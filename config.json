@@ -1,0 +1,14 @@
+{
+  "winEloGain": 20,
+  "loseEloLoss": 15,
+  "mvpBonus": 10,
+  "roles": {
+    "blueTeamRole": "",
+    "redTeamRole": "",
+    "organiserRole": ""
+  },
+  "dev": {
+    "enabled": false,
+    "guildId": ""
+  }
+}
