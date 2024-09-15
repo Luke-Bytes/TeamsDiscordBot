@@ -31,6 +31,16 @@ export class PlayerData {
         return this.inGameName;
     }
 
+    // Add method to update the in-game name
+    public updateInGameName(newName: string): void {
+        this.inGameName = newName;
+    }
+
+    // Add method to update the Discord user name
+    public updateDiscordUserName(newName: string): void {
+        this.discordUserName = newName;
+    }
+
     public getElo(): number {
         return this.elo;
     }
@@ -69,9 +79,5 @@ export class PlayerData {
 
     public setMvp(mvp: boolean) {
         this.isMvp = mvp;
-    }
-
-    public updateDiscordUserName(newName: string) {
-        this.discordUserName = newName;
     }
 }

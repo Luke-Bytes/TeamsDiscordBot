@@ -4,15 +4,21 @@ import fs from 'fs';
 import path from 'path';
 import { pathToFileURL } from 'url';
 import 'dotenv/config';
+import { GameData } from '../database/GameData';
+import { PlayerData } from '../database/PlayerData';
+import RegisterCommand from './RegisterCommand';
 
 export class CommandHandler {
   private commands: Command[] = [];
   private dependencies: Record<string, any> = {};
   private config: any;
+  private gameData: GameData;
+  private playerDataList: PlayerData[] = [];
 
   constructor(dependencies: Record<string, any>) {
     this.dependencies = dependencies;
     this.config = JSON.parse(fs.readFileSync('./config.json', 'utf-8'));
+    this.gameData = new GameData();
   }
 
   async loadCommands(commandDir: string): Promise<void> {
@@ -31,8 +37,13 @@ export class CommandHandler {
           continue;
         }
 
-        const commandInstance = new commandClass(this.dependencies) as Command;
-        this.register(commandInstance);
+        if (commandClass === RegisterCommand) {
+          const commandInstance = new RegisterCommand(this.gameData, this.playerDataList);
+          this.register(commandInstance);
+        } else {
+          const commandInstance = new commandClass(this.dependencies) as Command;
+          this.register(commandInstance);
+        }
       } catch (error) {
         console.error(`Failed to load command ${filePath}:`, error);
       }

@@ -7,6 +7,9 @@
     "redTeamRole": "",
     "organiserRole": ""
   },
+  "channels": {
+    "registration": ""
+  },
   "dev": {
     "enabled": false,
     "guildId": ""
