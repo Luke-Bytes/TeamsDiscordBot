@@ -31,12 +31,10 @@ export class PlayerData {
         return this.inGameName;
     }
 
-    // Add method to update the in-game name
     public updateInGameName(newName: string): void {
         this.inGameName = newName;
     }
 
-    // Add method to update the Discord user name
     public updateDiscordUserName(newName: string): void {
         this.discordUserName = newName;
     }
