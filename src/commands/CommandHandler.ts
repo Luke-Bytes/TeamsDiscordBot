@@ -22,7 +22,6 @@ export class CommandHandler {
   }
 
   async loadCommands(commandDir: string): Promise<void> {
-    // const commandFiles = fs.readdirSync(commandDir).filter(file => file.endsWith('Command.ts') || file.endsWith('Command.js'));
     const commandFiles = fs.readdirSync(commandDir).filter(file => file.match(/.*Command\.(ts|js)$/));
 
 
@@ -56,27 +55,30 @@ export class CommandHandler {
 
   async handleInteraction(interaction: Interaction) {
     if (interaction.isChatInputCommand()) {
-      const command = this.commands.find(cmd => cmd.name === interaction.commandName);
+      const chatInteraction = interaction as ChatInputCommandInteraction;
+      const command = this.commands.find(cmd => cmd.name === chatInteraction.commandName);
       if (command) {
-        console.log(`[${interaction.user.id}] runs /${interaction.commandName}`);
-        await command.execute(interaction as ChatInputCommandInteraction);
+        console.log(`[${chatInteraction.user.id}] runs /${chatInteraction.commandName}`);
+        await command.execute(chatInteraction);
       }
-
-    } else if (interaction.isMessageContextMenuCommand()) {
-      const command = this.commands.find(cmd => cmd.name === interaction.commandName);
+    }
+    else if (interaction.isMessageContextMenuCommand()) {
+      const messageInteraction = interaction as MessageContextMenuCommandInteraction;
+      const command = this.commands.find(cmd => cmd.name === messageInteraction.commandName);
       if (command) {
-        console.log(`[${interaction.user.id}] runs /${interaction.commandName}`);
-        await command.execute(interaction as MessageContextMenuCommandInteraction);
+        console.log(`[${messageInteraction.user.id}] runs /${messageInteraction.commandName}`);
+        await command.execute(messageInteraction);
       }
-
-    } else if (interaction.isUserContextMenuCommand()) {
-      const command = this.commands.find(cmd => cmd.name === interaction.commandName);
+    }
+    else if (interaction.isUserContextMenuCommand()) {
+      const userInteraction = interaction as UserContextMenuCommandInteraction;
+      const command = this.commands.find(cmd => cmd.name === userInteraction.commandName);
       if (command) {
-        console.log(`[${interaction.user.id}] runs /${interaction.commandName}`);
-        await command.execute(interaction as UserContextMenuCommandInteraction);
+        console.log(`[${userInteraction.user.id}] runs /${userInteraction.commandName}`);
+        await command.execute(userInteraction);
       }
-
-    } else if (interaction.isButton()) {
+    }
+    else if (interaction.isButton()) {
       const randomTeamsInstance = this.dependencies.randomTeamsInstance;
       if (randomTeamsInstance) {
         await randomTeamsInstance.handleButtonInteraction(interaction as ButtonInteraction);
@@ -86,6 +88,7 @@ export class CommandHandler {
     }
   }
 
+
   async registerCommands() {
     const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN as string);
 
@@ -93,7 +96,7 @@ export class CommandHandler {
 
     try {
       if (this.config.dev.enabled) {
-        console.log(`Development mode enabled. Registering guild-specific commands to guild ${this.config.dev.guildId}.`);
+        console.log(`Development mode enabled. Registering guild specific commands to ${this.config.dev.guildId}.`);
 
         await rest.put(
           Routes.applicationGuildCommands(process.env.APP_ID as string, this.config.dev.guildId),

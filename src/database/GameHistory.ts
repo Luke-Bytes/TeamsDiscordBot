@@ -1,15 +1,15 @@
 export class GameHistory {
-    private date: Date;
-    private map: string;
-    private minerushing: boolean;
-    private bannedClasses: string[];
-    private teamColorWinner: string;
-    private teamCaptainWinner: string;
-    private mvpWinner: string;
-    private teamCaptainLoser: string;
-    private mvpLoser: string;
-    private winnerTeamPlayers: string[];
-    private loserTeamPlayers: string[];
+    private readonly date: Date;
+    private readonly map: string;
+    private readonly minerushing: boolean;
+    private readonly bannedClasses: string[];
+    private readonly teamColorWinner: string;
+    private readonly teamCaptainWinner: string;
+    private readonly mvpWinner: string;
+    private readonly teamCaptainLoser: string;
+    private readonly mvpLoser: string;
+    private readonly winnerTeamPlayers: string[];
+    private readonly loserTeamPlayers: string[];
 
     constructor(
         map: string, bannedClasses: string[], minerushing: boolean, teamColorWinner: string, teamCaptainWinner: string,

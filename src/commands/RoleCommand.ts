@@ -3,19 +3,18 @@ import { Command } from './CommandInterface';
 import * as fs from 'fs';
 
 export default class RoleCommand implements Command {
-  data: SlashCommandBuilder;  // Ensure this is of type SlashCommandBuilder
+  data: SlashCommandBuilder;
   name: string;
   description: string;
 
   constructor() {
-    this.name = 'role';  // Explicitly define the name property
-    this.description = 'Configure roles';  // Explicitly define the description property
+    this.name = 'role';
+    this.description = 'Configure roles';
 
     const command = new SlashCommandBuilder()
       .setName(this.name)
       .setDescription(this.description);
 
-    // Now add subcommands separately and assign to data
     command.addSubcommand(subcommand =>
       subcommand
         .setName('set')
@@ -38,13 +37,11 @@ export default class RoleCommand implements Command {
             .setRequired(true)
         )
     );
-
-    // Assign the final command to this.data
     this.data = command;
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const roleType = interaction.options.getString('type', true); 
+    const roleType = interaction.options.getString('type', true);
     const role = interaction.options.getRole('role', true) as Role;
 
     const configPath = './config.json';

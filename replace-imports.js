@@ -1,18 +1,18 @@
-import replace from 'replace-in-file';  // ES module import
+import replace from 'replace-in-file';
 
 const options = {
   files: 'dist/**/*.js',
   from: [
-    /from\s+['"](\.\/[^'"]+)(?<!\.js)['"]/g,      // Match './' without .js
-    /from\s+['"](\.\.\/[^'"]+)(?<!\.js)['"]/g,    // Match '../' without .js
-    /from\s+['"](\.\.\/\.\.\/[^'"]+)(?<!\.js)['"]/g,  // Match '../../' without .js
-    /from\s+['"](\.\.\/\.\.\/\.\.\/[^'"]+)(?<!\.js)['"]/g  // Match '../../../' without .js
+    /from\s+['"](\.\/[^'"]+)(?<!\.js)['"]/g, // Match './' without .js etc
+    /from\s+['"](\.\.\/[^'"]+)(?<!\.js)['"]/g,
+    /from\s+['"](\.\.\/\.\.\/[^'"]+)(?<!\.js)['"]/g,
+    /from\s+['"](\.\.\/\.\.\/\.\.\/[^'"]+)(?<!\.js)['"]/g
   ],
   to: [
-    'from "$1.js"',  // Add .js to './'
-    'from "$1.js"',  // Add .js to '../'
-    'from "$1.js"',  // Add .js to '../../'
-    'from "$1.js"'   // Add .js to '../../../'
+    'from "$1.js"',  // Add .js to './' etc
+    'from "$1.js"',
+    'from "$1.js"',
+    'from "$1.js"'
   ]
 };
 

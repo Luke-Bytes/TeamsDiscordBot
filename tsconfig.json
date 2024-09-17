@@ -1,20 +1,19 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
+    "target": "ESNext",
     "module": "ESNext",
-    "moduleResolution": "node",
+    "moduleResolution": "Node",
     "strict": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "outDir": "./dist",
-    "rootDir": "./src",
     "resolveJsonModule": true,
     "paths": {
       "*": ["./src/*"]
     }
   },
-  "include": ["src/**/*", "config.json"],
+  "include": ["src", "config.json"],
   "exclude": ["node_modules"],
   "ts-node": {
     "transpileOnly": true,

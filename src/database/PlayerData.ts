@@ -1,5 +1,7 @@
+import { Snowflake } from 'discord.js';
+
 export class PlayerData {
-    private discordUserId: string;
+    private readonly discordUserId: Snowflake;
     private discordUserName: string;
     private inGameName: string;
     private elo: number;
@@ -8,7 +10,7 @@ export class PlayerData {
     private isCaptain: boolean;
     private isMvp: boolean;
 
-    constructor(discordUserId: string, discordUserName: string, inGameName: string, elo: number = 1000, wins: number = 0, losses: number = 0, isCaptain: boolean = false, isMvp: boolean = false) {
+    constructor(discordUserId: Snowflake, discordUserName: string, inGameName: string, elo: number = 1000, wins: number = 0, losses: number = 0, isCaptain: boolean = false, isMvp: boolean = false) {
         this.discordUserId = discordUserId;
         this.discordUserName = discordUserName;
         this.inGameName = inGameName;
