@@ -5,6 +5,7 @@
   "roles": {
     "blueTeamRole": "",
     "redTeamRole": "",
+    "captainRole": "",
     "organiserRole": ""
   },
   "channels": {

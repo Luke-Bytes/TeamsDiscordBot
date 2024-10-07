@@ -37,7 +37,7 @@ export class CommandHandler {
         }
 
         if (commandClass === RegisterCommand) {
-          const commandInstance = new RegisterCommand(this.gameData, this.playerDataList);
+          const commandInstance = new RegisterCommand();
           this.register(commandInstance);
         } else {
           const commandInstance = new commandClass(this.dependencies) as Command;

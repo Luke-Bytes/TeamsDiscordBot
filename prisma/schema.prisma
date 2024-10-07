@@ -1,0 +1,76 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model GameHistory {
+  id                Int       @id @default(autoincrement())
+  startTime         DateTime  @unique
+  map               String
+  minerushing       Boolean
+  teamColorWinner   String
+  teamCaptainWinner String
+  mvpWinner         String
+  teamCaptainLoser  String
+  mvpLoser          String
+
+  bannedClasses     BannedClass[]
+  winnerTeamPlayers WinnerTeamPlayer[]
+  loserTeamPlayers  LoserTeamPlayer[]
+}
+
+
+model BannedClass {
+  id            Int       @id @default(autoincrement())
+  className     String
+  gameHistoryId Int
+  GameHistory   GameHistory @relation(fields: [gameHistoryId], references: [id])
+
+  @@index([gameHistoryId])
+}
+
+model WinnerTeamPlayer {
+  id            Int       @id @default(autoincrement())
+  playerName    String
+  gameHistoryId Int
+  GameHistory   GameHistory @relation(fields: [gameHistoryId], references: [id])
+
+  @@index([gameHistoryId])
+}
+
+model LoserTeamPlayer {
+  id            Int       @id @default(autoincrement())
+  playerName    String
+  gameHistoryId Int
+  GameHistory   GameHistory @relation(fields: [gameHistoryId], references: [id])
+
+  @@index([gameHistoryId])
+}
+
+model PlayerHistory {
+  id             Int       @id @default(autoincrement())
+  discordUserId  String    @unique
+  discordUserName String
+  inGameName     String
+  wins           Int       @default(0)
+  losses         Int       @default(0)
+  captainCount   Int       @default(0)
+  mvpCount       Int       @default(0)
+  eloHistory     EloHistory[]
+}
+
+model EloHistory {
+  id             Int       @id @default(autoincrement())
+  playerId       Int
+  elo            Int
+  date           DateTime  @default(now())
+
+  PlayerHistory  PlayerHistory @relation(fields: [playerId], references: [id])
+
+  @@index([playerId])
+}
+

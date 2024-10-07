@@ -1,6 +1,9 @@
 import { Snowflake } from 'discord.js';
 
 export class PlayerData {
+
+    static playerDataList: PlayerData[] = [];
+
     private readonly discordUserId: Snowflake;
     private discordUserName: string;
     private inGameName: string;
@@ -19,9 +22,11 @@ export class PlayerData {
         this.losses = losses;
         this.isCaptain = isCaptain;
         this.isMvp = isMvp;
+
+        PlayerData.playerDataList.push(this);
     }
 
-    public getDiscordUserId(): string {
+    public getDiscordUserId(): Snowflake {
         return this.discordUserId;
     }
 
@@ -31,14 +36,6 @@ export class PlayerData {
 
     public getInGameName(): string {
         return this.inGameName;
-    }
-
-    public updateInGameName(newName: string): void {
-        this.inGameName = newName;
-    }
-
-    public updateDiscordUserName(newName: string): void {
-        this.discordUserName = newName;
     }
 
     public getElo(): number {
@@ -61,23 +58,44 @@ export class PlayerData {
         return this.isMvp;
     }
 
-    public addWin() {
-        this.wins += 1;
+    // Updaters
+    public updateInGameName(newName: string): void {
+        this.inGameName = newName;
     }
 
-    public addLoss() {
-        this.losses += 1;
+    public updateDiscordUserName(newName: string): void {
+        this.discordUserName = newName;
     }
 
-    public updateElo(newElo: number) {
+    public updateElo(newElo: number): void {
         this.elo = newElo;
     }
 
-    public setCaptain(captain: boolean) {
+    public addWin(): void {
+        this.wins += 1;
+    }
+
+    public addLoss(): void {
+        this.losses += 1;
+    }
+
+    public setCaptain(captain: boolean): void {
         this.isCaptain = captain;
     }
 
-    public setMvp(mvp: boolean) {
+    public setMvp(mvp: boolean): void {
         this.isMvp = mvp;
+    }
+
+    public static getPlayerByInGameName(inGameName: string): PlayerData | null {
+        return PlayerData.playerDataList.find(player => player.getInGameName() === inGameName) || null;
+    }
+
+    public static getAllPlayers(): PlayerData[] {
+        return PlayerData.playerDataList;
+    }
+
+    public static clearPlayerDataList(): void {
+        PlayerData.playerDataList = [];
     }
 }

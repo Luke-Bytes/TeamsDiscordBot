@@ -19,9 +19,11 @@
   "author": "Luke",
   "license": "GNU",
   "dependencies": {
+    "@prisma/client": "^5.20.0",
     "@types/node": "^22.5.4",
     "discord.js": "^14.16.2",
-    "dotenv": "^16.0.3"
+    "dotenv": "^16.0.3",
+    "prisma": "^5.20.0"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.6.0",
