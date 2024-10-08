@@ -100,7 +100,7 @@ export default class LeaderboardsCommand implements Command {
     });
 
     embed.setFooter({
-      text: `Your position: ${
+      text: `Your ranking: ${
         currentPlace === -1
           ? "(Unranked)"
           : "#" + (currentPlace + 1).toLocaleString()
