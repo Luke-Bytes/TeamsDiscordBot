@@ -61,9 +61,11 @@ export default class LeaderboardsCommand implements Command {
         };
       });
 
-    const currentPlace = this.playerDataList.findIndex(
-      (playerData) => playerData.getDiscordUserId() === interaction.user.id
-    );
+    const currentPlace = this.playerDataList
+      .toSorted((a, b) => {
+        return b.getElo() - a.getElo();
+      })
+      .findIndex((playerData) => playerData.getDiscordUserId() === interaction.user.id);
 
     const embed = new EmbedBuilder()
       .setColor("#0099ff")
