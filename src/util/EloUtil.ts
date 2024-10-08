@@ -1,3 +1,4 @@
+//TODO add relevant emojis and change elo value cut offs
 const eloEmojis = {
   800: ":black_circle:",
   1000: ":radio_button:",
