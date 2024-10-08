@@ -27,11 +27,11 @@ export default class LeaderboardsCommand implements Command {
     ign: string,
     elo: number,
     emoji: string,
-    gamesPlayed: number
+    winLossRatio: number
   ) {
     return `${emoji} ${ign} **[${elo} ${EloUtil.getEloEmoji(
       elo
-    )}]** ${gamesPlayed} G`;
+    )}]** ${winLossRatio} W/L`;
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -57,7 +57,7 @@ export default class LeaderboardsCommand implements Command {
           ign: playerData.getInGameName(),
           elo: playerData.getElo(),
           emoji: `:${placeEmojis[i]}:`,
-          gamesPlayed: playerData.getWins() + playerData.getLosses(),
+          winLossRatio: playerData.getWins() / playerData.getLosses(),
         };
       });
 
@@ -65,7 +65,9 @@ export default class LeaderboardsCommand implements Command {
       .toSorted((a, b) => {
         return b.getElo() - a.getElo();
       })
-      .findIndex((playerData) => playerData.getDiscordUserId() === interaction.user.id);
+      .findIndex(
+        (playerData) => playerData.getDiscordUserId() === interaction.user.id
+      );
 
     const embed = new EmbedBuilder()
       .setColor("#0099ff")
@@ -76,7 +78,7 @@ export default class LeaderboardsCommand implements Command {
           topTen[i].ign,
           topTen[i].elo,
           topTen[i].emoji,
-          topTen[i].gamesPlayed
+          topTen[i].winLossRatio
         ),
         value: " ",
         inline: false,
@@ -92,7 +94,7 @@ export default class LeaderboardsCommand implements Command {
               v.ign,
               v.elo,
               v.emoji,
-              v.gamesPlayed
+              v.winLossRatio
             );
           })
           .join("\n") || " ",
