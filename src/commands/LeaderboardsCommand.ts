@@ -12,7 +12,7 @@ export default class LeaderboardsCommand implements Command {
   name: string;
   description: string;
   playerDataList: PlayerData[];
-  constructor(playerDataList: PlayerData[]) {
+  constructor() {
     this.name = "leaderboards";
     this.description = "Get leaderboards for the top-rated players.";
 
@@ -20,7 +20,7 @@ export default class LeaderboardsCommand implements Command {
       .setName(this.name)
       .setDescription(this.description);
 
-    this.playerDataList = playerDataList;
+    this.playerDataList = PlayerData.playerDataList;
   }
 
   private getLeaderboardEntryString(
