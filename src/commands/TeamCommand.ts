@@ -10,8 +10,7 @@ export default class TeamCommand implements Command {
 
   data: SlashCommandBuilder;
 
-  private gameData = new GameData();
-  private randomTeams = new RandomTeams(this.gameData);
+  private randomTeams = new RandomTeams();
 
   constructor() {
     const command = new SlashCommandBuilder()
@@ -77,15 +76,15 @@ export default class TeamCommand implements Command {
           return;
         }
 
-        this.gameData.bluePlayers = [];
-        this.gameData.redPlayers = [];
-        await interaction.reply({ content: 'Teams have been reset!', ephemeral: true });
+        GameData.setBluePlayers([]);
+        GameData.setRedPlayers([]);
+        await interaction.reply({ content: 'Teams have been reset!', ephemeral: false });
         break;
       }
 
       case 'list': {
-        const bluePlayers = this.gameData.getBluePlayers().join(', ') || 'No players in Blue Team';
-        const redPlayers = this.gameData.getRedPlayers().join(', ') || 'No players in Red Team';
+        const bluePlayers = GameData.getBluePlayers().length > 0 ? GameData.getBluePlayers().join(', ') : 'No players in Blue Team';
+        const redPlayers = GameData.getRedPlayers().length > 0 ? GameData.getRedPlayers().join(', ') : 'No players in Red Team';
         await interaction.reply({
           content: `**Blue Team:** ${bluePlayers}\n**Red Team:** ${redPlayers}`,
           ephemeral: true,

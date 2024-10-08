@@ -19,8 +19,9 @@ const client = new Client({
 const players: PlayerData[] = [];
 const gameData = new GameData();
 const gameHistory: GameHistory[] = [];
+GameData.setDefaultValues();
 
-const randomTeamsInstance = new RandomTeams(gameData);
+const randomTeamsInstance = new RandomTeams();
 
 const commandHandler = new CommandHandler({ players, gameData, gameHistory, randomTeamsInstance });
 
@@ -36,12 +37,12 @@ client.once('ready', async () => {
   await commandHandler.registerCommands();
 });
 
-// Command + Context Menu Watchdog
+// Command + Context Menu Listener
 client.on('interactionCreate', async (interaction) => {
   await commandHandler.handleInteraction(interaction);
 });
 
-// Message Watchdog
+// Message Listener
 client.on('messageCreate', async (message) => {
   if (await messageHandler.isBotMentioned(message)) {
     if (message.channel instanceof TextChannel) {

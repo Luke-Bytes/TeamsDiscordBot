@@ -50,13 +50,7 @@ export class CommandHandler {
 
         // some commands have specific dependencies
         if (commandClass === RegisterCommand) {
-          const commandInstance = new RegisterCommand(
-            this.gameData,
-            this.playerDataList
-          );
-          this.register(commandInstance);
-        } else if (commandClass === LeaderboardsCommand) {
-          const commandInstance = new LeaderboardsCommand(this.playerDataList);
+          const commandInstance = new RegisterCommand();
           this.register(commandInstance);
         } else {
           const commandInstance = new commandClass(
