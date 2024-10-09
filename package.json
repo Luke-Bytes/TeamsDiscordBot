@@ -15,14 +15,15 @@
     "start:bot:prod": "node --experimental-specifier-resolution=node dist/BotManager.js",
     "dev": "npm run start:bot:dev",
     "prod": "npm run build && npm run start:bot:prod",
-    "lint": "eslint . --ext .ts",
+    "lint": "eslint .",
     "format": "prettier --write .",
-    "lint:fix": "eslint . --ext .ts --fix",
+    "lint:fix": "eslint . --fix",
     "check-format": "prettier --check ."
   },
   "author": "Luke",
   "license": "GNU",
   "dependencies": {
+    "@eslint/js": "^9.12.0",
     "@prisma/client": "^5.20.0",
     "@types/node": "^22.5.4",
     "discord.js": "^14.16.2",
@@ -30,11 +31,11 @@
     "prisma": "^5.20.0"
   },
   "devDependencies": {
-    "@typescript-eslint/eslint-plugin": "^8.6.0",
-    "@typescript-eslint/parser": "^8.6.0",
+    "@typescript-eslint/eslint-plugin": "^8.8.1",
+    "@typescript-eslint/parser": "^8.8.1",
     "concurrently": "^9.0.0",
     "cross-env": "^7.0.3",
-    "eslint": "^9.10.0",
+    "eslint": "^9.12.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.2.1",
     "nodemon": "^3.1.4",
