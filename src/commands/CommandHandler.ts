@@ -15,11 +15,10 @@ import "dotenv/config";
 import { GameData } from "../database/GameData";
 import { PlayerData } from "../database/PlayerData";
 import RegisterCommand from "./RegisterCommand";
-import LeaderboardsCommand from "./LeaderboardsCommand";
 
 export class CommandHandler {
   private commands: Command[] = [];
-  private dependencies: Record<string, any> = {};
+  private readonly dependencies: Record<string, any> = {};
   private config: any;
   private gameData: GameData;
   private playerDataList: PlayerData[] = [];

@@ -14,7 +14,11 @@
     "start:bot:dev": "node start-bot-dev.js",
     "start:bot:prod": "node --experimental-specifier-resolution=node dist/BotManager.js",
     "dev": "npm run start:bot:dev",
-    "prod": "npm run build && npm run start:bot:prod"
+    "prod": "npm run build && npm run start:bot:prod",
+    "lint": "eslint . --ext .ts",
+    "format": "prettier --write .",
+    "lint:fix": "eslint . --ext .ts --fix",
+    "check-format": "prettier --check ."
   },
   "author": "Luke",
   "license": "GNU",
@@ -31,7 +35,10 @@
     "concurrently": "^9.0.0",
     "cross-env": "^7.0.3",
     "eslint": "^9.10.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.2.1",
     "nodemon": "^3.1.4",
+    "prettier": "^3.3.3",
     "replace-in-file": "^6.3.5",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
