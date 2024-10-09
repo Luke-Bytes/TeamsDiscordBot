@@ -5,16 +5,17 @@
     "moduleResolution": "Node",
     "strict": false,
     "esModuleInterop": true,
-    "skipLibCheck": true,
+    "skipLibCheck": false,
     "forceConsistentCasingInFileNames": true,
     "outDir": "./dist",
     "resolveJsonModule": true,
+    "typeRoots": ["./node_modules/@types"],
     "paths": {
       "*": ["./src/*"]
     }
   },
-  "include": ["src", "config.json"],
-  "exclude": ["node_modules"],
+  "include": ["src", "config.json", "node_modules/@types/**/*.ts"],
+  "exclude": ["node_modules", "dist"],
   "ts-node": {
     "transpileOnly": true,
     "esm": true
