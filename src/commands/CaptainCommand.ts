@@ -185,7 +185,7 @@ export default class CaptainCommand implements Command {
       console.log(`No captain found for ${teamColor} team`);
     }
 
-    return captain || null;
+    return captain ?? null;
   }
 
   private isPlayerOnTeam(
