@@ -67,8 +67,8 @@ export default class CaptainCommand implements Command {
 
     const organiserRoleId = configData.roles.organiserRole;
     const captainRoleId = configData.roles.captainRole;
-    const teamColor = interaction.options.getString("team")!;
-    const user = interaction.options.getUser("user")!;
+    const teamColor = interaction.options.getString("team", true);
+    const user = interaction.options.getUser("user", true);
 
     if (!member.roles.cache.has(organiserRoleId)) {
       await interaction.reply({
@@ -185,7 +185,7 @@ export default class CaptainCommand implements Command {
       console.log(`No captain found for ${teamColor} team`);
     }
 
-    return captain || null;
+    return captain ?? null;
   }
 
   private isPlayerOnTeam(
