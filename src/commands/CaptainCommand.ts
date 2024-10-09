@@ -12,9 +12,17 @@ const configPath = "./config.json";
 const configData = JSON.parse(fs.readFileSync(configPath, "utf8"));
 
 export default class CaptainCommand implements Command {
-  data = new SlashCommandBuilder()
-    .setName("captain")
-    .setDescription("Set a team captain")
+
+  data: SlashCommandBuilder;
+  name: string;
+  description: string;
+
+  constructor() {
+    this.name = "captain";
+    this.description = "Set or change the captain of a team";
+    this.data = new SlashCommandBuilder()
+    .setName(this.name)
+    .setDescription(this.description)
     .addSubcommand((subcommand) =>
       subcommand
         .setName("set")
@@ -36,8 +44,8 @@ export default class CaptainCommand implements Command {
             )
         )
     );
-  name = "captain";
-  description = "Set or change the captain of a team";
+  }
+
 
   async execute(interaction: ChatInputCommandInteraction) {
     if (!interaction.guild) {
