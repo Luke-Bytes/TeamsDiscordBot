@@ -53,7 +53,7 @@ export default class AnnouncementCommand implements Command {
                     .setRequired(true)
             )
             .addStringOption(option =>
-                option.setName('minerushing')
+                option.setName('Minerushing')
                     .setDescription('Minerushing? (vote/yes/no)')
                     .setRequired(true)
             )
