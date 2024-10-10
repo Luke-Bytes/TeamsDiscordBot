@@ -33,4 +33,4 @@ jobs:
       - name: Run build
         run: npm run build
 
-
+    if: ${{ github.event_name == 'pull_request' || github.event.pull_request == null }}
