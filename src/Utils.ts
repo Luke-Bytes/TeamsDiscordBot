@@ -54,7 +54,10 @@ export function truncateString(str: string, maxLength: number): string {
   return str.length > maxLength ? str.substring(0, maxLength - 3) + "..." : str;
 }
 
-export function isPlayerOnTeam(player: PlayerData, teamColor: "blue" | "red"): boolean {
+export function isPlayerOnTeam(
+  player: PlayerData,
+  teamColor: "blue" | "red"
+): boolean {
   const inGameName = player.getInGameName();
   console.log(`Checking if player ${inGameName} is on team ${teamColor}`);
 
@@ -77,7 +80,9 @@ export function getCaptainByTeam(teamColor: "blue" | "red"): PlayerData | null {
   );
 
   if (captain) {
-    console.log(`Found captain for ${teamColor} team: ${captain.getInGameName()}`);
+    console.log(
+      `Found captain for ${teamColor} team: ${captain.getInGameName()}`
+    );
   } else {
     console.log(`No captain found for ${teamColor} team.`);
   }
@@ -85,19 +90,31 @@ export function getCaptainByTeam(teamColor: "blue" | "red"): PlayerData | null {
   return captain ?? null;
 }
 
-export async function updateRoles(member, addRoles: string[], removeRoles: string[]) {
+export async function updateRoles(
+  member,
+  addRoles: string[],
+  removeRoles: string[]
+) {
   for (const role of removeRoles) {
     if (member.roles.cache.has(role)) {
-      await member.roles.remove(role).catch(error =>
-        console.error(`Failed to remove role ${role} from ${member.user.username}: ${error}`)
-      );
+      await member.roles
+        .remove(role)
+        .catch((error) =>
+          console.error(
+            `Failed to remove role ${role} from ${member.user.username}: ${error}`
+          )
+        );
     }
   }
   for (const role of addRoles) {
     if (!member.roles.cache.has(role)) {
-      await member.roles.add(role).catch(error =>
-        console.error(`Failed to add role ${role} to ${member.user.username}: ${error}`)
-      );
+      await member.roles
+        .add(role)
+        .catch((error) =>
+          console.error(
+            `Failed to add role ${role} to ${member.user.username}: ${error}`
+          )
+        );
     }
   }
 }

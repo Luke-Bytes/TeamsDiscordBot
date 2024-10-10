@@ -3,10 +3,10 @@ name: CI - Lint and Build (Windows)
 on:
   push:
     branches:
-      - '*'
+      - "*"
   pull_request:
     branches:
-      - '*'
+      - "*"
 
 jobs:
   lint-and-build:
@@ -19,7 +19,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '18.x'
+          node-version: "18.x"
 
       - name: Install dependencies
         run: npm install
@@ -27,8 +27,10 @@ jobs:
       - name: Run ESLint
         run: npm run lint
 
+      - name: Check Prettier
+        run: npm run check-format
+
       - name: Run build
         run: npm run build
 
-      - name: Check formatting with Prettier
-        run: npm run check-format
+
