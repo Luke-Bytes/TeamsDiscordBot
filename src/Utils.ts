@@ -85,3 +85,19 @@ export function getCaptainByTeam(teamColor: "blue" | "red"): PlayerData | null {
   return captain ?? null;
 }
 
+export async function updateRoles(member, addRoles: string[], removeRoles: string[]) {
+  for (const role of removeRoles) {
+    if (member.roles.cache.has(role)) {
+      await member.roles.remove(role).catch(error =>
+        console.error(`Failed to remove role ${role} from ${member.user.username}: ${error}`)
+      );
+    }
+  }
+  for (const role of addRoles) {
+    if (!member.roles.cache.has(role)) {
+      await member.roles.add(role).catch(error =>
+        console.error(`Failed to add role ${role} to ${member.user.username}: ${error}`)
+      );
+    }
+  }
+}
