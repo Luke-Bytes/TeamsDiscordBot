@@ -5,7 +5,8 @@
     "moduleResolution": "Node",
     "strict": false,
     "esModuleInterop": true,
-    "skipLibCheck": false,
+    "skipLibCheck": true,
+    "allowJs": true,
     "forceConsistentCasingInFileNames": true,
     "outDir": "./dist",
     "resolveJsonModule": true,
@@ -14,7 +15,12 @@
       "*": ["./src/*"]
     }
   },
-  "include": ["src", "config.json", "node_modules/@types/**/*.ts"],
+  "include": [
+    "src",
+    "config.json",
+    "node_modules/@types/**/*.ts",
+    "node_modules/discord.js/typings/**/*.mts"
+  ],
   "exclude": ["node_modules", "dist"],
   "ts-node": {
     "transpileOnly": true,

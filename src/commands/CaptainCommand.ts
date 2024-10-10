@@ -38,9 +38,12 @@ export default class CaptainCommand implements Command {
               .setName("team")
               .setDescription("Team Colour")
               .setRequired(true)
-              .addChoices({ name: "blue", value: "blue" }, { name: "red", value: "red" })
+              .addChoices(
+                { name: "blue", value: "blue" },
+                { name: "red", value: "red" }
+              )
           )
-      );
+      ) as SlashCommandBuilder;
   }
 
   async execute(interaction: ChatInputCommandInteraction) {
@@ -92,45 +95,75 @@ export default class CaptainCommand implements Command {
       return;
     }
 
-    console.log(`Setting captain for ${teamColor} team. Checking current captain...`);
+    console.log(
+      `Setting captain for ${teamColor} team. Checking current captain...`
+    );
     const currentTeamCaptain = getCaptainByTeam(teamColor as "blue" | "red");
-    console.log(`Current ${teamColor} team captain: ${currentTeamCaptain?.getDiscordUserId() || "None"}`);
+    console.log(
+      `Current ${teamColor} team captain: ${currentTeamCaptain?.getDiscordUserId() || "None"}`
+    );
 
     if (currentTeamCaptain) {
-      const currentCaptainMember = interaction.guild.members.cache.get(currentTeamCaptain.getDiscordUserId());
+      const currentCaptainMember = interaction.guild.members.cache.get(
+        currentTeamCaptain.getDiscordUserId()
+      );
       if (currentCaptainMember) {
-        console.log(`Removing captain and team role from current captain: ${currentCaptainMember.user.username}`);
-        await currentCaptainMember.roles.remove(captainRoleId).catch((error) =>
-          console.error(`Failed to remove captain role from current team captain: ${error}`)
+        console.log(
+          `Removing captain and team role from current captain: ${currentCaptainMember.user.username}`
         );
+        await currentCaptainMember.roles
+          .remove(captainRoleId)
+          .catch((error) =>
+            console.error(
+              `Failed to remove captain role from current team captain: ${error}`
+            )
+          );
 
-        const teamRoleId = teamColor === "blue" ? blueTeamRoleId : redTeamRoleId;
-        await currentCaptainMember.roles.remove(teamRoleId).catch((error) =>
-          console.error(`Failed to remove team role from current team captain: ${error}`)
-        );
+        const teamRoleId =
+          teamColor === "blue" ? blueTeamRoleId : redTeamRoleId;
+        await currentCaptainMember.roles
+          .remove(teamRoleId)
+          .catch((error) =>
+            console.error(
+              `Failed to remove team role from current team captain: ${error}`
+            )
+          );
 
         currentTeamCaptain.setCaptain(false);
       }
     }
 
     const oppositeTeamColor = teamColor === "blue" ? "red" : "blue";
-    const oppositeCaptain = getCaptainByTeam(oppositeTeamColor as "blue" | "red");
+    const oppositeCaptain = getCaptainByTeam(
+      oppositeTeamColor as "blue" | "red"
+    );
     if (oppositeCaptain && oppositeCaptain.getDiscordUserId() === user.id) {
-      console.log(`User is captain of the opposite team (${oppositeTeamColor}), removing roles.`);
+      console.log(
+        `User is captain of the opposite team (${oppositeTeamColor}), removing roles.`
+      );
       const oppositeMember = await interaction.guild.members.fetch(user.id);
       if (oppositeMember) {
-        const oppositeTeamRoleId = oppositeTeamColor === "blue" ? blueTeamRoleId : redTeamRoleId;
-        await oppositeMember.roles.remove(captainRoleId).catch((error) =>
-          console.error(`Failed to remove captain role from opposite team captain: ${error}`)
-        );
-        await oppositeMember.roles.remove(oppositeTeamRoleId).catch((error) =>
-          console.error(`Failed to remove opposite team role: ${error}`)
-        );
+        const oppositeTeamRoleId =
+          oppositeTeamColor === "blue" ? blueTeamRoleId : redTeamRoleId;
+        await oppositeMember.roles
+          .remove(captainRoleId)
+          .catch((error) =>
+            console.error(
+              `Failed to remove captain role from opposite team captain: ${error}`
+            )
+          );
+        await oppositeMember.roles
+          .remove(oppositeTeamRoleId)
+          .catch((error) =>
+            console.error(`Failed to remove opposite team role: ${error}`)
+          );
       }
     }
 
     const previousCaptain = getCaptainByTeam(teamColor as "blue" | "red");
-    console.log(`Previous captain of the ${teamColor} team: ${previousCaptain?.getDiscordUserId() || "None"}`);
+    console.log(
+      `Previous captain of the ${teamColor} team: ${previousCaptain?.getDiscordUserId() || "None"}`
+    );
 
     const newCaptainMember = await interaction.guild.members.fetch(user.id);
     if (newCaptainMember) {
@@ -138,31 +171,47 @@ export default class CaptainCommand implements Command {
 
       player.setCaptain(true);
 
-      if (teamColor === "blue" && newCaptainMember.roles.cache.has(redTeamRoleId)) {
-        await newCaptainMember.roles.remove(redTeamRoleId).catch((error) =>
-          console.error(`Failed to remove red team role: ${error}`)
-        );
-      } else if (teamColor === "red" && newCaptainMember.roles.cache.has(blueTeamRoleId)) {
-        await newCaptainMember.roles.remove(blueTeamRoleId).catch((error) =>
-          console.error(`Failed to remove blue team role: ${error}`)
-        );
+      if (
+        teamColor === "blue" &&
+        newCaptainMember.roles.cache.has(redTeamRoleId)
+      ) {
+        await newCaptainMember.roles
+          .remove(redTeamRoleId)
+          .catch((error) =>
+            console.error(`Failed to remove red team role: ${error}`)
+          );
+      } else if (
+        teamColor === "red" &&
+        newCaptainMember.roles.cache.has(blueTeamRoleId)
+      ) {
+        await newCaptainMember.roles
+          .remove(blueTeamRoleId)
+          .catch((error) =>
+            console.error(`Failed to remove blue team role: ${error}`)
+          );
       }
 
-      await newCaptainMember.roles.add(captainRoleId).catch((error) =>
-        console.error(`Failed to add captain role: ${error}`)
-      );
+      await newCaptainMember.roles
+        .add(captainRoleId)
+        .catch((error) =>
+          console.error(`Failed to add captain role: ${error}`)
+        );
 
       const teamRoleId = teamColor === "blue" ? blueTeamRoleId : redTeamRoleId;
-      await newCaptainMember.roles.add(teamRoleId).catch((error) =>
-        console.error(`Failed to add team role: ${error}`)
-      );
+      await newCaptainMember.roles
+        .add(teamRoleId)
+        .catch((error) => console.error(`Failed to add team role: ${error}`));
 
       if (teamColor === "blue") {
         GameData.setBluePlayers([...GameData.getBluePlayers(), inGameName]);
-        GameData.setRedPlayers(GameData.getRedPlayers().filter(player => player !== inGameName));
+        GameData.setRedPlayers(
+          GameData.getRedPlayers().filter((player) => player !== inGameName)
+        );
       } else {
         GameData.setRedPlayers([...GameData.getRedPlayers(), inGameName]);
-        GameData.setBluePlayers(GameData.getBluePlayers().filter(player => player !== inGameName));
+        GameData.setBluePlayers(
+          GameData.getBluePlayers().filter((player) => player !== inGameName)
+        );
       }
 
       await interaction.reply({
@@ -171,7 +220,8 @@ export default class CaptainCommand implements Command {
     } else {
       console.error("Failed to fetch new captain member.");
       await interaction.reply({
-        content: "Could not assign captain role to that player. Is the name correct?",
+        content:
+          "Could not assign captain role to that player. Is the name correct?",
         ephemeral: true,
       });
     }
