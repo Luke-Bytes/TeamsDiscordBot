@@ -3,7 +3,7 @@ import { Command } from "./CommandInterface";
 import { PlayerData } from "../database/PlayerData";
 import { EloUtil } from "../util/EloUtil";
 
-export default class TestCommand implements Command {
+export default class StatsCommand implements Command {
   data: SlashCommandBuilder;
   name: string;
   description: string;
