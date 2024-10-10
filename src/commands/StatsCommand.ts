@@ -51,7 +51,7 @@ export default class TestCommand implements Command {
         },
         {
           name: " ",
-          value: `${player.getInGameName()}\n${player.getElo()}${EloUtil.getEloEmoji(
+          value: `${player.getInGameName()}\n${player.getElo()} ${EloUtil.getEloEmoji(
             player.getElo()
           )}\n${player.getWins()}\n${player.getLosses()}\n${winLossRatio}\n${"(winstreak)"}`,
           inline: true,
