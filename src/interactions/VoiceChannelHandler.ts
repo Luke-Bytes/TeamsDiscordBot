@@ -1,4 +1,4 @@
-import { VoiceChannel, GuildMember, VoiceState } from 'discord.js';
+import { VoiceChannel, GuildMember, VoiceState } from "discord.js";
 
 export class VoiceChannelHandler {
   getAllUsersInVC(channel: VoiceChannel): GuildMember[] {
@@ -9,7 +9,10 @@ export class VoiceChannelHandler {
     return channel.members.size;
   }
 
-  async moveUserToVC(member: GuildMember, newChannel: VoiceChannel): Promise<void> {
+  async moveUserToVC(
+    member: GuildMember,
+    newChannel: VoiceChannel
+  ): Promise<void> {
     if (member.voice.channelId !== newChannel.id) {
       await member.voice.setChannel(newChannel);
     }
