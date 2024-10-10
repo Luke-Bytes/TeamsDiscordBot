@@ -3,7 +3,7 @@ name: CI - Lint and Build (Windows)
 on:
   push:
     branches:
-      - "*"
+      - "master"
   pull_request:
     branches:
       - "*"
@@ -32,5 +32,3 @@ jobs:
 
       - name: Run build
         run: npm run build
-
-    if: ${{ github.event_name == 'pull_request' || github.event.pull_request == null }}
