@@ -2,6 +2,7 @@ import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
   EmbedBuilder,
+  SlashCommandSubcommandsOnlyBuilder,
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { PlayerData } from "../database/PlayerData";
@@ -9,9 +10,9 @@ import { EloUtil } from "../util/EloUtil";
 import { log } from "console";
 
 export default class StatsCommand implements Command {
-  data: SlashCommandBuilder;
   name: string;
   description: string;
+  data: SlashCommandBuilder;
 
   constructor() {
     this.name = "stats";
@@ -27,7 +28,7 @@ export default class StatsCommand implements Command {
             "the player to fetch stats for, or blank for yourself"
           )
           .setRequired(false)
-      );
+      ) as SlashCommandBuilder;
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
