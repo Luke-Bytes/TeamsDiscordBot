@@ -1,4 +1,4 @@
-name: CI - Lint and Build (Windows)
+name: CI - Windows
 
 on:
   push:
@@ -28,7 +28,6 @@ jobs:
           key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
-          compression-level: 1
 
       - name: Install dependencies
         run: npm ci
@@ -53,7 +52,6 @@ jobs:
           key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
-          compression-level: 1
 
       - name: Run ESLint
         run: npm run lint
@@ -78,7 +76,6 @@ jobs:
           key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
-          compression-level: 1
 
       - name: Check Prettier
         run: npm run check-format
@@ -103,7 +100,6 @@ jobs:
           key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
-          compression-level: 1
 
       - name: Run build
         run: npm run build
