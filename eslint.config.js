@@ -1,9 +1,8 @@
 import typescriptEslintPlugin from "@typescript-eslint/eslint-plugin";
 import prettierPlugin from "eslint-plugin-prettier";
 import js from "@eslint/js";
-import typescriptParser from "@typescript-eslint/parser"; // Import parser object
+import typescriptParser from "@typescript-eslint/parser";
 
-// Importing CommonJS module properly
 const { rules: tsEslintRules } = typescriptEslintPlugin.configs.recommended;
 
 export default [
@@ -13,11 +12,22 @@ export default [
   {
     files: ["**/*.ts"],
     languageOptions: {
-      parser: typescriptParser, // Use the parser object, not a string
+      parser: typescriptParser,
       parserOptions: {
         ecmaVersion: "latest",
         sourceType: "module",
         project: "./tsconfig.json",
+      },
+      globals: {
+        console: "readonly",
+        process: "readonly",
+        Buffer: "readonly",
+        __dirname: "readonly",
+        __filename: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
       },
     },
     plugins: {
