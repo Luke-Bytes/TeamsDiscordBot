@@ -1,7 +1,12 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder } from "discord.js";
+import {
+  SlashCommandBuilder,
+  ChatInputCommandInteraction,
+  EmbedBuilder,
+} from "discord.js";
 import { Command } from "./CommandInterface";
 import { PlayerData } from "../database/PlayerData";
 import { EloUtil } from "../util/EloUtil";
+import { log } from "console";
 
 export default class StatsCommand implements Command {
   data: SlashCommandBuilder;
@@ -18,7 +23,9 @@ export default class StatsCommand implements Command {
       .addStringOption((option) =>
         option
           .setName("player")
-          .setDescription("the player to fetch stats for, or blank for yourself")
+          .setDescription(
+            "the player to fetch stats for, or blank for yourself"
+          )
           .setRequired(false)
       );
   }
@@ -26,19 +33,31 @@ export default class StatsCommand implements Command {
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const input = interaction.options.getString("player", false);
     const player =
-      PlayerData.playerDataList.find((playerData) => playerData.getInGameName() === input) ??
-      PlayerData.playerDataList.find((playerData) => playerData.getDiscordUserId() === interaction.user.id);
+      input !== null
+        ? PlayerData.playerDataList.find(
+            (playerData) => playerData.getInGameName() === input
+          )
+        : PlayerData.playerDataList.find(
+            (playerData) =>
+              playerData.getDiscordUserId() === interaction.user.id
+          );
 
     if (player === undefined) {
       await interaction.reply({
         //TODO: better error messages?
-        content: input === null ? "You are not registered." : "Player not found",
+        content:
+          input === null ? "You are not registered." : "Player not found",
         ephemeral: true,
       });
       return;
+    } else {
+      log(player);
     }
 
-    const winLossRatio = player.getLosses() === 0 ? player.getWins() : player.getWins() / player.getLosses();
+    const winLossRatio =
+      player.getLosses() === 0
+        ? player.getWins()
+        : player.getWins() / player.getLosses();
     //TODO: winstreak
     const embed = new EmbedBuilder()
       .setColor("#0099ff")
@@ -46,7 +65,8 @@ export default class StatsCommand implements Command {
       .addFields(
         {
           name: " ",
-          value: "**NAME**\n**ELO**\n**WINS**\n**LOSSES**\n**W/L**\n**WINSTREAK**",
+          value:
+            "**NAME**\n**ELO**\n**WINS**\n**LOSSES**\n**W/L**\n**WINSTREAK**",
           inline: true,
         },
         {
