@@ -48,11 +48,12 @@ type GameSettings {
 
 type GameResult {
   winner Team
-  loser  Team
 }
 
 model Game {
   id String @id @default(uuid()) @map("_id")
+
+  finished Boolean @default(false)
 
   startTime DateTime
   endTime   DateTime
@@ -79,7 +80,7 @@ model GameParticipation {
   mvp     Boolean @default(false)
   captain Boolean @default(false)
 
-  @@unique([playerId, gameId]) // Ensure a player can only participate in one role per game
+  @@unique([playerId, gameId]) // a player can only participate in one role per game
 }
 
 enum Team {

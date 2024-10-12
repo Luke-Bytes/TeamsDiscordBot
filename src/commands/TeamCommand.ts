@@ -4,17 +4,15 @@ import {
   SlashCommandBuilder,
 } from "discord.js";
 import { Command } from "./CommandInterface";
-import { RandomTeams } from "../logic/RandomTeams";
-import { GameData } from "../database/GameData";
 import { promises as fs } from "fs";
+import { GameManager } from "logic/GameManager";
+import { createTeamGenerateEmbed, createTeamViewEmbed } from "util/EmbedUtil";
 
 export default class TeamCommand implements Command {
   name = "team";
   description = "Manage teams";
 
   data: SlashCommandBuilder;
-
-  private randomTeams = new RandomTeams();
 
   constructor() {
     const command = new SlashCommandBuilder()
@@ -53,6 +51,10 @@ export default class TeamCommand implements Command {
       memberRoles instanceof GuildMemberRoleManager &&
       memberRoles.cache.has(config.roles.organiserRole);
 
+    await interaction.deferReply();
+
+    const game = GameManager.getGameManager().getGame();
+
     switch (subcommand) {
       case "generate": {
         if (!isOrganiser) {
@@ -65,8 +67,8 @@ export default class TeamCommand implements Command {
 
         const method = interaction.options.getString("method");
         if (method === "random") {
-          this.randomTeams.randomizeTeams();
-          const response = this.randomTeams.createEmbedMessage();
+          game.shuffleTeams("random");
+          const response = createTeamGenerateEmbed(game);
           await interaction.reply(response);
         } else {
           await interaction.reply({
@@ -86,8 +88,8 @@ export default class TeamCommand implements Command {
           return;
         }
 
-        GameData.setBluePlayers([]);
-        GameData.setRedPlayers([]);
+        game.reset();
+
         await interaction.reply({
           content: "Teams have been reset!",
           ephemeral: false,
@@ -95,21 +97,10 @@ export default class TeamCommand implements Command {
         break;
       }
 
-      case "list": {
-        const bluePlayers =
-          GameData.getBluePlayers().length > 0
-            ? GameData.getBluePlayers().join(", ")
-            : "No players in Blue Team";
-        const redPlayers =
-          GameData.getRedPlayers().length > 0
-            ? GameData.getRedPlayers().join(", ")
-            : "No players in Red Team";
-        await interaction.reply({
-          content: `**Blue Team:** ${bluePlayers}\n**Red Team:** ${redPlayers}`,
-          ephemeral: true,
-        });
+      case "list":
+        const embed = createTeamViewEmbed(game);
+        await interaction.reply(embed);
         break;
-      }
 
       default:
         await interaction.reply({

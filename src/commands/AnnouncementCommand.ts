@@ -5,7 +5,9 @@ import {
   Message,
 } from "discord.js";
 import { Command } from "./CommandInterface";
-import { GameData } from "../database/GameData";
+import { log } from "console";
+import { AnniMap } from "@prisma/client";
+import { randomEnum } from "Utils";
 
 export default class AnnouncementCommand implements Command {
   data: SlashCommandBuilder;
@@ -35,22 +37,25 @@ export default class AnnouncementCommand implements Command {
     this.data = new SlashCommandBuilder()
       .setName(this.name)
       .setDescription(this.description)
-      .addIntegerOption((option) =>
-        option
-          .setName("when")
-          .setDescription("Unix timestamp")
-          .setRequired(true)
-      )
       .addStringOption((option) =>
-        option.setName("ruleset").setDescription("Ruleset").setRequired(true)
-      )
-      .addStringOption((option) =>
-        option.setName("maps").setDescription("Maps").setRequired(true)
+        option.setName("when").setDescription("Date").setRequired(true)
       )
       .addStringOption((option) =>
         option
           .setName("minerushing")
-          .setDescription("Minerushing? (vote/yes/no)")
+          .setDescription("Minerushing? (poll/yes/no)")
+          .setRequired(true)
+      )
+      .addStringOption((option) =>
+        option
+          .setName("banned_classes")
+          .setDescription("Banned classes, separated by a comma.")
+          .setRequired(true)
+      )
+      .addStringOption((option) =>
+        option
+          .setName("map")
+          .setDescription("Map? (vote <maps>/random/<map>)")
           .setRequired(true)
       )
       .addStringOption((option) =>
@@ -64,25 +69,30 @@ export default class AnnouncementCommand implements Command {
       ) as SlashCommandBuilder;
   }
 
+  private getMap(mapOption: string) {}
+
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const when = interaction.options.getInteger("when", true);
-    const ruleset = interaction.options.getString("ruleset", true);
-    const maps = interaction.options.getString("maps", true)?.split(",");
+    const when = interaction.options.getString("when", true);
     const minerushing = interaction.options.getString("minerushing", true);
+    const bannedClasses = interaction.options.getString("banned_classes", true);
+    const map = interaction.options.getString("map", true);
     const organiser = interaction.options.getString("organiser");
     const host = interaction.options.getString("host");
 
-    const response = `
-      **Announcement**
-      - **When:** <t:${when}:F>
-      - **Ruleset:** ${ruleset}
-      - **Maps:** ${maps.join(", ")}
-      - **Minerushing:** ${minerushing}
-      - **Organiser:** ${organiser ?? "N/A"}
-      - **Host:** ${host ?? "N/A"}
-    `;
-    await interaction.reply(response);
-    const replyMessage = await interaction.fetchReply();
+    await interaction.deferReply();
+
+    let chosenMap;
+    if (map.startsWith("vote ")) {
+      log(map.substring(5));
+    } else if (map === "random") {
+      chosenMap = randomEnum(AnniMap);
+    } else {
+      if ((Object.values(AnniMap) as string[]).includes(map)) {
+        chosenMap = map;
+      } else {
+        // error
+      }
+    }
 
     // Handle map vote if more than 1 map
     if (maps.length > 1) {
@@ -91,15 +101,6 @@ export default class AnnouncementCommand implements Command {
       );
       await this.addMapEmojis(mapVoteMessage, maps);
       this.startMapVoteTimer(mapVoteMessage, when, maps);
-    }
-
-    if (minerushing === "vote") {
-      const minerushingVoteMessage = await (
-        interaction.channel as TextChannel
-      ).send("Minerushing?");
-      await minerushingVoteMessage.react("⚔️");
-      await minerushingVoteMessage.react("🛡️");
-      this.startMinerushingVoteTimer(minerushingVoteMessage, when);
     }
   }
 
