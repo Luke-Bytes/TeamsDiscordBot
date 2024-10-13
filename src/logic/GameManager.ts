@@ -1,4 +1,4 @@
-import { TeamsGame } from "database/TeamsGame";
+import { TeamsGame } from "../database/TeamsGame";
 
 export class GameManager {
   private static currentGame?: TeamsGame;

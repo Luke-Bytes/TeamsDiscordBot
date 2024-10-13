@@ -1,3 +1,5 @@
+import { Player } from "@prisma/client";
+import { log } from "console";
 import { TeamsGame } from "database/TeamsGame";
 import { TeamsPlayer } from "database/TeamsPlayer";
 import {
@@ -5,7 +7,27 @@ import {
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
+  User,
 } from "discord.js";
+
+export function createIGNListEmbed(discordUser: User, player: Player) {
+  const primary = player.primaryMinecraftAccount;
+  const others = player.minecraftAccounts.filter((v) => v !== primary);
+
+  const embed = new EmbedBuilder()
+    .setColor("#0099ff")
+    .setTitle(`IGNs for ${discordUser.displayName}`)
+    .addFields({
+      name: `1. **${primary}**`,
+      value: ` ${others
+        .map((v, i) => {
+          return `${i + 2}. ${v}`;
+        })
+        .join("\n")}`,
+      inline: false,
+    });
+  return { embeds: [embed] };
+}
 
 export function createTeamViewEmbed(game: TeamsGame) {
   const redPlayers: TeamsPlayer[] = game.getPlayersOfTeam("RED");

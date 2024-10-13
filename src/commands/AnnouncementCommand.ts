@@ -10,28 +10,13 @@ import {
 import { Command } from "./CommandInterface";
 import { log } from "console";
 import { AnniMap } from "@prisma/client";
-import { randomEnum } from "Utils";
-import { ConfigManager } from "ConfigManager";
+import { randomEnum } from "../Utils";
+import { ConfigManager } from "../ConfigManager";
 
 export default class AnnouncementCommand implements Command {
   data: SlashCommandBuilder;
   name: string;
   description: string;
-  private mapEmojiMap: Record<AnniMap, string> = {
-    //TODO add relevant emojis
-    COASTAL: "🗺️",
-    //Duelstal: "🗺️",
-    //Clashstal: "🗺️",
-    //Canyon: "🗺️",
-    NATURE: "🗺️",
-    //Siege: "🗺️",
-    //Andorra: "🗺️",
-    //Arid: "🗺️",
-    //Aftermath: "🗺️",
-    //Dredge: "🗺️",
-    //Villages: "🗺️",
-    //Chasm: "🌍",
-  };
   private defaultEmojis: string[] = ["🟠", "🟡", "🟢", "🔵", "🟣"];
 
   constructor() {
@@ -111,31 +96,6 @@ export default class AnnouncementCommand implements Command {
         };
       }
     }
-  }
-
-  async startMapVote(channel: GuildBasedChannel, maps: AnniMap[]) {
-    if (!channel.isSendable()) {
-      console.error(`Missing send permissions in channel ${channel.name}`);
-      return;
-    }
-
-    const embed = new EmbedBuilder()
-      .setColor("#0099ff")
-      .setTitle("**MAP VOTE**");
-
-    maps.forEach((map) => {
-      embed.addFields({ name: map, value: " ", inline: false });
-    });
-
-    const message = await channel.send({
-      embeds: [embed],
-    });
-
-    for (let i = 0; i < maps.length; i++) {
-      await message.react(this.mapEmojiMap[maps[i]]);
-    }
-
-    return message;
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {

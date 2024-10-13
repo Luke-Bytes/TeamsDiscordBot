@@ -1,7 +1,7 @@
 import { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
 import { Command } from "./CommandInterface";
-import { ConfigManager } from "ConfigManager";
-import { GameManager } from "logic/GameManager";
+import { ConfigManager } from "../ConfigManager";
+import { GameManager } from "../logic/GameManager";
 import { Team } from "@prisma/client";
 
 export default class CaptainCommand implements Command {

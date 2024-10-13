@@ -5,7 +5,7 @@ import {
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { EloUtil } from "../util/EloUtil";
-import { prismaClient } from "database/prismaClient";
+import { prismaClient } from "../database/prismaClient";
 
 export default class LeaderboardsCommand implements Command {
   data: SlashCommandBuilder;

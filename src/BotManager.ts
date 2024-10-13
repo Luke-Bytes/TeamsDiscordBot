@@ -8,7 +8,7 @@ import {
 } from "./interactions/InteractionsHandler";
 import path from "path";
 import { fileURLToPath } from "url";
-import { RandomTeams } from "./logic/RandomTeams";
+import { log } from "console";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,19 +21,7 @@ const client = new Client({
   ],
 });
 
-const players: PlayerData[] = [];
-const gameData = new GameData();
-const gameHistory: GameHistory[] = [];
-GameData.setDefaultValues();
-
-const randomTeamsInstance = new RandomTeams();
-
-const commandHandler = new CommandHandler({
-  players,
-  gameData,
-  gameHistory,
-  randomTeamsInstance,
-});
+const commandHandler = new CommandHandler();
 
 const messageHandler = new MessageHandler(client);
 const reactionHandler = new ReactionHandler();

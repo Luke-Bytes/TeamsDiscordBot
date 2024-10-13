@@ -5,8 +5,11 @@ import {
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { promises as fs } from "fs";
-import { GameManager } from "logic/GameManager";
-import { createTeamGenerateEmbed, createTeamViewEmbed } from "util/EmbedUtil";
+import { GameManager } from "../logic/GameManager";
+import {
+  createTeamGenerateEmbed,
+  createTeamViewEmbed,
+} from "../util/EmbedUtil";
 
 export default class TeamCommand implements Command {
   name = "team";

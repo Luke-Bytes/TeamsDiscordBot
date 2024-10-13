@@ -4,8 +4,8 @@ import {
   embedLength,
 } from "discord.js";
 import { Command } from "./CommandInterface";
-import { ConfigManager } from "ConfigManager";
-import { GameManager } from "logic/GameManager";
+import { ConfigManager } from "../ConfigManager";
+import { GameManager } from "../logic/GameManager";
 
 export default class RegisterCommand implements Command {
   data: SlashCommandBuilder;

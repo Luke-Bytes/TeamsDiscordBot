@@ -10,6 +10,7 @@ import { prismaClient } from "./prismaClient";
 import { Snowflake } from "discord.js";
 import { TeamsPlayer } from "./TeamsPlayer";
 import { error } from "console";
+import { MapVoteManager } from "logic/MapVoteManager";
 
 // wrapper class for Game
 // todo bad naming
@@ -26,6 +27,7 @@ export class TeamsGame {
   };
 
   teams: Record<Team, TeamsPlayer[]> = { RED: [], BLUE: [] };
+  mapVoteManager?: MapVoteManager;
 
   constructor() {}
 

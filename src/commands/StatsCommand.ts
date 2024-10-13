@@ -6,7 +6,7 @@ import {
 import { Command } from "./CommandInterface";
 import { EloUtil } from "../util/EloUtil";
 import { log } from "console";
-import { TeamsPlayer } from "database/TeamsPlayer";
+import { TeamsPlayer } from "../database/TeamsPlayer";
 
 export default class StatsCommand implements Command {
   name: string;
