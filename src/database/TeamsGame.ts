@@ -1,16 +1,17 @@
 import {
   $Enums,
   AnniClass,
+  AnniMap,
   Game,
   Player,
   PrismaPromise,
   Team,
 } from "@prisma/client";
 import { prismaClient } from "./prismaClient";
-import { Snowflake } from "discord.js";
+import { GuildBasedChannel, Snowflake } from "discord.js";
 import { TeamsPlayer } from "./TeamsPlayer";
 import { error } from "console";
-import { MapVoteManager } from "logic/MapVoteManager";
+import { MapVoteManager } from "../logic/MapVoteManager";
 
 // wrapper class for Game
 // todo bad naming
@@ -20,16 +21,26 @@ export class TeamsGame {
   finished?: boolean;
   startTime?: Date;
   endTime?: Date;
-  settings?: {
-    minerushing: boolean;
-    bannedClasses: $Enums.AnniClass[];
-    map: $Enums.AnniMap;
+  settings: {
+    minerushing?: boolean;
+    bannedClasses?: $Enums.AnniClass[];
+    map?: $Enums.AnniMap;
   };
 
   teams: Record<Team, TeamsPlayer[]> = { RED: [], BLUE: [] };
   mapVoteManager?: MapVoteManager;
 
-  constructor() {}
+  constructor() {
+    this.settings = {};
+  }
+
+  public startMapVote(channel: GuildBasedChannel, maps: AnniMap[]) {
+    this.mapVoteManager = new MapVoteManager(maps);
+
+    this.mapVoteManager.startMapVote(channel, (winner) => {
+      this.settings.map = winner;
+    });
+  }
 
   private getTeamWithLeastPlayers() {
     return Object.keys(this.teams).sort(
@@ -56,7 +67,7 @@ export class TeamsGame {
       return {
         error: true,
         message:
-          "You have not registered this in-game name. Please use /register",
+          "You have not registered this in-game name. Please use `/ign add`",
       };
     }
 

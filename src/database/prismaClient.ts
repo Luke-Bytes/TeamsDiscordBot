@@ -29,26 +29,21 @@ export const prismaClient = new PrismaClient().$extends({
       },
 
       async addMcAccount(
-        idOrSnowflake: string,
+        discordSnowflake: string,
         ign: string
       ): Promise<{ error: false } | { error: string }> {
         let player = await prismaClient.player.findFirst({
           where: {
-            OR: [
-              {
-                id: idOrSnowflake,
-              },
-              {
-                discordSnowflake: idOrSnowflake,
-              },
-            ],
+            discordSnowflake: discordSnowflake,
           },
         });
 
         if (!player) {
-          return {
-            error: "Account not found.",
-          };
+          player = await prismaClient.player.create({
+            data: {
+              discordSnowflake: discordSnowflake,
+            },
+          });
         }
 
         if (player.minecraftAccounts.includes(ign)) {

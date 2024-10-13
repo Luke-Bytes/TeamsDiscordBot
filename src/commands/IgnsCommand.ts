@@ -1,8 +1,8 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
 import { Command } from "./CommandInterface";
-import { log } from "console";
 import { prismaClient } from "../database/prismaClient";
 import { createIGNListEmbed } from "../util/EmbedUtil";
+import { MojangAPI } from "../api/MojangAPI";
 
 export default class TestCommand implements Command {
   data: SlashCommandBuilder;
@@ -42,9 +42,10 @@ export default class TestCommand implements Command {
     switch (subcommand) {
       case "add":
         const ign = interaction.options.getString("ign", true);
+        const uuid = await MojangAPI.usernameToUUID(ign);
         const result = await prismaClient.player.addMcAccount(
           interaction.user.id,
-          ign
+          uuid
         );
         if (result.error) {
           await interaction.editReply(result.error);
@@ -66,7 +67,23 @@ export default class TestCommand implements Command {
           return;
         }
 
-        const msg = createIGNListEmbed(interaction.user, player);
+        const primaryMinecraftAccount = player.primaryMinecraftAccount
+          ? await MojangAPI.uuidToUsername(player.primaryMinecraftAccount)
+          : "N/A";
+
+        const others = await Promise.all(
+          player.minecraftAccounts
+            .filter((v) => v !== player.primaryMinecraftAccount)
+            .map(async (v) => {
+              return await MojangAPI.uuidToUsername(v);
+            })
+        );
+
+        const msg = createIGNListEmbed(
+          interaction.user.displayName,
+          primaryMinecraftAccount,
+          others
+        );
 
         await interaction.editReply(msg);
     }

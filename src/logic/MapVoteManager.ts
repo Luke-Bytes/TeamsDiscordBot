@@ -30,6 +30,9 @@ export class MapVoteManager {
   channel?: GuildBasedChannel;
   message?: Message;
 
+  voteTimeout?: NodeJS.Timeout;
+  winnerCallback?: (winner: AnniMap) => void;
+
   constructor(maps: AnniMap[]) {
     this.maps = maps;
     this.started = false;
@@ -50,6 +53,17 @@ export class MapVoteManager {
     await this.message?.edit({ embeds: [embed] });
   }
 
+  async finalizeVotes() {
+    clearTimeout(this.voteTimeout);
+    this.updateMapVotes();
+
+    const winningMap = Object.entries(this.votes).sort((a, b) => {
+      return a[1] - b[1];
+    })[0][0];
+
+    if (this.winnerCallback) this.winnerCallback(winningMap as AnniMap);
+  }
+
   makeEmbed() {
     const embed = new EmbedBuilder()
       .setColor("#0099ff")
@@ -66,7 +80,10 @@ export class MapVoteManager {
     return embed;
   }
 
-  async startMapVote(channel: GuildBasedChannel) {
+  async startMapVote(
+    channel: GuildBasedChannel,
+    winnerCallback: (winner: AnniMap) => void
+  ) {
     if (!channel.isSendable()) {
       console.error(`Missing send permissions in channel ${channel.name}`);
       return;
@@ -85,8 +102,26 @@ export class MapVoteManager {
       await this.message.react(mapToEmojis[this.maps[i]]);
     }
 
-    setTimeout(async () => {
+    let i = 0;
+    let interval = 500;
+    this.winnerCallback = winnerCallback;
+    this.voteTimeout = setTimeout(async () => {
       await this.updateMapVotes();
-    }, 500);
+      i += interval;
+
+      //10 second vote
+      if (i >= 10000) {
+        await this.finalizeVotes();
+      }
+    }, interval);
+  }
+
+  async cancelMapVote() {
+    if (this.message) {
+      if (this.voteTimeout) {
+        clearTimeout(this.voteTimeout);
+      }
+      this.message.delete();
+    }
   }
 }
