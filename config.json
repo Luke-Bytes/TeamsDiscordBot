@@ -9,7 +9,9 @@
     "organiserRole": ""
   },
   "channels": {
-    "registration": ""
+    "registration": "",
+    "mapVote": "",
+    "minerushingVote": ""
   },
   "dev": {
     "enabled": false,
