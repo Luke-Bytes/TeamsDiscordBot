@@ -8,9 +8,6 @@ import {
 } from "./interactions/InteractionsHandler";
 import path from "path";
 import { fileURLToPath } from "url";
-import { GameData } from "./database/GameData";
-import { PlayerData } from "./database/PlayerData";
-import { GameHistory } from "./database/GameHistory";
 import { RandomTeams } from "./logic/RandomTeams";
 
 const __filename = fileURLToPath(import.meta.url);

@@ -2,12 +2,11 @@ import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
   EmbedBuilder,
-  SlashCommandSubcommandsOnlyBuilder,
 } from "discord.js";
 import { Command } from "./CommandInterface";
-import { PlayerData } from "../database/PlayerData";
 import { EloUtil } from "../util/EloUtil";
 import { log } from "console";
+import { TeamsPlayer } from "database/TeamsPlayer";
 
 export default class StatsCommand implements Command {
   name: string;
@@ -35,13 +34,8 @@ export default class StatsCommand implements Command {
     const input = interaction.options.getString("player", false);
     const player =
       input !== null
-        ? PlayerData.playerDataList.find(
-            (playerData) => playerData.getInGameName() === input
-          )
-        : PlayerData.playerDataList.find(
-            (playerData) =>
-              playerData.getDiscordUserId() === interaction.user.id
-          );
+        ? await TeamsPlayer.byMinecraftAccount(input)
+        : await TeamsPlayer.byDiscordSnowflake(interaction.user.id);
 
     if (player === undefined) {
       await interaction.reply({
@@ -56,9 +50,8 @@ export default class StatsCommand implements Command {
     }
 
     const winLossRatio =
-      player.getLosses() === 0
-        ? player.getWins()
-        : player.getWins() / player.getLosses();
+      player.losses === 0 ? player.wins : player.wins / player.losses;
+
     //TODO: winstreak
     const embed = new EmbedBuilder()
       .setColor("#0099ff")
@@ -67,14 +60,14 @@ export default class StatsCommand implements Command {
         {
           name: " ",
           value:
-            "**NAME**\n**ELO**\n**WINS**\n**LOSSES**\n**W/L**\n**WINSTREAK**",
+            "**NAMES**\n**ELO**\n**WINS**\n**LOSSES**\n**W/L**\n**WINSTREAK**",
           inline: true,
         },
         {
           name: " ",
-          value: `${player.getInGameName()}\n${player.getElo()} ${EloUtil.getEloEmoji(
-            player.getElo()
-          )}\n${player.getWins()}\n${player.getLosses()}\n${winLossRatio}\n${"(winstreak)"}`,
+          value: `${player.minecraftAccounts.join(", ")}\n${player.elo} ${EloUtil.getEloEmoji(
+            player.elo
+          )}\n${player.wins}\n${player.losses}\n${winLossRatio}\n${"(winstreak)"}`,
           inline: true,
         }
       );

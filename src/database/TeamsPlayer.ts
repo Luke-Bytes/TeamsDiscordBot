@@ -6,6 +6,8 @@ import { TeamsGame } from "./TeamsGame";
 // wrapper class for Player
 // todo bad naming
 export class TeamsPlayer {
+  playerId: string;
+
   elo: number;
   wins: number;
   losses: number;
@@ -14,8 +16,10 @@ export class TeamsPlayer {
   primaryMinecraftAccount?: string;
 
   ignUsed?: string; //in the in-memory game.
+  captain?: boolean;
 
   constructor(data: Player) {
+    this.playerId = data.id;
     this.elo = data.elo;
     this.wins = data.wins;
     this.losses = data.losses;
@@ -36,6 +40,26 @@ export class TeamsPlayer {
         },
       })
     );
+  }
+
+  public static async byMinecraftAccount(minecraftAccount: string) {
+    let player = await prismaClient.player.findFirst({
+      where: {
+        OR: [
+          {
+            minecraftAccounts: {
+              has: minecraftAccount,
+            },
+          },
+          {
+            primaryMinecraftAccount: minecraftAccount,
+          },
+        ],
+      },
+    });
+    if (!player) return;
+
+    return new TeamsPlayer(player);
   }
 
   public async addMcAccount(ign: string) {
@@ -81,13 +105,17 @@ export class TeamsPlayer {
         player.primaryMinecraftAccount = ign;
       }
 
-      this.data = await prismaClient.player.update({
+      await prismaClient.player.update({
         where: { id: player.id },
         data: {
           minecraftAccounts: player.minecraftAccounts,
           primaryMinecraftAccount: player.primaryMinecraftAccount,
         },
       });
+
+      this.minecraftAccounts = player.minecraftAccounts;
+      this.primaryMinecraftAccount =
+        player.primaryMinecraftAccount ?? undefined;
 
       return {
         error: false,

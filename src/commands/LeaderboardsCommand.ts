@@ -4,14 +4,14 @@ import {
   EmbedBuilder,
 } from "discord.js";
 import { Command } from "./CommandInterface";
-import { PlayerData } from "../database/PlayerData";
 import { EloUtil } from "../util/EloUtil";
+import { prismaClient } from "database/prismaClient";
 
 export default class LeaderboardsCommand implements Command {
   data: SlashCommandBuilder;
   name: string;
   description: string;
-  playerDataList: PlayerData[];
+
   constructor() {
     this.name = "leaderboards";
     this.description = "Get leaderboards for the top-rated players.";
@@ -19,8 +19,6 @@ export default class LeaderboardsCommand implements Command {
     this.data = new SlashCommandBuilder()
       .setName(this.name)
       .setDescription(this.description);
-
-    this.playerDataList = PlayerData.playerDataList;
   }
 
   private getLeaderboardEntryString(
@@ -35,39 +33,36 @@ export default class LeaderboardsCommand implements Command {
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const topTen = this.playerDataList
-      .toSorted((a, b) => {
-        return b.getElo() - a.getElo();
-      })
-      .slice(0, 10)
-      .map((playerData, i) => {
-        const placeEmojis = [
-          "first_place",
-          "second_place",
-          "third_place",
-          "four",
-          "five",
-          "six",
-          "seven",
-          "eight",
-          "nine",
-          "keycap_ten",
-        ];
-        return {
-          ign: playerData.getInGameName(),
-          elo: playerData.getElo(),
-          emoji: `:${placeEmojis[i]}:`,
-          winLossRatio: playerData.getWins() / playerData.getLosses(),
-        };
-      });
+    const allPlayers = await prismaClient.player.findMany({
+      orderBy: {
+        elo: "desc",
+      },
+    });
 
-    const currentPlace = this.playerDataList
-      .toSorted((a, b) => {
-        return b.getElo() - a.getElo();
-      })
-      .findIndex(
-        (playerData) => playerData.getDiscordUserId() === interaction.user.id
-      );
+    const topTen = allPlayers.slice(0, 10).map((playerData, i) => {
+      const placeEmojis = [
+        "first_place",
+        "second_place",
+        "third_place",
+        "four",
+        "five",
+        "six",
+        "seven",
+        "eight",
+        "nine",
+        "keycap_ten",
+      ];
+      return {
+        ign: playerData.primaryMinecraftAccount ?? "N/A",
+        elo: playerData.elo,
+        emoji: `:${placeEmojis[i]}:`,
+        winLossRatio: playerData.wins / playerData.losses,
+      };
+    });
+
+    const currentPlace = allPlayers.findIndex(
+      (playerData) => playerData.discordSnowflake === interaction.user.id
+    );
 
     const embed = new EmbedBuilder()
       .setColor("#0099ff")

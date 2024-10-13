@@ -53,7 +53,7 @@ export default class TeamCommand implements Command {
 
     await interaction.deferReply();
 
-    const game = GameManager.getGameManager().getGame();
+    const game = GameManager.getGame();
 
     switch (subcommand) {
       case "generate": {

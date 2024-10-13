@@ -1,18 +1,12 @@
-import {
-  ButtonInteraction,
-  ActionRowBuilder,
-  ButtonBuilder,
-  EmbedBuilder,
-  ButtonStyle,
-} from "discord.js";
-import { promises as fs } from "fs";
+import { ButtonInteraction } from "discord.js";
 import { GuildMemberRoleManager } from "discord.js";
+import { ConfigManager } from "ConfigManager";
 
 export class RandomTeams {
   constructor() {}
 
   public async handleButtonInteraction(interaction: ButtonInteraction) {
-    const config = await fs.readFile("./config.json", "utf-8").then(JSON.parse);
+    const config = ConfigManager.getConfig();
 
     if (
       interaction.member?.roles instanceof GuildMemberRoleManager &&
@@ -28,13 +22,9 @@ export class RandomTeams {
           });
           break;
         case "reroll":
-          this.randomizeTeams(); // Randomize teams and update GameData globally
-          await interaction.editReply(this.createEmbedMessage());
           break;
         case "cancel":
           // Clear the global blue and red team players
-          GameData.setBluePlayers([]);
-          GameData.setRedPlayers([]);
           await interaction.editReply({
             content: "Team selection canceled.",
             components: [],
