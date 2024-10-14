@@ -4,7 +4,7 @@ import { prismaClient } from "../database/prismaClient";
 import { createIGNListEmbed } from "../util/EmbedUtil";
 import { MojangAPI } from "../api/MojangAPI";
 
-export default class TestCommand implements Command {
+export default class IgnsCommand implements Command {
   data: SlashCommandBuilder;
   name: string;
   description: string;

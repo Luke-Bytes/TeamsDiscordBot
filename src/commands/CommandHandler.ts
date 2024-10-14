@@ -5,48 +5,37 @@ import {
   ChatInputCommandInteraction,
   MessageContextMenuCommandInteraction,
   UserContextMenuCommandInteraction,
-  ButtonInteraction,
 } from "discord.js";
 import { Command } from "./CommandInterface";
-import fs from "fs";
-import path from "path";
-import { pathToFileURL } from "url";
 import "dotenv/config";
 import RegisterCommand from "./RegisterCommand";
 import { ConfigManager } from "../ConfigManager";
+import AnnouncementCommand from "./AnnouncementCommand";
+import CaptainCommand from "./CaptainCommand";
+import IgnsCommand from "./IgnsCommand";
+import LeaderboardsCommand from "./LeaderboardsCommand";
+import RoleCommand from "./RoleCommand";
+import StatsCommand from "./StatsCommand";
+import TeamCommand from "./TeamCommand";
+import TestCommand from "./TestCommand";
 
 export class CommandHandler {
   private commands: Command[] = [];
 
   constructor() {}
 
-  async loadCommands(commandDir: string): Promise<void> {
-    const commandFiles = fs
-      .readdirSync(commandDir)
-      .filter((file) => file.match(/.*Command\.(ts|js)$/));
-
-    for (const file of commandFiles) {
-      const filePath = path.join(commandDir, file);
-      const fileUrl = pathToFileURL(filePath).href;
-      try {
-        const commandClass = (await import(fileUrl)).default;
-        if (!commandClass || typeof commandClass !== "function") {
-          console.error(
-            `Error: ${filePath} does not export a valid command class.`
-          );
-          continue;
-        }
-        // some commands have specific dependencies
-        const commandInstance = new commandClass() as Command;
-        this.register(commandInstance);
-      } catch (error) {
-        console.error(`Failed to load command ${filePath}:`, error);
-      }
-    }
-  }
-
-  register(command: Command) {
-    this.commands.push(command);
+  async loadCommands() {
+    this.commands = [
+      new AnnouncementCommand(),
+      new CaptainCommand(),
+      new IgnsCommand(),
+      new LeaderboardsCommand(),
+      new RegisterCommand(),
+      new RoleCommand(),
+      new StatsCommand(),
+      new TeamCommand(),
+      new TestCommand(),
+    ];
   }
 
   async handleInteraction(interaction: Interaction) {

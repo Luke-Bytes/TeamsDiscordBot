@@ -46,6 +46,14 @@ export default class RegisterCommand implements Command {
       return;
     }
 
+    if (!GameManager.getGame().announced) {
+      await interaction.reply({
+        content: "No game has been announced yet!",
+        ephemeral: true,
+      });
+      return;
+    }
+
     const inGameName = interaction.options.getString("ingamename", true);
     const targetUser =
       interaction.options.getUser("discorduser") || interaction.user;

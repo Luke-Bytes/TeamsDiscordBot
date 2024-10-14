@@ -73,6 +73,14 @@ export default class CaptainCommand implements Command {
       return;
     }
 
+    if (!GameManager.getGame().announced) {
+      await interaction.reply({
+        content: "No game has been announced yet!",
+        ephemeral: true,
+      });
+      return;
+    }
+
     const player = GameManager.getGame()
       .getPlayers()
       .find((player) => player.discordSnowflake === user.id);

@@ -19,6 +19,7 @@ export class TeamsGame {
   gameId?: string;
 
   finished?: boolean;
+  announced = false;
   startTime?: Date;
   endTime?: Date;
   settings: {

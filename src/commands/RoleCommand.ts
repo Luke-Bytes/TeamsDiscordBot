@@ -4,7 +4,6 @@ import {
   SlashCommandBuilder,
 } from "discord.js";
 import { Command } from "./CommandInterface";
-import * as fs from "fs";
 import { ConfigManager } from "../ConfigManager";
 
 export default class RoleCommand implements Command {

@@ -12,6 +12,7 @@ import { log } from "console";
 import { AnniMap } from "@prisma/client";
 import { randomEnum } from "../Utils";
 import { ConfigManager } from "../ConfigManager";
+import { GameManager } from "../logic/GameManager";
 
 export default class AnnouncementCommand implements Command {
   data: SlashCommandBuilder;
@@ -73,10 +74,9 @@ export default class AnnouncementCommand implements Command {
       } {
     if (mapOption.startsWith("vote ")) {
       const rest = mapOption.substring(5);
-      const anniMaps = rest.toUpperCase().split(",");
       return {
         chooseMapType: "vote",
-        maps: rest.split(",") as AnniMap[],
+        maps: rest.toUpperCase().split(",") as AnniMap[],
       };
     } else if (mapOption === "random") {
       return {
@@ -120,9 +120,11 @@ export default class AnnouncementCommand implements Command {
           await message.edit("Could not find map vote channel.");
           return;
         }
-        this.startMapVote(channel, chosenMap.maps);
+        GameManager.getGame().startMapVote(channel, chosenMap.maps);
         break;
     }
+
+    GameManager.getGame().announced = true;
   }
 
   //startMapVoteTimer(message: Message, eventTime: number, maps: string[]) {

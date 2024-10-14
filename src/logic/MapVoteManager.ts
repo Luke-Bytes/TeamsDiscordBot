@@ -1,13 +1,14 @@
 import { AnniMap } from "@prisma/client";
+import { log } from "console";
 import { EmbedBuilder, GuildBasedChannel, Message } from "discord.js";
 
 const mapToEmojis: Record<AnniMap, string> = {
   //TODO add relevant emojis
-  COASTAL: ":ocean:",
+  COASTAL: "🌊",
   //Duelstal: "🗺️",
   //Clashstal: "🗺️",
   //Canyon: "🗺️",
-  NATURE: ":leaves:",
+  NATURE: "🍃",
   //Siege: "🗺️",
   //Andorra: "🗺️",
   //Arid: "🗺️",
@@ -18,8 +19,13 @@ const mapToEmojis: Record<AnniMap, string> = {
 };
 
 const emojiToMaps: Record<string, AnniMap> = {
-  ":ocean:": "COASTAL",
-  ":leaves:": "NATURE",
+  "🌊": "COASTAL",
+  "🍃": "NATURE",
+};
+
+const prettyMapNames: Record<AnniMap, String> = {
+  COASTAL: "Coastal",
+  NATURE: "Nature",
 };
 
 export class MapVoteManager {
@@ -42,9 +48,10 @@ export class MapVoteManager {
   }
 
   async updateMapVotes() {
-    this.message?.reactions.cache.forEach((reaction) => {
-      if ((this.maps as string[]).includes(reaction.emoji.name!)) {
-        this.votes[emojiToMaps[reaction.emoji.name!]] = reaction.count;
+    this.message?.reactions.cache.forEach(async (reaction) => {
+      if ((this.maps as string[]).includes(emojiToMaps[reaction.emoji.name!])) {
+        const size = (await reaction.users.fetch()).size;
+        this.votes[emojiToMaps[reaction.emoji.name!]] = size - 1;
       }
     });
 
@@ -71,7 +78,7 @@ export class MapVoteManager {
 
     this.maps.forEach((map) => {
       embed.addFields({
-        name: map + ": " + this.votes[map],
+        name: prettyMapNames[map] + ": " + this.votes[map],
         value: " ",
         inline: false,
       });
@@ -99,13 +106,15 @@ export class MapVoteManager {
     });
 
     for (let i = 0; i < this.maps.length; i++) {
-      await this.message.react(mapToEmojis[this.maps[i]]);
+      await this.message.react(
+        mapToEmojis[this.maps[i].toUpperCase() as AnniMap]
+      );
     }
 
     let i = 0;
-    let interval = 500;
+    let interval = 1000;
     this.winnerCallback = winnerCallback;
-    this.voteTimeout = setTimeout(async () => {
+    this.voteTimeout = setInterval(async () => {
       await this.updateMapVotes();
       i += interval;
 

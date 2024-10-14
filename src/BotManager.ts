@@ -8,10 +8,6 @@ import {
 } from "./interactions/InteractionsHandler";
 import path from "path";
 import { fileURLToPath } from "url";
-import { log } from "console";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const client = new Client({
   intents: [
@@ -30,8 +26,7 @@ const voiceChannelHandler = new VoiceChannelHandler();
 client.once("ready", async () => {
   console.log(`Logged in as ${client.user?.tag}!`);
 
-  const commandsPath = path.join(__dirname, "commands");
-  await commandHandler.loadCommands(commandsPath);
+  await commandHandler.loadCommands();
   await commandHandler.registerCommands();
 });
 
