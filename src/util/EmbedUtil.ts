@@ -18,7 +18,7 @@ export function createIGNListEmbed(
     .setColor("#0099ff")
     .setTitle(`IGNs for ${discordDisplayName}`)
     .addFields({
-      name: `1. **${primaryAccount}**`,
+      name: `1. ${primaryAccount}`,
       value: ` ${otherAccounts
         .map((v, i) => {
           return `${i + 2}. ${v}`;

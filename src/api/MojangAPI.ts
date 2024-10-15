@@ -1,5 +1,3 @@
-import { log } from "console";
-
 export class MojangAPI {
   //store in db
   public static async usernameToUUID(username: string) {
@@ -25,5 +23,10 @@ export class MojangAPI {
     const data = await response.json();
 
     return data.name;
+  }
+
+  public static validateUsername(username: string) {
+    //no length check because some people have og
+    return /^[a-zA-Z0-9_]+$/.test(username) && username.length <= 16;
   }
 }

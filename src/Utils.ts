@@ -1,4 +1,4 @@
-import { GuildMember, PermissionResolvable, Client, Message } from "discord.js";
+import { GuildMember, PermissionResolvable } from "discord.js";
 
 export function formatDate(date: Date = new Date()): string {
   return date.toISOString().replace("T", " ").split(".")[0];

@@ -43,6 +43,18 @@ export class TeamsGame {
     });
   }
 
+  public setMap(map: AnniMap) {
+    if (this.mapVoteManager) {
+      this.mapVoteManager.cancelMapVote();
+    }
+
+    this.settings.map = map;
+  }
+
+  public announce() {
+    game.announced = true;
+  }
+
   private getTeamWithLeastPlayers() {
     return Object.keys(this.teams).sort(
       (a, b) => this.teams[a as Team].length - this.teams[b as Team].length
