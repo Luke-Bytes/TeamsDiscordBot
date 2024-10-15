@@ -19,6 +19,7 @@ export class TeamsBot {
       intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.GuildMessagePolls,
         GatewayIntentBits.MessageContent,
       ],
     });
