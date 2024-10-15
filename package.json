@@ -9,8 +9,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "start:bot:prod": "node dist/src/BotManager.js",
-    "dev": "tsx watch src/BotManager.ts",
+    "start:bot:prod": "node dist/src/main.js",
+    "dev": "tsx watch src/main.ts",
     "prod": "npm run build && npm run start:bot:prod",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -23,6 +23,7 @@
     "@eslint/js": "^9.12.0",
     "@prisma/client": "^5.20.0",
     "@types/ws": "^8.5.12",
+    "chrono-node": "^2.7.7",
     "discord.js": "^14.16.3",
     "dotenv": "^16.0.3",
     "prisma": "^5.20.0"
