@@ -3,16 +3,15 @@ import { Command } from "./CommandInterface";
 import { prismaClient } from "../database/prismaClient";
 import { createIGNListEmbed } from "../util/EmbedUtil";
 import { MojangAPI } from "../api/MojangAPI";
+import { log } from "console";
 
 export default class IgnsCommand implements Command {
-  data: SlashCommandBuilder;
-  name: string;
-  description: string;
+  public data: SlashCommandBuilder;
+  public name = "ign";
+  public description = "View or modify your in-game names";
+  public buttonIds: string[] = [];
 
   constructor() {
-    this.name = "ign";
-    this.description = "View or modify your in-game names.";
-
     this.data = new SlashCommandBuilder()
       .setName(this.name)
       .setDescription(this.description)
@@ -42,7 +41,20 @@ export default class IgnsCommand implements Command {
     switch (subcommand) {
       case "add":
         const ign = interaction.options.getString("ign", true);
+        if (!MojangAPI.validateUsername(ign)) {
+          await interaction.editReply({
+            content: "Could not validate username.",
+          });
+          return;
+        }
         const uuid = await MojangAPI.usernameToUUID(ign);
+
+        if (uuid === undefined) {
+          await interaction.editReply({
+            content: "Username does not exist.",
+          });
+          return;
+        }
         const result = await prismaClient.player.addMcAccount(
           interaction.user.id,
           uuid

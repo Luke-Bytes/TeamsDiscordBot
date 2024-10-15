@@ -9,9 +9,10 @@ import { log } from "console";
 import { TeamsPlayer } from "../database/TeamsPlayer";
 
 export default class StatsCommand implements Command {
-  name: string;
-  description: string;
-  data: SlashCommandBuilder;
+  public name = "stats";
+  public description = "Get the stats of yourself or another player";
+  public data: SlashCommandBuilder;
+  public buttonIds: string[] = [];
 
   constructor() {
     this.name = "stats";

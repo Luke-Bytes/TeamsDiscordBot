@@ -7,14 +7,12 @@ import { Command } from "./CommandInterface";
 import { ConfigManager } from "../ConfigManager";
 
 export default class RoleCommand implements Command {
-  data: SlashCommandBuilder;
-  name: string;
-  description: string;
+  public data: SlashCommandBuilder;
+  public name = "role";
+  public description = "Configure roles";
+  public buttonIds: string[] = [];
 
   constructor() {
-    this.name = "role";
-    this.description = "Configure roles";
-
     const command = new SlashCommandBuilder()
       .setName(this.name)
       .setDescription(this.description);

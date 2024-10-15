@@ -8,14 +8,12 @@ import { ConfigManager } from "../ConfigManager";
 import { GameManager } from "../logic/GameManager";
 
 export default class RegisterCommand implements Command {
-  data: SlashCommandBuilder;
-  name: string;
-  description: string;
+  public data: SlashCommandBuilder;
+  public name = "register";
+  public description = "Register for friendly war!";
+  public buttonIds: string[] = [];
 
   constructor() {
-    this.name = "register";
-    this.description = "Register for friendly war!";
-
     this.data = new SlashCommandBuilder()
       .setName(this.name)
       .setDescription(this.description)

@@ -2,6 +2,8 @@ import {
   ChatInputCommandInteraction,
   GuildMemberRoleManager,
   SlashCommandBuilder,
+  SlashCommandSubcommandBuilder,
+  SlashCommandSubcommandsOnlyBuilder,
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { promises as fs } from "fs";
@@ -12,38 +14,33 @@ import {
 } from "../util/EmbedUtil";
 
 export default class TeamCommand implements Command {
-  name = "team";
-  description = "Manage teams";
-
-  data: SlashCommandBuilder;
+  public data: SlashCommandSubcommandsOnlyBuilder;
+  public name = "team";
+  public description = "Manage teams";
+  public buttonIds: string[] = [];
 
   constructor() {
-    const command = new SlashCommandBuilder()
-      .setName("team")
-      .setDescription("Manage teams");
-
-    command.addSubcommand((subcommand) =>
-      subcommand
-        .setName("generate")
-        .setDescription("Generate teams")
-        .addStringOption((option) =>
-          option
-            .setName("method")
-            .setDescription("Method to generate teams")
-            .setRequired(true)
-            .addChoices({ name: "random", value: "random" })
-        )
-    );
-
-    command.addSubcommand((subcommand) =>
-      subcommand.setName("reset").setDescription("Reset the teams")
-    );
-
-    command.addSubcommand((subcommand) =>
-      subcommand.setName("list").setDescription("List the current teams")
-    );
-
-    this.data = command;
+    this.data = new SlashCommandBuilder()
+      .setName(this.name)
+      .setDescription(this.description)
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName("generate")
+          .setDescription("Generate teams")
+          .addStringOption((option) =>
+            option
+              .setName("method")
+              .setDescription("Method to generate teams")
+              .setRequired(true)
+              .addChoices({ name: "random", value: "random" })
+          )
+      )
+      .addSubcommand((subcommand) =>
+        subcommand.setName("reset").setDescription("Reset the teams")
+      )
+      .addSubcommand((subcommand) =>
+        subcommand.setName("list").setDescription("List the current teams")
+      );
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -101,8 +98,14 @@ export default class TeamCommand implements Command {
       }
 
       case "list":
-        const embed = createTeamViewEmbed(game);
-        await interaction.reply(embed);
+        if (!game.announced) {
+          await interaction.editReply({
+            content: "Game does not exist.",
+          });
+        } else {
+          const embed = createTeamViewEmbed(game);
+          await interaction.editReply(embed);
+        }
         break;
 
       default:

@@ -6,6 +6,9 @@ import {
   GuildBasedChannel,
   Embed,
   EmbedBuilder,
+  ApplicationCommandOptionData,
+  ButtonInteraction,
+  SlashCommandOptionsOnlyBuilder,
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { log } from "console";
@@ -13,17 +16,15 @@ import { AnniMap } from "@prisma/client";
 import { randomEnum } from "../Utils";
 import { ConfigManager } from "../ConfigManager";
 import { GameManager } from "../logic/GameManager";
+import { Chrono, parseDate } from "chrono-node";
 
 export default class AnnouncementCommand implements Command {
-  data: SlashCommandBuilder;
-  name: string;
-  description: string;
-  private defaultEmojis: string[] = ["🟠", "🟡", "🟢", "🔵", "🟣"];
+  public data: SlashCommandOptionsOnlyBuilder;
+  public name: string = "announce";
+  public description: string = "Create a game announcement";
+  public buttonIds: string[] = ["announcement-confirm"];
 
   constructor() {
-    this.name = "announce";
-    this.description = "Create a game announcement";
-
     this.data = new SlashCommandBuilder()
       .setName(this.name)
       .setDescription(this.description)
@@ -45,7 +46,7 @@ export default class AnnouncementCommand implements Command {
       .addStringOption((option) =>
         option
           .setName("map")
-          .setDescription("Map? (vote <maps>/random/<map>)")
+          .setDescription("Map? (poll <maps>/random/<map>)")
           .setRequired(true)
       )
       .addStringOption((option) =>
@@ -56,7 +57,7 @@ export default class AnnouncementCommand implements Command {
       )
       .addStringOption((option) =>
         option.setName("host").setDescription("Host Name").setRequired(false)
-      ) as SlashCommandBuilder;
+      );
   }
 
   private getMap(mapOption: string):
@@ -84,7 +85,9 @@ export default class AnnouncementCommand implements Command {
         map: randomEnum(AnniMap),
       };
     } else {
-      if ((Object.values(AnniMap) as string[]).includes(mapOption)) {
+      if (
+        (Object.values(AnniMap) as string[]).includes(mapOption.toUpperCase())
+      ) {
         return {
           chooseMapType: "specific",
           map: mapOption as AnniMap,
@@ -107,6 +110,8 @@ export default class AnnouncementCommand implements Command {
     const organiser = interaction.options.getString("organiser");
     const host = interaction.options.getString("host");
 
+    const game = GameManager.getGame();
+
     const message = await interaction.deferReply();
 
     const chosenMap = this.getMap(map);
@@ -120,23 +125,33 @@ export default class AnnouncementCommand implements Command {
           await message.edit("Could not find map vote channel.");
           return;
         }
-        GameManager.getGame().startMapVote(channel, chosenMap.maps);
+        game.startMapVote(channel, chosenMap.maps);
+        break;
+      case "random":
+      case "specific":
+        game.setMap(chosenMap.map);
+        break;
+      case "error":
+        await interaction.editReply({
+          content: "Invalid map option",
+        });
         break;
     }
 
-    GameManager.getGame().announced = true;
+    const date = parseDate(when, undefined, {
+      forwardDate: true,
+    });
+
+    await interaction.editReply({
+      content: date?.toString(),
+    });
+
+    game.announced = true;
   }
 
-  //startMapVoteTimer(message: Message, eventTime: number, maps: string[]) {
-  //  const voteEndTime = eventTime * 1000 - 15 * 60 * 1000;
-  //  const delay = voteEndTime - Date.now();
-
-  //  setTimeout(async () => {
-  //    const winningMap = this.tallyVotes(message, maps);
-  //    GameData.addMapVote(winningMap);
-  //    await message.edit(`The map will be **${winningMap}**!`);
-  //  }, delay);
-  //}
+  public async handleButtonPress(
+    interaction: ButtonInteraction
+  ): Promise<void> {}
 
   //startMinerushingVoteTimer(message: Message, eventTime: number) {
   //  const delay = eventTime * 1000 - Date.now();

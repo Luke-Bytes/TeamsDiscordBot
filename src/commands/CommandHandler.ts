@@ -4,7 +4,6 @@ import {
   Interaction,
   ChatInputCommandInteraction,
   MessageContextMenuCommandInteraction,
-  UserContextMenuCommandInteraction,
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import "dotenv/config";
@@ -24,7 +23,7 @@ export class CommandHandler {
 
   constructor() {}
 
-  async loadCommands() {
+  public loadCommands() {
     this.commands = [
       new AnnouncementCommand(),
       new CaptainCommand(),
@@ -38,7 +37,7 @@ export class CommandHandler {
     ];
   }
 
-  async handleInteraction(interaction: Interaction) {
+  public async handleInteraction(interaction: Interaction) {
     if (interaction.isChatInputCommand()) {
       const chatInteraction = interaction as ChatInputCommandInteraction;
       const command = this.commands.find(
@@ -62,17 +61,6 @@ export class CommandHandler {
         );
         await command.execute(messageInteraction);
       }
-    } else if (interaction.isUserContextMenuCommand()) {
-      const userInteraction = interaction as UserContextMenuCommandInteraction;
-      const command = this.commands.find(
-        (cmd) => cmd.name === userInteraction.commandName
-      );
-      if (command) {
-        console.log(
-          `[${userInteraction.user.id}] runs /${userInteraction.commandName}`
-        );
-        await command.execute(userInteraction);
-      }
     } else if (interaction.isButton()) {
       //const randomTeamsInstance = this.dependencies.randomTeamsInstance;
       //if (randomTeamsInstance) {
@@ -85,7 +73,7 @@ export class CommandHandler {
     }
   }
 
-  async registerCommands() {
+  public async registerCommands() {
     const config = ConfigManager.getConfig();
     const rest = new REST({ version: "10" }).setToken(
       process.env.BOT_TOKEN as string

@@ -8,14 +8,12 @@ import { EloUtil } from "../util/EloUtil";
 import { prismaClient } from "../database/prismaClient";
 
 export default class LeaderboardsCommand implements Command {
-  data: SlashCommandBuilder;
-  name: string;
-  description: string;
+  public data: SlashCommandBuilder;
+  public name = "leaderboards";
+  public description = "Get leaderboards for the top-rated players";
+  public buttonIds: string[] = [];
 
   constructor() {
-    this.name = "leaderboards";
-    this.description = "Get leaderboards for the top-rated players.";
-
     this.data = new SlashCommandBuilder()
       .setName(this.name)
       .setDescription(this.description);

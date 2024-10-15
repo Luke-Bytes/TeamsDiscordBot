@@ -5,13 +5,12 @@ import { GameManager } from "../logic/GameManager";
 import { Team } from "@prisma/client";
 
 export default class CaptainCommand implements Command {
-  data: SlashCommandBuilder;
-  name: string;
-  description: string;
+  public data: SlashCommandBuilder;
+  public name = "captain";
+  public description = "Set or change the captain of a team";
+  public buttonIds: string[] = [];
 
   constructor() {
-    this.name = "captain";
-    this.description = "Set or change the captain of a team";
     this.data = new SlashCommandBuilder()
       .setName(this.name)
       .setDescription(this.description)
