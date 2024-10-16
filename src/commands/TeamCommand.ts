@@ -11,6 +11,7 @@ import {
   createTeamGenerateEmbed,
   createTeamViewEmbed,
 } from "../util/EmbedUtil";
+import { ConfigManager } from "ConfigManager";
 
 export default class TeamCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;
@@ -43,7 +44,7 @@ export default class TeamCommand implements Command {
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const config = await fs.readFile("./config.json", "utf-8").then(JSON.parse);
+    const config = ConfigManager.getConfig();
     const subcommand = interaction.options.getSubcommand();
     const memberRoles = interaction.member?.roles;
     const isOrganiser =
@@ -75,6 +76,27 @@ export default class TeamCommand implements Command {
             ephemeral: true,
           });
         }
+
+        const redTeam = game.getPlayersOfTeam("RED");
+        for (let i = 0; i < redTeam.length; i++) {
+          const player = redTeam[i];
+          const discordUser = await interaction.guild?.members.fetch(
+            player.discordSnowflake
+          );
+          await discordUser?.roles.remove(config.roles.blueTeamRole);
+          discordUser?.roles.add(config.roles.redTeamRole);
+        }
+
+        const blueTeam = game.getPlayersOfTeam("BLUE");
+        for (let i = 0; i < blueTeam.length; i++) {
+          const player = blueTeam[i];
+          const discordUser = await interaction.guild?.members.fetch(
+            player.discordSnowflake
+          );
+          await discordUser?.roles.remove(config.roles.redTeamRole);
+          discordUser?.roles.add(config.roles.blueTeamRole);
+        }
+
         break;
       }
 
