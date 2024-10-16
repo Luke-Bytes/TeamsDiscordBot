@@ -1,6 +1,3 @@
-import { Player } from "@prisma/client";
-import * as fs from "fs";
-
 //export class Elo {
 //  private discordUserId: string;
 //  private won: boolean;

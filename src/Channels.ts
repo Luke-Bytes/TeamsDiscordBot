@@ -1,6 +1,5 @@
 import { ConfigManager } from "ConfigManager";
 import { error } from "console";
-import { Channel } from "diagnostics_channel";
 import { Client, GuildBasedChannel } from "discord.js";
 
 export class Channels {

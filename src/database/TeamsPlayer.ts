@@ -1,7 +1,6 @@
-import { Snowflake, Team } from "discord.js";
+import { Snowflake } from "discord.js";
 import { prismaClient } from "./prismaClient";
 import { Player } from "@prisma/client";
-import { TeamsGame } from "./TeamsGame";
 
 // wrapper class for Player
 // todo bad naming

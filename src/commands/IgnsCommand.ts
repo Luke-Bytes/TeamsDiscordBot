@@ -39,64 +39,69 @@ export default class IgnsCommand implements Command {
 
     switch (subcommand) {
       case "add":
-        const ign = interaction.options.getString("ign", true);
-        if (!MojangAPI.validateUsername(ign)) {
-          await interaction.editReply({
-            content: "Could not validate username.",
-          });
-          return;
-        }
-        const uuid = await MojangAPI.usernameToUUID(ign);
+        {
+          const ign = interaction.options.getString("ign", true);
+          if (!MojangAPI.validateUsername(ign)) {
+            await interaction.editReply({
+              content: "Could not validate username.",
+            });
+            return;
+          }
+          const uuid = await MojangAPI.usernameToUUID(ign);
 
-        if (uuid === undefined) {
-          await interaction.editReply({
-            content: "Username does not exist.",
-          });
-          return;
-        }
-        const result = await prismaClient.player.addMcAccount(
-          interaction.user.id,
-          uuid
-        );
-        if (result.error) {
-          await interaction.editReply(result.error);
-        } else {
-          await interaction.editReply("IGN added successfully.");
+          if (uuid === undefined) {
+            await interaction.editReply({
+              content: "Username does not exist.",
+            });
+            return;
+          }
+          const result = await prismaClient.player.addMcAccount(
+            interaction.user.id,
+            uuid
+          );
+          if (result.error) {
+            await interaction.editReply(result.error);
+          } else {
+            await interaction.editReply("IGN added successfully.");
+          }
         }
         break;
       case "list":
-        const player = await prismaClient.player.findUnique({
-          where: {
-            discordSnowflake: interaction.user.id,
-          },
-        });
+        {
+          const player = await prismaClient.player.findUnique({
+            where: {
+              discordSnowflake: interaction.user.id,
+            },
+          });
 
-        if (!player) {
-          await interaction.editReply(
-            "You are unregistered. Use /ign to add an IGN."
+          if (!player) {
+            await interaction.editReply(
+              "You are unregistered. Use /ign to add an IGN."
+            );
+            return;
+          }
+
+          const primaryMinecraftAccount = player.primaryMinecraftAccount
+            ? await MojangAPI.uuidToUsername(player.primaryMinecraftAccount)
+            : "N/A";
+
+          const others = await Promise.all(
+            player.minecraftAccounts
+              .filter((v) => v !== player.primaryMinecraftAccount)
+              .map(async (v) => {
+                return await MojangAPI.uuidToUsername(v);
+              })
           );
-          return;
+
+          const msg = createIGNListEmbed(
+            interaction.user.displayName,
+            primaryMinecraftAccount,
+            others
+          );
+
+          await interaction.editReply(msg);
         }
-
-        const primaryMinecraftAccount = player.primaryMinecraftAccount
-          ? await MojangAPI.uuidToUsername(player.primaryMinecraftAccount)
-          : "N/A";
-
-        const others = await Promise.all(
-          player.minecraftAccounts
-            .filter((v) => v !== player.primaryMinecraftAccount)
-            .map(async (v) => {
-              return await MojangAPI.uuidToUsername(v);
-            })
-        );
-
-        const msg = createIGNListEmbed(
-          interaction.user.displayName,
-          primaryMinecraftAccount,
-          others
-        );
-
-        await interaction.editReply(msg);
+        break;
     }
   }
 }

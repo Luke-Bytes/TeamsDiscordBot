@@ -1,5 +1,3 @@
-import { AnniClass, Player } from "@prisma/client";
-import { log } from "console";
 import { TeamsGame } from "database/TeamsGame";
 import { TeamsPlayer } from "database/TeamsPlayer";
 
@@ -9,7 +7,6 @@ import {
   ButtonStyle,
   EmbedBuilder,
 } from "discord.js";
-import { prettifyName } from "Utils";
 
 export function createIGNListEmbed(
   discordDisplayName: string,

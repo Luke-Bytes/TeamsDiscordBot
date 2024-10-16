@@ -1,13 +1,6 @@
 import { AnniMap } from "@prisma/client";
 import { Channels } from "Channels";
-import { log } from "console";
-import {
-  EmbedBuilder,
-  GuildBasedChannel,
-  Message,
-  PollLayoutType,
-  Snowflake,
-} from "discord.js";
+import { Message } from "discord.js";
 import EventEmitter from "events";
 import { prettifyName } from "Utils";
 
@@ -59,7 +52,7 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
           .sorted((firstValue, secondValue, firstKey, secondKey) => {
             return secondKey - firstKey;
           })
-          .first()?.emoji?.name!
+          .first()?.emoji?.name ?? ""
       ];
 
     this.emit("pollEnd", winningMap);

@@ -3,7 +3,6 @@ import { Snowflake } from "discord.js";
 import { TeamsPlayer } from "./TeamsPlayer";
 import { MapVoteManager } from "../logic/MapVoteManager";
 import { MinerushVoteManager } from "logic/MinerushVoteManager";
-import { log } from "console";
 
 // wrapper class for Game
 // todo bad naming
@@ -56,7 +55,6 @@ export class TeamsGame {
     if (this.mapVoteManager) {
       await this.mapVoteManager.startMapVote();
     }
-    log("test2");
     if (this.minerushVoteManager) {
       await this.minerushVoteManager.startMinerushVote();
     }
@@ -118,14 +116,17 @@ export class TeamsGame {
   public shuffleTeams(shuffleMethod: "random") {
     switch (shuffleMethod) {
       case "random":
-        const shuffled = this.getPlayers().sort(() => Math.random() - 0.5);
-        const half = Math.ceil(shuffled.length / 2);
+        {
+          const shuffled = this.getPlayers().sort(() => Math.random() - 0.5);
+          const half = Math.ceil(shuffled.length / 2);
 
-        const blue = shuffled.slice(0, half);
-        const red = shuffled.slice(half);
+          const blue = shuffled.slice(0, half);
+          const red = shuffled.slice(half);
 
-        this.teams.BLUE = blue;
-        this.teams.RED = red;
+          this.teams.BLUE = blue;
+          this.teams.RED = red;
+        }
+        break;
     }
   }
 

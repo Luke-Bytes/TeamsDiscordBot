@@ -2,6 +2,7 @@ export class MojangAPI {
   //store in db
   public static async usernameToUUID(username: string) {
     //idk if u need this encodeURI
+
     const response = await fetch(
       encodeURI(`https://api.mojang.com/users/profiles/minecraft/${username}`)
     );

@@ -1,5 +1,4 @@
 import { Channels } from "Channels";
-import { log } from "console";
 import { Message } from "discord.js";
 import EventEmitter from "events";
 
