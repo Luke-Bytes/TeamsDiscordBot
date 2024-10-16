@@ -1,5 +1,13 @@
 import { GuildMember, PermissionResolvable } from "discord.js";
 
+export function prettifyName(name: string) {
+  return name
+    .toLowerCase()
+    .split(" ")
+    .map((s) => s.charAt(0).toUpperCase() + s.substring(1))
+    .join(" ");
+}
+
 export function formatDate(date: Date = new Date()): string {
   return date.toISOString().replace("T", " ").split(".")[0];
 }

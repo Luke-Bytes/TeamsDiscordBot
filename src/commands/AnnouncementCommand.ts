@@ -12,11 +12,12 @@ import {
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { log } from "console";
-import { AnniMap } from "@prisma/client";
+import { AnniClass, AnniMap } from "@prisma/client";
 import { randomEnum } from "../Utils";
 import { ConfigManager } from "../ConfigManager";
 import { GameManager } from "../logic/GameManager";
 import { Chrono, parseDate } from "chrono-node";
+import { createGameAnnouncementPreviewEmbed } from "util/EmbedUtil";
 
 export default class AnnouncementCommand implements Command {
   public data: SlashCommandOptionsOnlyBuilder;
@@ -40,7 +41,9 @@ export default class AnnouncementCommand implements Command {
       .addStringOption((option) =>
         option
           .setName("banned_classes")
-          .setDescription("Banned classes, separated by a comma.")
+          .setDescription(
+            "Banned classes separated by a comma, or 'none' for none."
+          )
           .setRequired(true)
       )
       .addStringOption((option) =>
@@ -60,93 +63,143 @@ export default class AnnouncementCommand implements Command {
       );
   }
 
-  private getMap(mapOption: string):
-    | {
-        chooseMapType: "vote";
-        maps: AnniMap[];
-      }
-    | {
-        chooseMapType: "random" | "specific";
-        map: AnniMap;
-      }
-    | {
-        chooseMapType: "error";
-        error: string;
-      } {
+  private getMap(mapOption: string) {
     if (mapOption.startsWith("vote ")) {
-      const rest = mapOption.substring(5);
+      const rest = mapOption
+        .substring(5)
+        .toUpperCase()
+        .split(",")
+        .map((v) => v.trim());
+
+      for (let i = 0; i < rest.length; i++) {
+        if (!Object.values(AnniMap).includes(rest[i] as AnniMap)) {
+          return {
+            error: `Map '${rest[i]}' not recognized.`,
+          };
+        }
+      }
+
       return {
+        error: false,
         chooseMapType: "vote",
-        maps: rest.toUpperCase().split(",") as AnniMap[],
-      };
+        maps: rest as AnniMap[],
+      } as const;
     } else if (mapOption === "random") {
       return {
+        error: false,
         chooseMapType: "random",
         map: randomEnum(AnniMap),
-      };
+      } as const;
     } else {
       if (
         (Object.values(AnniMap) as string[]).includes(mapOption.toUpperCase())
       ) {
         return {
+          error: false,
           chooseMapType: "specific",
-          map: mapOption as AnniMap,
-        };
+          map: mapOption.toUpperCase() as AnniMap,
+        } as const;
       } else {
         return {
-          chooseMapType: "error",
           error: "Could not detect map(s).",
-        };
+        } as const;
       }
     }
+  }
+
+  private getBannedClasses(bannedClassesOption: string) {
+    if (bannedClassesOption === "none")
+      return {
+        error: false,
+        bannedClasses: [] as AnniClass[],
+      } as const;
+
+    const kits = bannedClassesOption
+      .toUpperCase()
+      .split(",")
+      .map((v) => v.trim());
+
+    for (let i = 0; i < kits.length; i++) {
+      if (!Object.values(AnniClass).includes(kits[i] as AnniClass)) {
+        return {
+          error: `Class '${kits[i]}' not recognized.`,
+        } as const;
+      }
+    }
+
+    return {
+      error: false,
+      bannedClasses: kits as AnniClass[],
+    } as const;
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const config = ConfigManager.getConfig();
     const when = interaction.options.getString("when", true);
     const minerushing = interaction.options.getString("minerushing", true);
-    const bannedClasses = interaction.options.getString("banned_classes", true);
+    const bannedClassesOption = interaction.options.getString(
+      "banned_classes",
+      true
+    );
     const map = interaction.options.getString("map", true);
     const organiser = interaction.options.getString("organiser");
     const host = interaction.options.getString("host");
 
     const game = GameManager.getGame();
 
-    const message = await interaction.deferReply();
+    await interaction.deferReply();
 
     const chosenMap = this.getMap(map);
 
-    switch (chosenMap.chooseMapType) {
-      case "vote":
-        const channel = interaction.guild?.channels.cache.find(
-          (c) => c.id === config.channels.mapVote
-        );
-        if (!channel) {
-          await message.edit("Could not find map vote channel.");
-          return;
-        }
-        game.startMapVote(channel, chosenMap.maps);
-        break;
-      case "random":
-      case "specific":
-        game.setMap(chosenMap.map);
-        break;
-      case "error":
-        await interaction.editReply({
-          content: "Invalid map option",
-        });
-        break;
+    if (chosenMap.error) {
+      await interaction.editReply(chosenMap.error);
+      return;
+    } else {
+      switch (chosenMap.chooseMapType) {
+        case "vote":
+          const channel = interaction.guild?.channels.cache.find(
+            (c) => c.id === config.channels.mapVote
+          );
+          if (!channel) {
+            await interaction.editReply(
+              "Could not find map vote channel. Please contact devs"
+            );
+            return;
+          }
+          game.startMapVote(channel, chosenMap.maps);
+          break;
+        case "random":
+        case "specific":
+          game.setMap(chosenMap.map);
+          break;
+      }
     }
 
     const date = parseDate(when, undefined, {
       forwardDate: true,
     });
 
-    await interaction.editReply({
-      content: date?.toString(),
-    });
+    if (!date) {
+      await interaction.editReply(
+        "Date could not be deduced. Please try again"
+      );
+      return;
+    }
 
-    game.announced = true;
+    game.startTime = date;
+
+    const bannedClasses = this.getBannedClasses(bannedClassesOption);
+
+    if (!bannedClasses.error) {
+      game.settings.bannedClasses = bannedClasses.bannedClasses;
+    } else {
+      await interaction.editReply(bannedClasses.error);
+      return;
+    }
+
+    const embed = createGameAnnouncementPreviewEmbed(game);
+
+    await interaction.editReply(embed);
   }
 
   public async handleButtonPress(

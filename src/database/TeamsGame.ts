@@ -30,6 +30,7 @@ export class TeamsGame {
 
   teams: Record<Team, TeamsPlayer[]> = { RED: [], BLUE: [] };
   mapVoteManager?: MapVoteManager;
+  willVote = false;
 
   constructor() {
     this.settings = {};
@@ -37,10 +38,6 @@ export class TeamsGame {
 
   public startMapVote(channel: GuildBasedChannel, maps: AnniMap[]) {
     this.mapVoteManager = new MapVoteManager(maps);
-
-    this.mapVoteManager.startMapVote(channel, (winner) => {
-      this.settings.map = winner;
-    });
   }
 
   public setMap(map: AnniMap) {
@@ -51,8 +48,18 @@ export class TeamsGame {
     this.settings.map = map;
   }
 
+  public setWillVote(willVote: boolean) {
+    this.willVote = willVote;
+  }
+
   public announce() {
-    game.announced = true;
+    this.announced = true;
+
+    if (this.mapVoteManager) {
+      this.mapVoteManager.startMapVote(channel, (winner) => {
+        this.settings.map = winner;
+      });
+    }
   }
 
   private getTeamWithLeastPlayers() {

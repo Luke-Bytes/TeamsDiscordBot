@@ -1,13 +1,39 @@
-import { Player } from "@prisma/client";
+import { AnniClass, Player } from "@prisma/client";
 import { log } from "console";
 import { TeamsGame } from "database/TeamsGame";
 import { TeamsPlayer } from "database/TeamsPlayer";
+
 import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
 } from "discord.js";
+import { prettifyName } from "Utils";
+
+export function createGameAnnouncementPreviewEmbed(game: TeamsGame) {
+  const embed = new EmbedBuilder()
+    .setColor("#0099ff")
+    .setTitle(`FRIENDLY WAR ANNOUNCEMENT [preview]`)
+    .addFields(
+      {
+        name: `TIME: ${game.startTime ? `<t:${game.startTime.getTime() / 1000}:f>` : "N/A"}`,
+        value: " ",
+        inline: false,
+      },
+      {
+        name: `MAP: ${game.settings.map ? game.settings.map : game.mapVoteManager ? "Voting..." : "N/A"}`,
+        value: " ",
+        inline: false,
+      },
+      {
+        name: `BANNED CLASSES: ${game.settings.bannedClasses?.length === 0 ? "None" : game.settings.bannedClasses?.map((v) => prettifyName(v)).join(", ")}`,
+        value: " ",
+        inline: false,
+      }
+    );
+  return { embeds: [embed] };
+}
 
 export function createIGNListEmbed(
   discordDisplayName: string,
