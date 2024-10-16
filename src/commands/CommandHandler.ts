@@ -62,14 +62,13 @@ export class CommandHandler {
         await command.execute(messageInteraction);
       }
     } else if (interaction.isButton()) {
-      //const randomTeamsInstance = this.dependencies.randomTeamsInstance;
-      //if (randomTeamsInstance) {
-      //  await randomTeamsInstance.handleButtonInteraction(
-      //    interaction as ButtonInteraction
-      //  );
-      //} else {
-      //  console.error("RandomTeams instance is not available");
-      //}
+      const command = this.commands.find((command) =>
+        command.buttonIds.includes(interaction.customId)
+      );
+
+      if (command && command.handleButtonPress) {
+        command.handleButtonPress(interaction);
+      }
     }
   }
 

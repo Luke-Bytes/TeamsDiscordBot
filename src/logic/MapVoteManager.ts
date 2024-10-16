@@ -1,4 +1,5 @@
 import { AnniMap } from "@prisma/client";
+import { Channels } from "Channels";
 import { log } from "console";
 import {
   EmbedBuilder,
@@ -7,6 +8,7 @@ import {
   PollLayoutType,
   Snowflake,
 } from "discord.js";
+import EventEmitter from "events";
 import { prettifyName } from "Utils";
 
 //todo: store these three maps somewhere else?
@@ -31,18 +33,18 @@ const emojiToMaps: Record<string, AnniMap> = {
   "🍃": "NATURE",
 };
 
-export class MapVoteManager {
+interface MapVoteManagerEvents {
+  pollEnd: [winningMap: AnniMap];
+}
+
+export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
   maps: AnniMap[];
 
-  channel?: GuildBasedChannel;
   pollMessage?: Message;
 
-  winnerCallback?: (winner: AnniMap) => void;
-
-  constructor(maps: AnniMap[], channel: GuildBasedChannel) {
+  constructor(maps: AnniMap[]) {
+    super();
     this.maps = maps;
-
-    this.channel = channel;
   }
 
   async finalizeVotes() {
@@ -53,25 +55,25 @@ export class MapVoteManager {
     const winningMap =
       emojiToMaps[
         this.pollMessage.poll?.answers
+          //todo better naming, kinda confusing
           .sorted((firstValue, secondValue, firstKey, secondKey) => {
             return secondKey - firstKey;
           })
           .first()?.emoji?.name!
       ];
 
-    log(winningMap);
-
-    if (this.winnerCallback) this.winnerCallback(winningMap as AnniMap);
+    this.emit("pollEnd", winningMap);
   }
 
-  async startMapVote(winnerCallback: (winner: AnniMap) => void) {
-    if (!this.channel) return;
-    if (!this.channel.isSendable()) {
-      console.error(`Missing send permissions in channel ${this.channel.name}`);
+  async startMapVote() {
+    const channel = Channels.announcements;
+    if (!channel) return;
+    if (!channel.isSendable()) {
+      console.error(`Missing send permissions in channel ${channel.name}`);
       return;
     }
 
-    this.pollMessage = await this.channel.send({
+    this.pollMessage = await channel.send({
       poll: {
         question: {
           text: "Map vote",
@@ -87,18 +89,14 @@ export class MapVoteManager {
       },
     });
 
-    this.winnerCallback = winnerCallback;
-
     const etaMs = this.pollMessage.poll!.expiresAt.getTime() - Date.now();
 
     setTimeout(() => {
       this.finalizeVotes();
-    }, 2000);
-
-    log(etaMs);
+    }, etaMs);
   }
 
-  async cancelMapVote() {
+  async cancelVote() {
     if (this.pollMessage) {
       this.pollMessage.delete();
     }

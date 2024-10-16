@@ -2,7 +2,6 @@ import {
   ChatInputCommandInteraction,
   GuildMemberRoleManager,
   SlashCommandBuilder,
-  SlashCommandSubcommandBuilder,
   SlashCommandSubcommandsOnlyBuilder,
 } from "discord.js";
 import { Command } from "./CommandInterface";
@@ -88,7 +87,7 @@ export default class TeamCommand implements Command {
           return;
         }
 
-        game.reset();
+        game.resetTeams();
 
         await interaction.reply({
           content: "Teams have been reset!",

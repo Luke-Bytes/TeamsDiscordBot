@@ -12,8 +12,7 @@ type Config = {
   };
   channels: {
     registration: string;
-    mapVote: string;
-    minerushingVote: string;
+    announcements: string;
   };
   dev: {
     enabled: boolean;

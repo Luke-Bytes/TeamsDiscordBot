@@ -1,17 +1,9 @@
-import {
-  $Enums,
-  AnniClass,
-  AnniMap,
-  Game,
-  Player,
-  PrismaPromise,
-  Team,
-} from "@prisma/client";
-import { prismaClient } from "./prismaClient";
-import { GuildBasedChannel, Snowflake } from "discord.js";
+import { $Enums, AnniMap, Team } from "@prisma/client";
+import { Snowflake } from "discord.js";
 import { TeamsPlayer } from "./TeamsPlayer";
-import { error } from "console";
 import { MapVoteManager } from "../logic/MapVoteManager";
+import { MinerushVoteManager } from "logic/MinerushVoteManager";
+import { log } from "console";
 
 // wrapper class for Game
 // todo bad naming
@@ -30,35 +22,43 @@ export class TeamsGame {
 
   teams: Record<Team, TeamsPlayer[]> = { RED: [], BLUE: [] };
   mapVoteManager?: MapVoteManager;
-  willVote = false;
+  minerushVoteManager?: MinerushVoteManager;
 
   constructor() {
     this.settings = {};
   }
 
-  public startMapVote(channel: GuildBasedChannel, maps: AnniMap[]) {
+  public startMinerushVote() {
+    this.minerushVoteManager = new MinerushVoteManager();
+    this.minerushVoteManager.on("pollEnd", (answer) => {
+      this.settings.minerushing = answer;
+    });
+  }
+
+  public startMapVote(maps: AnniMap[]) {
     this.mapVoteManager = new MapVoteManager(maps);
+    this.mapVoteManager.on("pollEnd", (winningMap) => {
+      this.setMap(winningMap);
+    });
   }
 
   public setMap(map: AnniMap) {
     if (this.mapVoteManager) {
-      this.mapVoteManager.cancelMapVote();
+      this.mapVoteManager.cancelVote();
     }
 
     this.settings.map = map;
   }
 
-  public setWillVote(willVote: boolean) {
-    this.willVote = willVote;
-  }
-
-  public announce() {
+  public async announce() {
     this.announced = true;
 
     if (this.mapVoteManager) {
-      this.mapVoteManager.startMapVote(channel, (winner) => {
-        this.settings.map = winner;
-      });
+      await this.mapVoteManager.startMapVote();
+    }
+    log("test2");
+    if (this.minerushVoteManager) {
+      await this.minerushVoteManager.startMinerushVote();
     }
   }
 
@@ -110,7 +110,7 @@ export class TeamsGame {
     return this.teams[team];
   }
 
-  public reset() {
+  public resetTeams() {
     this.teams["BLUE"] = [];
     this.teams["RED"] = [];
   }

@@ -3,7 +3,6 @@ import { Command } from "./CommandInterface";
 import { prismaClient } from "../database/prismaClient";
 import { createIGNListEmbed } from "../util/EmbedUtil";
 import { MojangAPI } from "../api/MojangAPI";
-import { log } from "console";
 
 export default class IgnsCommand implements Command {
   public data: SlashCommandBuilder;

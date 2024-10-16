@@ -10,8 +10,7 @@
   },
   "channels": {
     "registration": "",
-    "mapVote": "",
-    "minerushingVote": ""
+    "announcements": "",
   },
   "dev": {
     "enabled": false,

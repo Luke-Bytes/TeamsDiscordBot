@@ -2,69 +2,89 @@ import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
   Message,
-  Channel,
-  GuildBasedChannel,
-  Embed,
   EmbedBuilder,
-  ApplicationCommandOptionData,
   ButtonInteraction,
-  SlashCommandOptionsOnlyBuilder,
+  ButtonBuilder,
+  ActionRowBuilder,
+  ButtonStyle,
+  SlashCommandSubcommandsOnlyBuilder,
 } from "discord.js";
 import { Command } from "./CommandInterface";
-import { log } from "console";
 import { AnniClass, AnniMap } from "@prisma/client";
-import { randomEnum } from "../Utils";
-import { ConfigManager } from "../ConfigManager";
+import { prettifyName, randomEnum } from "../Utils";
 import { GameManager } from "../logic/GameManager";
-import { Chrono, parseDate } from "chrono-node";
-import { createGameAnnouncementPreviewEmbed } from "util/EmbedUtil";
+import { parseDate } from "chrono-node";
+import { log } from "console";
+import { Channels } from "Channels";
 
 export default class AnnouncementCommand implements Command {
-  public data: SlashCommandOptionsOnlyBuilder;
+  public data: SlashCommandSubcommandsOnlyBuilder;
   public name: string = "announce";
   public description: string = "Create a game announcement";
-  public buttonIds: string[] = ["announcement-confirm"];
+  public buttonIds: string[] = [
+    "announcement-confirm",
+    "announcement-cancel",
+    "announcement-edit-time",
+    "announcement-edit-maps",
+    "announcement-edit-banned-classes",
+  ];
+
+  private announcementPreviewMessage?: Message;
+  private announcementMessage?: Message;
 
   constructor() {
     this.data = new SlashCommandBuilder()
       .setName(this.name)
       .setDescription(this.description)
-      .addStringOption((option) =>
-        option.setName("when").setDescription("Date").setRequired(true)
-      )
-      .addStringOption((option) =>
-        option
-          .setName("minerushing")
-          .setDescription("Minerushing? (poll/yes/no)")
-          .setRequired(true)
-      )
-      .addStringOption((option) =>
-        option
-          .setName("banned_classes")
-          .setDescription(
-            "Banned classes separated by a comma, or 'none' for none."
+      .addSubcommand((subcommand) => {
+        return subcommand
+          .setName("start")
+          .setDescription("Start an announcement")
+          .addStringOption((option) =>
+            option.setName("when").setDescription("Date").setRequired(true)
           )
-          .setRequired(true)
-      )
-      .addStringOption((option) =>
-        option
-          .setName("map")
-          .setDescription("Map? (poll <maps>/random/<map>)")
-          .setRequired(true)
-      )
-      .addStringOption((option) =>
-        option
-          .setName("organiser")
-          .setDescription("Organiser Name")
-          .setRequired(false)
-      )
-      .addStringOption((option) =>
-        option.setName("host").setDescription("Host Name").setRequired(false)
-      );
+          .addStringOption((option) =>
+            option
+              .setName("minerushing")
+              .setDescription("Minerushing? (poll/yes/no)")
+              .setRequired(true)
+          )
+          .addStringOption((option) =>
+            option
+              .setName("banned_classes")
+              .setDescription(
+                "Banned classes separated by a comma, or 'none' for none."
+              )
+              .setRequired(true)
+          )
+          .addStringOption((option) =>
+            option
+              .setName("map")
+              .setDescription("Map? (poll <maps>/random/<map>)")
+              .setRequired(true)
+          )
+          .addStringOption((option) =>
+            option
+              .setName("organiser")
+              .setDescription("Organiser Name")
+              .setRequired(false)
+          )
+          .addStringOption((option) =>
+            option
+              .setName("host")
+              .setDescription("Host Name")
+              .setRequired(false)
+          );
+      })
+      .addSubcommand((subcommand) => {
+        return subcommand
+          .setName("cancel")
+          .setDescription("Cancels the current announcement.");
+      });
   }
 
   private getMap(mapOption: string) {
-    if (mapOption.startsWith("vote ")) {
+    if (mapOption.startsWith("poll ")) {
       const rest = mapOption
         .substring(5)
         .toUpperCase()
@@ -101,7 +121,7 @@ export default class AnnouncementCommand implements Command {
         } as const;
       } else {
         return {
-          error: "Could not detect map(s).",
+          error: `Map '${mapOption} not recognized'`,
         } as const;
       }
     }
@@ -133,49 +153,47 @@ export default class AnnouncementCommand implements Command {
     } as const;
   }
 
-  async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const config = ConfigManager.getConfig();
-    const when = interaction.options.getString("when", true);
-    const minerushing = interaction.options.getString("minerushing", true);
+  //todo: really bad function naming and separation of tasks.
+  private async setBannedClasses(interaction: ChatInputCommandInteraction) {
     const bannedClassesOption = interaction.options.getString(
       "banned_classes",
       true
     );
-    const map = interaction.options.getString("map", true);
-    const organiser = interaction.options.getString("organiser");
-    const host = interaction.options.getString("host");
+    const bannedClasses = this.getBannedClasses(bannedClassesOption);
 
-    const game = GameManager.getGame();
+    if (!bannedClasses.error) {
+      GameManager.getGame().settings.bannedClasses =
+        bannedClasses.bannedClasses;
+    } else {
+      await interaction.editReply(bannedClasses.error);
+      return;
+    }
+  }
 
-    await interaction.deferReply();
-
-    const chosenMap = this.getMap(map);
+  private async setMap(interaction: ChatInputCommandInteraction) {
+    const mapOption = interaction.options.getString("map", true);
+    const chosenMap = this.getMap(mapOption);
 
     if (chosenMap.error) {
       await interaction.editReply(chosenMap.error);
-      return;
+      return false;
     } else {
       switch (chosenMap.chooseMapType) {
         case "vote":
-          const channel = interaction.guild?.channels.cache.find(
-            (c) => c.id === config.channels.mapVote
-          );
-          if (!channel) {
-            await interaction.editReply(
-              "Could not find map vote channel. Please contact devs"
-            );
-            return;
-          }
-          game.startMapVote(channel, chosenMap.maps);
+          GameManager.getGame().startMapVote(chosenMap.maps);
           break;
         case "random":
         case "specific":
-          game.setMap(chosenMap.map);
-          break;
+          GameManager.getGame().setMap(chosenMap.map);
       }
+      return true;
     }
+  }
 
-    const date = parseDate(when, undefined, {
+  private async setDate(interaction: ChatInputCommandInteraction) {
+    const whenOption = interaction.options.getString("when", true);
+
+    const date = parseDate(whenOption, undefined, {
       forwardDate: true,
     });
 
@@ -183,28 +201,194 @@ export default class AnnouncementCommand implements Command {
       await interaction.editReply(
         "Date could not be deduced. Please try again"
       );
+      return false;
+    }
+
+    date.setSeconds(0);
+
+    GameManager.getGame().startTime = date;
+
+    return true;
+  }
+
+  private async setMinerushing(interaction: ChatInputCommandInteraction) {
+    const minerushingOption = interaction.options.getString(
+      "minerushing",
+      true
+    );
+    const game = GameManager.getGame();
+
+    if (minerushingOption === "poll") {
+      game.startMinerushVote();
+    } else if (minerushingOption === "yes") {
+      game.settings.minerushing = true;
+    } else if (minerushingOption === "no") {
+      game.settings.minerushing = false;
+    }
+  }
+
+  private async handleAnnouncementStart(
+    interaction: ChatInputCommandInteraction
+  ) {
+    const organiser = interaction.options.getString("organiser");
+    const host = interaction.options.getString("host");
+
+    await interaction.deferReply();
+
+    if (this.announcementPreviewMessage) {
+      await interaction.editReply(
+        "A proposed announcement has already started. Please cancel that one or edit it."
+      );
       return;
     }
 
-    game.startTime = date;
-
-    const bannedClasses = this.getBannedClasses(bannedClassesOption);
-
-    if (!bannedClasses.error) {
-      game.settings.bannedClasses = bannedClasses.bannedClasses;
-    } else {
-      await interaction.editReply(bannedClasses.error);
+    if (!this.setMap(interaction)) {
       return;
     }
 
-    const embed = createGameAnnouncementPreviewEmbed(game);
+    if (!this.setDate(interaction)) {
+      return;
+    }
 
-    await interaction.editReply(embed);
+    if (!this.setBannedClasses(interaction)) {
+      return;
+    }
+
+    if (!this.setMinerushing(interaction)) {
+      return;
+    }
+
+    const embed = this.createGameAnnouncementEmbed(true);
+
+    this.announcementPreviewMessage = await interaction.editReply(embed);
+  }
+
+  private async handleAnnouncementCancel() {
+    GameManager.cancelGame();
+    if (this.announcementMessage) {
+      this.announcementMessage.delete();
+      delete this.announcementMessage;
+    }
+
+    if (this.announcementPreviewMessage) {
+      log("attempt to delete announcement preview message");
+      this.announcementPreviewMessage.delete();
+      delete this.announcementPreviewMessage;
+    }
+  }
+
+  async execute(interaction: ChatInputCommandInteraction): Promise<void> {
+    const subcommand = interaction.options.getSubcommand(true);
+
+    switch (subcommand) {
+      case "start":
+        this.handleAnnouncementStart(interaction);
+        break;
+      case "cancel":
+        this.handleAnnouncementCancel();
+    }
+  }
+
+  private async handleAnnouncementConfirm() {
+    const embed = this.createGameAnnouncementEmbed(false);
+    if (!Channels.announcements.isSendable()) return;
+
+    this.announcementMessage = await Channels.announcements.send(embed);
+
+    await GameManager.getGame().announce();
   }
 
   public async handleButtonPress(
     interaction: ButtonInteraction
-  ): Promise<void> {}
+  ): Promise<void> {
+    switch (interaction.customId) {
+      case "announcement-cancel":
+        if (GameManager.getGame().announced) {
+          await interaction.reply(
+            "Game has already been announced. Cancel the announcement with /announce cancel."
+          );
+        } else {
+          this.handleAnnouncementCancel();
+          await interaction.reply("Cancelled announcement.");
+        }
+        break;
+      case "announcement-confirm":
+        this.handleAnnouncementConfirm();
+        await interaction.reply("Sent announcement!");
+        break;
+    }
+  }
+
+  private createGameAnnouncementEmbed(preview: boolean) {
+    const game = GameManager.getGame();
+    const embed = new EmbedBuilder()
+      .setColor("#0099ff")
+      .setTitle(`FRIENDLY WAR ANNOUNCEMENT${preview ? " [preview]" : ""}`)
+      .addFields(
+        {
+          name: `TIME: ${game.startTime ? `<t:${Math.round(game.startTime.getTime() / 1000)}:f>` : "N/A"}`,
+          value: " ",
+          inline: false,
+        },
+        {
+          name: `MAP: ${game.settings.map ? game.settings.map : game.mapVoteManager ? "Voting..." : "N/A"}`,
+          value: " ",
+          inline: false,
+        },
+        {
+          name: `BANNED CLASSES: ${game.settings.bannedClasses?.length === 0 ? "None" : game.settings.bannedClasses?.map((v) => prettifyName(v)).join(", ")}`,
+          value: " ",
+          inline: false,
+        },
+        {
+          name: "MINERUSHING? Voting...",
+          value: " ",
+          inline: false,
+        }
+      );
+
+    const confirmButton = new ButtonBuilder()
+      .setCustomId("announcement-confirm")
+      .setLabel("Confirm and Send")
+      .setStyle(ButtonStyle.Primary);
+
+    const cancelButton = new ButtonBuilder()
+      .setCustomId("announcement-cancel")
+      .setLabel("Cancel")
+      .setStyle(ButtonStyle.Danger);
+
+    const firstRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      confirmButton,
+      cancelButton
+    );
+
+    const editTimeButton = new ButtonBuilder()
+      .setCustomId("announcement-edit-time")
+      .setLabel("Edit Time")
+      .setStyle(ButtonStyle.Secondary);
+
+    const editMapButton = new ButtonBuilder()
+      .setCustomId("announcement-edit-button")
+      .setLabel("Edit Map")
+      .setStyle(ButtonStyle.Secondary);
+
+    const editBannedClassesButton = new ButtonBuilder()
+      .setCustomId("announcement-edit-banned-classes")
+      .setLabel("Edit Banned Classes")
+      .setStyle(ButtonStyle.Secondary);
+
+    const secondRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      editTimeButton,
+      editMapButton,
+      editBannedClassesButton
+    );
+
+    if (preview) {
+      return { embeds: [embed], components: [firstRow, secondRow] } as const;
+    } else {
+      return { embeds: [embed] } as const;
+    }
+  }
 
   //startMinerushingVoteTimer(message: Message, eventTime: number) {
   //  const delay = eventTime * 1000 - Date.now();

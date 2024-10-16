@@ -1,8 +1,4 @@
-import {
-  SlashCommandBuilder,
-  ChatInputCommandInteraction,
-  embedLength,
-} from "discord.js";
+import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
 import { Command } from "./CommandInterface";
 import { ConfigManager } from "../ConfigManager";
 import { GameManager } from "../logic/GameManager";
