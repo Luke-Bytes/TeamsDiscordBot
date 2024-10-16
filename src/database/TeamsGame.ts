@@ -3,6 +3,7 @@ import { Snowflake } from "discord.js";
 import { TeamsPlayer } from "./TeamsPlayer";
 import { MapVoteManager } from "../logic/MapVoteManager";
 import { MinerushVoteManager } from "logic/MinerushVoteManager";
+import { MojangAPI } from "api/MojangAPI";
 
 // wrapper class for Game
 // todo bad naming
@@ -69,24 +70,20 @@ export class TeamsGame {
   public async addPlayerByDiscordId(
     discordSnowflake: Snowflake,
     ignUsed: string
-  ): Promise<
-    | {
-        error: true;
-        message: string;
-      }
-    | {
-        error: false;
-        team: Team;
-      }
-  > {
+  ) {
     const player = await TeamsPlayer.byDiscordSnowflake(discordSnowflake);
-
-    if (!player.minecraftAccounts.includes(ignUsed)) {
+    const uuid = await MojangAPI.usernameToUUID(ignUsed);
+    if (!uuid) {
       return {
-        error: true,
-        message:
+        error: "This in-game name doesn't exist.",
+      } as const;
+    }
+
+    if (!player.minecraftAccounts.includes(uuid)) {
+      return {
+        error:
           "You have not registered this in-game name. Please use `/ign add`",
-      };
+      } as const;
     }
 
     player.ignUsed = ignUsed;
@@ -97,7 +94,7 @@ export class TeamsGame {
     return {
       error: false,
       team: team,
-    };
+    } as const;
   }
 
   public getPlayers() {

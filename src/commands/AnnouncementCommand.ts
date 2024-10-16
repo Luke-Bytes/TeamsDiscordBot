@@ -341,7 +341,7 @@ export default class AnnouncementCommand implements Command {
           inline: false,
         },
         {
-          name: "MINERUSHING? Voting...",
+          name: `MINERUSHING? ${game.settings.minerushing ? (game.settings.minerushing ? "Yes" : "No") : game.minerushVoteManager ? "Voting..." : "N/A"}`,
           value: " ",
           inline: false,
         }
@@ -389,50 +389,4 @@ export default class AnnouncementCommand implements Command {
       return { embeds: [embed] } as const;
     }
   }
-
-  //startMinerushingVoteTimer(message: Message, eventTime: number) {
-  //  const delay = eventTime * 1000 - Date.now();
-
-  //  setTimeout(async () => {
-  //    const minerushingResult = this.tallyMinerushingVotes(message);
-  //    GameData.addMinerushingVote(minerushingResult);
-  //    await message.edit(
-  //      minerushingResult === "yes"
-  //        ? "Minerushing will be allowed!"
-  //        : "Minerushing will be disallowed!"
-  //    );
-  //  }, delay);
-  //}
-
-  //tallyVotes(message: Message, maps: string[]): string {
-  //  const reactions = message.reactions.cache;
-  //  let maxVotes = 0;
-  //  let winningMap = maps[0];
-
-  //  reactions.forEach((reaction) => {
-  //    const emoji = reaction.emoji.name;
-
-  //    if (typeof emoji === "string") {
-  //      const mapIndex = Object.values(this.mapEmojiMap).indexOf(emoji);
-  //      const mapName =
-  //        mapIndex !== -1 ? Object.keys(this.mapEmojiMap)[mapIndex] : null;
-  //      const count = reaction.count - 1;
-
-  //      if (count > maxVotes && mapName) {
-  //        maxVotes = count;
-  //        winningMap = mapName;
-  //      }
-  //    }
-  //  });
-
-  //  return winningMap;
-  //}
-
-  //tallyMinerushingVotes(message: Message): string {
-  //  const reactions = message.reactions.cache;
-  //  const swords = reactions.get("⚔️")?.count ?? 0;
-  //  const shield = reactions.get("🛡️")?.count ?? 0;
-
-  //  return swords > shield ? "yes" : "no";
-  //}
 }

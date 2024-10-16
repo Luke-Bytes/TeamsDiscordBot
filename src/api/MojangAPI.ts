@@ -9,7 +9,11 @@ export class MojangAPI {
 
     const data = await response.json();
 
-    return data.id;
+    if (!data.id) {
+      return;
+    }
+
+    return data.id as string;
   }
 
   // display
@@ -23,7 +27,11 @@ export class MojangAPI {
 
     const data = await response.json();
 
-    return data.name;
+    if (!data.name) {
+      return;
+    }
+
+    return data.name as string;
   }
 
   public static validateUsername(username: string) {

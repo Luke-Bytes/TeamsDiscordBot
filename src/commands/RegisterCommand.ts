@@ -86,7 +86,7 @@ export default class RegisterCommand implements Command {
 
     if (result.error) {
       await interaction.reply({
-        content: result.message,
+        content: result.error,
         ephemeral: false,
       });
     } else {
