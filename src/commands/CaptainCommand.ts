@@ -92,10 +92,22 @@ export default class CaptainCommand implements Command {
       return;
     }
 
-    GameManager.getGame().setTeamCaptain(
+    const captains = GameManager.getGame().setTeamCaptain(
       teamColor.toUpperCase() as Team,
       player
     );
+
+    if (captains.oldCaptain) {
+      const oldTeamCaptain = await interaction.guild.members.fetch(
+        captains.oldCaptain
+      );
+      await oldTeamCaptain.roles.remove(captainRoleId);
+    }
+
+    const newTeamCaptain = await interaction.guild.members.fetch(
+      captains.newCaptain
+    );
+    await newTeamCaptain.roles.add(captainRoleId);
 
     await interaction.reply({
       content: `Set captain of team ${teamColor} to ${player.ignUsed}`,

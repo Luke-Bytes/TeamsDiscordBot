@@ -149,5 +149,9 @@ export class TeamsGame {
 
       this.teams[team].push(player);
     }
+    return {
+      oldCaptain: oldTeamCaptain?.discordSnowflake,
+      newCaptain: player.discordSnowflake,
+    };
   }
 }
