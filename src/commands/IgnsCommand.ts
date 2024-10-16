@@ -81,10 +81,26 @@ export default class IgnsCommand implements Command {
             return;
           }
 
-          const primaryMinecraftAccount = player.primaryMinecraftAccount
-            ? await MojangAPI.uuidToUsername(player.primaryMinecraftAccount)
-            : "N/A";
+          if (!player.primaryMinecraftAccount) {
+            await interaction.editReply(
+              "You are unregistered. Use /ign to add an IGN."
+            );
+            return;
+          }
 
+          const primaryMinecraftAccount = await MojangAPI.uuidToUsername(
+            player.primaryMinecraftAccount
+          );
+
+          if (!primaryMinecraftAccount) {
+            //technically this should never happen, because how can you have a uuid saved that doesn't point to a valid minecraft account..
+            await interaction.editReply(
+              "You are unregistered. Use /ign to add an IGN."
+            );
+            return;
+          }
+
+          //same here.
           const others = await Promise.all(
             player.minecraftAccounts
               .filter((v) => v !== player.primaryMinecraftAccount)
@@ -93,10 +109,20 @@ export default class IgnsCommand implements Command {
               })
           );
 
+          //just be sure that they're all valid mc accounts
+          for (let i = 0; i < others.length; i++) {
+            if (others[i] === undefined) {
+              await interaction.editReply(
+                "One or more of your accounts failed to fetch properly. Please contact devs."
+              );
+              return;
+            }
+          }
+
           const msg = createIGNListEmbed(
             interaction.user.displayName,
             primaryMinecraftAccount,
-            others
+            others as string[]
           );
 
           await interaction.editReply(msg);
