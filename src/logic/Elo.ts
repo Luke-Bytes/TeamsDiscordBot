@@ -1,38 +1,33 @@
-import { PlayerData } from "../database/PlayerData";
-import * as fs from "fs";
+import { ConfigManager } from "ConfigManager";
+import { PlayerInstance } from "database/PlayerInstance";
 
 export class Elo {
-  private discordUserId: string;
   private won: boolean;
   private mvp: boolean;
-  private config: any;
 
-  constructor(discordUserId: string, won: boolean, mvp: boolean) {
-    this.discordUserId = discordUserId;
+  constructor(won: boolean, mvp: boolean) {
     this.won = won;
     this.mvp = mvp;
-
-    const configData = fs.readFileSync("./config.json", "utf-8");
-    this.config = JSON.parse(configData);
   }
 
-  public calculateNewElo(player: PlayerData): number {
-    let currentElo = player.getElo();
+  public calculateNewElo(player: PlayerInstance): number {
+    const config = ConfigManager.getConfig();
+    let currentElo = player.elo;
     if (this.won) {
-      currentElo += this.config.winEloGain;
+      currentElo += config.winEloGain;
     } else {
-      currentElo -= this.config.loseEloLoss;
+      currentElo -= config.loseEloLoss;
     }
 
     if (this.mvp) {
-      currentElo += this.config.mvpBonus;
+      currentElo += config.mvpBonus;
     }
 
     return currentElo;
   }
 
-  public applyEloUpdate(player: PlayerData): void {
+  public applyEloUpdate(player: PlayerInstance): void {
     const newElo = this.calculateNewElo(player);
-    player.updateElo(newElo);
+    player.elo = newElo;
   }
 }

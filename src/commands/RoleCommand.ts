@@ -4,17 +4,15 @@ import {
   SlashCommandBuilder,
 } from "discord.js";
 import { Command } from "./CommandInterface";
-import * as fs from "fs";
+import { ConfigManager } from "../ConfigManager";
 
 export default class RoleCommand implements Command {
-  data: SlashCommandBuilder;
-  name: string;
-  description: string;
+  public data: SlashCommandBuilder;
+  public name = "role";
+  public description = "Configure roles";
+  public buttonIds: string[] = [];
 
   constructor() {
-    this.name = "role";
-    this.description = "Configure roles";
-
     const command = new SlashCommandBuilder()
       .setName(this.name)
       .setDescription(this.description);
@@ -47,25 +45,23 @@ export default class RoleCommand implements Command {
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const roleType = interaction.options.getString("type", true);
     const role = interaction.options.getRole("role", true) as Role;
-
-    const configPath = "./config.json";
-    const configData = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    const config = ConfigManager.getConfig();
 
     switch (roleType) {
       case "blue":
-        configData.roles.blueTeamRole = role.id;
+        config.roles.blueTeamRole = role.id;
         await interaction.reply(
           `Set the Blue Team role to ${role.name} (ID: ${role.id})`
         );
         break;
       case "red":
-        configData.roles.redTeamRole = role.id;
+        config.roles.redTeamRole = role.id;
         await interaction.reply(
           `Set the Red Team role to ${role.name} (ID: ${role.id})`
         );
         break;
       case "organiser":
-        configData.roles.organiserRole = role.id;
+        config.roles.organiserRole = role.id;
         await interaction.reply(
           `Set the Organiser role to ${role.name} (ID: ${role.id})`
         );
@@ -75,6 +71,6 @@ export default class RoleCommand implements Command {
         return;
     }
 
-    fs.writeFileSync(configPath, JSON.stringify(configData, null, 2), "utf8");
+    ConfigManager.writeConfig(config);
   }
 }

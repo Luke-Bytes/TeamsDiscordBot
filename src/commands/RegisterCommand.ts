@@ -1,24 +1,15 @@
-import {
-  SlashCommandBuilder,
-  ChatInputCommandInteraction,
-  PermissionsBitField,
-  User,
-} from "discord.js";
+import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
 import { Command } from "./CommandInterface";
-import { GameData } from "../database/GameData";
-import { PlayerData } from "../database/PlayerData";
-import fs from "fs";
+import { ConfigManager } from "../ConfigManager";
+import { CurrentGameManager } from "../logic/CurrentGameManager";
 
 export default class RegisterCommand implements Command {
-  data: SlashCommandBuilder;
-  name: string;
-  description: string;
-  private config: any;
+  public data: SlashCommandBuilder;
+  public name = "register";
+  public description = "Register for friendly war!";
+  public buttonIds: string[] = [];
 
   constructor() {
-    this.name = "register";
-    this.description = "Register for friendly war!";
-
     this.data = new SlashCommandBuilder()
       .setName(this.name)
       .setDescription(this.description)
@@ -34,13 +25,12 @@ export default class RegisterCommand implements Command {
           .setDescription("The Discord user to register (organisers only)")
           .setRequired(false)
       ) as SlashCommandBuilder;
-
-    this.config = JSON.parse(fs.readFileSync("./config.json", "utf-8"));
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const registrationChannelId = this.config.channels.registration;
-    const organiserRoleId = this.config.roles.organiserRole;
+    const config = ConfigManager.getConfig();
+    const registrationChannelId = config.channels.registration;
+    const organiserRoleId = config.roles.organiserRole;
 
     if (interaction.channelId !== registrationChannelId) {
       await interaction.reply({
@@ -50,7 +40,15 @@ export default class RegisterCommand implements Command {
       return;
     }
 
-    const inGameName = interaction.options.getString("ingamename");
+    if (!CurrentGameManager.getCurrentGame().announced) {
+      await interaction.reply({
+        content: "No game has been announced yet!",
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const inGameName = interaction.options.getString("ingamename", true);
     const targetUser =
       interaction.options.getUser("discorduser") || interaction.user;
 
@@ -68,12 +66,9 @@ export default class RegisterCommand implements Command {
       return;
     }
 
-    // Check if the player is already registered globally
-    const isAlreadyRegistered =
-      PlayerData.getPlayerByInGameName(inGameName) ||
-      PlayerData.getAllPlayers().some(
-        (player) => player.getDiscordUserId() === discordUserId
-      );
+    const isAlreadyRegistered = CurrentGameManager.getCurrentGame()
+      .getPlayers()
+      .some((player) => player.discordSnowflake === discordUserId);
 
     if (isAlreadyRegistered) {
       await interaction.reply({
@@ -84,24 +79,29 @@ export default class RegisterCommand implements Command {
       return;
     }
 
-    GameData.addPlayer(inGameName);
-    const newPlayer = new PlayerData(
-      discordUserId,
-      discordUserName,
-      inGameName
-    );
-    PlayerData.playerDataList.push(newPlayer);
+    const result =
+      await CurrentGameManager.getCurrentGame().addPlayerByDiscordId(
+        discordUserId,
+        inGameName
+      );
 
-    if (targetUser.id === interaction.user.id) {
+    if (result.error) {
       await interaction.reply({
-        content: `You have successfully registered as ${inGameName}!`,
+        content: result.error,
         ephemeral: false,
       });
     } else {
-      await interaction.reply({
-        content: `${discordUserName} has been successfully registered as ${inGameName}!`,
-        ephemeral: false,
-      });
+      if (targetUser.id === interaction.user.id) {
+        await interaction.reply({
+          content: `You have successfully registered as ${inGameName} and joined team ${result.team}!`,
+          ephemeral: false,
+        });
+      } else {
+        await interaction.reply({
+          content: `${discordUserName} has been successfully registered as ${inGameName} in team ${result.team}!`,
+          ephemeral: false,
+        });
+      }
     }
   }
 }
