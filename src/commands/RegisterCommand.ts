@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
 import { Command } from "./CommandInterface";
 import { ConfigManager } from "../ConfigManager";
-import { GameManager } from "../logic/GameManager";
+import { CurrentGameManager } from "../logic/CurrentGameManager";
 
 export default class RegisterCommand implements Command {
   public data: SlashCommandBuilder;
@@ -40,7 +40,7 @@ export default class RegisterCommand implements Command {
       return;
     }
 
-    if (!GameManager.getGame().announced) {
+    if (!CurrentGameManager.getCurrentGame().announced) {
       await interaction.reply({
         content: "No game has been announced yet!",
         ephemeral: true,
@@ -66,7 +66,7 @@ export default class RegisterCommand implements Command {
       return;
     }
 
-    const isAlreadyRegistered = GameManager.getGame()
+    const isAlreadyRegistered = CurrentGameManager.getCurrentGame()
       .getPlayers()
       .some((player) => player.discordSnowflake === discordUserId);
 
@@ -79,10 +79,11 @@ export default class RegisterCommand implements Command {
       return;
     }
 
-    const result = await GameManager.getGame().addPlayerByDiscordId(
-      discordUserId,
-      inGameName
-    );
+    const result =
+      await CurrentGameManager.getCurrentGame().addPlayerByDiscordId(
+        discordUserId,
+        inGameName
+      );
 
     if (result.error) {
       await interaction.reply({

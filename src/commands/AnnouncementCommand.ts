@@ -12,10 +12,10 @@ import {
 import { Command } from "./CommandInterface";
 import { AnniClass, AnniMap } from "@prisma/client";
 import { prettifyName, randomEnum } from "../Utils";
-import { GameManager } from "../logic/GameManager";
 import { parseDate } from "chrono-node";
 import { log } from "console";
 import { Channels } from "Channels";
+import { CurrentGameManager } from "logic/CurrentGameManager";
 
 export default class AnnouncementCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;
@@ -162,7 +162,7 @@ export default class AnnouncementCommand implements Command {
     const bannedClasses = this.getBannedClasses(bannedClassesOption);
 
     if (!bannedClasses.error) {
-      GameManager.getGame().settings.bannedClasses =
+      CurrentGameManager.getCurrentGame().settings.bannedClasses =
         bannedClasses.bannedClasses;
     } else {
       await interaction.editReply(bannedClasses.error);
@@ -180,11 +180,11 @@ export default class AnnouncementCommand implements Command {
     } else {
       switch (chosenMap.chooseMapType) {
         case "vote":
-          GameManager.getGame().startMapVote(chosenMap.maps);
+          CurrentGameManager.getCurrentGame().startMapVote(chosenMap.maps);
           break;
         case "random":
         case "specific":
-          GameManager.getGame().setMap(chosenMap.map);
+          CurrentGameManager.getCurrentGame().setMap(chosenMap.map);
       }
       return true;
     }
@@ -206,7 +206,7 @@ export default class AnnouncementCommand implements Command {
 
     date.setSeconds(0);
 
-    GameManager.getGame().startTime = date;
+    CurrentGameManager.getCurrentGame().startTime = date;
 
     return true;
   }
@@ -216,7 +216,7 @@ export default class AnnouncementCommand implements Command {
       "minerushing",
       true
     );
-    const game = GameManager.getGame();
+    const game = CurrentGameManager.getCurrentGame();
 
     if (minerushingOption === "poll") {
       game.startMinerushVote();
@@ -264,7 +264,7 @@ export default class AnnouncementCommand implements Command {
   }
 
   private async handleAnnouncementCancel() {
-    GameManager.cancelGame();
+    CurrentGameManager.cancelCurrentGame();
     if (this.announcementMessage) {
       this.announcementMessage.delete();
       delete this.announcementMessage;
@@ -295,7 +295,7 @@ export default class AnnouncementCommand implements Command {
 
     this.announcementMessage = await Channels.announcements.send(embed);
 
-    await GameManager.getGame().announce();
+    await CurrentGameManager.getCurrentGame().announce();
   }
 
   public async handleButtonPress(
@@ -303,7 +303,7 @@ export default class AnnouncementCommand implements Command {
   ): Promise<void> {
     switch (interaction.customId) {
       case "announcement-cancel":
-        if (GameManager.getGame().announced) {
+        if (CurrentGameManager.getCurrentGame().announced) {
           await interaction.reply(
             "Game has already been announced. Cancel the announcement with /announce cancel."
           );
@@ -320,7 +320,7 @@ export default class AnnouncementCommand implements Command {
   }
 
   private createGameAnnouncementEmbed(preview: boolean) {
-    const game = GameManager.getGame();
+    const game = CurrentGameManager.getCurrentGame();
     const embed = new EmbedBuilder()
       .setColor("#0099ff")
       .setTitle(`FRIENDLY WAR ANNOUNCEMENT${preview ? " [preview]" : ""}`)

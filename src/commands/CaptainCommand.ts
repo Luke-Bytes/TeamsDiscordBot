@@ -5,8 +5,8 @@ import {
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { ConfigManager } from "../ConfigManager";
-import { GameManager } from "../logic/GameManager";
 import { Team } from "@prisma/client";
+import { CurrentGameManager } from "logic/CurrentGameManager";
 
 export default class CaptainCommand implements Command {
   public data: SlashCommandBuilder;
@@ -75,8 +75,8 @@ export default class CaptainCommand implements Command {
       });
       return;
     }
-
-    if (!GameManager.getGame().announced) {
+    const game = CurrentGameManager.getCurrentGame();
+    if (!game.announced) {
       await interaction.reply({
         content: "No game has been announced yet!",
         ephemeral: true,
@@ -84,7 +84,7 @@ export default class CaptainCommand implements Command {
       return;
     }
 
-    const player = GameManager.getGame()
+    const player = game
       .getPlayers()
       .find((player) => player.discordSnowflake === user.id);
 
@@ -96,7 +96,7 @@ export default class CaptainCommand implements Command {
       return;
     }
 
-    const captains = GameManager.getGame().setTeamCaptain(
+    const captains = game.setTeamCaptain(
       teamColor.toUpperCase() as Team,
       player
     );

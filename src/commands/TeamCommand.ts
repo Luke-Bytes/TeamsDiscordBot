@@ -9,7 +9,7 @@ import {
   SlashCommandSubcommandsOnlyBuilder,
 } from "discord.js";
 import { Command } from "./CommandInterface";
-import { GameManager } from "../logic/GameManager";
+import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { ConfigManager } from "ConfigManager";
 import { TeamsGame } from "database/TeamsGame";
 import { TeamsPlayer } from "database/TeamsPlayer";
@@ -54,7 +54,7 @@ export default class TeamCommand implements Command {
 
     await interaction.deferReply();
 
-    const game = GameManager.getGame();
+    const game = CurrentGameManager.getCurrentGame();
 
     switch (subcommand) {
       case "generate": {
