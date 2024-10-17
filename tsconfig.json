@@ -9,17 +9,11 @@
     "forceConsistentCasingInFileNames": true,
     "outDir": "./dist",
     "resolveJsonModule": true,
-    "typeRoots": [
-      "./node_modules/@types",
-      "./node_modules/discord.js/typings"
-    ],
+    "typeRoots": ["./node_modules/@types", "./node_modules/discord.js/typings"],
     "paths": {
       "*": ["./src/*"]
     }
   },
-  "include": [
-    "src/**/*",
-    "config.json",
-  ],
+  "include": ["src/**/*", "config.json"],
   "exclude": ["node_modules", "dist"]
 }
