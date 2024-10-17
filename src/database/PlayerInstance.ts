@@ -4,7 +4,7 @@ import { Player } from "@prisma/client";
 
 // wrapper class for Player
 // todo bad naming
-export class TeamsPlayer {
+export class PlayerInstance {
   playerId: string;
 
   elo: number;
@@ -30,9 +30,9 @@ export class TeamsPlayer {
   public static async byDiscordSnowflake(discordSnowflake: Snowflake) {
     let player = await prismaClient.player.byDiscordSnowflake(discordSnowflake);
 
-    if (player) return new TeamsPlayer(player);
+    if (player) return new PlayerInstance(player);
 
-    return new TeamsPlayer(
+    return new PlayerInstance(
       await prismaClient.player.create({
         data: {
           discordSnowflake: discordSnowflake,

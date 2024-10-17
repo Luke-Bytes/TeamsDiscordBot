@@ -1,13 +1,13 @@
 import { $Enums, AnniMap, Team } from "@prisma/client";
 import { Snowflake } from "discord.js";
-import { TeamsPlayer } from "./TeamsPlayer";
+import { PlayerInstance } from "./PlayerInstance";
 import { MapVoteManager } from "../logic/MapVoteManager";
 import { MinerushVoteManager } from "logic/MinerushVoteManager";
 import { MojangAPI } from "api/MojangAPI";
 
 // wrapper class for Game
 // todo bad naming
-export class TeamsGame {
+export class GameInstance {
   gameId?: string;
 
   finished?: boolean;
@@ -20,7 +20,7 @@ export class TeamsGame {
     map?: $Enums.AnniMap;
   };
 
-  teams: Record<Team, TeamsPlayer[]> = { RED: [], BLUE: [] };
+  teams: Record<Team, PlayerInstance[]> = { RED: [], BLUE: [] };
   mapVoteManager?: MapVoteManager;
   minerushVoteManager?: MinerushVoteManager;
 
@@ -71,7 +71,7 @@ export class TeamsGame {
     discordSnowflake: Snowflake,
     ignUsed: string
   ) {
-    const player = await TeamsPlayer.byDiscordSnowflake(discordSnowflake);
+    const player = await PlayerInstance.byDiscordSnowflake(discordSnowflake);
     const uuid = await MojangAPI.usernameToUUID(ignUsed);
     if (!uuid) {
       return {
@@ -131,7 +131,7 @@ export class TeamsGame {
     return this.teams[team].find((p) => p.captain);
   }
 
-  public setTeamCaptain(team: Team, player: TeamsPlayer) {
+  public setTeamCaptain(team: Team, player: PlayerInstance) {
     const oldTeamCaptain = this.getCaptainOfTeam(team);
 
     if (oldTeamCaptain) {

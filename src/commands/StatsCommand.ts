@@ -6,7 +6,7 @@ import {
 import { Command } from "./CommandInterface";
 import { EloUtil } from "../util/EloUtil";
 import { log } from "console";
-import { TeamsPlayer } from "../database/TeamsPlayer";
+import { PlayerInstance } from "../database/PlayerInstance";
 
 export default class StatsCommand implements Command {
   public name = "stats";
@@ -35,8 +35,8 @@ export default class StatsCommand implements Command {
     const input = interaction.options.getString("player", false);
     const player =
       input !== null
-        ? await TeamsPlayer.byMinecraftAccount(input)
-        : await TeamsPlayer.byDiscordSnowflake(interaction.user.id);
+        ? await PlayerInstance.byMinecraftAccount(input)
+        : await PlayerInstance.byDiscordSnowflake(interaction.user.id);
 
     if (player === undefined) {
       await interaction.reply({

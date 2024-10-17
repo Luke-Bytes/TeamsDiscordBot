@@ -11,8 +11,8 @@ import {
 import { Command } from "./CommandInterface";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { ConfigManager } from "ConfigManager";
-import { TeamsGame } from "database/TeamsGame";
-import { TeamsPlayer } from "database/TeamsPlayer";
+import { GameInstance } from "database/GameInstance";
+import { PlayerInstance } from "database/PlayerInstance";
 
 export default class TeamCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;
@@ -138,9 +138,9 @@ export default class TeamCommand implements Command {
     }
   }
 
-  createTeamViewEmbed(game: TeamsGame) {
-    const redPlayers: TeamsPlayer[] = game.getPlayersOfTeam("RED");
-    const bluePlayers: TeamsPlayer[] = game.getPlayersOfTeam("BLUE");
+  createTeamViewEmbed(game: GameInstance) {
+    const redPlayers: PlayerInstance[] = game.getPlayersOfTeam("RED");
+    const bluePlayers: PlayerInstance[] = game.getPlayersOfTeam("BLUE");
     const bluePlayersString =
       bluePlayers.length > 0
         ? `**${bluePlayers[0]}**\n` +
@@ -170,9 +170,9 @@ export default class TeamCommand implements Command {
     return { embeds: [embed], ephemeral: true };
   }
 
-  createTeamGenerateEmbed(game: TeamsGame) {
-    const redPlayers: TeamsPlayer[] = game.getPlayersOfTeam("RED");
-    const bluePlayers: TeamsPlayer[] = game.getPlayersOfTeam("BLUE");
+  createTeamGenerateEmbed(game: GameInstance) {
+    const redPlayers: PlayerInstance[] = game.getPlayersOfTeam("RED");
+    const bluePlayers: PlayerInstance[] = game.getPlayersOfTeam("BLUE");
 
     const bluePlayersString =
       bluePlayers.length > 0

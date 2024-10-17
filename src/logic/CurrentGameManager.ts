@@ -1,20 +1,20 @@
-import { TeamsGame } from "../database/TeamsGame";
+import { GameInstance } from "../database/GameInstance";
 
 //todo bad naming
 export class CurrentGameManager {
-  private static currentGame?: TeamsGame;
+  private static currentGame?: GameInstance;
 
   private constructor() {}
 
   public static getCurrentGame() {
     if (!this.currentGame) {
-      this.currentGame = new TeamsGame();
+      this.currentGame = new GameInstance();
     }
     return this.currentGame;
   }
 
   public static resetCurrentGame() {
-    this.currentGame = new TeamsGame();
+    this.currentGame = new GameInstance();
   }
 
   public static cancelCurrentGame() {
