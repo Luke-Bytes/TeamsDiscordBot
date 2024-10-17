@@ -1,4 +1,8 @@
-import { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import {
+  ChatInputCommandInteraction,
+  SlashCommandBuilder,
+  Snowflake,
+} from "discord.js";
 import { Command } from "./CommandInterface";
 import { ConfigManager } from "../ConfigManager";
 import { GameManager } from "../logic/GameManager";
@@ -39,10 +43,10 @@ export default class CaptainCommand implements Command {
 
   async execute(interaction: ChatInputCommandInteraction) {
     const config = ConfigManager.getConfig();
-    const organiserRoleId = config.roles.organiserRole;
-    const captainRoleId = config.roles.captainRole;
-    const blueTeamRoleId = config.roles.blueTeamRole;
-    const redTeamRoleId = config.roles.redTeamRole;
+    const organiserRoleId = config.roles.organiserRole as Snowflake;
+    const captainRoleId = config.roles.captainRole as Snowflake;
+    const blueTeamRoleId = config.roles.blueTeamRole as Snowflake;
+    const redTeamRoleId = config.roles.redTeamRole as Snowflake;
 
     if (!interaction.guild) {
       await interaction.reply({

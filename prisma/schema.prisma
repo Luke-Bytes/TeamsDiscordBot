@@ -80,7 +80,7 @@ model GameParticipation {
   mvp     Boolean @default(false)
   captain Boolean @default(false)
 
-  @@unique([playerId, gameId]) // a player can only participate in one role per game
+  @@unique([playerId, gameId]) // only 1 playerId for per player per game
 }
 
 enum Team {

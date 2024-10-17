@@ -6,6 +6,7 @@ export class Channels {
   public static announcements: GuildBasedChannel;
 
   public static async initChannels(client: Client) {
+    //TODO add other channels like registration and organiser-commands etc
     const config = ConfigManager.getConfig();
     const fetchedAnnouncements = await client.channels.fetch(
       config.channels.announcements

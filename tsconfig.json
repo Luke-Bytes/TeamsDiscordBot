@@ -4,21 +4,22 @@
     "module": "CommonJS",
     "strict": true,
     "esModuleInterop": true,
-    "skipLibCheck": false,
+    "skipLibCheck": true,
     "allowJs": true,
     "forceConsistentCasingInFileNames": true,
     "outDir": "./dist",
     "resolveJsonModule": true,
-    "typeRoots": ["./node_modules/@types"],
+    "typeRoots": [
+      "./node_modules/@types",
+      "./node_modules/discord.js/typings"
+    ],
     "paths": {
       "*": ["./src/*"]
     }
   },
   "include": [
-    "src",
+    "src/**/*",
     "config.json",
-    "node_modules/@types/**/*.ts",
-    "node_modules/discord.js/typings/**/*.mts"
   ],
   "exclude": ["node_modules", "dist"]
 }

@@ -5,7 +5,6 @@ import {
   SlashCommandSubcommandsOnlyBuilder,
 } from "discord.js";
 import { Command } from "./CommandInterface";
-import { promises as fs } from "fs";
 import { GameManager } from "../logic/GameManager";
 import {
   createTeamGenerateEmbed,
