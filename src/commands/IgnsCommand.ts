@@ -1,7 +1,10 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
+import {
+  SlashCommandBuilder,
+  ChatInputCommandInteraction,
+  EmbedBuilder,
+} from "discord.js";
 import { Command } from "./CommandInterface";
 import { prismaClient } from "../database/prismaClient";
-import { createIGNListEmbed } from "../util/EmbedUtil";
 import { MojangAPI } from "../api/MojangAPI";
 
 export default class IgnsCommand implements Command {
@@ -119,7 +122,7 @@ export default class IgnsCommand implements Command {
             }
           }
 
-          const msg = createIGNListEmbed(
+          const msg = this.createIGNListEmbed(
             interaction.user.displayName,
             primaryMinecraftAccount,
             others as string[]
@@ -129,5 +132,25 @@ export default class IgnsCommand implements Command {
         }
         break;
     }
+  }
+
+  createIGNListEmbed(
+    discordDisplayName: string,
+    primaryAccount: string,
+    otherAccounts: string[]
+  ) {
+    const embed = new EmbedBuilder()
+      .setColor("#0099ff")
+      .setTitle(`IGNs for ${discordDisplayName}`)
+      .addFields({
+        name: `1. ${primaryAccount}`,
+        value: ` ${otherAccounts
+          .map((v, i) => {
+            return `${i + 2}. ${v}`;
+          })
+          .join("\n")}`,
+        inline: false,
+      });
+    return { embeds: [embed] };
   }
 }
