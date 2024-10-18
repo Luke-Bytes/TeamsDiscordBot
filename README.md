@@ -12,6 +12,8 @@ Rename env.sample to .env and add your credentials
 
 Optionally, add your testing discord server ID to GuildId in config.json and enable dev mode to work on commands efficiently.
 
+Rename config.json.sample to config.json and add your role and channel IDs.
+
 Start with:
 -npm run dev
 or

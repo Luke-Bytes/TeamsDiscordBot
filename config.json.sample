@@ -9,7 +9,8 @@
     "organiserRole": ""
   },
   "channels": {
-    "registration": ""
+    "registration": "",
+    "announcements": "",
   },
   "dev": {
     "enabled": false,

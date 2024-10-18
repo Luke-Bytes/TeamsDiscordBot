@@ -3,13 +3,11 @@ import { Command } from "./CommandInterface";
 
 export default class TestCommand implements Command {
   data: SlashCommandBuilder;
-  name: string;
-  description: string;
+  name = "test";
+  description = "Replies wiht a test message!";
+  public buttonIds: string[] = [];
 
   constructor() {
-    this.name = "test";
-    this.description = "Replies with a test message!";
-
     this.data = new SlashCommandBuilder()
       .setName(this.name)
       .setDescription(this.description);
