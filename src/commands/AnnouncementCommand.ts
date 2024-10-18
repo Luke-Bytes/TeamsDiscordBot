@@ -86,11 +86,11 @@ export default class AnnouncementCommand implements Command {
   private getMap(mapOption: string) {
     if (mapOption.startsWith("poll ")) {
       const rest = mapOption
-        .substring(5) // remove "poll "
-        .toUpperCase() // capitalize everything for enum
-        .split(",") // split by comma
-        .map((v) => v.trim()) // remove the whitespaces (so e.g. " coastal , nature " will still work)
-        .map((v) => v.split(" ").join("")); // remove spaces so "AFTERMATH 1V1" becomes AFTERMATH1V1, the correct enum string for AnniMap.
+        .substring(5)
+        .toUpperCase()
+        .split(",")
+        .map((v) => v.trim())
+        .map((v) => v.split(" ").join(""));
 
       for (let i = 0; i < rest.length; i++) {
         if (!Object.values(AnniMap).includes(rest[i] as AnniMap)) {
