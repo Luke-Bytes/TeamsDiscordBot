@@ -7,16 +7,16 @@ import { prettifyName } from "Utils";
 
 //todo: store these three maps somewhere else?
 const mapToEmojis: Record<AnniMap, string> = {
-  AFTERMATH_1V1: "🕸️",
-  ANDORRA_1V1: "🏔️",
-  ARID_1V1: "❓",
-  CANYON_1V1: "🏜️",
-  CHASM_1V1: "🏝️",
-  CHEROKEE_1V1: "🎌",
-  DREDGE_1V1: "🧙",
+  AFTERMATH1V1: "🕸️",
+  ANDORRA1V1: "🏔️",
+  ARID1V1: "❓",
+  CANYON1V1: "🏜️",
+  CHASM1V1: "🏝️",
+  CHEROKEE1V1: "🎌",
+  DREDGE1V1: "🧙",
   DUELSTAL: "💫 ",
-  NATURE_1V1: "🌲 ",
-  SIEGE_1V1: "🪄",
+  NATURE1V1: "🌲 ",
+  SIEGE1V1: "🪄",
 };
 
 interface MapVoteManagerEvents {
@@ -41,11 +41,11 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
     const winningMap = Object.entries(mapToEmojis).find(
       (v) =>
         v[1] ===
-          this.pollMessage?.poll?.answers
-            .sorted((_firstAnswer, _secondAnswer, firstCount, secondCount) => {
-              return secondCount - firstCount;
-            })
-            .first()?.emoji?.name ?? ""
+        this.pollMessage?.poll?.answers
+          .sorted((_firstAnswer, _secondAnswer, firstCount, secondCount) => {
+            return secondCount - firstCount;
+          })
+          .first()?.emoji?.name
     )?.[0];
 
     if (!winningMap) {
