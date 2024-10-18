@@ -1,29 +1,22 @@
 import { AnniMap } from "@prisma/client";
 import { Channels } from "Channels";
+import { error, log } from "console";
 import { Message } from "discord.js";
 import EventEmitter from "events";
 import { prettifyName } from "Utils";
 
 //todo: store these three maps somewhere else?
 const mapToEmojis: Record<AnniMap, string> = {
-  //TODO add relevant emojis
-  COASTAL: "🌊",
-  //Duelstal: "🗺️",
-  //Clashstal: "🗺️",
-  //Canyon: "🗺️",
-  NATURE: "🍃",
-  //Siege: "🗺️",
-  //Andorra: "🗺️",
-  //Arid: "🗺️",
-  //Aftermath: "🗺️",
-  //Dredge: "🗺️",
-  //Villages: "🗺️",
-  //Chasm: "🌍",
-};
-
-const emojiToMaps: Record<string, AnniMap> = {
-  "🌊": "COASTAL",
-  "🍃": "NATURE",
+  AFTERMATH_1V1: "🕸️",
+  ANDORRA_1V1: "🏔️",
+  ARID_1V1: "❓",
+  CANYON_1V1: "🏜️",
+  CHASM_1V1: "🏝️",
+  CHEROKEE_1V1: "🎌",
+  DREDGE_1V1: "🧙",
+  DUELSTAL: "💫 ",
+  NATURE_1V1: "🌲 ",
+  SIEGE_1V1: "🪄",
 };
 
 interface MapVoteManagerEvents {
@@ -45,17 +38,22 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
 
     this.pollMessage.poll?.end();
 
-    const winningMap =
-      emojiToMaps[
-        this.pollMessage.poll?.answers
-          //todo better naming, kinda confusing
-          .sorted((firstValue, secondValue, firstKey, secondKey) => {
-            return secondKey - firstKey;
-          })
-          .first()?.emoji?.name ?? ""
-      ];
+    const winningMap = Object.entries(mapToEmojis).find(
+      (v) =>
+        v[1] ===
+          this.pollMessage?.poll?.answers
+            .sorted((_firstAnswer, _secondAnswer, firstCount, secondCount) => {
+              return secondCount - firstCount;
+            })
+            .first()?.emoji?.name ?? ""
+    )?.[0];
 
-    this.emit("pollEnd", winningMap);
+    if (!winningMap) {
+      error("Could not find winning map!");
+      return;
+    }
+
+    this.emit("pollEnd", winningMap as AnniMap);
   }
 
   async startMapVote() {

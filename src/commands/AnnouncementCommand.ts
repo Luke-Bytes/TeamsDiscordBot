@@ -86,10 +86,11 @@ export default class AnnouncementCommand implements Command {
   private getMap(mapOption: string) {
     if (mapOption.startsWith("poll ")) {
       const rest = mapOption
-        .substring(5)
-        .toUpperCase()
-        .split(",")
-        .map((v) => v.trim());
+        .substring(5) // remove "poll "
+        .toUpperCase() // capitalize everything for enum
+        .split(",") // split by comma
+        .map((v) => v.trim()) // remove the whitespaces (so e.g. " coastal , nature " will still work)
+        .map((v) => v.split(" ").join("")); // remove spaces so "AFTERMATH 1V1" becomes AFTERMATH1V1, the correct enum string for AnniMap.
 
       for (let i = 0; i < rest.length; i++) {
         if (!Object.values(AnniMap).includes(rest[i] as AnniMap)) {
@@ -111,13 +112,13 @@ export default class AnnouncementCommand implements Command {
         map: randomEnum(AnniMap),
       } as const;
     } else {
-      if (
-        (Object.values(AnniMap) as string[]).includes(mapOption.toUpperCase())
-      ) {
+      const enumMapName = mapOption.toUpperCase().trim().split(" ").join("");
+
+      if ((Object.values(AnniMap) as string[]).includes(enumMapName)) {
         return {
           error: false,
           chooseMapType: "specific",
-          map: mapOption.toUpperCase() as AnniMap,
+          map: enumMapName as AnniMap,
         } as const;
       } else {
         return {
@@ -166,8 +167,9 @@ export default class AnnouncementCommand implements Command {
         bannedClasses.bannedClasses;
     } else {
       await interaction.editReply(bannedClasses.error);
-      return;
+      return false;
     }
+    return true;
   }
 
   private async setMap(interaction: ChatInputCommandInteraction) {
@@ -224,6 +226,10 @@ export default class AnnouncementCommand implements Command {
       game.settings.minerushing = true;
     } else if (minerushingOption === "no") {
       game.settings.minerushing = false;
+    } else {
+      await interaction.reply(
+        `Minerushing option '${minerushingOption}' unrecognized.`
+      );
     }
   }
 
@@ -242,15 +248,15 @@ export default class AnnouncementCommand implements Command {
       return;
     }
 
-    if (!this.setMap(interaction)) {
+    if (!(await this.setMap(interaction))) {
       return;
     }
 
-    if (!this.setDate(interaction)) {
+    if (!(await this.setDate(interaction))) {
       return;
     }
 
-    if (!this.setBannedClasses(interaction)) {
+    if (!(await this.setBannedClasses(interaction))) {
       return;
     }
 
@@ -301,20 +307,23 @@ export default class AnnouncementCommand implements Command {
   public async handleButtonPress(
     interaction: ButtonInteraction
   ): Promise<void> {
+    await interaction.deferReply({
+      ephemeral: true,
+    });
     switch (interaction.customId) {
       case "announcement-cancel":
         if (CurrentGameManager.getCurrentGame().announced) {
-          await interaction.reply(
+          await interaction.editReply(
             "Game has already been announced. Cancel the announcement with /announce cancel."
           );
         } else {
-          this.handleAnnouncementCancel();
-          await interaction.reply("Cancelled announcement.");
+          await this.handleAnnouncementCancel();
+          await interaction.editReply("Cancelled announcement.");
         }
         break;
       case "announcement-confirm":
         this.handleAnnouncementConfirm();
-        await interaction.reply("Sent announcement!");
+        await interaction.editReply("Sent announcement!");
         break;
     }
   }
@@ -331,7 +340,7 @@ export default class AnnouncementCommand implements Command {
           inline: false,
         },
         {
-          name: `MAP: ${game.settings.map ? game.settings.map : game.mapVoteManager ? "Voting..." : "N/A"}`,
+          name: `MAP: ${game.settings.map ? prettifyName(game.settings.map) : game.mapVoteManager ? "Voting..." : "N/A"}`,
           value: " ",
           inline: false,
         },
