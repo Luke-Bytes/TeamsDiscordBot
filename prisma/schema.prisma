@@ -1,76 +1,146 @@
-datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
-}
-
 generator client {
   provider = "prisma-client-js"
 }
 
-model GameHistory {
-  id                Int       @id @default(autoincrement())
-  startTime         DateTime  @unique
-  map               String
-  minerushing       Boolean
-  teamColorWinner   String
-  teamCaptainWinner String
-  mvpWinner         String
-  teamCaptainLoser  String
-  mvpLoser          String
-
-  bannedClasses     BannedClass[]
-  winnerTeamPlayers WinnerTeamPlayer[]
-  loserTeamPlayers  LoserTeamPlayer[]
-}
-
-
-model BannedClass {
-  id            Int       @id @default(autoincrement())
-  className     String
-  gameHistoryId Int
-  GameHistory   GameHistory @relation(fields: [gameHistoryId], references: [id])
-
-  @@index([gameHistoryId])
-}
-
-model WinnerTeamPlayer {
-  id            Int       @id @default(autoincrement())
-  playerName    String
-  gameHistoryId Int
-  GameHistory   GameHistory @relation(fields: [gameHistoryId], references: [id])
-
-  @@index([gameHistoryId])
-}
-
-model LoserTeamPlayer {
-  id            Int       @id @default(autoincrement())
-  playerName    String
-  gameHistoryId Int
-  GameHistory   GameHistory @relation(fields: [gameHistoryId], references: [id])
-
-  @@index([gameHistoryId])
-}
-
-model PlayerHistory {
-  id             Int       @id @default(autoincrement())
-  discordUserId  String    @unique
-  discordUserName String
-  inGameName     String
-  wins           Int       @default(0)
-  losses         Int       @default(0)
-  captainCount   Int       @default(0)
-  mvpCount       Int       @default(0)
-  eloHistory     EloHistory[]
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
 }
 
 model EloHistory {
-  id             Int       @id @default(autoincrement())
-  playerId       Int
-  elo            Int
-  date           DateTime  @default(now())
+  id       String @id @default(uuid()) @map("_id")
+  playerId String
+  player   Player @relation(fields: [playerId], references: [id])
 
-  PlayerHistory  PlayerHistory @relation(fields: [playerId], references: [id])
+  createdAt DateTime @default(now())
 
-  @@index([playerId])
+  elo Int // elo rating after the match
+
+  gameId String
+  game   Game   @relation(fields: [gameId], references: [id])
 }
 
+model Player {
+  id String @id @default(uuid()) @map("_id")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  elo          Int          @default(1000) // Current Elo rating of the player
+  eloHistories EloHistory[]
+
+  wins   Int @default(0)
+  losses Int @default(0)
+
+  discordSnowflake String @unique
+
+  minecraftAccounts       String[] @default([])
+  primaryMinecraftAccount String?
+
+  games GameParticipation[] // New relation to GameParticipation model
+}
+
+type GameSettings {
+  minerushing   Boolean
+  bannedClasses AnniClass[]
+  map           AnniMap
+}
+
+type GameResult {
+  winner Team
+}
+
+model Game {
+  id String @id @default(uuid()) @map("_id")
+
+  finished Boolean @default(false)
+
+  startTime DateTime
+  endTime   DateTime
+
+  settings       GameSettings
+  participations GameParticipation[]
+
+  result GameResult
+
+  eloHistories EloHistory[]
+}
+
+model GameParticipation {
+  id String @id @default(uuid()) @map("_id")
+
+  ignUsed String //ign, not uuid.
+  team    Team
+
+  playerId String
+  gameId   String
+  player   Player @relation(fields: [playerId], references: [id])
+  game     Game   @relation(fields: [gameId], references: [id])
+
+  mvp     Boolean @default(false)
+  captain Boolean @default(false)
+
+  @@unique([playerId, gameId]) // only 1 playerId for per player per game
+}
+
+enum Team {
+  RED
+  BLUE
+}
+
+enum AnniClass {
+  ACROBAT
+  ALCHEMIST
+  ARCHER
+  ASSASSIN
+  BARD
+  BERSERKER
+  BLOODMAGE
+  BUILDER
+  CIVILIAN
+  DASHER
+  DEFENDER
+  ENCHANTER
+  ENGINEER
+  FARMER
+  HANDYMAN
+  HEALER
+  HUNTER
+  ICEMAN
+  IMMOBILIZER
+  LUMBERJACK
+  MERCENARY
+  MINER
+  NINJA
+  PYRO
+  RIFT_WALKER
+  ROBIN_HOOD
+  SCORPIO
+  SCOUT
+  SNIPER
+  SPIDER
+  SPY
+  SUCCUBUS
+  SWAPPER
+  TANK
+  THOR
+  TINKERER
+  TRANSPORTER
+  VAMPIRE
+  WARRIOR
+  WIZARD
+}
+
+// TODO
+enum AnniMap {
+  AFTERMATH1V1
+  ANDORRA1V1
+  ARID1V1
+  CANYON1V1
+  CHASM1V1
+  CHEROKEE1V1
+  DREDGE1V1
+  DUELSTAL
+  NATURE1V1
+  SIEGE1V1
+}

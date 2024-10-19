@@ -1,57 +1,60 @@
 import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   ChatInputCommandInteraction,
+  EmbedBuilder,
   GuildMemberRoleManager,
   SlashCommandBuilder,
+  SlashCommandSubcommandsOnlyBuilder,
 } from "discord.js";
 import { Command } from "./CommandInterface";
-import { RandomTeams } from "../logic/RandomTeams";
-import { GameData } from "../database/GameData";
-import { promises as fs } from "fs";
+import { CurrentGameManager } from "../logic/CurrentGameManager";
+import { ConfigManager } from "ConfigManager";
+import { GameInstance } from "database/GameInstance";
+import { PlayerInstance } from "database/PlayerInstance";
 
 export default class TeamCommand implements Command {
-  name = "team";
-  description = "Manage teams";
-
-  data: SlashCommandBuilder;
-
-  private randomTeams = new RandomTeams();
+  public data: SlashCommandSubcommandsOnlyBuilder;
+  public name = "team";
+  public description = "Manage teams";
+  public buttonIds: string[] = [];
 
   constructor() {
-    const command = new SlashCommandBuilder()
-      .setName("team")
-      .setDescription("Manage teams");
-
-    command.addSubcommand((subcommand) =>
-      subcommand
-        .setName("generate")
-        .setDescription("Generate teams")
-        .addStringOption((option) =>
-          option
-            .setName("method")
-            .setDescription("Method to generate teams")
-            .setRequired(true)
-            .addChoices({ name: "random", value: "random" })
-        )
-    );
-
-    command.addSubcommand((subcommand) =>
-      subcommand.setName("reset").setDescription("Reset the teams")
-    );
-
-    command.addSubcommand((subcommand) =>
-      subcommand.setName("list").setDescription("List the current teams")
-    );
-
-    this.data = command;
+    this.data = new SlashCommandBuilder()
+      .setName(this.name)
+      .setDescription(this.description)
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName("generate")
+          .setDescription("Generate teams")
+          .addStringOption((option) =>
+            option
+              .setName("method")
+              .setDescription("Method to generate teams")
+              .setRequired(true)
+              .addChoices({ name: "random", value: "random" })
+          )
+      )
+      .addSubcommand((subcommand) =>
+        subcommand.setName("reset").setDescription("Reset the teams")
+      )
+      .addSubcommand((subcommand) =>
+        subcommand.setName("list").setDescription("List the current teams")
+      );
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const config = await fs.readFile("./config.json", "utf-8").then(JSON.parse);
+    const config = ConfigManager.getConfig();
     const subcommand = interaction.options.getSubcommand();
     const memberRoles = interaction.member?.roles;
     const isOrganiser =
       memberRoles instanceof GuildMemberRoleManager &&
       memberRoles.cache.has(config.roles.organiserRole);
+
+    await interaction.deferReply();
+
+    const game = CurrentGameManager.getCurrentGame();
 
     switch (subcommand) {
       case "generate": {
@@ -65,8 +68,8 @@ export default class TeamCommand implements Command {
 
         const method = interaction.options.getString("method");
         if (method === "random") {
-          this.randomTeams.randomizeTeams();
-          const response = this.randomTeams.createEmbedMessage();
+          game.shuffleTeams("random");
+          const response = this.createTeamGenerateEmbed(game);
           await interaction.reply(response);
         } else {
           await interaction.reply({
@@ -74,6 +77,27 @@ export default class TeamCommand implements Command {
             ephemeral: true,
           });
         }
+
+        const redTeam = game.getPlayersOfTeam("RED");
+        for (let i = 0; i < redTeam.length; i++) {
+          const player = redTeam[i];
+          const discordUser = await interaction.guild?.members.fetch(
+            player.discordSnowflake
+          );
+          await discordUser?.roles.remove(config.roles.blueTeamRole);
+          discordUser?.roles.add(config.roles.redTeamRole);
+        }
+
+        const blueTeam = game.getPlayersOfTeam("BLUE");
+        for (let i = 0; i < blueTeam.length; i++) {
+          const player = blueTeam[i];
+          const discordUser = await interaction.guild?.members.fetch(
+            player.discordSnowflake
+          );
+          await discordUser?.roles.remove(config.roles.redTeamRole);
+          discordUser?.roles.add(config.roles.blueTeamRole);
+        }
+
         break;
       }
 
@@ -86,8 +110,8 @@ export default class TeamCommand implements Command {
           return;
         }
 
-        GameData.setBluePlayers([]);
-        GameData.setRedPlayers([]);
+        game.resetTeams();
+
         await interaction.reply({
           content: "Teams have been reset!",
           ephemeral: false,
@@ -95,21 +119,16 @@ export default class TeamCommand implements Command {
         break;
       }
 
-      case "list": {
-        const bluePlayers =
-          GameData.getBluePlayers().length > 0
-            ? GameData.getBluePlayers().join(", ")
-            : "No players in Blue Team";
-        const redPlayers =
-          GameData.getRedPlayers().length > 0
-            ? GameData.getRedPlayers().join(", ")
-            : "No players in Red Team";
-        await interaction.reply({
-          content: `**Blue Team:** ${bluePlayers}\n**Red Team:** ${redPlayers}`,
-          ephemeral: true,
-        });
+      case "list":
+        if (!game.announced) {
+          await interaction.editReply({
+            content: "Game does not exist.",
+          });
+        } else {
+          const embed = this.createTeamViewEmbed(game);
+          await interaction.editReply(embed);
+        }
         break;
-      }
 
       default:
         await interaction.reply({
@@ -117,5 +136,85 @@ export default class TeamCommand implements Command {
           ephemeral: true,
         });
     }
+  }
+
+  createTeamViewEmbed(game: GameInstance) {
+    const redPlayers: PlayerInstance[] = game.getPlayersOfTeam("RED");
+    const bluePlayers: PlayerInstance[] = game.getPlayersOfTeam("BLUE");
+    const bluePlayersString =
+      bluePlayers.length > 0
+        ? `**${bluePlayers[0]}**\n` +
+          bluePlayers
+            .slice(1)
+            .map((player) => player.ignUsed)
+            .join("\n") // Only the first player bold
+        : "No players";
+
+    const redPlayersString =
+      redPlayers.length > 0
+        ? `**${redPlayers[0]}**\n` +
+          redPlayers
+            .slice(1)
+            .map((player) => player.ignUsed)
+            .join("\n") // Only the first player bold
+        : "No players";
+
+    const embed = new EmbedBuilder()
+      .setColor("#0099ff")
+      .setTitle("Teams")
+      .addFields(
+        { name: "🔵 Blue Team 🔵  ", value: bluePlayersString, inline: true },
+        { name: "🔴 Red Team 🔴   ", value: redPlayersString, inline: true }
+      );
+
+    return { embeds: [embed], ephemeral: true };
+  }
+
+  createTeamGenerateEmbed(game: GameInstance) {
+    const redPlayers: PlayerInstance[] = game.getPlayersOfTeam("RED");
+    const bluePlayers: PlayerInstance[] = game.getPlayersOfTeam("BLUE");
+
+    const bluePlayersString =
+      bluePlayers.length > 0
+        ? `**${bluePlayers[0]}**\n` +
+          bluePlayers
+            .slice(1)
+            .map((player) => player.ignUsed)
+            .join("\n") // Only the first player bold
+        : "No players";
+
+    const redPlayersString =
+      redPlayers.length > 0
+        ? `**${redPlayers[0]}**\n` +
+          redPlayers
+            .slice(1)
+            .map((player) => player.ignUsed)
+            .join("\n") // Only the first player bold
+        : "No players";
+
+    const embed = new EmbedBuilder()
+      .setColor("#0099ff")
+      .setTitle("Randomized Teams")
+      .addFields(
+        { name: "🔵 Blue Team 🔵  ", value: bluePlayersString, inline: true },
+        { name: "🔴 Red Team 🔴   ", value: redPlayersString, inline: true }
+      )
+      .setFooter({ text: "Choose an action below." });
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId("accept")
+        .setLabel("Accept!")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId("reroll")
+        .setLabel("Reroll")
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId("cancel")
+        .setLabel("Cancel?")
+        .setStyle(ButtonStyle.Danger)
+    );
+    return { embeds: [embed], components: [row] };
   }
 }

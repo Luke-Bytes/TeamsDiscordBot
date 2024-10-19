@@ -3,29 +3,28 @@
   "private": true,
   "version": "1.0.0",
   "description": "Discord teams bot",
-  "main": "src/index.ts",
   "type": "module",
+  "main": "src/index.ts",
   "engines": {
     "node": ">=18.x"
   },
   "scripts": {
-    "build": "tsc && npm run postbuild",
-    "postbuild": "node replace-imports.js",
-    "start:bot:dev": "node start-bot-dev.js",
-    "start:bot:prod": "node --experimental-specifier-resolution=node dist/BotManager.js",
-    "dev": "npm run start:bot:dev",
+    "build": "npx prisma generate && tsc",
+    "start:bot:prod": "node dist/src/main.js",
+    "dev": "tsx watch src/main.ts",
     "prod": "npm run build && npm run start:bot:prod",
     "lint": "eslint .",
     "format": "prettier --write .",
     "lint:fix": "eslint . --fix",
     "check-format": "prettier --check ."
   },
-  "author": "Luke",
+  "author": "Luke and Eric",
   "license": "GNU",
   "dependencies": {
     "@eslint/js": "^9.12.0",
     "@prisma/client": "^5.20.0",
     "@types/ws": "^8.5.12",
+    "chrono-node": "^2.7.7",
     "discord.js": "^14.16.3",
     "dotenv": "^16.0.3",
     "prisma": "^5.20.0"
@@ -33,17 +32,14 @@
   "devDependencies": {
     "@types/node": "^22.7.5",
     "@typescript-eslint/eslint-plugin": "^8.8.1",
-    "@typescript-eslint/parser": "^8.8.1",
+    "@typescript-eslint/parser": "^8.9.0",
     "concurrently": "^9.0.0",
     "cross-env": "^7.0.3",
     "eslint": "^9.12.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.2.1",
-    "nodemon": "^3.1.4",
     "prettier": "^3.3.3",
-    "replace-in-file": "^6.3.5",
-    "ts-node": "^10.9.2",
-    "ts-node-dev": "^2.0.0",
+    "tsx": "^4.19.1",
     "typescript": "^5.6.3"
   }
 }

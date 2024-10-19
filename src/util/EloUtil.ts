@@ -16,10 +16,10 @@ export const EloUtil = {
       .sort((a, b) => a - b);
     for (let i = sortedEloRanks.length - 1; i >= 0; i--) {
       if (elo >= sortedEloRanks[i]) {
-        return eloEmojis[sortedEloRanks[i]];
+        return eloEmojis[sortedEloRanks[i] as keyof typeof eloEmojis];
       }
     }
 
-    return eloEmojis[sortedEloRanks[0]];
+    return eloEmojis[sortedEloRanks[0] as keyof typeof eloEmojis];
   },
 };
