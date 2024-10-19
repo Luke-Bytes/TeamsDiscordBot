@@ -9,7 +9,7 @@
     "node": ">=18.x"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "npx prisma generate && tsc",
     "start:bot:prod": "node dist/src/main.js",
     "dev": "tsx watch src/main.ts",
     "prod": "npm run build && npm run start:bot:prod",
