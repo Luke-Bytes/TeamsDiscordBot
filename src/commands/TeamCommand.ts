@@ -1,6 +1,7 @@
 import {
   ActionRowBuilder,
   ButtonBuilder,
+  ButtonInteraction,
   ButtonStyle,
   ChatInputCommandInteraction,
   EmbedBuilder,
@@ -13,12 +14,20 @@ import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { ConfigManager } from "ConfigManager";
 import { GameInstance } from "database/GameInstance";
 import { PlayerInstance } from "database/PlayerInstance";
+import { TeamPickingSession } from "logic/teams/TeamPickingSession";
+import { RandomTeamPickingSession } from "logic/teams/RandomTeamPickingSession";
 
 export default class TeamCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;
   public name = "team";
   public description = "Manage teams";
-  public buttonIds: string[] = [];
+  public buttonIds: string[] = [
+    "random-team-accept",
+    "random-team-generate-reroll",
+    "random-team-generate-cancel",
+  ];
+
+  private teamPickingSession?: TeamPickingSession;
 
   constructor() {
     this.data = new SlashCommandBuilder()
@@ -52,8 +61,6 @@ export default class TeamCommand implements Command {
       memberRoles instanceof GuildMemberRoleManager &&
       memberRoles.cache.has(config.roles.organiserRole);
 
-    await interaction.deferReply();
-
     const game = CurrentGameManager.getCurrentGame();
 
     switch (subcommand) {
@@ -66,16 +73,22 @@ export default class TeamCommand implements Command {
           return;
         }
 
-        const method = interaction.options.getString("method");
-        if (method === "random") {
-          game.shuffleTeams("random");
-          const response = this.createTeamGenerateEmbed(game);
-          await interaction.reply(response);
-        } else {
+        if (this.teamPickingSession) {
           await interaction.reply({
-            content: "Invalid generation method!",
+            content:
+              "A team picking session is already happening. Either cancel that one or continue it.",
             ephemeral: true,
           });
+          return;
+        }
+
+        const method = interaction.options.getString("method");
+
+        switch (method) {
+          case "random":
+            this.teamPickingSession = new RandomTeamPickingSession("random");
+            this.teamPickingSession.initialize(interaction);
+            break;
         }
 
         const redTeam = game.getPlayersOfTeam("RED");
@@ -119,7 +132,7 @@ export default class TeamCommand implements Command {
         break;
       }
 
-      case "list":
+      case "list": {
         if (!game.announced) {
           await interaction.editReply({
             content: "Game does not exist.",
@@ -129,6 +142,7 @@ export default class TeamCommand implements Command {
           await interaction.editReply(embed);
         }
         break;
+      }
 
       default:
         await interaction.reply({
@@ -170,51 +184,9 @@ export default class TeamCommand implements Command {
     return { embeds: [embed], ephemeral: true };
   }
 
-  createTeamGenerateEmbed(game: GameInstance) {
-    const redPlayers: PlayerInstance[] = game.getPlayersOfTeam("RED");
-    const bluePlayers: PlayerInstance[] = game.getPlayersOfTeam("BLUE");
-
-    const bluePlayersString =
-      bluePlayers.length > 0
-        ? `**${bluePlayers[0]}**\n` +
-          bluePlayers
-            .slice(1)
-            .map((player) => player.ignUsed)
-            .join("\n") // Only the first player bold
-        : "No players";
-
-    const redPlayersString =
-      redPlayers.length > 0
-        ? `**${redPlayers[0]}**\n` +
-          redPlayers
-            .slice(1)
-            .map((player) => player.ignUsed)
-            .join("\n") // Only the first player bold
-        : "No players";
-
-    const embed = new EmbedBuilder()
-      .setColor("#0099ff")
-      .setTitle("Randomized Teams")
-      .addFields(
-        { name: "🔵 Blue Team 🔵  ", value: bluePlayersString, inline: true },
-        { name: "🔴 Red Team 🔴   ", value: redPlayersString, inline: true }
-      )
-      .setFooter({ text: "Choose an action below." });
-
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId("accept")
-        .setLabel("Accept!")
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId("reroll")
-        .setLabel("Reroll")
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId("cancel")
-        .setLabel("Cancel?")
-        .setStyle(ButtonStyle.Danger)
-    );
-    return { embeds: [embed], components: [row] };
+  public async handleButtonPress(interaction: ButtonInteraction) {
+    if (this.teamPickingSession) {
+      this.teamPickingSession.handleInteraction(interaction);
+    }
   }
 }
