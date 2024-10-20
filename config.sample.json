@@ -10,7 +10,8 @@
   },
   "channels": {
     "registration": "",
-    "announcements": ""
+    "announcements": "",
+    "teamPicking": ""
   },
   "dev": {
     "enabled": false,
