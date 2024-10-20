@@ -11,6 +11,7 @@
   "channels": {
     "registration": "",
     "announcements": "",
+    "teamPicking": ""
   },
   "dev": {
     "enabled": false,
