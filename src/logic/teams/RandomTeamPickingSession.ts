@@ -37,13 +37,14 @@ export class RandomTeamPickingSession extends TeamPickingSession {
       case "random-team-accept":
         break;
       case "random-team-generate-reroll":
-        game.shuffleTeams("random");
-        const embed = this.createTeamGenerateEmbed(game);
+        {
+          game.shuffleTeams("random");
+          const embed = this.createTeamGenerateEmbed(game);
 
-        interaction.message.edit(embed);
+          interaction.message.edit(embed);
 
-        interaction.update({});
-
+          interaction.update({});
+        }
         break;
       case "random-team-generate-cancel":
         break;
