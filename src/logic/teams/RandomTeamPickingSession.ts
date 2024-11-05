@@ -5,21 +5,23 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  Message,
 } from "discord.js";
-import { TeamPickingSession } from "./TeamPickingSession";
+import {
+  TeamPickingSession,
+  TeamPickingSessionState,
+} from "./TeamPickingSession";
 import { GameInstance } from "database/GameInstance";
 import { PlayerInstance } from "database/PlayerInstance";
 import { CurrentGameManager } from "logic/CurrentGameManager";
 
-//TODO: elo-based random picking
-export type RandomTeamPickingMethod = "random";
-
 export class RandomTeamPickingSession extends TeamPickingSession {
-  method: RandomTeamPickingMethod;
+  state: TeamPickingSessionState = "inProgress";
 
-  constructor(method: RandomTeamPickingMethod) {
+  embedMessage?: Message<boolean>;
+
+  constructor() {
     super();
-    this.method = method;
   }
 
   public async initialize(interaction: ChatInputCommandInteraction) {
@@ -28,25 +30,33 @@ export class RandomTeamPickingSession extends TeamPickingSession {
     game.shuffleTeams("random");
     const embed = this.createTeamGenerateEmbed(game);
 
-    await interaction.reply(embed);
+    this.embedMessage = await (await interaction.reply(embed)).fetch();
   }
 
   public async handleInteraction(interaction: ButtonInteraction) {
     const game = CurrentGameManager.getCurrentGame();
     switch (interaction.customId) {
       case "random-team-accept":
+        {
+          const { embeds } = this.createTeamGenerateEmbed(game);
+          await this.embedMessage?.edit({ embeds, components: [] });
+          await interaction.update({});
+          this.state = "finalized";
+        }
         break;
       case "random-team-generate-reroll":
         {
           game.shuffleTeams("random");
           const embed = this.createTeamGenerateEmbed(game);
 
-          interaction.message.edit(embed);
+          await this.embedMessage!.edit(embed);
 
-          interaction.update({});
+          await interaction.update({});
         }
         break;
       case "random-team-generate-cancel":
+        await this.embedMessage?.delete();
+        this.state = "cancelled";
         break;
     }
   }
@@ -97,5 +107,9 @@ export class RandomTeamPickingSession extends TeamPickingSession {
         .setStyle(ButtonStyle.Danger)
     );
     return { embeds: [embed], components: [row] };
+  }
+
+  public getState() {
+    return this.state;
   }
 }

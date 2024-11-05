@@ -16,6 +16,7 @@ import { GameInstance } from "database/GameInstance";
 import { PlayerInstance } from "database/PlayerInstance";
 import { TeamPickingSession } from "logic/teams/TeamPickingSession";
 import { RandomTeamPickingSession } from "logic/teams/RandomTeamPickingSession";
+import { log } from "console";
 
 export default class TeamCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;
@@ -86,7 +87,7 @@ export default class TeamCommand implements Command {
 
         switch (method) {
           case "random":
-            this.teamPickingSession = new RandomTeamPickingSession("random");
+            this.teamPickingSession = new RandomTeamPickingSession();
             this.teamPickingSession.initialize(interaction);
             break;
         }
@@ -186,7 +187,17 @@ export default class TeamCommand implements Command {
 
   public async handleButtonPress(interaction: ButtonInteraction) {
     if (this.teamPickingSession) {
-      this.teamPickingSession.handleInteraction(interaction);
+      await this.teamPickingSession.handleInteraction(interaction);
+
+      const state = this.teamPickingSession.getState();
+      log(state);
+      switch (state) {
+        case "finalized": //for now these do the same thing but we'll see
+        case "cancelled":
+          delete this.teamPickingSession;
+          this.teamPickingSession = undefined;
+          break;
+      }
     }
   }
 }
