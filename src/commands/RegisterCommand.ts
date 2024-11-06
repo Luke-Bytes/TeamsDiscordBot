@@ -72,8 +72,7 @@ export default class RegisterCommand implements Command {
 
     if (isAlreadyRegistered) {
       await interaction.reply({
-        content:
-          "You have already registered for the announced game!",
+        content: "You have already registered for the announced game!",
         ephemeral: false,
       });
       return;
@@ -90,18 +89,16 @@ export default class RegisterCommand implements Command {
         content: result.error,
         ephemeral: false,
       });
+    } else if (targetUser.id === interaction.user.id) {
+      await interaction.reply({
+        content: `You have successfully registered as ${inGameName} and joined team ${result.team}!`,
+        ephemeral: false,
+      });
     } else {
-      if (targetUser.id === interaction.user.id) {
-        await interaction.reply({
-          content: `You have successfully registered as ${inGameName} and joined team ${result.team}!`,
-          ephemeral: false,
-        });
-      } else {
-        await interaction.reply({
-          content: `${discordUserName} has been successfully registered as ${inGameName} in team ${result.team}!`,
-          ephemeral: false,
-        });
-      }
+      await interaction.reply({
+        content: `${discordUserName} has been successfully registered as ${inGameName} in team ${result.team}!`,
+        ephemeral: false,
+      });
     }
   }
 }

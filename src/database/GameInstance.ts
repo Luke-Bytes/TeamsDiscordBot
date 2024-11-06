@@ -81,16 +81,20 @@ export class GameInstance {
     }
 
     if (!player.minecraftAccounts.includes(uuid)) {
-      const result = await prismaClient.player.addMcAccount(discordSnowflake, uuid);
+      const result = await prismaClient.player.addMcAccount(
+        discordSnowflake,
+        uuid
+      );
       if (result.error) {
-        console.error(`Failed to register UUID for discord user ${discordSnowflake} with UUID ${uuid}: ${result.error}`);
+        console.error(
+          `Failed to register UUID for discord user ${discordSnowflake} with UUID ${uuid}: ${result.error}`
+        );
         return {
           error: "Something went wrong while adding the IGN! Is it valid?",
         } as const;
       }
       player.minecraftAccounts.push(uuid);
     }
-
 
     player.ignUsed = ignUsed;
 
