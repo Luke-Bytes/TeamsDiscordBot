@@ -35,7 +35,7 @@ export default class RegisterCommand implements Command {
     if (interaction.channelId !== registrationChannelId) {
       await interaction.reply({
         content: "You can only register in the registration channel.",
-        ephemeral: false,
+        ephemeral: true,
       });
       return;
     }
@@ -61,7 +61,7 @@ export default class RegisterCommand implements Command {
     if (!isOrganiser && targetUser.id !== interaction.user.id) {
       await interaction.reply({
         content: "You do not have permission to register other users.",
-        ephemeral: false,
+        ephemeral: true,
       });
       return;
     }
@@ -73,7 +73,7 @@ export default class RegisterCommand implements Command {
     if (isAlreadyRegistered) {
       await interaction.reply({
         content:
-          "This user is already registered or the in-game name is taken.",
+          "You have already registered for the announced game!",
         ephemeral: false,
       });
       return;

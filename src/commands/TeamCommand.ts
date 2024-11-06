@@ -77,7 +77,7 @@ export default class TeamCommand implements Command {
         if (this.teamPickingSession) {
           await interaction.reply({
             content:
-              "A team picking session is already happening. Either cancel that one or continue it.",
+              "A team picking session is already in process. Cancel that one is necessary before creating another.",
             ephemeral: true,
           });
           return;
@@ -88,7 +88,7 @@ export default class TeamCommand implements Command {
         switch (method) {
           case "random":
             this.teamPickingSession = new RandomTeamPickingSession();
-            this.teamPickingSession.initialize(interaction);
+            await this.teamPickingSession.initialize(interaction);
             break;
         }
 
