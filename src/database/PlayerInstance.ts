@@ -5,6 +5,8 @@ import { Player } from "@prisma/client";
 // wrapper class for Player
 // todo bad naming
 export class PlayerInstance {
+  private static instances: PlayerInstance[] = [];
+
   playerId: string;
 
   elo: number;
@@ -25,6 +27,18 @@ export class PlayerInstance {
     this.discordSnowflake = data.discordSnowflake;
     this.minecraftAccounts = data.minecraftAccounts;
     this.primaryMinecraftAccount = data.primaryMinecraftAccount ?? undefined;
+
+    PlayerInstance.instances.push(this);
+  }
+
+  public static resetAll() {
+    PlayerInstance.instances = [];
+  }
+
+  public static removePlayerInstance(instance: PlayerInstance) {
+    PlayerInstance.instances = PlayerInstance.instances.filter(
+      (i) => i !== instance
+    );
   }
 
   public static async byDiscordSnowflake(discordSnowflake: Snowflake) {

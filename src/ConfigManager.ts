@@ -13,6 +13,12 @@ type Config = {
   channels: {
     registration: string;
     announcements: string;
+    teamPickingVC: string;
+    teamPickingChat: string;
+    redTeamVC: string;
+    blueTeamVC: string;
+    redTeamChat: string;
+    blueTeamChat: string;
   };
   dev: {
     enabled: boolean;

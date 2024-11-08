@@ -288,10 +288,10 @@ export default class AnnouncementCommand implements Command {
 
     switch (subcommand) {
       case "start":
-        this.handleAnnouncementStart(interaction);
+        await this.handleAnnouncementStart(interaction);
         break;
       case "cancel":
-        this.handleAnnouncementCancel();
+        await this.handleAnnouncementCancel();
     }
   }
 

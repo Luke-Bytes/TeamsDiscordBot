@@ -6,7 +6,7 @@ import { MinerushVoteManager } from "logic/MinerushVoteManager";
 import { MojangAPI } from "api/MojangAPI";
 
 // wrapper class for Game
-// todo bad naming
+// TODO refactor this into a singleton
 export class GameInstance {
   gameId?: string;
 
@@ -26,6 +26,22 @@ export class GameInstance {
 
   constructor() {
     this.settings = {};
+  }
+
+  public reset() {
+    this.gameId = undefined;
+    this.finished = undefined;
+    this.announced = false;
+    this.startTime = undefined;
+    this.endTime = undefined;
+    this.settings = {
+      minerushing: undefined,
+      bannedClasses: undefined,
+      map: undefined,
+    };
+    this.teams = { RED: [], BLUE: [] };
+    this.mapVoteManager = undefined;
+    this.minerushVoteManager = undefined;
   }
 
   public startMinerushVote() {

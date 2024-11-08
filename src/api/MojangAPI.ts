@@ -35,7 +35,6 @@ export class MojangAPI {
   }
 
   public static validateUsername(username: string) {
-    //no length check because some people have og
-    return /^[a-zA-Z0-9_]+$/.test(username) && username.length <= 16;
+    return /^[a-zA-Z0-9_]{1,16}$/.test(username);
   }
 }
