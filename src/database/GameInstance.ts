@@ -49,7 +49,6 @@ export class GameInstance {
     PlayerInstance.resetAll();
   }
 
-
   public startMinerushVote() {
     this.minerushVoteManager = new MinerushVoteManager();
     this.minerushVoteManager.on("pollEnd", (answer) => {
@@ -87,12 +86,18 @@ export class GameInstance {
     )[0] as Team;
   }
 
-  public async addPlayerByDiscordId(discordSnowflake: Snowflake, ignUsed: string) {
+  public async addPlayerByDiscordId(
+    discordSnowflake: Snowflake,
+    ignUsed: string
+  ) {
     const player = await PlayerInstance.byDiscordSnowflake(discordSnowflake);
     const uuid = await MojangAPI.usernameToUUID(ignUsed);
     if (!uuid) return { error: "This in-game name doesn't exist." } as const;
     if (!player.minecraftAccounts.includes(uuid))
-      return { error: "You have not registered this in-game name. Please use `/ign add`" } as const;
+      return {
+        error:
+          "You have not registered this in-game name. Please use `/ign add`",
+      } as const;
     player.ignUsed = ignUsed;
     const team = this.getTeamWithLeastPlayers();
     this.teams[team].push(player);
