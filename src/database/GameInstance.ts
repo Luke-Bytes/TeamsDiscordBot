@@ -21,7 +21,11 @@ export class GameInstance {
     map?: $Enums.AnniMap;
   };
 
-  teams: Record<Team, PlayerInstance[]> = { RED: [], BLUE: [] };
+  teams: Record<Team | "UNDECIDED", PlayerInstance[]> = {
+    RED: [],
+    BLUE: [],
+    UNDECIDED: [],
+  };
   mapVoteManager?: MapVoteManager;
   minerushVoteManager?: MinerushVoteManager;
 
@@ -98,12 +102,10 @@ export class GameInstance {
 
     player.ignUsed = ignUsed;
 
-    const team = this.getTeamWithLeastPlayers();
-    this.teams[team].push(player);
+    this.teams["UNDECIDED"].push(player);
 
     return {
       error: false,
-      team: team,
     } as const;
   }
 
