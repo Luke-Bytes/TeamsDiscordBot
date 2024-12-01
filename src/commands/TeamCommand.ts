@@ -14,6 +14,7 @@ import { PlayerInstance } from "database/PlayerInstance";
 import { TeamPickingSession } from "logic/teams/TeamPickingSession";
 import { RandomTeamPickingSession } from "logic/teams/RandomTeamPickingSession";
 import { log } from "console";
+import { DraftTeamPickingSession } from "logic/teams/DraftTeamPickingSession";
 
 export default class TeamCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;
@@ -40,7 +41,13 @@ export default class TeamCommand implements Command {
               .setName("method")
               .setDescription("Method to generate teams")
               .setRequired(true)
-              .addChoices({ name: "random", value: "random" })
+              .addChoices(
+                { name: "random", value: "random" },
+                {
+                  name: "draft",
+                  value: "draft",
+                }
+              )
           )
       )
       .addSubcommand((subcommand) =>
@@ -71,6 +78,15 @@ export default class TeamCommand implements Command {
           return;
         }
 
+        if (!game.announced) {
+          await interaction.reply({
+            content:
+              "A game has not been announced yet. Please use `/announce start`.",
+            ephemeral: true,
+          });
+          return;
+        }
+
         if (this.teamPickingSession) {
           await interaction.reply({
             content:
@@ -85,6 +101,10 @@ export default class TeamCommand implements Command {
         switch (method) {
           case "random":
             this.teamPickingSession = new RandomTeamPickingSession();
+            await this.teamPickingSession.initialize(interaction);
+            break;
+          case "draft":
+            this.teamPickingSession = new DraftTeamPickingSession();
             await this.teamPickingSession.initialize(interaction);
             break;
         }
@@ -132,12 +152,12 @@ export default class TeamCommand implements Command {
 
       case "list": {
         if (!game.announced) {
-          await interaction.editReply({
+          await interaction.reply({
             content: "Game does not exist.",
           });
         } else {
           const embed = this.createTeamViewEmbed(game);
-          await interaction.editReply(embed);
+          await interaction.reply(embed);
         }
         break;
       }
@@ -155,7 +175,7 @@ export default class TeamCommand implements Command {
     const bluePlayers: PlayerInstance[] = game.getPlayersOfTeam("BLUE");
     const bluePlayersString =
       bluePlayers.length > 0
-        ? `**${bluePlayers[0]}**\n` +
+        ? `**${bluePlayers[0].ignUsed}**\n` +
           bluePlayers
             .slice(1)
             .map((player) => player.ignUsed)
@@ -164,7 +184,7 @@ export default class TeamCommand implements Command {
 
     const redPlayersString =
       redPlayers.length > 0
-        ? `**${redPlayers[0]}**\n` +
+        ? `**${redPlayers[0].ignUsed}**\n` +
           redPlayers
             .slice(1)
             .map((player) => player.ignUsed)

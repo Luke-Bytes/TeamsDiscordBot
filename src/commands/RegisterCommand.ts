@@ -91,12 +91,12 @@ export default class RegisterCommand implements Command {
       });
     } else if (targetUser.id === interaction.user.id) {
       await interaction.reply({
-        content: `You have successfully registered as ${inGameName} and joined team ${result.team}!`,
+        content: `You have successfully registered as ${inGameName}!`,
         ephemeral: false,
       });
     } else {
       await interaction.reply({
-        content: `${discordUserName} has been successfully registered as ${inGameName} in team ${result.team}!`,
+        content: `${discordUserName} has been successfully registered as ${inGameName}`,
         ephemeral: false,
       });
     }

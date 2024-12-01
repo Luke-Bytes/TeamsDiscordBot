@@ -77,10 +77,22 @@ export class GameInstance {
     ignUsed: string
   ) {
     const player = await PlayerInstance.byDiscordSnowflake(discordSnowflake);
-    const uuid = await MojangAPI.usernameToUUID(ignUsed);
+    let uuid: string | undefined;
+
+    if (ignUsed === "") {
+      uuid = player.primaryMinecraftAccount;
+    } else {
+      uuid = await MojangAPI.usernameToUUID(ignUsed);
+      if (!uuid) {
+        return {
+          error: "That IGN doesn't exist! Did you spell it correctly?",
+        } as const;
+      }
+    }
+
     if (!uuid) {
       return {
-        error: "That IGN doesn't exist! Did you spell it correctly?",
+        error: "The player does not have a primary minecraft account.",
       } as const;
     }
 
@@ -100,12 +112,21 @@ export class GameInstance {
       player.minecraftAccounts.push(uuid);
     }
 
-    player.ignUsed = ignUsed;
+    const ign = ignUsed === "" ? await MojangAPI.uuidToUsername(uuid) : ignUsed;
+
+    if (!ign) {
+      return {
+        error: "Could not locate IGN of player.",
+      } as const;
+    }
+
+    player.ignUsed = ign;
 
     this.teams["UNDECIDED"].push(player);
 
     return {
       error: false,
+      playerInstance: player,
     } as const;
   }
 
