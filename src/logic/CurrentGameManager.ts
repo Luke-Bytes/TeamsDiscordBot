@@ -1,6 +1,5 @@
-import { GameInstance } from "../database/GameInstance";
+import { GameInstance } from "database/GameInstance";
 
-//todo bad naming
 export class CurrentGameManager {
   private static currentGame?: GameInstance;
 
@@ -8,19 +7,18 @@ export class CurrentGameManager {
 
   public static getCurrentGame() {
     if (!this.currentGame) {
-      this.currentGame = new GameInstance();
+      this.currentGame = GameInstance.getInstance();
     }
     return this.currentGame;
   }
 
   public static resetCurrentGame() {
-    this.currentGame = new GameInstance();
+    this.currentGame?.reset();
   }
 
   public static cancelCurrentGame() {
     this.currentGame?.mapVoteManager?.cancelVote();
     this.currentGame?.minerushVoteManager?.cancelVote();
-
     this.resetCurrentGame();
   }
 }

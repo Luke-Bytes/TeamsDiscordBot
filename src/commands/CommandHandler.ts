@@ -50,8 +50,7 @@ export class CommandHandler {
         await command.execute(chatInteraction);
       }
     } else if (interaction.isMessageContextMenuCommand()) {
-      const messageInteraction =
-        interaction as MessageContextMenuCommandInteraction;
+      const messageInteraction = interaction;
       const command = this.commands.find(
         (cmd) => cmd.name === messageInteraction.commandName
       );

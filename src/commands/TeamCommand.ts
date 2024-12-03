@@ -52,89 +52,140 @@ export default class TeamCommand implements Command {
       memberRoles instanceof GuildMemberRoleManager &&
       memberRoles.cache.has(config.roles.organiserRole);
 
-    await interaction.deferReply();
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply();
+    }
 
     const game = CurrentGameManager.getCurrentGame();
 
-    switch (subcommand) {
-      case "generate": {
-        if (!isOrganiser) {
-          await interaction.reply({
-            content: "You do not have permission to run this command!",
-            ephemeral: true,
-          });
-          return;
+    try {
+      switch (subcommand) {
+        case "generate": {
+          if (!isOrganiser) {
+            if (!interaction.replied) {
+              await interaction.reply({
+                content: "You do not have permission to run this command!",
+                ephemeral: true,
+              });
+            }
+            return;
+          }
+
+          const method = interaction.options.getString("method");
+          if (method === "random") {
+            game.shuffleTeams("random");
+            const response = this.createTeamGenerateEmbed(game);
+            if (!interaction.replied) {
+              await interaction.reply(response);
+            } else {
+              await interaction.followUp(response);
+            }
+          } else if (!interaction.replied) {
+            await interaction.reply({
+              content: "Invalid generation method!",
+              ephemeral: true,
+            });
+          } else {
+            await interaction.followUp({
+              content: "Invalid generation method!",
+              ephemeral: true,
+            });
+          }
+
+          const redTeam = game.getPlayersOfTeam("RED");
+          for (const element of redTeam) {
+            const discordUser = await interaction.guild?.members.fetch(
+              element.discordSnowflake
+            );
+            await discordUser?.roles.remove(config.roles.blueTeamRole);
+            discordUser?.roles.add(config.roles.redTeamRole);
+          }
+
+          const blueTeam = game.getPlayersOfTeam("BLUE");
+          for (const element of blueTeam) {
+            const discordUser = await interaction.guild?.members.fetch(
+              element.discordSnowflake
+            );
+            await discordUser?.roles.remove(config.roles.redTeamRole);
+            discordUser?.roles.add(config.roles.blueTeamRole);
+          }
+
+          break;
         }
 
-        const method = interaction.options.getString("method");
-        if (method === "random") {
-          game.shuffleTeams("random");
-          const response = this.createTeamGenerateEmbed(game);
-          await interaction.reply(response);
-        } else {
-          await interaction.reply({
-            content: "Invalid generation method!",
-            ephemeral: true,
-          });
+        case "reset": {
+          if (!isOrganiser) {
+            if (!interaction.replied) {
+              await interaction.reply({
+                content: "You do not have permission to run this command!",
+                ephemeral: true,
+              });
+            }
+            return;
+          }
+
+          game.resetTeams();
+
+          if (!interaction.replied) {
+            await interaction.reply({
+              content: "Teams have been reset!",
+            });
+          } else {
+            await interaction.followUp({
+              content: "Teams have been reset!",
+            });
+          }
+          break;
         }
 
-        const redTeam = game.getPlayersOfTeam("RED");
-        for (let i = 0; i < redTeam.length; i++) {
-          const player = redTeam[i];
-          const discordUser = await interaction.guild?.members.fetch(
-            player.discordSnowflake
-          );
-          await discordUser?.roles.remove(config.roles.blueTeamRole);
-          discordUser?.roles.add(config.roles.redTeamRole);
+        case "list": {
+          if (!game.announced) {
+            if (!interaction.replied) {
+              await interaction.reply({
+                content: "Game does not exist.",
+              });
+            } else {
+              await interaction.followUp({
+                content: "Game does not exist.",
+              });
+            }
+          } else {
+            const embed = this.createTeamViewEmbed(game);
+            if (!interaction.replied) {
+              await interaction.reply(embed);
+            } else {
+              await interaction.followUp(embed);
+            }
+          }
+          break;
         }
 
-        const blueTeam = game.getPlayersOfTeam("BLUE");
-        for (let i = 0; i < blueTeam.length; i++) {
-          const player = blueTeam[i];
-          const discordUser = await interaction.guild?.members.fetch(
-            player.discordSnowflake
-          );
-          await discordUser?.roles.remove(config.roles.redTeamRole);
-          discordUser?.roles.add(config.roles.blueTeamRole);
-        }
-
-        break;
+        default:
+          if (!interaction.replied) {
+            await interaction.reply({
+              content: "Invalid subcommand!",
+              ephemeral: true,
+            });
+          } else {
+            await interaction.followUp({
+              content: "Invalid subcommand!",
+              ephemeral: true,
+            });
+          }
       }
-
-      case "reset": {
-        if (!isOrganiser) {
-          await interaction.reply({
-            content: "You do not have permission to run this command!",
-            ephemeral: true,
-          });
-          return;
-        }
-
-        game.resetTeams();
-
+    } catch (error) {
+      console.error("Error in TeamCommand execution:", error);
+      if (!interaction.replied) {
         await interaction.reply({
-          content: "Teams have been reset!",
-          ephemeral: false,
-        });
-        break;
-      }
-
-      case "list":
-        if (!game.announced) {
-          await interaction.editReply({
-            content: "Game does not exist.",
-          });
-        } else {
-          const embed = this.createTeamViewEmbed(game);
-          await interaction.editReply(embed);
-        }
-        break;
-
-      default:
-        await interaction.reply({
-          content: "Invalid subcommand!",
+          content: "An error occurred while executing the command.",
           ephemeral: true,
         });
+      } else {
+        await interaction.followUp({
+          content: "An error occurred while executing the command.",
+          ephemeral: true,
+        });
+      }
     }
   }
 

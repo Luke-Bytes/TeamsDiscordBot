@@ -8,6 +8,8 @@ import {
   ActionRowBuilder,
   ButtonStyle,
   SlashCommandSubcommandsOnlyBuilder,
+  Snowflake,
+  GuildMember,
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { AnniClass, AnniMap } from "@prisma/client";
@@ -16,6 +18,7 @@ import { parseDate } from "chrono-node";
 import { log } from "console";
 import { Channels } from "Channels";
 import { CurrentGameManager } from "logic/CurrentGameManager";
+import { ConfigManager } from "ConfigManager";
 
 export default class AnnouncementCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;
@@ -310,6 +313,16 @@ export default class AnnouncementCommand implements Command {
     await interaction.deferReply({
       ephemeral: true,
     });
+    const organiserRoleId = ConfigManager.getConfig().roles.organiserRole;
+    const member = interaction.member as GuildMember;
+
+    if (!member.roles.cache.has(organiserRoleId)) {
+      await interaction.editReply(
+        "Only organisers can use announcement buttons!"
+      );
+      return;
+    }
+
     switch (interaction.customId) {
       case "announcement-cancel":
         if (CurrentGameManager.getCurrentGame().announced) {
