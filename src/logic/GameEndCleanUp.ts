@@ -81,9 +81,7 @@ export async function cleanUpAfterGame(guild: Guild) {
     }
 
     for (const channelId of chatChannelIds) {
-      const channel = guild.channels.cache.get(
-        channelId
-      ) as TextChannel;
+      const channel = guild.channels.cache.get(channelId) as TextChannel;
       if (channel?.isTextBased()) {
         try {
           let fetched;

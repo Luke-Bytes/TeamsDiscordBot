@@ -4,7 +4,6 @@ import { Player } from "@prisma/client";
 
 // wrapper class for Player
 export class PlayerInstance {
-
   playerId: string;
   elo: number;
   wins: number;

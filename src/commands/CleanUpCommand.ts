@@ -5,7 +5,8 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  PermissionFlagsBits, GuildMemberRoleManager,
+  PermissionFlagsBits,
+  GuildMemberRoleManager,
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { ConfigManager } from "../ConfigManager";
@@ -100,7 +101,6 @@ export default class CleanupCommand implements Command {
           ephemeral: true,
         });
       }
-
     } else if (interaction.customId === "cleanup_cancel") {
       await interaction.update({
         content: "❌ Cleanup process cancelled.",

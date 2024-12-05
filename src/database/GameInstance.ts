@@ -56,7 +56,6 @@ export class GameInstance {
     this.instance = new GameInstance();
   }
 
-
   public startMinerushVote() {
     this.minerushVoteManager = new MinerushVoteManager();
     this.minerushVoteManager.on("pollEnd", (answer) => {

@@ -33,7 +33,7 @@ export class CommandHandler {
       new StatsCommand(),
       new TeamCommand(),
       new TestCommand(),
-      new CleanupCommand()
+      new CleanupCommand(),
     ];
   }
 
