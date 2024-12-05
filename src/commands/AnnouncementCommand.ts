@@ -8,12 +8,11 @@ import {
   ActionRowBuilder,
   ButtonStyle,
   SlashCommandSubcommandsOnlyBuilder,
-  Snowflake,
   GuildMember,
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { AnniClass, AnniMap } from "@prisma/client";
-import { prettifyName, randomEnum } from "../Utils";
+import { prettifyName, randomEnum } from "Utils";
 import { parseDate } from "chrono-node";
 import { log } from "console";
 import { Channels } from "Channels";
@@ -95,10 +94,10 @@ export default class AnnouncementCommand implements Command {
         .map((v) => v.trim())
         .map((v) => v.split(" ").join(""));
 
-      for (let i = 0; i < rest.length; i++) {
-        if (!Object.values(AnniMap).includes(rest[i] as AnniMap)) {
+      for (const element of rest) {
+        if (!Object.values(AnniMap).includes(element as AnniMap)) {
           return {
-            error: `Map '${rest[i]}' not recognized.`,
+            error: `Map '${element}' not recognized.`,
           };
         }
       }
@@ -143,10 +142,10 @@ export default class AnnouncementCommand implements Command {
       .split(",")
       .map((v) => v.trim());
 
-    for (let i = 0; i < kits.length; i++) {
-      if (!Object.values(AnniClass).includes(kits[i] as AnniClass)) {
+    for (const element of kits) {
+      if (!Object.values(AnniClass).includes(element as AnniClass)) {
         return {
-          error: `Class '${kits[i]}' not recognized.`,
+          error: `Class '${element}' not recognized.`,
         } as const;
       }
     }
@@ -204,7 +203,7 @@ export default class AnnouncementCommand implements Command {
 
     if (!date) {
       await interaction.editReply(
-        "Date could not be deduced. Please try again"
+        "The date/time you entered doesn't make sense, try again"
       );
       return false;
     }
@@ -275,13 +274,13 @@ export default class AnnouncementCommand implements Command {
   private async handleAnnouncementCancel() {
     CurrentGameManager.cancelCurrentGame();
     if (this.announcementMessage) {
-      this.announcementMessage.delete();
+      await this.announcementMessage.delete();
       delete this.announcementMessage;
     }
 
     if (this.announcementPreviewMessage) {
       log("attempt to delete announcement preview message");
-      this.announcementPreviewMessage.delete();
+      await this.announcementPreviewMessage.delete();
       delete this.announcementPreviewMessage;
     }
   }
@@ -311,7 +310,7 @@ export default class AnnouncementCommand implements Command {
     interaction: ButtonInteraction
   ): Promise<void> {
     await interaction.deferReply({
-      ephemeral: true,
+      ephemeral: false,
     });
     const organiserRoleId = ConfigManager.getConfig().roles.organiserRole;
     const member = interaction.member as GuildMember;
@@ -335,7 +334,7 @@ export default class AnnouncementCommand implements Command {
         }
         break;
       case "announcement-confirm":
-        this.handleAnnouncementConfirm();
+        await this.handleAnnouncementConfirm();
         await interaction.editReply("Sent announcement!");
         break;
     }
