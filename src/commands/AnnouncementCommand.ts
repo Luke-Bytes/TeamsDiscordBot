@@ -340,7 +340,7 @@ export default class AnnouncementCommand implements Command {
           inline: false,
         },
         {
-          name: `MAP: ${game.settings.map ? prettifyName(game.settings.map) : game.mapVoteManager ? "Voting..." : "N/A"}`,
+          name: `MAP: ${game.settings.map ? prettifyName(game.settings.map) : game.mapVoteManager ? "Voting..." + (preview ? " [" + game.mapVoteManager.maps.map(prettifyName).join(", ") + "]" : "") : "N/A"}`,
           value: " ",
           inline: false,
         },

@@ -35,7 +35,7 @@ export default class RegisterCommand implements Command {
     if (interaction.channelId !== registrationChannelId) {
       await interaction.reply({
         content: "You can only register in the registration channel.",
-        ephemeral: false,
+        ephemeral: true,
       });
       return;
     }
@@ -61,7 +61,7 @@ export default class RegisterCommand implements Command {
     if (!isOrganiser && targetUser.id !== interaction.user.id) {
       await interaction.reply({
         content: "You do not have permission to register other users.",
-        ephemeral: false,
+        ephemeral: true,
       });
       return;
     }
@@ -72,8 +72,7 @@ export default class RegisterCommand implements Command {
 
     if (isAlreadyRegistered) {
       await interaction.reply({
-        content:
-          "This user is already registered or the in-game name is taken.",
+        content: "You have already registered for the announced game!",
         ephemeral: false,
       });
       return;
@@ -90,18 +89,16 @@ export default class RegisterCommand implements Command {
         content: result.error,
         ephemeral: false,
       });
+    } else if (targetUser.id === interaction.user.id) {
+      await interaction.reply({
+        content: `You have successfully registered as ${inGameName}!`,
+        ephemeral: false,
+      });
     } else {
-      if (targetUser.id === interaction.user.id) {
-        await interaction.reply({
-          content: `You have successfully registered as ${inGameName} and joined team ${result.team}!`,
-          ephemeral: false,
-        });
-      } else {
-        await interaction.reply({
-          content: `${discordUserName} has been successfully registered as ${inGameName} in team ${result.team}!`,
-          ephemeral: false,
-        });
-      }
+      await interaction.reply({
+        content: `${discordUserName} has been successfully registered as ${inGameName}`,
+        ephemeral: false,
+      });
     }
   }
 }

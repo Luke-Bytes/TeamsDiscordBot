@@ -4,6 +4,7 @@ import { PlayerInstance } from "./PlayerInstance";
 import { MapVoteManager } from "../logic/MapVoteManager";
 import { MinerushVoteManager } from "logic/MinerushVoteManager";
 import { MojangAPI } from "api/MojangAPI";
+import { prismaClient } from "database/prismaClient";
 
 // wrapper class for Game
 // todo bad naming
@@ -20,7 +21,11 @@ export class GameInstance {
     map?: $Enums.AnniMap;
   };
 
-  teams: Record<Team, PlayerInstance[]> = { RED: [], BLUE: [] };
+  teams: Record<Team | "UNDECIDED", PlayerInstance[]> = {
+    RED: [],
+    BLUE: [],
+    UNDECIDED: [],
+  };
   mapVoteManager?: MapVoteManager;
   minerushVoteManager?: MinerushVoteManager;
 
@@ -72,28 +77,56 @@ export class GameInstance {
     ignUsed: string
   ) {
     const player = await PlayerInstance.byDiscordSnowflake(discordSnowflake);
-    const uuid = await MojangAPI.usernameToUUID(ignUsed);
+    let uuid: string | undefined;
+
+    if (ignUsed === "") {
+      uuid = player.primaryMinecraftAccount;
+    } else {
+      uuid = await MojangAPI.usernameToUUID(ignUsed);
+      if (!uuid) {
+        return {
+          error: "That IGN doesn't exist! Did you spell it correctly?",
+        } as const;
+      }
+    }
+
     if (!uuid) {
       return {
-        error: "This in-game name doesn't exist.",
+        error: "The player does not have a primary minecraft account.",
       } as const;
     }
 
     if (!player.minecraftAccounts.includes(uuid)) {
+      const result = await prismaClient.player.addMcAccount(
+        discordSnowflake,
+        uuid
+      );
+      if (result.error) {
+        console.error(
+          `Failed to register UUID for discord user ${discordSnowflake} with UUID ${uuid}: ${result.error}`
+        );
+        return {
+          error: "Something went wrong while adding the IGN! Is it valid?",
+        } as const;
+      }
+      player.minecraftAccounts.push(uuid);
+    }
+
+    const ign = ignUsed === "" ? await MojangAPI.uuidToUsername(uuid) : ignUsed;
+
+    if (!ign) {
       return {
-        error:
-          "You have not registered this in-game name. Please use `/ign add`",
+        error: "Could not locate IGN of player.",
       } as const;
     }
 
-    player.ignUsed = ignUsed;
+    player.ignUsed = ign;
 
-    const team = this.getTeamWithLeastPlayers();
-    this.teams[team].push(player);
+    this.teams["UNDECIDED"].push(player);
 
     return {
       error: false,
-      team: team,
+      playerInstance: player,
     } as const;
   }
 

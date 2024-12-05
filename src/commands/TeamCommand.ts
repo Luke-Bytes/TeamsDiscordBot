@@ -1,7 +1,5 @@
 import {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
+  ButtonInteraction,
   ChatInputCommandInteraction,
   EmbedBuilder,
   GuildMemberRoleManager,
@@ -13,12 +11,22 @@ import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { ConfigManager } from "ConfigManager";
 import { GameInstance } from "database/GameInstance";
 import { PlayerInstance } from "database/PlayerInstance";
+import { TeamPickingSession } from "logic/teams/TeamPickingSession";
+import { RandomTeamPickingSession } from "logic/teams/RandomTeamPickingSession";
+import { log } from "console";
+import { DraftTeamPickingSession } from "logic/teams/DraftTeamPickingSession";
 
 export default class TeamCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;
   public name = "team";
   public description = "Manage teams";
-  public buttonIds: string[] = [];
+  public buttonIds: string[] = [
+    "random-team-accept",
+    "random-team-generate-reroll",
+    "random-team-generate-cancel",
+  ];
+
+  private teamPickingSession?: TeamPickingSession;
 
   constructor() {
     this.data = new SlashCommandBuilder()
@@ -33,7 +41,13 @@ export default class TeamCommand implements Command {
               .setName("method")
               .setDescription("Method to generate teams")
               .setRequired(true)
-              .addChoices({ name: "random", value: "random" })
+              .addChoices(
+                { name: "random", value: "random" },
+                {
+                  name: "draft",
+                  value: "draft",
+                }
+              )
           )
       )
       .addSubcommand((subcommand) =>
@@ -52,8 +66,6 @@ export default class TeamCommand implements Command {
       memberRoles instanceof GuildMemberRoleManager &&
       memberRoles.cache.has(config.roles.organiserRole);
 
-    await interaction.deferReply();
-
     const game = CurrentGameManager.getCurrentGame();
 
     switch (subcommand) {
@@ -66,16 +78,35 @@ export default class TeamCommand implements Command {
           return;
         }
 
-        const method = interaction.options.getString("method");
-        if (method === "random") {
-          game.shuffleTeams("random");
-          const response = this.createTeamGenerateEmbed(game);
-          await interaction.reply(response);
-        } else {
+        if (!game.announced) {
           await interaction.reply({
-            content: "Invalid generation method!",
+            content:
+              "A game has not been announced yet. Please use `/announce start`.",
             ephemeral: true,
           });
+          return;
+        }
+
+        if (this.teamPickingSession) {
+          await interaction.reply({
+            content:
+              "A team picking session is already in process. Cancel that one is necessary before creating another.",
+            ephemeral: true,
+          });
+          return;
+        }
+
+        const method = interaction.options.getString("method");
+
+        switch (method) {
+          case "random":
+            this.teamPickingSession = new RandomTeamPickingSession();
+            await this.teamPickingSession.initialize(interaction);
+            break;
+          case "draft":
+            this.teamPickingSession = new DraftTeamPickingSession();
+            await this.teamPickingSession.initialize(interaction);
+            break;
         }
 
         const redTeam = game.getPlayersOfTeam("RED");
@@ -119,16 +150,17 @@ export default class TeamCommand implements Command {
         break;
       }
 
-      case "list":
+      case "list": {
         if (!game.announced) {
-          await interaction.editReply({
+          await interaction.reply({
             content: "Game does not exist.",
           });
         } else {
           const embed = this.createTeamViewEmbed(game);
-          await interaction.editReply(embed);
+          await interaction.reply(embed);
         }
         break;
+      }
 
       default:
         await interaction.reply({
@@ -143,7 +175,7 @@ export default class TeamCommand implements Command {
     const bluePlayers: PlayerInstance[] = game.getPlayersOfTeam("BLUE");
     const bluePlayersString =
       bluePlayers.length > 0
-        ? `**${bluePlayers[0]}**\n` +
+        ? `**${bluePlayers[0].ignUsed}**\n` +
           bluePlayers
             .slice(1)
             .map((player) => player.ignUsed)
@@ -152,7 +184,7 @@ export default class TeamCommand implements Command {
 
     const redPlayersString =
       redPlayers.length > 0
-        ? `**${redPlayers[0]}**\n` +
+        ? `**${redPlayers[0].ignUsed}**\n` +
           redPlayers
             .slice(1)
             .map((player) => player.ignUsed)
@@ -170,51 +202,19 @@ export default class TeamCommand implements Command {
     return { embeds: [embed], ephemeral: true };
   }
 
-  createTeamGenerateEmbed(game: GameInstance) {
-    const redPlayers: PlayerInstance[] = game.getPlayersOfTeam("RED");
-    const bluePlayers: PlayerInstance[] = game.getPlayersOfTeam("BLUE");
+  public async handleButtonPress(interaction: ButtonInteraction) {
+    if (this.teamPickingSession) {
+      await this.teamPickingSession.handleInteraction(interaction);
 
-    const bluePlayersString =
-      bluePlayers.length > 0
-        ? `**${bluePlayers[0]}**\n` +
-          bluePlayers
-            .slice(1)
-            .map((player) => player.ignUsed)
-            .join("\n") // Only the first player bold
-        : "No players";
-
-    const redPlayersString =
-      redPlayers.length > 0
-        ? `**${redPlayers[0]}**\n` +
-          redPlayers
-            .slice(1)
-            .map((player) => player.ignUsed)
-            .join("\n") // Only the first player bold
-        : "No players";
-
-    const embed = new EmbedBuilder()
-      .setColor("#0099ff")
-      .setTitle("Randomized Teams")
-      .addFields(
-        { name: "🔵 Blue Team 🔵  ", value: bluePlayersString, inline: true },
-        { name: "🔴 Red Team 🔴   ", value: redPlayersString, inline: true }
-      )
-      .setFooter({ text: "Choose an action below." });
-
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId("accept")
-        .setLabel("Accept!")
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId("reroll")
-        .setLabel("Reroll")
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId("cancel")
-        .setLabel("Cancel?")
-        .setStyle(ButtonStyle.Danger)
-    );
-    return { embeds: [embed], components: [row] };
+      const state = this.teamPickingSession.getState();
+      log(state);
+      switch (state) {
+        case "finalized": //for now these do the same thing but we'll see
+        case "cancelled":
+          delete this.teamPickingSession;
+          this.teamPickingSession = undefined;
+          break;
+      }
+    }
   }
 }

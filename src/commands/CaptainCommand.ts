@@ -7,6 +7,7 @@ import { Command } from "./CommandInterface";
 import { ConfigManager } from "../ConfigManager";
 import { Team } from "@prisma/client";
 import { CurrentGameManager } from "logic/CurrentGameManager";
+import { log } from "console";
 
 export default class CaptainCommand implements Command {
   public data: SlashCommandBuilder;
@@ -84,16 +85,27 @@ export default class CaptainCommand implements Command {
       return;
     }
 
-    const player = game
+    let player = game
       .getPlayers()
       .find((player) => player.discordSnowflake === user.id);
 
     if (!player) {
-      await interaction.reply({
-        content: "This player hasn't registered!",
-        ephemeral: true,
-      });
-      return;
+      //if the player isn't registered then we register them.
+      const result =
+        await CurrentGameManager.getCurrentGame().addPlayerByDiscordId(
+          user.id,
+          ""
+        );
+
+      if (result.error) {
+        await interaction.reply({
+          content: "Error: " + result.error,
+          ephemeral: true,
+        });
+        return;
+      } else {
+        player = result.playerInstance;
+      }
     }
 
     const captains = game.setTeamCaptain(
@@ -114,7 +126,7 @@ export default class CaptainCommand implements Command {
     await newTeamCaptain.roles.add(captainRoleId);
 
     await interaction.reply({
-      content: `Set captain of team ${teamColor} to ${player.ignUsed}`,
+      content: `Set captain of team **${teamColor}** to **${player.ignUsed}**`,
     });
   }
 }

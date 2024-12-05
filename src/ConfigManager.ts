@@ -13,6 +13,7 @@ type Config = {
   channels: {
     registration: string;
     announcements: string;
+    teamPicking: string;
   };
   dev: {
     enabled: boolean;
