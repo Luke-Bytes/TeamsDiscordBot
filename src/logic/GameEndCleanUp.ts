@@ -1,16 +1,15 @@
-import { Guild, Snowflake, TextChannel } from "discord.js";
+import { Guild, TextChannel } from "discord.js";
 import { ConfigManager } from "ConfigManager";
 import { GameInstance } from "database/GameInstance";
-import { PlayerInstance } from "database/PlayerInstance";
 
 export async function cleanUpAfterGame(guild: Guild) {
   const config = ConfigManager.getConfig();
-  const captainRoleId = config.roles.captainRole as Snowflake;
-  const blueTeamRoleId = config.roles.blueTeamRole as Snowflake;
-  const redTeamRoleId = config.roles.redTeamRole as Snowflake;
-  const teamPickingVCId = config.channels.teamPickingVC as Snowflake;
-  const blueTeamVCId = config.channels.blueTeamVC as Snowflake;
-  const redTeamVCId = config.channels.redTeamVC as Snowflake;
+  const captainRoleId = config.roles.captainRole;
+  const blueTeamRoleId = config.roles.blueTeamRole;
+  const redTeamRoleId = config.roles.redTeamRole;
+  const teamPickingVCId = config.channels.teamPickingVC;
+  const blueTeamVCId = config.channels.blueTeamVC;
+  const redTeamVCId = config.channels.redTeamVC;
 
   const chatChannelIds = [
     config.channels.blueTeamChat,
@@ -83,7 +82,7 @@ export async function cleanUpAfterGame(guild: Guild) {
 
     for (const channelId of chatChannelIds) {
       const channel = guild.channels.cache.get(
-        channelId as Snowflake
+        channelId
       ) as TextChannel;
       if (channel?.isTextBased()) {
         try {
@@ -112,10 +111,7 @@ export async function cleanUpAfterGame(guild: Guild) {
       error
     );
   }
-  // Refactor gameInstance to gameSingleton
-  // gameInstance.reset();
-  console.log("Game instance reset to default values.");
 
-  PlayerInstance.resetAll();
-  console.log("All player instances have been removed.");
+  await GameInstance.resetGameInstance();
+  console.log("Game instance reset to default values.");
 }

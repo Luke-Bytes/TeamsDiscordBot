@@ -46,8 +46,16 @@ export class GameInstance {
     this.teams = { RED: [], BLUE: [] };
     this.mapVoteManager = undefined;
     this.minerushVoteManager = undefined;
-    PlayerInstance.resetAll();
   }
+
+  public static async resetGameInstance() {
+    const currentInstance = this.getInstance();
+    if (currentInstance) {
+      // FIXME commit to database method here
+    }
+    this.instance = new GameInstance();
+  }
+
 
   public startMinerushVote() {
     this.minerushVoteManager = new MinerushVoteManager();

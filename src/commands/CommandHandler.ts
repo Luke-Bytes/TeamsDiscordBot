@@ -17,11 +17,10 @@ import RoleCommand from "./RoleCommand";
 import StatsCommand from "./StatsCommand";
 import TeamCommand from "./TeamCommand";
 import TestCommand from "./TestCommand";
+import CleanupCommand from "commands/CleanUpCommand";
 
 export class CommandHandler {
   private commands: Command[] = [];
-
-  constructor() {}
 
   public loadCommands() {
     this.commands = [
@@ -34,12 +33,13 @@ export class CommandHandler {
       new StatsCommand(),
       new TeamCommand(),
       new TestCommand(),
+      new CleanupCommand()
     ];
   }
 
   public async handleInteraction(interaction: Interaction) {
     if (interaction.isChatInputCommand()) {
-      const chatInteraction = interaction as ChatInputCommandInteraction;
+      const chatInteraction = interaction;
       const command = this.commands.find(
         (cmd) => cmd.name === chatInteraction.commandName
       );
