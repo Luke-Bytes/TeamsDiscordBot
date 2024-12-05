@@ -8,16 +8,14 @@ import {
   ActionRowBuilder,
   ButtonStyle,
   SlashCommandSubcommandsOnlyBuilder,
-  GuildMember,
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { AnniClass, AnniMap } from "@prisma/client";
-import { prettifyName, randomEnum } from "Utils";
+import { prettifyName, randomEnum } from "../Utils";
 import { parseDate } from "chrono-node";
 import { log } from "console";
 import { Channels } from "Channels";
 import { CurrentGameManager } from "logic/CurrentGameManager";
-import { ConfigManager } from "ConfigManager";
 
 export default class AnnouncementCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;
@@ -94,10 +92,10 @@ export default class AnnouncementCommand implements Command {
         .map((v) => v.trim())
         .map((v) => v.split(" ").join(""));
 
-      for (const element of rest) {
-        if (!Object.values(AnniMap).includes(element as AnniMap)) {
+      for (let i = 0; i < rest.length; i++) {
+        if (!Object.values(AnniMap).includes(rest[i] as AnniMap)) {
           return {
-            error: `Map '${element}' not recognized.`,
+            error: `Map '${rest[i]}' not recognized.`,
           };
         }
       }
@@ -142,10 +140,10 @@ export default class AnnouncementCommand implements Command {
       .split(",")
       .map((v) => v.trim());
 
-    for (const element of kits) {
-      if (!Object.values(AnniClass).includes(element as AnniClass)) {
+    for (let i = 0; i < kits.length; i++) {
+      if (!Object.values(AnniClass).includes(kits[i] as AnniClass)) {
         return {
-          error: `Class '${element}' not recognized.`,
+          error: `Class '${kits[i]}' not recognized.`,
         } as const;
       }
     }
@@ -203,7 +201,7 @@ export default class AnnouncementCommand implements Command {
 
     if (!date) {
       await interaction.editReply(
-        "The date/time you entered doesn't make sense, try again"
+        "Date could not be deduced. Please try again"
       );
       return false;
     }
@@ -274,13 +272,13 @@ export default class AnnouncementCommand implements Command {
   private async handleAnnouncementCancel() {
     CurrentGameManager.cancelCurrentGame();
     if (this.announcementMessage) {
-      await this.announcementMessage.delete();
+      this.announcementMessage.delete();
       delete this.announcementMessage;
     }
 
     if (this.announcementPreviewMessage) {
       log("attempt to delete announcement preview message");
-      await this.announcementPreviewMessage.delete();
+      this.announcementPreviewMessage.delete();
       delete this.announcementPreviewMessage;
     }
   }
@@ -290,10 +288,10 @@ export default class AnnouncementCommand implements Command {
 
     switch (subcommand) {
       case "start":
-        await this.handleAnnouncementStart(interaction);
+        this.handleAnnouncementStart(interaction);
         break;
       case "cancel":
-        await this.handleAnnouncementCancel();
+        this.handleAnnouncementCancel();
     }
   }
 
@@ -310,18 +308,8 @@ export default class AnnouncementCommand implements Command {
     interaction: ButtonInteraction
   ): Promise<void> {
     await interaction.deferReply({
-      ephemeral: false,
+      ephemeral: true,
     });
-    const organiserRoleId = ConfigManager.getConfig().roles.organiserRole;
-    const member = interaction.member as GuildMember;
-
-    if (!member.roles.cache.has(organiserRoleId)) {
-      await interaction.editReply(
-        "Only organisers can use announcement buttons!"
-      );
-      return;
-    }
-
     switch (interaction.customId) {
       case "announcement-cancel":
         if (CurrentGameManager.getCurrentGame().announced) {
@@ -334,7 +322,7 @@ export default class AnnouncementCommand implements Command {
         }
         break;
       case "announcement-confirm":
-        await this.handleAnnouncementConfirm();
+        this.handleAnnouncementConfirm();
         await interaction.editReply("Sent announcement!");
         break;
     }
@@ -352,7 +340,7 @@ export default class AnnouncementCommand implements Command {
           inline: false,
         },
         {
-          name: `MAP: ${game.settings.map ? prettifyName(game.settings.map) : game.mapVoteManager ? "Voting..." : "N/A"}`,
+          name: `MAP: ${game.settings.map ? prettifyName(game.settings.map) : game.mapVoteManager ? "Voting..." + (preview ? " [" + game.mapVoteManager.maps.map(prettifyName).join(", ") + "]" : "") : "N/A"}`,
           value: " ",
           inline: false,
         },

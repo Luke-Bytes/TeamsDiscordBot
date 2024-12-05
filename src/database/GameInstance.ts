@@ -1,13 +1,17 @@
 import { $Enums, AnniMap, Team } from "@prisma/client";
 import { Snowflake } from "discord.js";
 import { PlayerInstance } from "./PlayerInstance";
-import { MapVoteManager } from "logic/MapVoteManager";
+import { MapVoteManager } from "../logic/MapVoteManager";
 import { MinerushVoteManager } from "logic/MinerushVoteManager";
 import { MojangAPI } from "api/MojangAPI";
+import { prismaClient } from "database/prismaClient";
 
+// wrapper class for Game
+// todo bad naming
 export class GameInstance {
   private static instance: GameInstance;
   gameId?: string;
+
   finished?: boolean;
   announced = false;
   startTime?: Date;
@@ -17,7 +21,12 @@ export class GameInstance {
     bannedClasses?: $Enums.AnniClass[];
     map?: $Enums.AnniMap;
   };
-  teams: Record<Team, PlayerInstance[]> = { RED: [], BLUE: [] };
+
+  teams: Record<Team | "UNDECIDED", PlayerInstance[]> = {
+    RED: [],
+    BLUE: [],
+    UNDECIDED: [],
+  };
   mapVoteManager?: MapVoteManager;
   minerushVoteManager?: MinerushVoteManager;
 
@@ -43,7 +52,7 @@ export class GameInstance {
       bannedClasses: undefined,
       map: undefined,
     };
-    this.teams = { RED: [], BLUE: [] };
+    this.teams = { RED: [], BLUE: [], UNDECIDED: [] };
     this.mapVoteManager = undefined;
     this.minerushVoteManager = undefined;
   }
@@ -74,11 +83,13 @@ export class GameInstance {
     if (this.mapVoteManager) {
       this.mapVoteManager.cancelVote();
     }
+
     this.settings.map = map;
   }
 
   public async announce() {
     this.announced = true;
+
     if (this.mapVoteManager) {
       await this.mapVoteManager.startMapVote();
     }
@@ -98,17 +109,57 @@ export class GameInstance {
     ignUsed: string
   ) {
     const player = await PlayerInstance.byDiscordSnowflake(discordSnowflake);
-    const uuid = await MojangAPI.usernameToUUID(ignUsed);
-    if (!uuid) return { error: "This in-game name doesn't exist." } as const;
-    if (!player.minecraftAccounts.includes(uuid))
+    let uuid: string | undefined;
+
+    if (ignUsed === "") {
+      uuid = player.primaryMinecraftAccount;
+    } else {
+      uuid = await MojangAPI.usernameToUUID(ignUsed);
+      if (!uuid) {
+        return {
+          error: "That IGN doesn't exist! Did you spell it correctly?",
+        } as const;
+      }
+    }
+
+    if (!uuid) {
       return {
-        error:
-          "You have not registered this in-game name. Please use `/ign add`",
+        error: "The player does not have a primary minecraft account.",
       } as const;
-    player.ignUsed = ignUsed;
-    const team = this.getTeamWithLeastPlayers();
-    this.teams[team].push(player);
-    return { error: false, team: team } as const;
+    }
+
+    if (!player.minecraftAccounts.includes(uuid)) {
+      const result = await prismaClient.player.addMcAccount(
+        discordSnowflake,
+        uuid
+      );
+      if (result.error) {
+        console.error(
+          `Failed to register UUID for discord user ${discordSnowflake} with UUID ${uuid}: ${result.error}`
+        );
+        return {
+          error: "Something went wrong while adding the IGN! Is it valid?",
+        } as const;
+      }
+      player.minecraftAccounts.push(uuid);
+    }
+
+    const ign = ignUsed === "" ? await MojangAPI.uuidToUsername(uuid) : ignUsed;
+
+    if (!ign) {
+      return {
+        error: "Could not locate IGN of player.",
+      } as const;
+    }
+
+    player.ignUsed = ign;
+
+    this.teams["UNDECIDED"].push(player);
+
+    return {
+      error: false,
+      playerInstance: player,
+    } as const;
   }
 
   public getPlayers() {
@@ -126,13 +177,18 @@ export class GameInstance {
 
   public shuffleTeams(shuffleMethod: "random") {
     switch (shuffleMethod) {
-      case "random": {
-        const shuffled = this.getPlayers().sort(() => Math.random() - 0.5);
-        const half = Math.ceil(shuffled.length / 2);
-        this.teams.BLUE = shuffled.slice(0, half);
-        this.teams.RED = shuffled.slice(half);
+      case "random":
+        {
+          const shuffled = this.getPlayers().sort(() => Math.random() - 0.5);
+          const half = Math.ceil(shuffled.length / 2);
+
+          const blue = shuffled.slice(0, half);
+          const red = shuffled.slice(half);
+
+          this.teams.BLUE = blue;
+          this.teams.RED = red;
+        }
         break;
-      }
     }
   }
 
@@ -142,13 +198,20 @@ export class GameInstance {
 
   public setTeamCaptain(team: Team, player: PlayerInstance) {
     const oldTeamCaptain = this.getCaptainOfTeam(team);
-    if (oldTeamCaptain) oldTeamCaptain.captain = false;
+
+    if (oldTeamCaptain) {
+      oldTeamCaptain.captain = false;
+    }
+
     player.captain = true;
+
     if (!this.teams[team].includes(player)) {
       const otherTeam = team === "RED" ? "BLUE" : "RED";
+
       if (this.teams[otherTeam].includes(player)) {
-        this.teams[otherTeam].splice(this.teams[otherTeam].indexOf(player), 1);
+        this.teams[otherTeam].splice(this.teams[otherTeam].indexOf(player));
       }
+
       this.teams[team].push(player);
     }
     return {
