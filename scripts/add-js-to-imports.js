@@ -5,7 +5,8 @@ function log(message) {
   console.log(message);
 }
 
-const importRegex = /(import\s.*?from\s+['"])(\.\/|\.\.\/|\/|[^/@][^:]*?)(['"])/g;
+const importRegex =
+  /(import\s.*?from\s+['"])(\.\/|\.\.\/|\/|[^/@][^:]*?)(['"])/g;
 
 function processFile(filePath) {
   const content = fs.readFileSync(filePath, "utf-8");
