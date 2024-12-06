@@ -11,7 +11,9 @@ export class MojangAPI {
       );
 
       if (!response.ok) {
-        console.error(`Mojang API error: ${response.status} ${response.statusText}`);
+        console.error(
+          `Mojang API error for username ${username}: ${response.status} ${response.statusText}`
+        );
       }
 
       const data = await response.json();
@@ -42,7 +44,9 @@ export class MojangAPI {
       );
 
       if (!response.ok) {
-        console.error(`Mojang API error: ${response.status} ${response.statusText}`);
+        console.error(
+          `Mojang API error for UUID ${uuid}: ${response.status} ${response.statusText}`
+        );
         return null;
       }
 
@@ -63,4 +67,3 @@ export class MojangAPI {
     return /^[a-zA-Z0-9_]{1,16}$/.test(username);
   }
 }
-

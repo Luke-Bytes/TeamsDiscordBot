@@ -1,4 +1,4 @@
-import { TeamsBot } from "TeamsBot";
+import { TeamsBot } from "./TeamsBot.js";
 
 const teamsBot = new TeamsBot();
 

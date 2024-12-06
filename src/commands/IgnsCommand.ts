@@ -3,9 +3,9 @@ import {
   ChatInputCommandInteraction,
   EmbedBuilder,
 } from "discord.js";
-import { Command } from "./CommandInterface";
-import { prismaClient } from "../database/prismaClient";
-import { MojangAPI } from "../api/MojangAPI";
+import { Command } from "./CommandInterface.js";
+import { prismaClient } from "../database/prismaClient.js";
+import { MojangAPI } from "../api/MojangAPI.js";
 
 export default class IgnsCommand implements Command {
   public data: SlashCommandBuilder;
@@ -52,7 +52,7 @@ export default class IgnsCommand implements Command {
           }
           const uuid = await MojangAPI.usernameToUUID(ign);
 
-          if (uuid === undefined) {
+          if (!uuid) {
             await interaction.editReply({
               content: "Username does not exist.",
             });
@@ -113,8 +113,8 @@ export default class IgnsCommand implements Command {
           );
 
           //just be sure that they're all valid mc accounts
-          for (let i = 0; i < others.length; i++) {
-            if (others[i] === undefined) {
+          for (const element of others) {
+            if (element === undefined) {
               await interaction.editReply(
                 "One or more of your accounts failed to fetch properly. Please contact devs."
               );

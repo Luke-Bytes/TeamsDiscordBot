@@ -8,9 +8,9 @@ import {
   PermissionFlagsBits,
   GuildMemberRoleManager,
 } from "discord.js";
-import { Command } from "./CommandInterface";
-import { ConfigManager } from "../ConfigManager";
-import { cleanUpAfterGame } from "logic/GameEndCleanUp";
+import { Command } from "../commands/CommandInterface.js";
+import { ConfigManager } from "../ConfigManager.js";
+import { cleanUpAfterGame } from "../logic/GameEndCleanUp.js";
 
 export default class CleanupCommand implements Command {
   name = "cleanup";
@@ -61,11 +61,11 @@ export default class CleanupCommand implements Command {
         content:
           "⚠️ **WARNING:** This command is for debugging only and should not be used carelessly. Confirm to proceed or cancel.",
         components: [row],
-        ephemeral: true,
+        ephemeral: false,
       });
     }
   }
-
+  // FIXME crashes rn
   async handleButtonPress(interaction: ButtonInteraction) {
     if (interaction.customId === "cleanup_confirm") {
       await interaction.update({
@@ -75,7 +75,7 @@ export default class CleanupCommand implements Command {
 
       await interaction.reply({
         content: "Cleaning up after the game. This may take a moment...",
-        ephemeral: true,
+        ephemeral: false,
       });
 
       const guild = interaction.guild;
@@ -92,13 +92,13 @@ export default class CleanupCommand implements Command {
         await cleanUpAfterGame(guild);
         await interaction.followUp({
           content: "✅ Cleanup completed successfully.",
-          ephemeral: true,
+          ephemeral: false,
         });
       } catch (error) {
         console.error("Error during cleanup:", error);
         await interaction.followUp({
           content: "❌ Cleanup failed. Check the logs for details.",
-          ephemeral: true,
+          ephemeral: false,
         });
       }
     } else if (interaction.customId === "cleanup_cancel") {

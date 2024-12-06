@@ -1,13 +1,12 @@
 import { $Enums, AnniMap, Team } from "@prisma/client";
 import { Snowflake } from "discord.js";
-import { PlayerInstance } from "./PlayerInstance";
-import { MapVoteManager } from "../logic/MapVoteManager";
-import { MinerushVoteManager } from "logic/MinerushVoteManager";
-import { MojangAPI } from "api/MojangAPI";
-import { prismaClient } from "database/prismaClient";
+import { PlayerInstance } from "./PlayerInstance.js";
+import { MapVoteManager } from "../logic/MapVoteManager.js";
+import { MinerushVoteManager } from "../logic/MinerushVoteManager.js";
+import { MojangAPI } from "../api/MojangAPI.js";
+import { prismaClient } from "../database/prismaClient.js";
 
 // wrapper class for Game
-// todo bad naming
 export class GameInstance {
   private static instance: GameInstance;
   gameId?: string;
@@ -109,7 +108,7 @@ export class GameInstance {
     ignUsed: string
   ) {
     const player = await PlayerInstance.byDiscordSnowflake(discordSnowflake);
-    let uuid: string | undefined;
+    let uuid: string | undefined | null;
 
     if (ignUsed === "") {
       uuid = player.primaryMinecraftAccount;

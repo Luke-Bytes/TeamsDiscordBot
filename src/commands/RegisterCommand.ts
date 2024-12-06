@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
-import { Command } from "./CommandInterface";
-import { ConfigManager } from "../ConfigManager";
-import { CurrentGameManager } from "../logic/CurrentGameManager";
+import { Command } from "./CommandInterface.js";
+import { ConfigManager } from "../ConfigManager.js";
+import { CurrentGameManager } from "../logic/CurrentGameManager.js";
 
 export default class RegisterCommand implements Command {
   public data: SlashCommandBuilder;

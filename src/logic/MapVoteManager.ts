@@ -1,9 +1,8 @@
 import { AnniMap } from "@prisma/client";
-import { Channels } from "Channels";
-import { error, log } from "console";
+import { Channels } from "../Channels.js";
 import { Message } from "discord.js";
 import EventEmitter from "events";
-import { prettifyName } from "Utils";
+import { prettifyName } from "../util/Utils.js";
 
 //todo: store these three maps somewhere else?
 const mapToEmojis: Record<AnniMap, string> = {
@@ -49,7 +48,7 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
     )?.[0];
 
     if (!winningMap) {
-      error("Could not find winning map!");
+      console.error("Could not find winning map!");
       return;
     }
 

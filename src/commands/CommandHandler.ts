@@ -1,27 +1,20 @@
-import {
-  REST,
-  Routes,
-  Interaction,
-  ChatInputCommandInteraction,
-  MessageContextMenuCommandInteraction,
-} from "discord.js";
-import { Command } from "./CommandInterface";
+import { REST, Routes, Interaction } from "discord.js";
+import { Command } from "./CommandInterface.js";
 import "dotenv/config";
-import RegisterCommand from "./RegisterCommand";
-import { ConfigManager } from "../ConfigManager";
-import AnnouncementCommand from "./AnnouncementCommand";
-import CaptainCommand from "./CaptainCommand";
-import IgnsCommand from "./IgnsCommand";
-import LeaderboardsCommand from "./LeaderboardsCommand";
-import RoleCommand from "./RoleCommand";
-import StatsCommand from "./StatsCommand";
-import TeamCommand from "./TeamCommand";
-import TestCommand from "./TestCommand";
+import RegisterCommand from "./RegisterCommand.js";
+import { ConfigManager } from "../ConfigManager.js";
+import AnnouncementCommand from "./AnnouncementCommand.js";
+import CaptainCommand from "./CaptainCommand.js";
+import IgnsCommand from "./IgnsCommand.js";
+import LeaderboardsCommand from "./LeaderboardsCommand.js";
+import RoleCommand from "./RoleCommand.js";
+import StatsCommand from "./StatsCommand.js";
+import TeamCommand from "./TeamCommand.js";
+import TestCommand from "./TestCommand.js";
+import CleanupCommand from "../commands/CleanUpCommand.js";
 
 export class CommandHandler {
   private commands: Command[] = [];
-
-  constructor() {}
 
   public loadCommands() {
     this.commands = [
@@ -34,30 +27,30 @@ export class CommandHandler {
       new StatsCommand(),
       new TeamCommand(),
       new TestCommand(),
+      new CleanupCommand(),
     ];
   }
 
   public async handleInteraction(interaction: Interaction) {
     if (interaction.isChatInputCommand()) {
-      const chatInteraction = interaction as ChatInputCommandInteraction;
+      const chatInteraction = interaction;
       const command = this.commands.find(
         (cmd) => cmd.name === chatInteraction.commandName
       );
       if (command) {
         console.log(
-          `[${chatInteraction.user.id}] runs /${chatInteraction.commandName}`
+          `[${chatInteraction.user.tag}] ran /${chatInteraction.commandName}`
         );
         await command.execute(chatInteraction);
       }
     } else if (interaction.isMessageContextMenuCommand()) {
-      const messageInteraction =
-        interaction as MessageContextMenuCommandInteraction;
+      const messageInteraction = interaction;
       const command = this.commands.find(
         (cmd) => cmd.name === messageInteraction.commandName
       );
       if (command) {
         console.log(
-          `[${messageInteraction.user.id}] runs /${messageInteraction.commandName}`
+          `[${messageInteraction.user.tag}] ran /${messageInteraction.commandName}`
         );
         await command.execute(messageInteraction);
       }
@@ -67,7 +60,7 @@ export class CommandHandler {
       );
 
       if (command && command.handleButtonPress) {
-        command.handleButtonPress(interaction);
+        await command.handleButtonPress(interaction);
       }
     }
   }
@@ -108,7 +101,7 @@ export class CommandHandler {
         console.log("Successfully reloaded global application (/) commands.");
       }
     } catch (error) {
-      console.error("Failed to register commands:", error);
+      console.error("Failed to register commands: ", error);
     }
   }
 }

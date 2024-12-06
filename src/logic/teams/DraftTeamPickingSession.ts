@@ -2,9 +2,9 @@ import { ChatInputCommandInteraction, ButtonInteraction } from "discord.js";
 import {
   TeamPickingSession,
   TeamPickingSessionState,
-} from "./TeamPickingSession";
-import { Channels } from "Channels";
-import { CurrentGameManager } from "logic/CurrentGameManager";
+} from "./TeamPickingSession.js";
+import { Channels } from "../../Channels.js";
+import { CurrentGameManager } from "../../logic/CurrentGameManager.js";
 
 export class DraftTeamPickingSession extends TeamPickingSession {
   state: TeamPickingSessionState = "inProgress";

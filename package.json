@@ -9,14 +9,16 @@
     "node": ">=18.x"
   },
   "scripts": {
-    "build": "npx prisma generate && tsc",
-    "start:bot:prod": "node dist/src/main.js",
+    "build": "npx prisma generate --no-hints && tsc",
+    "start:bot:prod": "node dist/main.js",
     "dev": "tsx watch src/main.ts",
     "prod": "npm run build && npm run start:bot:prod",
+    "clean": "rimraf dist",
     "lint": "eslint .",
     "format": "prettier --write .",
     "lint:fix": "eslint . --fix",
-    "check-format": "prettier --check ."
+    "check-format": "prettier --check .",
+    "add-js-to-imports": "node scripts/add-js-to-imports.js"
   },
   "author": "Luke and Eric",
   "license": "GNU",
@@ -40,6 +42,7 @@
     "eslint-plugin-prettier": "^5.2.1",
     "husky": "^9.1.7",
     "prettier": "^3.3.3",
+    "rimraf": "^6.0.1",
     "tsx": "^4.19.1",
     "typescript": "^5.6.3"
   }

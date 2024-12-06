@@ -6,15 +6,14 @@ import {
   SlashCommandBuilder,
   SlashCommandSubcommandsOnlyBuilder,
 } from "discord.js";
-import { Command } from "./CommandInterface";
-import { CurrentGameManager } from "../logic/CurrentGameManager";
-import { ConfigManager } from "ConfigManager";
-import { GameInstance } from "database/GameInstance";
-import { PlayerInstance } from "database/PlayerInstance";
-import { TeamPickingSession } from "logic/teams/TeamPickingSession";
-import { RandomTeamPickingSession } from "logic/teams/RandomTeamPickingSession";
-import { log } from "console";
-import { DraftTeamPickingSession } from "logic/teams/DraftTeamPickingSession";
+import { Command } from "./CommandInterface.js";
+import { CurrentGameManager } from "../logic/CurrentGameManager.js";
+import { ConfigManager } from "../ConfigManager.js";
+import { GameInstance } from "../database/GameInstance.js";
+import { PlayerInstance } from "../database/PlayerInstance.js";
+import { TeamPickingSession } from "../logic/teams/TeamPickingSession.js";
+import { RandomTeamPickingSession } from "../logic/teams/RandomTeamPickingSession.js";
+import { DraftTeamPickingSession } from "../logic/teams/DraftTeamPickingSession.js";
 
 export default class TeamCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;
@@ -110,8 +109,7 @@ export default class TeamCommand implements Command {
         }
 
         const redTeam = game.getPlayersOfTeam("RED");
-        for (let i = 0; i < redTeam.length; i++) {
-          const player = redTeam[i];
+        for (const player of redTeam) {
           const discordUser = await interaction.guild?.members.fetch(
             player.discordSnowflake
           );
@@ -120,8 +118,7 @@ export default class TeamCommand implements Command {
         }
 
         const blueTeam = game.getPlayersOfTeam("BLUE");
-        for (let i = 0; i < blueTeam.length; i++) {
-          const player = blueTeam[i];
+        for (const player of blueTeam) {
           const discordUser = await interaction.guild?.members.fetch(
             player.discordSnowflake
           );
@@ -207,7 +204,6 @@ export default class TeamCommand implements Command {
       await this.teamPickingSession.handleInteraction(interaction);
 
       const state = this.teamPickingSession.getState();
-      log(state);
       switch (state) {
         case "finalized": //for now these do the same thing but we'll see
         case "cancelled":

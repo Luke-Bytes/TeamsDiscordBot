@@ -1,6 +1,6 @@
 import { Guild, TextChannel } from "discord.js";
-import { ConfigManager } from "ConfigManager";
-import { GameInstance } from "database/GameInstance";
+import { ConfigManager } from "../ConfigManager.js";
+import { GameInstance } from "../database/GameInstance.js";
 
 export async function cleanUpAfterGame(guild: Guild) {
   const config = ConfigManager.getConfig();

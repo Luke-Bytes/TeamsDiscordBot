@@ -1,4 +1,4 @@
-import { ConfigManager } from "../ConfigManager";
+import { ConfigManager } from "../ConfigManager.js";
 import { ButtonInteraction } from "discord.js";
 import { GuildMemberRoleManager } from "discord.js";
 

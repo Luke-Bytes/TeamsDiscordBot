@@ -1,4 +1,4 @@
-import { GameInstance } from "database/GameInstance";
+import { GameInstance } from "../database/GameInstance.js";
 
 export class CurrentGameManager {
   private static currentGame?: GameInstance;

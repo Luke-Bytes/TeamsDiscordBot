@@ -1,5 +1,5 @@
-import { ConfigManager } from "ConfigManager";
-import { PlayerInstance } from "database/PlayerInstance";
+import { ConfigManager } from "../ConfigManager.js";
+import { PlayerInstance } from "../database/PlayerInstance.js";
 
 export class Elo {
   private won: boolean;
