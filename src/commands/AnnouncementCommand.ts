@@ -121,7 +121,7 @@ export default class AnnouncementCommand implements Command {
         } as const;
       } else {
         return {
-          error: `Map '${mapOption} not recognized'`,
+          error: `Map "${mapOption}" not recognized`,
         } as const;
       }
     }

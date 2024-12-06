@@ -1,6 +1,6 @@
 import { REST, Routes, Interaction } from "discord.js";
 import { Command } from "./CommandInterface.js";
-import "dotenv/config";
+import "dotenv/config.js";
 import RegisterCommand from "./RegisterCommand.js";
 import { ConfigManager } from "../ConfigManager.js";
 import AnnouncementCommand from "./AnnouncementCommand.js";
