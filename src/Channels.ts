@@ -22,7 +22,7 @@ export class Channels {
     this.announcements = fetchedAnnouncements as GuildBasedChannel;
 
     const fetchedTeamPicking = await client.channels.fetch(
-      config.channels.teamPicking
+      config.channels.teamPickingChat
     );
 
     if (fetchedTeamPicking === null) {
