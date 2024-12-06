@@ -3,8 +3,6 @@
   "private": true,
   "version": "1.0.0",
   "description": "Discord teams bot",
-  "type": "module",
-  "main": "src/index.ts",
   "engines": {
     "node": ">=18.x"
   },
@@ -17,8 +15,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "lint:fix": "eslint . --fix",
-    "check-format": "prettier --check .",
-    "add-js-to-imports": "node scripts/add-js-to-imports.js"
+    "check-format": "prettier --check ."
   },
   "author": "Luke and Eric",
   "license": "GNU",

@@ -1,8 +1,8 @@
 import { AnniMap } from "@prisma/client";
-import { Channels } from "../Channels.js";
+import { Channels } from "../Channels";
 import { Message } from "discord.js";
 import EventEmitter from "events";
-import { prettifyName } from "../util/Utils.js";
+import { prettifyName } from "../Utils";
 
 //todo: store these three maps somewhere else?
 const mapToEmojis: Record<AnniMap, string> = {

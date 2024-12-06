@@ -6,14 +6,14 @@ import {
   SlashCommandBuilder,
   SlashCommandSubcommandsOnlyBuilder,
 } from "discord.js";
-import { Command } from "./CommandInterface.js";
-import { CurrentGameManager } from "../logic/CurrentGameManager.js";
-import { ConfigManager } from "../ConfigManager.js";
-import { GameInstance } from "../database/GameInstance.js";
-import { PlayerInstance } from "../database/PlayerInstance.js";
-import { TeamPickingSession } from "../logic/teams/TeamPickingSession.js";
-import { RandomTeamPickingSession } from "../logic/teams/RandomTeamPickingSession.js";
-import { DraftTeamPickingSession } from "../logic/teams/DraftTeamPickingSession.js";
+import { Command } from "./CommandInterface";
+import { CurrentGameManager } from "../logic/CurrentGameManager";
+import { ConfigManager } from "../ConfigManager";
+import { GameInstance } from "../database/GameInstance";
+import { PlayerInstance } from "../database/PlayerInstance";
+import { DraftTeamPickingSession } from "../logic/teams/DraftTeamPickingSession";
+import { RandomTeamPickingSession } from "../logic/teams/RandomTeamPickingSession";
+import { TeamPickingSession } from "../logic/teams/TeamPickingSession";
 
 export default class TeamCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;
@@ -125,7 +125,6 @@ export default class TeamCommand implements Command {
           await discordUser?.roles.remove(config.roles.redTeamRole);
           discordUser?.roles.add(config.roles.blueTeamRole);
         }
-
         break;
       }
 

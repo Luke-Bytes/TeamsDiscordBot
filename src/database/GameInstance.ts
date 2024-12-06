@@ -1,10 +1,10 @@
 import { $Enums, AnniMap, Team } from "@prisma/client";
 import { Snowflake } from "discord.js";
-import { PlayerInstance } from "./PlayerInstance.js";
-import { MapVoteManager } from "../logic/MapVoteManager.js";
-import { MinerushVoteManager } from "../logic/MinerushVoteManager.js";
-import { MojangAPI } from "../api/MojangAPI.js";
-import { prismaClient } from "../database/prismaClient.js";
+import { PlayerInstance } from "./PlayerInstance";
+import { MapVoteManager } from "../logic/MapVoteManager";
+import { MojangAPI } from "../api/MojangAPI";
+import { MinerushVoteManager } from "../logic/MinerushVoteManager";
+import { prismaClient } from "./prismaClient";
 
 // wrapper class for Game
 export class GameInstance {
