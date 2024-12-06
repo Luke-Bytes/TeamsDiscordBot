@@ -8,13 +8,13 @@ import {
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
-import { ConfigManager } from "ConfigManager";
-import { GameInstance } from "database/GameInstance";
-import { PlayerInstance } from "database/PlayerInstance";
-import { TeamPickingSession } from "logic/teams/TeamPickingSession";
-import { RandomTeamPickingSession } from "logic/teams/RandomTeamPickingSession";
 import { log } from "console";
-import { DraftTeamPickingSession } from "logic/teams/DraftTeamPickingSession";
+import { ConfigManager } from "../ConfigManager";
+import { GameInstance } from "../database/GameInstance";
+import { PlayerInstance } from "../database/PlayerInstance";
+import { DraftTeamPickingSession } from "../logic/teams/DraftTeamPickingSession";
+import { RandomTeamPickingSession } from "../logic/teams/RandomTeamPickingSession";
+import { TeamPickingSession } from "../logic/teams/TeamPickingSession";
 
 export default class TeamCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;

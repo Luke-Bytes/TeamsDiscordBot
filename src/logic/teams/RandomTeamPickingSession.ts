@@ -11,9 +11,9 @@ import {
   TeamPickingSession,
   TeamPickingSessionState,
 } from "./TeamPickingSession";
-import { GameInstance } from "database/GameInstance";
-import { PlayerInstance } from "database/PlayerInstance";
-import { CurrentGameManager } from "logic/CurrentGameManager";
+import { GameInstance } from "../../database/GameInstance";
+import { PlayerInstance } from "../../database/PlayerInstance";
+import { CurrentGameManager } from "../../logic/CurrentGameManager";
 
 export class RandomTeamPickingSession extends TeamPickingSession {
   state: TeamPickingSessionState = "inProgress";

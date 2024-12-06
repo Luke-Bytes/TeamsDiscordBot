@@ -3,8 +3,6 @@
   "private": true,
   "version": "1.0.0",
   "description": "Discord teams bot",
-  "type": "module",
-  "main": "src/index.ts",
   "engines": {
     "node": ">=18.x"
   },

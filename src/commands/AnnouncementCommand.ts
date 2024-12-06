@@ -14,8 +14,8 @@ import { AnniClass, AnniMap } from "@prisma/client";
 import { prettifyName, randomEnum } from "../Utils";
 import { parseDate } from "chrono-node";
 import { log } from "console";
-import { Channels } from "Channels";
-import { CurrentGameManager } from "logic/CurrentGameManager";
+import { Channels } from "../Channels";
+import { CurrentGameManager } from "../logic/CurrentGameManager";
 
 export default class AnnouncementCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;

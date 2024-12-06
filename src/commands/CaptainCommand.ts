@@ -6,8 +6,7 @@ import {
 import { Command } from "./CommandInterface";
 import { ConfigManager } from "../ConfigManager";
 import { Team } from "@prisma/client";
-import { CurrentGameManager } from "logic/CurrentGameManager";
-import { log } from "console";
+import { CurrentGameManager } from "../logic/CurrentGameManager";
 
 export default class CaptainCommand implements Command {
   public data: SlashCommandBuilder;

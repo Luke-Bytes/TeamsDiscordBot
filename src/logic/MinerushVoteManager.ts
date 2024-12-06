@@ -1,4 +1,4 @@
-import { Channels } from "Channels";
+import { Channels } from "../Channels";
 import { Message } from "discord.js";
 import EventEmitter from "events";
 

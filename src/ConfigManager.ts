@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync } from "fs";
+import conf from "../config.json";
 
 type Config = {
   winEloGain: number;
@@ -26,7 +27,7 @@ export class ConfigManager {
 
   static getConfig() {
     if (!this.config) {
-      this.config = JSON.parse(readFileSync("./config.json", "utf8"));
+      this.config = conf;
     }
     return this.config;
   }

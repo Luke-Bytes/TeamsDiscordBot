@@ -7,12 +7,12 @@ import {
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import "dotenv/config";
-import RegisterCommand from "./RegisterCommand";
 import { ConfigManager } from "../ConfigManager";
 import AnnouncementCommand from "./AnnouncementCommand";
 import CaptainCommand from "./CaptainCommand";
 import IgnsCommand from "./IgnsCommand";
 import LeaderboardsCommand from "./LeaderboardsCommand";
+import RegisterCommand from "./RegisterCommand";
 import RoleCommand from "./RoleCommand";
 import StatsCommand from "./StatsCommand";
 import TeamCommand from "./TeamCommand";

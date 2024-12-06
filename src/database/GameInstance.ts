@@ -2,9 +2,9 @@ import { $Enums, AnniMap, Team } from "@prisma/client";
 import { Snowflake } from "discord.js";
 import { PlayerInstance } from "./PlayerInstance";
 import { MapVoteManager } from "../logic/MapVoteManager";
-import { MinerushVoteManager } from "logic/MinerushVoteManager";
-import { MojangAPI } from "api/MojangAPI";
-import { prismaClient } from "database/prismaClient";
+import { MojangAPI } from "../api/MojangAPI";
+import { MinerushVoteManager } from "../logic/MinerushVoteManager";
+import { prismaClient } from "./prismaClient";
 
 // wrapper class for Game
 // todo bad naming
