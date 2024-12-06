@@ -8,7 +8,6 @@ import {
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
-import { log } from "console";
 import { ConfigManager } from "../ConfigManager";
 import { GameInstance } from "../database/GameInstance";
 import { PlayerInstance } from "../database/PlayerInstance";
@@ -110,8 +109,7 @@ export default class TeamCommand implements Command {
         }
 
         const redTeam = game.getPlayersOfTeam("RED");
-        for (let i = 0; i < redTeam.length; i++) {
-          const player = redTeam[i];
+        for (const player of redTeam) {
           const discordUser = await interaction.guild?.members.fetch(
             player.discordSnowflake
           );
@@ -120,15 +118,13 @@ export default class TeamCommand implements Command {
         }
 
         const blueTeam = game.getPlayersOfTeam("BLUE");
-        for (let i = 0; i < blueTeam.length; i++) {
-          const player = blueTeam[i];
+        for (const player of blueTeam) {
           const discordUser = await interaction.guild?.members.fetch(
             player.discordSnowflake
           );
           await discordUser?.roles.remove(config.roles.redTeamRole);
           discordUser?.roles.add(config.roles.blueTeamRole);
         }
-
         break;
       }
 
@@ -207,7 +203,6 @@ export default class TeamCommand implements Command {
       await this.teamPickingSession.handleInteraction(interaction);
 
       const state = this.teamPickingSession.getState();
-      log(state);
       switch (state) {
         case "finalized": //for now these do the same thing but we'll see
         case "cancelled":

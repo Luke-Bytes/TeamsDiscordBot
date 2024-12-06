@@ -11,7 +11,7 @@ export const prismaClient = new PrismaClient().$extends({
         });
       },
       async byMinecraftAccount(minecraftAccount: string) {
-        let player = await prismaClient.player.findFirst({
+        return await prismaClient.player.findFirst({
           where: {
             OR: [
               {
@@ -25,7 +25,6 @@ export const prismaClient = new PrismaClient().$extends({
             ],
           },
         });
-        return player;
       },
 
       async addMcAccount(
@@ -60,34 +59,28 @@ export const prismaClient = new PrismaClient().$extends({
           },
         });
 
-        if (otherPlayers.length > 0) {
+        if (otherPlayers.length) {
           return {
-            error: "Someone already has this username.",
+            error: "This user is already registered by another user.",
           };
         }
 
-        if (player.minecraftAccounts.length >= 4) {
-          return {
-            error: "You have reached the account limit.",
-          };
-        } else {
-          player.minecraftAccounts.push(ign);
-          if (player.minecraftAccounts.length === 1) {
-            player.primaryMinecraftAccount = ign;
-          }
-
-          await prismaClient.player.update({
-            where: { id: player.id },
-            data: {
-              minecraftAccounts: player.minecraftAccounts,
-              primaryMinecraftAccount: player.primaryMinecraftAccount,
-            },
-          });
-
-          return {
-            error: false,
-          };
+        player.minecraftAccounts.push(ign);
+        if (player.minecraftAccounts.length === 1) {
+          player.primaryMinecraftAccount = ign;
         }
+
+        await prismaClient.player.update({
+          where: { id: player.id },
+          data: {
+            minecraftAccounts: player.minecraftAccounts,
+            primaryMinecraftAccount: player.primaryMinecraftAccount,
+          },
+        });
+
+        return {
+          error: false,
+        };
       },
     },
   },

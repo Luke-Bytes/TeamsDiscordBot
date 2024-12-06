@@ -3,8 +3,8 @@ import {
   SlashCommandBuilder,
   Snowflake,
 } from "discord.js";
-import { Command } from "./CommandInterface";
-import { ConfigManager } from "../ConfigManager";
+import { Command } from "../commands/CommandInterface.js";
+import { ConfigManager } from "../ConfigManager.js";
 import { Team } from "@prisma/client";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 
@@ -86,7 +86,10 @@ export default class CaptainCommand implements Command {
 
     let player = game
       .getPlayers()
-      .find((player) => player.discordSnowflake === user.id);
+      .find(
+        (player: { discordSnowflake: string }) =>
+          player.discordSnowflake === user.id
+      );
 
     if (!player) {
       //if the player isn't registered then we register them.

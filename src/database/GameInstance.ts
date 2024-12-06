@@ -7,8 +7,8 @@ import { MinerushVoteManager } from "../logic/MinerushVoteManager";
 import { prismaClient } from "./prismaClient";
 
 // wrapper class for Game
-// todo bad naming
 export class GameInstance {
+  private static instance: GameInstance;
   gameId?: string;
 
   finished?: boolean;
@@ -29,8 +29,39 @@ export class GameInstance {
   mapVoteManager?: MapVoteManager;
   minerushVoteManager?: MinerushVoteManager;
 
-  constructor() {
+  private constructor() {
     this.settings = {};
+  }
+
+  public static getInstance(): GameInstance {
+    if (!GameInstance.instance) {
+      GameInstance.instance = new GameInstance();
+    }
+    return GameInstance.instance;
+  }
+
+  public reset() {
+    this.gameId = undefined;
+    this.finished = undefined;
+    this.announced = false;
+    this.startTime = undefined;
+    this.endTime = undefined;
+    this.settings = {
+      minerushing: undefined,
+      bannedClasses: undefined,
+      map: undefined,
+    };
+    this.teams = { RED: [], BLUE: [], UNDECIDED: [] };
+    this.mapVoteManager = undefined;
+    this.minerushVoteManager = undefined;
+  }
+
+  public static async resetGameInstance() {
+    const currentInstance = this.getInstance();
+    if (currentInstance) {
+      // FIXME commit to database method here
+    }
+    this.instance = new GameInstance();
   }
 
   public startMinerushVote() {
@@ -77,7 +108,7 @@ export class GameInstance {
     ignUsed: string
   ) {
     const player = await PlayerInstance.byDiscordSnowflake(discordSnowflake);
-    let uuid: string | undefined;
+    let uuid: string | undefined | null;
 
     if (ignUsed === "") {
       uuid = player.primaryMinecraftAccount;

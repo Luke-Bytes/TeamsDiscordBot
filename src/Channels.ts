@@ -1,5 +1,4 @@
 import { ConfigManager } from "./ConfigManager";
-import { error } from "console";
 import { Client, GuildBasedChannel } from "discord.js";
 
 export class Channels {
@@ -15,7 +14,7 @@ export class Channels {
     );
 
     if (fetchedAnnouncements === null) {
-      error("Could not find announcements channel!");
+      console.error("Could not find announcements channel!");
       return;
     }
 
@@ -26,7 +25,7 @@ export class Channels {
     );
 
     if (fetchedTeamPicking === null) {
-      error("Could not find team picking channel!");
+      console.error("Could not find team picking channel!");
       return;
     }
 

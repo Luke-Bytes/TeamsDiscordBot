@@ -11,7 +11,12 @@
   "channels": {
     "registration": "",
     "announcements": "",
-    "teamPicking": ""
+    "teamPickingVC": "",
+    "teamPickingChat": "",
+    "redTeamVC": "",
+    "blueTeamVC": "",
+    "redTeamChat": "",
+    "blueTeamChat": ""
   },
   "dev": {
     "enabled": false,

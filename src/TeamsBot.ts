@@ -4,7 +4,6 @@ import { CommandHandler } from "./commands/CommandHandler";
 import { MessageHandler } from "./interactions/MessageHandler";
 import { ReactionHandler } from "./interactions/ReactionHandler";
 import { VoiceChannelHandler } from "./interactions/VoiceChannelHandler";
-import { log } from "console";
 import { Channels } from "./Channels";
 
 export class TeamsBot {
@@ -47,9 +46,9 @@ export class TeamsBot {
     try {
       await this.client.login(process.env.BOT_TOKEN);
       await Channels.initChannels(this.client);
-      log("Successfully logged in!");
+      console.log("Successfully logged in!");
     } catch (error) {
-      log(error);
+      console.log(error);
     }
   }
 }

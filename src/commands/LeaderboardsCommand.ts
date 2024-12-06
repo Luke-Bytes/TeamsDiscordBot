@@ -3,9 +3,9 @@ import {
   ChatInputCommandInteraction,
   EmbedBuilder,
 } from "discord.js";
-import { Command } from "./CommandInterface";
-import { EloUtil } from "../util/EloUtil";
-import { prismaClient } from "../database/prismaClient";
+import { Command } from "./CommandInterface.js";
+import { EloUtil } from "../util/EloUtil.js";
+import { prismaClient } from "../database/prismaClient.js";
 
 export default class LeaderboardsCommand implements Command {
   public data: SlashCommandBuilder;

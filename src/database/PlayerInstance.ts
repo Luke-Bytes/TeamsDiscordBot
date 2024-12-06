@@ -1,12 +1,10 @@
 import { Snowflake } from "discord.js";
-import { prismaClient } from "./prismaClient";
+import { prismaClient } from "./prismaClient.js";
 import { Player } from "@prisma/client";
 
 // wrapper class for Player
-// todo bad naming
 export class PlayerInstance {
   playerId: string;
-
   elo: number;
   wins: number;
   losses: number;
