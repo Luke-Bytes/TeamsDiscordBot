@@ -55,7 +55,7 @@ export default [
       "import/no-unresolved": [
         "error",
         {
-          ignore: ["\\.js$"],
+          ignore: ["\\.js$", "\\.json$"],
         },
       ],
       "import/no-absolute-path": "error",
@@ -63,7 +63,7 @@ export default [
     settings: {
       "import/resolver": {
         node: {
-          extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
+          extensions: [".js", ".jsx", ".ts", ".tsx", ".json"],
         },
       },
     },
