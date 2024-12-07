@@ -1,4 +1,8 @@
-import { ChatInputCommandInteraction, ButtonInteraction } from "discord.js";
+import {
+  ChatInputCommandInteraction,
+  ButtonInteraction,
+  Message,
+} from "discord.js";
 import {
   TeamPickingSession,
   TeamPickingSessionState,
@@ -45,7 +49,13 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       content: `Started a draft team picking session in <#${teamPickingChannel.id}>`,
       ephemeral: true,
     });
+
+    if (teamPickingChannel.isSendable()) {
+      await teamPickingChannel.send("Team picking");
+    }
   }
 
   public async handleInteraction(interaction: ButtonInteraction) {}
+
+  public async handleMessage(message: Message<boolean>) {}
 }

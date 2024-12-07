@@ -1,5 +1,10 @@
 import "dotenv/config";
-import { Client, GatewayIntentBits } from "discord.js";
+import {
+  Client,
+  GatewayIntentBits,
+  Message,
+  OmitPartialGroupDMChannel,
+} from "discord.js";
 import { CommandHandler } from "commands/CommandHandler";
 import { MessageHandler } from "interactions/MessageHandler";
 import { ReactionHandler } from "interactions/ReactionHandler";
@@ -45,7 +50,10 @@ export class TeamsBot {
     });
 
     this.client.on("messageCreate", async (msg) => {
-      log(`message of text ${msg.content}`);
+      let a: Message<boolean> = msg;
+      if (msg.channel.id === Channels.teamPicking.id) {
+        log(`message of text ${msg.content}`);
+      }
     });
 
     try {
