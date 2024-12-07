@@ -13,8 +13,8 @@ import { Command } from "../commands/CommandInterface.js";
 import { AnniClass, AnniMap } from "@prisma/client";
 import { prettifyName, randomEnum, formatTimestamp } from "../util/Utils.js";
 import { parseDate } from "chrono-node";
-import { Channels } from "../Channels.js";
-import { CurrentGameManager } from "../logic/CurrentGameManager.js";
+import { Channels } from "../Channels";
+import { CurrentGameManager } from "../logic/CurrentGameManager";
 
 export default class AnnouncementCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;

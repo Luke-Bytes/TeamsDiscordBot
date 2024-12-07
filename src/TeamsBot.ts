@@ -1,10 +1,10 @@
-import "dotenv/config.js";
+import "dotenv/config";
 import { Client, GatewayIntentBits } from "discord.js";
-import { CommandHandler } from "./commands/CommandHandler.js";
-import { MessageHandler } from "./interactions/MessageHandler.js";
-import { ReactionHandler } from "./interactions/ReactionHandler.js";
-import { VoiceChannelHandler } from "./interactions/VoiceChannelHandler.js";
-import { Channels } from "./Channels.js";
+import { CommandHandler } from "./commands/CommandHandler";
+import { MessageHandler } from "./interactions/MessageHandler";
+import { ReactionHandler } from "./interactions/ReactionHandler";
+import { VoiceChannelHandler } from "./interactions/VoiceChannelHandler";
+import { Channels } from "./Channels";
 
 export class TeamsBot {
   client: Client;

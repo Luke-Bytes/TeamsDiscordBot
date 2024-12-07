@@ -1,22 +1,16 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "module": "ESNext",
-    "moduleResolution": "node",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "allowJs": true,
-    "forceConsistentCasingInFileNames": true,
+    "module": "CommonJS",
     "rootDir": "./src",
     "outDir": "./dist",
+    "esModuleInterop": true,
+    "allowJs": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
     "resolveJsonModule": true,
-    "typeRoots": ["./node_modules/@types", "./node_modules/discord.js/typings"],
-    "baseUrl": ".",
-    "paths": {
-      "*": ["./src/*"]
-    }
+    "typeRoots": ["./node_modules/@types", "./node_modules/discord.js/typings"]
   },
-  "include": ["src/**/*", "config.json"],
-  "exclude": ["node_modules", "dist", "eslint.config.js"]
+  "exclude": ["node_modules", "dist", "./eslint.config.js", "scripts"]
 }

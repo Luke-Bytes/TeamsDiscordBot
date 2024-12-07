@@ -1,17 +1,17 @@
 import { REST, Routes, Interaction } from "discord.js";
 import { Command } from "./CommandInterface.js";
-import "dotenv/config.js";
-import RegisterCommand from "./RegisterCommand.js";
-import { ConfigManager } from "../ConfigManager.js";
-import AnnouncementCommand from "./AnnouncementCommand.js";
-import CaptainCommand from "./CaptainCommand.js";
-import IgnsCommand from "./IgnsCommand.js";
-import LeaderboardsCommand from "./LeaderboardsCommand.js";
-import RoleCommand from "./RoleCommand.js";
-import StatsCommand from "./StatsCommand.js";
-import TeamCommand from "./TeamCommand.js";
-import TestCommand from "./TestCommand.js";
-import CleanupCommand from "../commands/CleanUpCommand.js";
+import "dotenv/config";
+import { ConfigManager } from "../ConfigManager";
+import AnnouncementCommand from "./AnnouncementCommand";
+import CaptainCommand from "./CaptainCommand";
+import IgnsCommand from "./IgnsCommand";
+import LeaderboardsCommand from "./LeaderboardsCommand";
+import RegisterCommand from "./RegisterCommand";
+import RoleCommand from "./RoleCommand";
+import StatsCommand from "./StatsCommand";
+import TeamCommand from "./TeamCommand";
+import TestCommand from "./TestCommand";
+import CleanupCommand from "./CleanUpCommand";
 
 export class CommandHandler {
   private commands: Command[] = [];

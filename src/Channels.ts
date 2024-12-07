@@ -1,4 +1,4 @@
-import { ConfigManager } from "./ConfigManager.js";
+import { ConfigManager } from "./ConfigManager";
 import { Client, GuildBasedChannel } from "discord.js";
 
 export class Channels {
