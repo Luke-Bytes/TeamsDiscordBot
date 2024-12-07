@@ -12,9 +12,10 @@ import StatsCommand from "./StatsCommand";
 import TeamCommand from "./TeamCommand";
 import TestCommand from "./TestCommand";
 import CleanupCommand from "./CleanUpCommand";
+import ScenarioCommand from "./ScenarioCommand";
 
 export class CommandHandler {
-  private commands: Command[] = [];
+  commands: Command[] = [];
 
   public loadCommands() {
     this.commands = [
@@ -28,39 +29,56 @@ export class CommandHandler {
       new TeamCommand(),
       new TestCommand(),
       new CleanupCommand(),
+      new ScenarioCommand(this),
     ];
   }
 
   public async handleInteraction(interaction: Interaction) {
-    if (interaction.isChatInputCommand()) {
-      const chatInteraction = interaction;
-      const command = this.commands.find(
-        (cmd) => cmd.name === chatInteraction.commandName
-      );
-      if (command) {
-        console.log(
-          `[${chatInteraction.user.tag}] ran /${chatInteraction.commandName}`
+    try {
+      if (interaction.isChatInputCommand()) {
+        const chatInteraction = interaction;
+        const command = this.commands.find(
+          (cmd) => cmd.name === chatInteraction.commandName
         );
-        await command.execute(chatInteraction);
-      }
-    } else if (interaction.isMessageContextMenuCommand()) {
-      const messageInteraction = interaction;
-      const command = this.commands.find(
-        (cmd) => cmd.name === messageInteraction.commandName
-      );
-      if (command) {
-        console.log(
-          `[${messageInteraction.user.tag}] ran /${messageInteraction.commandName}`
+        if (command) {
+          console.log(
+            `[${chatInteraction.user.tag}] ran /${chatInteraction.commandName}`
+          );
+          await command.execute(chatInteraction);
+        }
+      } else if (interaction.isMessageContextMenuCommand()) {
+        const messageInteraction = interaction;
+        const command = this.commands.find(
+          (cmd) => cmd.name === messageInteraction.commandName
         );
-        await command.execute(messageInteraction);
-      }
-    } else if (interaction.isButton()) {
-      const command = this.commands.find((command) =>
-        command.buttonIds.includes(interaction.customId)
-      );
+        if (command) {
+          console.log(
+            `[${messageInteraction.user.tag}] ran /${messageInteraction.commandName}`
+          );
+          await command.execute(messageInteraction);
+        }
+      } else if (interaction.isButton()) {
+        const command = this.commands.find((command) =>
+          command.buttonIds.includes(interaction.customId)
+        );
 
-      if (command && command.handleButtonPress) {
-        await command.handleButtonPress(interaction);
+        if (command && command.handleButtonPress) {
+          await command.handleButtonPress(interaction);
+        }
+      }
+    } catch (error) {
+      console.error("Error handling interaction:", error);
+
+      // Ensure the interaction is replied to if an error occurs
+      if (
+        interaction.isRepliable() &&
+        !interaction.replied &&
+        !interaction.deferred
+      ) {
+        await interaction.reply({
+          content: "An error occurred while processing your request.",
+          ephemeral: true,
+        });
       }
     }
   }

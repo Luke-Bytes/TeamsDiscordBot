@@ -30,7 +30,11 @@ export class RandomTeamPickingSession extends TeamPickingSession {
     game.shuffleTeams("random");
     const embed = this.createTeamGenerateEmbed(game);
 
-    this.embedMessage = await (await interaction.reply(embed)).fetch();
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply({ ephemeral: true });
+    }
+
+    this.embedMessage = await interaction.editReply(embed);
   }
 
   public async handleInteraction(interaction: ButtonInteraction) {
@@ -67,25 +71,25 @@ export class RandomTeamPickingSession extends TeamPickingSession {
 
     const bluePlayersString =
       bluePlayers.length > 0
-        ? `**${bluePlayers[0].ignUsed}**\n` +
+        ? `**${bluePlayers[0].ignUsed ?? "Unknown Player"}**\n` +
           bluePlayers
             .slice(1)
-            .map((player) => player.ignUsed)
-            .join("\n") // Only the first player bold
+            .map((player) => player.ignUsed ?? "Unknown Player")
+            .join("\n")
         : "No players";
 
     const redPlayersString =
       redPlayers.length > 0
-        ? `**${redPlayers[0].ignUsed}**\n` +
+        ? `**${redPlayers[0].ignUsed ?? "Unknown Player"}**\n` +
           redPlayers
             .slice(1)
-            .map((player) => player.ignUsed)
-            .join("\n") // Only the first player bold
+            .map((player) => player.ignUsed ?? "Unknown Player")
+            .join("\n")
         : "No players";
 
     const embed = new EmbedBuilder()
       .setColor("#0099ff")
-      .setTitle("Randomized Teams")
+      .setTitle("Randomised Teams")
       .addFields(
         { name: "🔵 Blue Team 🔵  ", value: bluePlayersString, inline: true },
         { name: "🔴 Red Team 🔴   ", value: redPlayersString, inline: true }

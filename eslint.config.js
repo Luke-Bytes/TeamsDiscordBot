@@ -50,7 +50,7 @@ export default [
       "import/extensions": [
         "error",
         "always",
-        { js: "always", ts: "never", tsx: "never" },
+        { js: "never", ts: "never", tsx: "never" },
       ],
       "import/no-unresolved": [
         "error",

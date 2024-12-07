@@ -27,7 +27,7 @@ export default class LeaderboardsCommand implements Command {
   ) {
     return `${emoji} ${ign} **[${elo} ${EloUtil.getEloEmoji(
       elo
-    )}]** ${winLossRatio} W/L`;
+    )}]** ${winLossRatio.toFixed(1)} W/L`;
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {

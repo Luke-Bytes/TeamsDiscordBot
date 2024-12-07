@@ -65,37 +65,34 @@ export default class CleanupCommand implements Command {
       });
     }
   }
-  // FIXME crashes rn
   async handleButtonPress(interaction: ButtonInteraction) {
     if (interaction.customId === "cleanup_confirm") {
-      await interaction.update({
-        content: "✅ Cleanup process initiated!",
-        components: [],
-      });
-
-      await interaction.reply({
-        content: "Cleaning up after the game. This may take a moment...",
-        ephemeral: false,
-      });
-
-      const guild = interaction.guild;
-
-      if (!guild) {
-        await interaction.reply({
-          content: "This command can only be used in a guild.",
-          ephemeral: true,
-        });
-        return;
-      }
-
       try {
+        await interaction.update({
+          content:
+            "✅ Cleanup process initiated! Cleaning up the game instance. This may take a moment...",
+          components: [],
+        });
+
+        const guild = interaction.guild;
+
+        if (!guild) {
+          await interaction.followUp({
+            content: "This command can only be used in a guild.",
+            ephemeral: true,
+          });
+          return;
+        }
+
         await cleanUpAfterGame(guild);
+
         await interaction.followUp({
           content: "✅ Cleanup completed successfully.",
           ephemeral: false,
         });
       } catch (error) {
         console.error("Error during cleanup:", error);
+
         await interaction.followUp({
           content: "❌ Cleanup failed. Check the logs for details.",
           ephemeral: false,

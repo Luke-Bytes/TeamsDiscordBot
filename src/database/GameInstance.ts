@@ -61,6 +61,7 @@ export class GameInstance {
     if (currentInstance) {
       // FIXME commit to database method here
     }
+    this.instance.reset();
     this.instance = new GameInstance();
   }
 
@@ -217,5 +218,51 @@ export class GameInstance {
       oldCaptain: oldTeamCaptain?.discordSnowflake,
       newCaptain: player.discordSnowflake,
     };
+  }
+
+  public async testValues() {
+    this.gameId = "default-game-id";
+    this.finished = false;
+    this.announced = true;
+    this.startTime = new Date("2025-01-01T00:00:00Z");
+    this.endTime = new Date("2025-01-01T02:00:00Z");
+    this.settings = {
+      minerushing: true,
+      bannedClasses: ["SNIPER"],
+      map: "DUELSTAL",
+    };
+
+    await this.fillTeamsWithTestPlayers(10);
+
+    this.mapVoteManager = new MapVoteManager([
+      "AFTERMATH1V1",
+      "ANDORRA1V1",
+      "DUELSTAL",
+    ] as AnniMap[]);
+
+    this.minerushVoteManager = new MinerushVoteManager();
+
+    // await this.mapVoteManager.startMapVote();
+    // await this.minerushVoteManager.startMinerushVote();
+  }
+
+  private async fillTeamsWithTestPlayers(playerCount: number) {
+    this.teams.RED = [];
+    this.teams.BLUE = [];
+    this.teams.UNDECIDED = [];
+    const playerInstances: PlayerInstance[] = [];
+
+    for (let i = 0; i < playerCount; i++) {
+      const player = await PlayerInstance.testValues();
+      playerInstances.push(player);
+    }
+
+    playerInstances.forEach((player, index) => {
+      if (index % 2 === 0) {
+        this.teams.RED.push(player);
+      } else {
+        this.teams.BLUE.push(player);
+      }
+    });
   }
 }
