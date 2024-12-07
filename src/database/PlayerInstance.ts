@@ -1,12 +1,10 @@
 import { Snowflake } from "discord.js";
-import { prismaClient } from "./prismaClient";
+import { prismaClient } from "./prismaClient.js";
 import { Player } from "@prisma/client";
 
 // wrapper class for Player
-// todo bad naming
 export class PlayerInstance {
   playerId: string;
-
   elo: number;
   wins: number;
   losses: number;
@@ -42,4 +40,27 @@ export class PlayerInstance {
   }
 
   public static async byMinecraftAccount(minecraftAccount: string) {}
+
+  public static async testValues(): Promise<PlayerInstance> {
+    const playerCount = await prismaClient.player.count();
+
+    const randomElo = Math.floor(Math.random() * (1500 - 800 + 1)) + 800; // 800 to 1500
+    const randomWins = Math.floor(Math.random() * 21); // 0 to 20
+    const randomLosses = Math.floor(Math.random() * 21); // 0 to 20
+
+    const newPlayer = await prismaClient.player.create({
+      data: {
+        discordSnowflake: `testSnowflake${playerCount + 1}`,
+        elo: randomElo,
+        wins: randomWins,
+        losses: randomLosses,
+        minecraftAccounts: [`Phi${playerCount + 1}`],
+        id: `Chi${playerCount + 1}`,
+      },
+    });
+
+    const playerInstance = new PlayerInstance(newPlayer);
+    playerInstance.ignUsed = `Rho${playerCount + 1}`;
+    return playerInstance;
+  }
 }

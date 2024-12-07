@@ -3,10 +3,9 @@ import {
   ChatInputCommandInteraction,
   EmbedBuilder,
 } from "discord.js";
-import { Command } from "./CommandInterface";
-import { EloUtil } from "../util/EloUtil";
-import { log } from "console";
-import { PlayerInstance } from "../database/PlayerInstance";
+import { Command } from "./CommandInterface.js";
+import { EloUtil } from "../util/EloUtil.js";
+import { PlayerInstance } from "../database/PlayerInstance.js";
 
 export default class StatsCommand implements Command {
   public name = "stats";
@@ -47,7 +46,7 @@ export default class StatsCommand implements Command {
       });
       return;
     } else {
-      log(player);
+      console.log(player);
     }
 
     const winLossRatio =

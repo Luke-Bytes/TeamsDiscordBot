@@ -41,10 +41,6 @@ export function parseArgs(input: string): string[] {
   );
 }
 
-export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 export function sanitizeInput(input: string): string {
   return input.replace(/[^a-zA-Z0-9 ]/g, "");
 }
@@ -96,4 +92,8 @@ export function randomEnum<T extends object>(anEnum: T): T[keyof T] {
   const enumValues = Object.values(anEnum) as unknown as T[keyof T][];
   const randomIndex = Math.floor(Math.random() * enumValues.length);
   return enumValues[randomIndex];
+}
+
+export function formatTimestamp(date: Date): string {
+  return `<t:${Math.round(date.getTime() / 1000)}:f>`;
 }

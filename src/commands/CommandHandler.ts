@@ -1,27 +1,21 @@
-import {
-  REST,
-  Routes,
-  Interaction,
-  ChatInputCommandInteraction,
-  MessageContextMenuCommandInteraction,
-} from "discord.js";
-import { Command } from "./CommandInterface";
+import { REST, Routes, Interaction } from "discord.js";
+import { Command } from "./CommandInterface.js";
 import "dotenv/config";
-import RegisterCommand from "./RegisterCommand";
 import { ConfigManager } from "../ConfigManager";
 import AnnouncementCommand from "./AnnouncementCommand";
 import CaptainCommand from "./CaptainCommand";
 import IgnsCommand from "./IgnsCommand";
 import LeaderboardsCommand from "./LeaderboardsCommand";
+import RegisterCommand from "./RegisterCommand";
 import RoleCommand from "./RoleCommand";
 import StatsCommand from "./StatsCommand";
 import TeamCommand from "./TeamCommand";
 import TestCommand from "./TestCommand";
+import CleanupCommand from "./CleanUpCommand";
+import ScenarioCommand from "./ScenarioCommand";
 
 export class CommandHandler {
-  private commands: Command[] = [];
-
-  constructor() {}
+  commands: Command[] = [];
 
   public loadCommands() {
     this.commands = [
@@ -34,40 +28,57 @@ export class CommandHandler {
       new StatsCommand(),
       new TeamCommand(),
       new TestCommand(),
+      new CleanupCommand(),
+      new ScenarioCommand(this),
     ];
   }
 
   public async handleInteraction(interaction: Interaction) {
-    if (interaction.isChatInputCommand()) {
-      const chatInteraction = interaction as ChatInputCommandInteraction;
-      const command = this.commands.find(
-        (cmd) => cmd.name === chatInteraction.commandName
-      );
-      if (command) {
-        console.log(
-          `[${chatInteraction.user.id}] runs /${chatInteraction.commandName}`
+    try {
+      if (interaction.isChatInputCommand()) {
+        const chatInteraction = interaction;
+        const command = this.commands.find(
+          (cmd) => cmd.name === chatInteraction.commandName
         );
-        await command.execute(chatInteraction);
-      }
-    } else if (interaction.isMessageContextMenuCommand()) {
-      const messageInteraction =
-        interaction as MessageContextMenuCommandInteraction;
-      const command = this.commands.find(
-        (cmd) => cmd.name === messageInteraction.commandName
-      );
-      if (command) {
-        console.log(
-          `[${messageInteraction.user.id}] runs /${messageInteraction.commandName}`
+        if (command) {
+          console.log(
+            `[${chatInteraction.user.tag}] ran /${chatInteraction.commandName}`
+          );
+          await command.execute(chatInteraction);
+        }
+      } else if (interaction.isMessageContextMenuCommand()) {
+        const messageInteraction = interaction;
+        const command = this.commands.find(
+          (cmd) => cmd.name === messageInteraction.commandName
         );
-        await command.execute(messageInteraction);
-      }
-    } else if (interaction.isButton()) {
-      const command = this.commands.find((command) =>
-        command.buttonIds.includes(interaction.customId)
-      );
+        if (command) {
+          console.log(
+            `[${messageInteraction.user.tag}] ran /${messageInteraction.commandName}`
+          );
+          await command.execute(messageInteraction);
+        }
+      } else if (interaction.isButton()) {
+        const command = this.commands.find((command) =>
+          command.buttonIds.includes(interaction.customId)
+        );
 
-      if (command && command.handleButtonPress) {
-        command.handleButtonPress(interaction);
+        if (command && command.handleButtonPress) {
+          await command.handleButtonPress(interaction);
+        }
+      }
+    } catch (error) {
+      console.error("Error handling interaction:", error);
+
+      // Ensure the interaction is replied to if an error occurs
+      if (
+        interaction.isRepliable() &&
+        !interaction.replied &&
+        !interaction.deferred
+      ) {
+        await interaction.reply({
+          content: "An error occurred while processing your request.",
+          ephemeral: true,
+        });
       }
     }
   }
@@ -108,7 +119,7 @@ export class CommandHandler {
         console.log("Successfully reloaded global application (/) commands.");
       }
     } catch (error) {
-      console.error("Failed to register commands:", error);
+      console.error("Failed to register commands: ", error);
     }
   }
 }

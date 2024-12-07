@@ -3,9 +3,9 @@ import {
   ChatInputCommandInteraction,
   EmbedBuilder,
 } from "discord.js";
-import { Command } from "./CommandInterface";
-import { EloUtil } from "../util/EloUtil";
-import { prismaClient } from "../database/prismaClient";
+import { Command } from "./CommandInterface.js";
+import { EloUtil } from "../util/EloUtil.js";
+import { prismaClient } from "../database/prismaClient.js";
 
 export default class LeaderboardsCommand implements Command {
   public data: SlashCommandBuilder;
@@ -27,7 +27,7 @@ export default class LeaderboardsCommand implements Command {
   ) {
     return `${emoji} ${ign} **[${elo} ${EloUtil.getEloEmoji(
       elo
-    )}]** ${winLossRatio} W/L`;
+    )}]** ${winLossRatio.toFixed(1)} W/L`;
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
