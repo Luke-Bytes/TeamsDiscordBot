@@ -44,9 +44,9 @@ export class PlayerInstance {
   public static async testValues(): Promise<PlayerInstance> {
     const playerCount = await prismaClient.player.count();
 
-    const randomElo = Math.floor(Math.random() * (1500 - 800 + 1)) + 800; // 800 to 1500
-    const randomWins = Math.floor(Math.random() * 21); // 0 to 20
-    const randomLosses = Math.floor(Math.random() * 21); // 0 to 20
+    const randomElo = Math.floor(Math.random() * (1500 - 800 + 1)) + 800;
+    const randomWins = Math.floor(Math.random() * 21);
+    const randomLosses = Math.floor(Math.random() * 21);
 
     const newPlayer = await prismaClient.player.create({
       data: {

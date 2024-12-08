@@ -13,6 +13,7 @@ import TeamCommand from "./TeamCommand";
 import TestCommand from "./TestCommand";
 import CleanupCommand from "./CleanUpCommand";
 import ScenarioCommand from "./ScenarioCommand";
+import UnregisterCommand from "./UnregisterCommand";
 
 export class CommandHandler {
   commands: Command[] = [];
@@ -24,12 +25,13 @@ export class CommandHandler {
       new IgnsCommand(),
       new LeaderboardsCommand(),
       new RegisterCommand(),
+      new UnregisterCommand(),
       new RoleCommand(),
       new StatsCommand(),
       new TeamCommand(),
       new TestCommand(),
       new CleanupCommand(),
-      new ScenarioCommand(this),
+      new ScenarioCommand(),
     ];
   }
 
