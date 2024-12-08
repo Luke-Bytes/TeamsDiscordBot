@@ -10,8 +10,18 @@ export default class ScenarioCommand implements Command {
     .setDescription("Run predefined scenarios.")
     .addSubcommand((sub) =>
       sub
-        .setName("game-ready")
-        .setDescription("Sets the bot up for a game-ready scenario.")
+        .setName("game-playing")
+        .setDescription("Sets the bot up for a game-playing scenario.")
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("game-announce")
+        .setDescription("Sets the bot up for a game-announce scenario.")
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("game-prepare")
+        .setDescription("Prepares the bot for a game.")
     );
 
   public name = "scenario";
@@ -28,30 +38,43 @@ export default class ScenarioCommand implements Command {
     const config = ConfigManager.getConfig();
 
     if (!config.dev.enabled) {
-      await interaction.reply({
-        content: "This command is only available in development mode.",
-        ephemeral: true,
-      });
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({
+          content: "This command is only available in development mode.",
+          ephemeral: true,
+        });
+      }
       return;
     }
 
-    if (interaction.options.getSubcommand() === "game-ready") {
-      const gameInstance = GameInstance.getInstance();
-      await gameInstance.testValues();
-      await interaction.reply(
-        "Game is now ready and test values have been initialised!"
-      );
-      const commandsToRun = ["register", "role", "team"];
-      for (const cmdName of commandsToRun) {
-        const cmd = this.commandHandler.commands.find(
-          (c) => c.name === cmdName
+    const subCommand = interaction.options.getSubcommand();
+    const gameInstance = GameInstance.getInstance();
+
+    if (subCommand === "game-playing") {
+      await gameInstance.testValues("red-blue");
+
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply(
+          `The ${subCommand.replace("-", " ")} scenario has been initialised!`
         );
-        if (cmd) {
-          await cmd.execute(interaction);
-        }
       }
-      await interaction.reply({
-        content: "Game-ready scenario setup complete.",
+    } else if (subCommand === "game-announce") {
+      await gameInstance.testValues("none");
+
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply("Game is now announced!");
+      }
+    } else if (subCommand === "game-prepare") {
+      await gameInstance.testValues("undecided");
+
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply("Game is now ready to play!");
+      }
+    }
+
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.followUp({
+        content: `${subCommand.replace("-", " ")} scenario setup complete.`,
         ephemeral: true,
       });
     }

@@ -130,7 +130,7 @@ export default class TeamCommand implements Command {
           }
 
           await interaction.editReply({
-            content: "Teams generated successfully!",
+            content: `Team picking in progress..`,
           });
           break;
         }

@@ -2,9 +2,6 @@ import { GameInstance } from "../database/GameInstance.js";
 
 export class CurrentGameManager {
   private static currentGame?: GameInstance;
-
-  private constructor() {}
-
   public static getCurrentGame() {
     if (!this.currentGame) {
       this.currentGame = GameInstance.getInstance();
