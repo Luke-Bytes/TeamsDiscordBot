@@ -87,17 +87,19 @@ export class RandomTeamPickingSession extends TeamPickingSession {
   ) {
     const teams = simulatedTeams || game.teams;
 
-    const bluePlayersString = teams.BLUE.length
-      ? teams.BLUE.map(
-          (player) => `**${player.ignUsed || "Unknown Player"}**`
-        ).join("\n")
-      : "No players";
+    const formatTeamString = (players: PlayerInstance[]) =>
+      players.length
+        ? players
+          .map((player, index) =>
+            index === 0
+              ? `**${player.ignUsed ?? "Unknown Player"}**`
+              : `${player.ignUsed ?? "Unknown Player"}`
+          )
+          .join("\n")
+        : "No players";
 
-    const redPlayersString = teams.RED.length
-      ? teams.RED.map(
-          (player) => `**${player.ignUsed || "Unknown Player"}**`
-        ).join("\n")
-      : "No players";
+    const bluePlayersString = formatTeamString(teams.BLUE);
+    const redPlayersString = formatTeamString(teams.RED);
 
     const embed = new EmbedBuilder()
       .setColor("#0099ff")
@@ -125,6 +127,7 @@ export class RandomTeamPickingSession extends TeamPickingSession {
 
     return { embeds: [embed], components: [row] };
   }
+
 
   public getState() {
     return this.state;

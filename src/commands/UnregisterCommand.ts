@@ -20,7 +20,7 @@ export default class UnregisterCommand implements Command {
           .setRequired(false)
       ) as SlashCommandBuilder;
   }
-  //FIXME investigate why this isn't working properly when same player wants to re register
+
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const config = ConfigManager.getConfig();
     const registrationChannelId = config.channels.registration;

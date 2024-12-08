@@ -26,10 +26,7 @@ export default class ScenarioCommand implements Command {
   public description = "Run predefined scenarios.";
   public buttonIds: string[] = [];
 
-  private readonly commandHandler: CommandHandler;
-
-  constructor(commandHandler: CommandHandler) {
-    this.commandHandler = commandHandler;
+  constructor() {
   }
 
   public async execute(interaction: ChatInputCommandInteraction) {
