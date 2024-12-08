@@ -31,7 +31,7 @@ export class CommandHandler {
       new TeamCommand(),
       new TestCommand(),
       new CleanupCommand(),
-      new ScenarioCommand(this),
+      new ScenarioCommand(),
     ];
   }
 
