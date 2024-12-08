@@ -26,8 +26,7 @@ export default class ScenarioCommand implements Command {
   public description = "Run predefined scenarios.";
   public buttonIds: string[] = [];
 
-  constructor() {
-  }
+  constructor() {}
 
   public async execute(interaction: ChatInputCommandInteraction) {
     const config = ConfigManager.getConfig();

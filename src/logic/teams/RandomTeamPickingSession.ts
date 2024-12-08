@@ -90,12 +90,12 @@ export class RandomTeamPickingSession extends TeamPickingSession {
     const formatTeamString = (players: PlayerInstance[]) =>
       players.length
         ? players
-          .map((player, index) =>
-            index === 0
-              ? `**${player.ignUsed ?? "Unknown Player"}**`
-              : `${player.ignUsed ?? "Unknown Player"}`
-          )
-          .join("\n")
+            .map((player, index) =>
+              index === 0
+                ? `**${player.ignUsed ?? "Unknown Player"}**`
+                : `${player.ignUsed ?? "Unknown Player"}`
+            )
+            .join("\n")
         : "No players";
 
     const bluePlayersString = formatTeamString(teams.BLUE);
@@ -127,7 +127,6 @@ export class RandomTeamPickingSession extends TeamPickingSession {
 
     return { embeds: [embed], components: [row] };
   }
-
 
   public getState() {
     return this.state;
