@@ -13,7 +13,7 @@ import TeamCommand from "./TeamCommand";
 import TestCommand from "./TestCommand";
 import CleanupCommand from "./CleanUpCommand";
 import ScenarioCommand from "./ScenarioCommand";
-import UnregisterCommand from "commands/UnregisterCommand";
+import UnregisterCommand from "./UnregisterCommand";
 
 export class CommandHandler {
   commands: Command[] = [];
