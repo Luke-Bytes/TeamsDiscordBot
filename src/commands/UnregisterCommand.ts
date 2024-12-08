@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
 import { Command } from "./CommandInterface.js";
-import { ConfigManager } from "../ConfigManager.js";
+import { PermissionsUtil } from "../util/PermissionsUtil.js";
 import { CurrentGameManager } from "../logic/CurrentGameManager.js";
 
 export default class UnregisterCommand implements Command {
@@ -22,11 +22,7 @@ export default class UnregisterCommand implements Command {
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const config = ConfigManager.getConfig();
-    const registrationChannelId = config.channels.registration;
-    const organiserRoleId = config.roles.organiserRole;
-
-    if (interaction.channelId !== registrationChannelId) {
+    if (!PermissionsUtil.isChannel(interaction, "registration")) {
       await interaction.reply({
         content: "You can only unregister in the registration channel.",
         ephemeral: true,
@@ -45,19 +41,22 @@ export default class UnregisterCommand implements Command {
     const targetUser =
       interaction.options.getUser("discorduser") || interaction.user;
 
-    const discordUserId = targetUser.id;
-    const discordUserName = targetUser.username;
-
-    const member = interaction.guild?.members.cache.get(interaction.user.id);
-    const isOrganiser = member?.roles.cache.has(organiserRoleId);
-
-    if (!isOrganiser && targetUser.id !== interaction.user.id) {
+    if (
+      !PermissionsUtil.hasRole(
+        interaction.guild?.members.cache.get(interaction.user.id),
+        "organiserRole"
+      ) &&
+      !PermissionsUtil.isSameUser(interaction, targetUser.id)
+    ) {
       await interaction.reply({
         content: "You do not have permission to unregister other users.",
         ephemeral: true,
       });
       return;
     }
+
+    const discordUserId = targetUser.id;
+    const discordUserName = targetUser.username;
 
     const isRegistered = CurrentGameManager.getCurrentGame()
       .getPlayers()
@@ -81,7 +80,7 @@ export default class UnregisterCommand implements Command {
         content: result.error,
         ephemeral: false,
       });
-    } else if (targetUser.id === interaction.user.id) {
+    } else if (PermissionsUtil.isSameUser(interaction, targetUser.id)) {
       await interaction.reply({
         content: `You have successfully unregistered from the game!`,
         ephemeral: false,

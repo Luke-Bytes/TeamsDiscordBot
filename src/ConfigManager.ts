@@ -1,7 +1,7 @@
 import { writeFileSync } from "fs";
 import conf from "../config.json";
 
-type Config = {
+export type Config = {
   winEloGain: number;
   loseEloLoss: number;
   mvpBonus: number;
