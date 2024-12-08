@@ -43,6 +43,10 @@ export class TeamsBot {
       await this.commandHandler.handleInteraction(interaction);
     });
 
+    this.client.on("messageCreate", async (msg) => {
+      log(`message of text ${msg.content}`);
+    });
+
     try {
       await this.client.login(process.env.BOT_TOKEN);
       await Channels.initChannels(this.client);
