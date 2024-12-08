@@ -194,7 +194,6 @@ export class GameInstance {
     }
   }
 
-
   public getPlayers() {
     return Object.values(this.teams).flat(1);
   }
@@ -219,7 +218,6 @@ export class GameInstance {
     }
   }
 
-
   public simulateShuffledTeams(): Record<Team, PlayerInstance[]> {
     const undecidedPlayers = Array.from(this.getPlayersOfTeam("UNDECIDED"));
     const shuffled = undecidedPlayers.sort(() => Math.random() - 0.5);
@@ -230,8 +228,6 @@ export class GameInstance {
       RED: shuffled.slice(half),
     };
   }
-
-
 
   public getCaptainOfTeam(team: Team) {
     return this.teams[team].find((p) => p.captain);
@@ -262,7 +258,9 @@ export class GameInstance {
   }
 
   public async testValues(fillOption: "red-blue" | "undecided" | "none") {
-    console.info(`[GAME] Initializing test values with fillOption: ${fillOption}`);
+    console.info(
+      `[GAME] Initializing test values with fillOption: ${fillOption}`
+    );
 
     this.gameId = "default-game-id";
     this.finished = false;
@@ -329,6 +327,4 @@ export class GameInstance {
 
     console.info(`[GAME] Final team state:`, this.teams);
   }
-
-
 }

@@ -19,9 +19,7 @@ export default class ScenarioCommand implements Command {
         .setDescription("Sets the bot up for a game-announce scenario.")
     )
     .addSubcommand((sub) =>
-      sub
-        .setName("game-prepare")
-        .setDescription("Prepares the bot for a game.")
+      sub.setName("game-prepare").setDescription("Prepares the bot for a game.")
     );
 
   public name = "scenario";

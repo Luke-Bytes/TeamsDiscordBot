@@ -61,7 +61,10 @@ export class RandomTeamPickingSession extends TeamPickingSession {
 
       case "random-team-generate-reroll": {
         const simulatedTeams = game.simulateShuffledTeams();
-        const { embeds, components } = this.createTeamGenerateEmbed(game, simulatedTeams);
+        const { embeds, components } = this.createTeamGenerateEmbed(
+          game,
+          simulatedTeams
+        );
         await this.embedMessage?.edit({
           embeds,
           components,
@@ -78,16 +81,22 @@ export class RandomTeamPickingSession extends TeamPickingSession {
     }
   }
 
-
-  createTeamGenerateEmbed(game: GameInstance, simulatedTeams?: Record<Team, PlayerInstance[]>) {
+  createTeamGenerateEmbed(
+    game: GameInstance,
+    simulatedTeams?: Record<Team, PlayerInstance[]>
+  ) {
     const teams = simulatedTeams || game.teams;
 
     const bluePlayersString = teams.BLUE.length
-      ? teams.BLUE.map((player) => `**${player.ignUsed || "Unknown Player"}**`).join("\n")
+      ? teams.BLUE.map(
+          (player) => `**${player.ignUsed || "Unknown Player"}**`
+        ).join("\n")
       : "No players";
 
     const redPlayersString = teams.RED.length
-      ? teams.RED.map((player) => `**${player.ignUsed || "Unknown Player"}**`).join("\n")
+      ? teams.RED.map(
+          (player) => `**${player.ignUsed || "Unknown Player"}**`
+        ).join("\n")
       : "No players";
 
     const embed = new EmbedBuilder()
@@ -114,10 +123,8 @@ export class RandomTeamPickingSession extends TeamPickingSession {
         .setStyle(ButtonStyle.Danger)
     );
 
-
     return { embeds: [embed], components: [row] };
   }
-
 
   public getState() {
     return this.state;
