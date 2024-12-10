@@ -11,6 +11,8 @@ import RoleCommand from "./RoleCommand";
 import StatsCommand from "./StatsCommand";
 import TeamCommand from "./TeamCommand";
 import TestCommand from "./TestCommand";
+import CleanupCommand from "./CleanUpCommand.js";
+import ScenarioCommand from "./ScenarioCommand.js";
 
 export class CommandHandler {
   commands: Command[] = [];
@@ -18,10 +20,12 @@ export class CommandHandler {
   //todo: just make these singletons.
   announcementCommand = new AnnouncementCommand();
   captainCommand = new CaptainCommand();
+  cleanupCommand = new CleanupCommand();
   ignsCommand = new IgnsCommand();
   leaderboardsCommand = new LeaderboardsCommand();
   registerCommand = new RegisterCommand();
   roleCommand = new RoleCommand();
+  scenarioCommand = new ScenarioCommand(this);
   statsCommand = new StatsCommand();
   teamCommand = new TeamCommand();
   testCommand = new TestCommand();
@@ -30,10 +34,12 @@ export class CommandHandler {
     this.commands = [
       this.announcementCommand,
       this.captainCommand,
+      this.cleanupCommand,
       this.ignsCommand,
       this.leaderboardsCommand,
       this.registerCommand,
       this.roleCommand,
+      this.scenarioCommand,
       this.statsCommand,
       this.teamCommand,
       this.testCommand,
