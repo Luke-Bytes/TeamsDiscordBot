@@ -50,9 +50,8 @@ export class TeamsBot {
     });
 
     this.client.on("messageCreate", async (msg) => {
-      let a: Message<boolean> = msg;
-      if (msg.channel.id === Channels.teamPicking.id) {
-        log(`message of text ${msg.content}`);
+      if (this.commandHandler.teamCommand.teamPickingSession) {
+        this.commandHandler.teamCommand.teamPickingSession.handleMessage(msg);
       }
     });
 

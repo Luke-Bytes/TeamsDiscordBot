@@ -52,10 +52,23 @@ export class DraftTeamPickingSession extends TeamPickingSession {
 
     if (teamPickingChannel.isSendable()) {
       await teamPickingChannel.send("Team picking");
+    } else {
+      console.error(
+        "Can not send messages in the team picking channel! Maybe messed up permissions."
+      );
     }
   }
 
   public async handleInteraction(interaction: ButtonInteraction) {}
 
-  public async handleMessage(message: Message<boolean>) {}
+  public async handleMessage(message: Message<boolean>) {
+    if (message.channel.id !== Channels.teamPicking.id) return;
+
+    if (!message.channel.isSendable()) {
+      console.error(
+        "Can not send messages in the team picking channel! Maybe messed up permissions."
+      );
+      return;
+    }
+  }
 }

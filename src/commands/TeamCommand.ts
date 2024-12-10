@@ -26,7 +26,7 @@ export default class TeamCommand implements Command {
     "random-team-generate-cancel",
   ];
 
-  private teamPickingSession?: TeamPickingSession;
+  teamPickingSession?: TeamPickingSession;
 
   constructor() {
     this.data = new SlashCommandBuilder()

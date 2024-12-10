@@ -23,17 +23,28 @@ export class CommandHandler {
 
   constructor() {}
 
+  //todo: just make these singletons.
+  announcementCommand = new AnnouncementCommand();
+  captainCommand = new CaptainCommand();
+  ignsCommand = new IgnsCommand();
+  leaderboardsCommand = new LeaderboardsCommand();
+  registerCommand = new RegisterCommand();
+  roleCommand = new RoleCommand();
+  statsCommand = new StatsCommand();
+  teamCommand = new TeamCommand();
+  testCommand = new TestCommand();
+
   public loadCommands() {
     this.commands = [
-      new AnnouncementCommand(),
-      new CaptainCommand(),
-      new IgnsCommand(),
-      new LeaderboardsCommand(),
-      new RegisterCommand(),
-      new RoleCommand(),
-      new StatsCommand(),
-      new TeamCommand(),
-      new TestCommand(),
+      this.announcementCommand,
+      this.captainCommand,
+      this.ignsCommand,
+      this.leaderboardsCommand,
+      this.registerCommand,
+      this.roleCommand,
+      this.statsCommand,
+      this.teamCommand,
+      this.testCommand,
     ];
   }
 
