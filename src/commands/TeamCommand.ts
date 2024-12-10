@@ -2,6 +2,7 @@ import {
   ButtonInteraction,
   ChatInputCommandInteraction,
   EmbedBuilder,
+  Guild,
   GuildMemberRoleManager,
   SlashCommandBuilder,
   SlashCommandSubcommandsOnlyBuilder,
@@ -109,26 +110,6 @@ export default class TeamCommand implements Command {
             break;
         }
 
-        const redTeam = game.getPlayersOfTeam("RED");
-        for (let i = 0; i < redTeam.length; i++) {
-          const player = redTeam[i];
-          const discordUser = await interaction.guild?.members.fetch(
-            player.discordSnowflake
-          );
-          await discordUser?.roles.remove(config.roles.blueTeamRole);
-          discordUser?.roles.add(config.roles.redTeamRole);
-        }
-
-        const blueTeam = game.getPlayersOfTeam("BLUE");
-        for (let i = 0; i < blueTeam.length; i++) {
-          const player = blueTeam[i];
-          const discordUser = await interaction.guild?.members.fetch(
-            player.discordSnowflake
-          );
-          await discordUser?.roles.remove(config.roles.redTeamRole);
-          discordUser?.roles.add(config.roles.blueTeamRole);
-        }
-
         break;
       }
 
@@ -202,17 +183,41 @@ export default class TeamCommand implements Command {
     return { embeds: [embed], ephemeral: true };
   }
 
+  private async setRoles(guild: Guild) {
+    const game = CurrentGameManager.getCurrentGame();
+    const config = ConfigManager.getConfig();
+
+    const redTeam = game.getPlayersOfTeam("RED");
+    for (let i = 0; i < redTeam.length; i++) {
+      const player = redTeam[i];
+      const discordUser = await guild.members.fetch(player.discordSnowflake);
+      await discordUser?.roles.remove(config.roles.blueTeamRole);
+      discordUser?.roles.add(config.roles.redTeamRole);
+    }
+
+    const blueTeam = game.getPlayersOfTeam("BLUE");
+    for (let i = 0; i < blueTeam.length; i++) {
+      const player = blueTeam[i];
+      const discordUser = await guild.members.fetch(player.discordSnowflake);
+      await discordUser?.roles.remove(config.roles.redTeamRole);
+      discordUser?.roles.add(config.roles.blueTeamRole);
+    }
+  }
+
   public async handleButtonPress(interaction: ButtonInteraction) {
+    if (!interaction.guild) return;
     if (this.teamPickingSession) {
       await this.teamPickingSession.handleInteraction(interaction);
-
       const state = this.teamPickingSession.getState();
       log(state);
       switch (state) {
-        case "finalized": //for now these do the same thing but we'll see
+        case "finalized":
+          this.setRoles(interaction.guild);
+          break;
         case "cancelled":
           delete this.teamPickingSession;
           this.teamPickingSession = undefined;
+
           break;
       }
     }

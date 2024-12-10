@@ -14,11 +14,19 @@ import {
 import { GameInstance } from "database/GameInstance";
 import { PlayerInstance } from "database/PlayerInstance";
 import { CurrentGameManager } from "logic/CurrentGameManager";
+import { Team } from "@prisma/client";
+import { log } from "console";
 
 export class RandomTeamPickingSession extends TeamPickingSession {
   state: TeamPickingSessionState = "inProgress";
-
   embedMessage?: Message<boolean>;
+  proposedTeams: Record<Team | "UNDECIDED", PlayerInstance[]> = {
+    RED: [],
+    BLUE: [],
+    UNDECIDED: [],
+  };
+  redCaptain?: PlayerInstance;
+  blueCaptain?: PlayerInstance;
 
   constructor() {
     super();
@@ -27,10 +35,36 @@ export class RandomTeamPickingSession extends TeamPickingSession {
   public async initialize(interaction: ChatInputCommandInteraction) {
     const game = CurrentGameManager.getCurrentGame();
 
-    game.shuffleTeams("random");
+    this.redCaptain = game.getCaptainOfTeam("RED");
+    this.blueCaptain = game.getCaptainOfTeam("BLUE");
+
+    this.proposedTeams = { ...game.teams };
+
+    this.shuffle();
     const embed = this.createTeamGenerateEmbed(game);
 
     this.embedMessage = await (await interaction.reply(embed)).fetch();
+  }
+
+  private shuffle() {
+    const shuffled = Object.values(this.proposedTeams)
+      .flat(1)
+      .filter((p) => !p.captain)
+      .sort(() => Math.random() - 0.5);
+    const half = Math.ceil(shuffled.length / 2);
+
+    const blue = shuffled.slice(0, half);
+    const red = shuffled.slice(half);
+
+    this.proposedTeams.BLUE = [this.blueCaptain!];
+    this.proposedTeams.RED = [this.redCaptain!];
+
+    this.proposedTeams.BLUE.push(...blue);
+    this.proposedTeams.RED.push(...red);
+
+    this.proposedTeams.UNDECIDED = [];
+
+    log(this.proposedTeams);
   }
 
   public async handleInteraction(interaction: ButtonInteraction) {
@@ -41,12 +75,13 @@ export class RandomTeamPickingSession extends TeamPickingSession {
           const { embeds } = this.createTeamGenerateEmbed(game);
           await this.embedMessage?.edit({ embeds, components: [] });
           await interaction.update({});
+          game.teams = this.proposedTeams;
           this.state = "finalized";
         }
         break;
       case "random-team-generate-reroll":
         {
-          game.shuffleTeams("random");
+          this.shuffle();
           const embed = this.createTeamGenerateEmbed(game);
 
           await this.embedMessage!.edit(embed);
@@ -62,8 +97,8 @@ export class RandomTeamPickingSession extends TeamPickingSession {
   }
 
   createTeamGenerateEmbed(game: GameInstance) {
-    const redPlayers: PlayerInstance[] = game.getPlayersOfTeam("RED");
-    const bluePlayers: PlayerInstance[] = game.getPlayersOfTeam("BLUE");
+    const redPlayers: PlayerInstance[] = this.proposedTeams.RED;
+    const bluePlayers: PlayerInstance[] = this.proposedTeams.BLUE;
 
     const bluePlayersString =
       bluePlayers.length > 0

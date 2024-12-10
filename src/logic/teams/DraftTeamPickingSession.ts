@@ -9,9 +9,13 @@ import {
 } from "./TeamPickingSession";
 import { Channels } from "Channels";
 import { CurrentGameManager } from "logic/CurrentGameManager";
+import { PlayerInstance } from "database/PlayerInstance";
 
 export class DraftTeamPickingSession extends TeamPickingSession {
   state: TeamPickingSessionState = "inProgress";
+
+  redCaptain?: PlayerInstance;
+  blueCaptain?: PlayerInstance;
 
   public getState(): TeamPickingSessionState {
     return this.state;
@@ -20,29 +24,35 @@ export class DraftTeamPickingSession extends TeamPickingSession {
   public async initialize(interaction: ChatInputCommandInteraction) {
     const teamPickingChannel = Channels.teamPicking;
 
-    const redCaptain =
+    this.redCaptain =
       CurrentGameManager.getCurrentGame().getCaptainOfTeam("RED");
-    const blueCaptain =
+    this.blueCaptain =
       CurrentGameManager.getCurrentGame().getCaptainOfTeam("BLUE");
 
-    if (!redCaptain && !blueCaptain) {
+    if (!this.redCaptain && !this.blueCaptain) {
       await interaction.reply({
         content:
           "The teams do not have captains. Please use `/captain set` to set the captains of the teams.",
         ephemeral: true,
       });
-    } else if (!redCaptain) {
+      this.state = "cancelled";
+      return;
+    } else if (!this.redCaptain) {
       await interaction.reply({
         content:
           "Red team does not have a captain. Please use `/captain set` to set the captains of Red team.",
         ephemeral: true,
       });
-    } else if (!blueCaptain) {
+      this.state = "cancelled";
+      return;
+    } else if (!this.blueCaptain) {
       await interaction.reply({
         content:
           "Blue team does not have a captain. Please use `/captain set` to set the captains of Blue team.",
         ephemeral: true,
       });
+      this.state = "cancelled";
+      return;
     }
 
     await interaction.reply({
