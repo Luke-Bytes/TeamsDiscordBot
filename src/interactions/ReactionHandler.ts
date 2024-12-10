@@ -27,6 +27,6 @@ export class ReactionHandler {
 
   async getReactionCount(message: Message, emoji: string): Promise<number> {
     const reaction = message.reactions.cache.get(emoji);
-    return reaction?.count || 0;
+    return reaction?.count ?? 0;
   }
 }

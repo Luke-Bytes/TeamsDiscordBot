@@ -2,6 +2,7 @@ import typescriptEslintPlugin from "@typescript-eslint/eslint-plugin";
 import prettierPlugin from "eslint-plugin-prettier";
 import js from "@eslint/js";
 import typescriptParser from "@typescript-eslint/parser";
+import importPlugin from "eslint-plugin-import";
 
 const { rules: tsEslintRules } = typescriptEslintPlugin.configs.recommended;
 
@@ -34,6 +35,7 @@ export default [
     plugins: {
       "@typescript-eslint": typescriptEslintPlugin,
       prettier: prettierPlugin,
+      import: importPlugin,
     },
     rules: {
       ...js.configs.recommended.rules,
@@ -45,6 +47,25 @@ export default [
         "warn",
         { argsIgnorePattern: "^_" },
       ],
+      "import/extensions": [
+        "error",
+        "always",
+        { js: "never", ts: "never", tsx: "never" },
+      ],
+      "import/no-unresolved": [
+        "error",
+        {
+          ignore: ["\\.js$", "\\.json$"],
+        },
+      ],
+      "import/no-absolute-path": "error",
+    },
+    settings: {
+      "import/resolver": {
+        node: {
+          extensions: [".js", ".jsx", ".ts", ".tsx", ".json"],
+        },
+      },
     },
   },
 ];

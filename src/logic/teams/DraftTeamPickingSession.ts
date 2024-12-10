@@ -7,8 +7,8 @@ import {
   TeamPickingSession,
   TeamPickingSessionState,
 } from "./TeamPickingSession";
-import { Channels } from "Channels";
-import { CurrentGameManager } from "logic/CurrentGameManager";
+import { Channels } from "../../Channels";
+import { CurrentGameManager } from "../CurrentGameManager";
 import { PlayerInstance } from "database/PlayerInstance";
 
 export class DraftTeamPickingSession extends TeamPickingSession {

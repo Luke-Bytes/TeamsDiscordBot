@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync } from "fs";
+import { writeFileSync } from "fs";
+import conf from "../config.json";
 
 type Config = {
   winEloGain: number;
@@ -13,7 +14,12 @@ type Config = {
   channels: {
     registration: string;
     announcements: string;
-    teamPicking: string;
+    teamPickingVC: string;
+    teamPickingChat: string;
+    redTeamVC: string;
+    blueTeamVC: string;
+    redTeamChat: string;
+    blueTeamChat: string;
   };
   dev: {
     enabled: boolean;
@@ -26,7 +32,7 @@ export class ConfigManager {
 
   static getConfig() {
     if (!this.config) {
-      this.config = JSON.parse(readFileSync("./config.json", "utf8"));
+      this.config = conf;
     }
     return this.config;
   }

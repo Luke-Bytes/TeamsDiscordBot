@@ -1,10 +1,10 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
-import { Command } from "./CommandInterface";
+import { Command } from "./CommandInterface.js";
 
 export default class TestCommand implements Command {
   data: SlashCommandBuilder;
   name = "test";
-  description = "Replies wiht a test message!";
+  description = "Replies with a test message!";
   public buttonIds: string[] = [];
 
   constructor() {

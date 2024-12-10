@@ -3,8 +3,8 @@ import {
   Role,
   SlashCommandBuilder,
 } from "discord.js";
-import { Command } from "./CommandInterface";
-import { ConfigManager } from "../ConfigManager";
+import { Command } from "./CommandInterface.js";
+import { ConfigManager } from "../ConfigManager.js";
 
 export default class RoleCommand implements Command {
   public data: SlashCommandBuilder;

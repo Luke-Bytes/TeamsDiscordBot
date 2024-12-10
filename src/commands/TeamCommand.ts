@@ -9,13 +9,12 @@ import {
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
-import { ConfigManager } from "ConfigManager";
-import { GameInstance } from "database/GameInstance";
-import { PlayerInstance } from "database/PlayerInstance";
-import { TeamPickingSession } from "logic/teams/TeamPickingSession";
-import { RandomTeamPickingSession } from "logic/teams/RandomTeamPickingSession";
-import { log } from "console";
-import { DraftTeamPickingSession } from "logic/teams/DraftTeamPickingSession";
+import { ConfigManager } from "../ConfigManager";
+import { GameInstance } from "../database/GameInstance";
+import { PlayerInstance } from "../database/PlayerInstance";
+import { DraftTeamPickingSession } from "../logic/teams/DraftTeamPickingSession";
+import { RandomTeamPickingSession } from "../logic/teams/RandomTeamPickingSession";
+import { TeamPickingSession } from "../logic/teams/TeamPickingSession";
 
 export default class TeamCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;
@@ -69,85 +68,153 @@ export default class TeamCommand implements Command {
 
     const game = CurrentGameManager.getCurrentGame();
 
-    switch (subcommand) {
-      case "generate": {
-        if (!isOrganiser) {
+    try {
+      switch (subcommand) {
+        case "generate": {
+          if (!isOrganiser) {
+            await interaction.reply({
+              content: "You do not have permission to run this command!",
+              ephemeral: true,
+            });
+            return;
+          }
+
+          if (!game.announced) {
+            await interaction.reply({
+              content:
+                "A game has not been announced yet. Please use `/announce start`.",
+              ephemeral: true,
+            });
+            return;
+          }
+
+          if (this.teamPickingSession) {
+            await interaction.reply({
+              content:
+                "A team picking session is already in process. Cancel that one before creating another.",
+              ephemeral: true,
+            });
+            return;
+          }
+
+          await interaction.deferReply({ ephemeral: false });
+
+          const method = interaction.options.getString("method");
+
+          switch (method) {
+            case "random":
+              this.teamPickingSession = new RandomTeamPickingSession();
+              await this.teamPickingSession.initialize(interaction);
+              break;
+            case "draft":
+              this.teamPickingSession = new DraftTeamPickingSession();
+              await this.teamPickingSession.initialize(interaction);
+              break;
+          }
+
+          const redTeam = game.getPlayersOfTeam("RED");
+          for (const player of redTeam) {
+            const discordUser = await interaction.guild?.members.fetch(
+              player.discordSnowflake
+            );
+            await discordUser?.roles.remove(config.roles.blueTeamRole);
+            discordUser?.roles.add(config.roles.redTeamRole);
+          }
+
+          const blueTeam = game.getPlayersOfTeam("BLUE");
+          for (const player of blueTeam) {
+            const discordUser = await interaction.guild?.members.fetch(
+              player.discordSnowflake
+            );
+            await discordUser?.roles.remove(config.roles.redTeamRole);
+            discordUser?.roles.add(config.roles.blueTeamRole);
+          }
+
+          await interaction.editReply({
+            content: "Teams generated successfully!",
+          });
+          break;
+        }
+
+        case "reset": {
+          if (!isOrganiser) {
+            await interaction.reply({
+              content: "You do not have permission to run this command!",
+              ephemeral: true,
+            });
+            return;
+          }
+
+          await interaction.deferReply({ ephemeral: false });
+
+          game.resetTeams();
+
+          await interaction.editReply({
+            content: "Teams have been reset!",
+          });
+          break;
+        }
+
+        case "list": {
+          if (!game.announced) {
+            await interaction.reply({
+              content: "Game does not exist.",
+            });
+          } else {
+            await interaction.deferReply({ ephemeral: false });
+
+            const embed = this.createTeamViewEmbed(game);
+            await interaction.editReply(embed);
+          }
+          break;
+        }
+
+        default:
           await interaction.reply({
-            content: "You do not have permission to run this command!",
+            content: "Invalid subcommand!",
             ephemeral: true,
           });
           return;
-        }
-
-        if (!game.announced) {
-          await interaction.reply({
-            content:
-              "A game has not been announced yet. Please use `/announce start`.",
-            ephemeral: true,
-          });
-          return;
-        }
-
-        if (this.teamPickingSession) {
-          await interaction.reply({
-            content:
-              "A team picking session is already in process. Cancel that one is necessary before creating another.",
-            ephemeral: true,
-          });
-          return;
-        }
-
-        const method = interaction.options.getString("method");
-
-        switch (method) {
-          case "random":
-            this.teamPickingSession = new RandomTeamPickingSession();
-            await this.teamPickingSession.initialize(interaction);
-            break;
-          case "draft":
-            this.teamPickingSession = new DraftTeamPickingSession();
-            await this.teamPickingSession.initialize(interaction);
-            break;
-        }
-
-        break;
       }
 
-      case "reset": {
-        if (!isOrganiser) {
-          await interaction.reply({
-            content: "You do not have permission to run this command!",
-            ephemeral: true,
-          });
-          return;
-        }
-
-        game.resetTeams();
-
+      if (!game.announced) {
         await interaction.reply({
-          content: "Teams have been reset!",
-          ephemeral: false,
-        });
-        break;
-      }
-
-      case "list": {
-        if (!game.announced) {
-          await interaction.reply({
-            content: "Game does not exist.",
-          });
-        } else {
-          const embed = this.createTeamViewEmbed(game);
-          await interaction.reply(embed);
-        }
-        break;
-      }
-
-      default:
-        await interaction.reply({
-          content: "Invalid subcommand!",
+          content:
+            "A game has not been announced yet. Please use `/announce start`.",
           ephemeral: true,
         });
+        return;
+      }
+
+      if (this.teamPickingSession) {
+        await interaction.reply({
+          content:
+            "A team picking session is already in process. Cancel that one is necessary before creating another.",
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const method = interaction.options.getString("method");
+
+      switch (method) {
+        case "random":
+          this.teamPickingSession = new RandomTeamPickingSession();
+          await this.teamPickingSession.initialize(interaction);
+          break;
+        case "draft":
+          this.teamPickingSession = new DraftTeamPickingSession();
+          await this.teamPickingSession.initialize(interaction);
+          break;
+      }
+    } catch (error) {
+      console.error(error);
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({
+          content: "An error occurred while executing this command.",
+          ephemeral: true,
+        });
+      }
     }
   }
 
@@ -180,7 +247,7 @@ export default class TeamCommand implements Command {
         { name: "🔴 Red Team 🔴   ", value: redPlayersString, inline: true }
       );
 
-    return { embeds: [embed], ephemeral: true };
+    return { embeds: [embed], ephemeral: false };
   }
 
   private async setRoles(guild: Guild) {
@@ -209,7 +276,6 @@ export default class TeamCommand implements Command {
     if (this.teamPickingSession) {
       await this.teamPickingSession.handleInteraction(interaction);
       const state = this.teamPickingSession.getState();
-      log(state);
       switch (state) {
         case "finalized":
           this.setRoles(interaction.guild);
@@ -217,7 +283,6 @@ export default class TeamCommand implements Command {
         case "cancelled":
           delete this.teamPickingSession;
           this.teamPickingSession = undefined;
-
           break;
       }
     }

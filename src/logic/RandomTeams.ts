@@ -1,10 +1,8 @@
-import { ConfigManager } from "../ConfigManager";
+import { ConfigManager } from "../ConfigManager.js";
 import { ButtonInteraction } from "discord.js";
 import { GuildMemberRoleManager } from "discord.js";
 
 export class RandomTeams {
-  constructor() {}
-
   public async handleButtonInteraction(interaction: ButtonInteraction) {
     const config = ConfigManager.getConfig();
 

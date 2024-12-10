@@ -2,13 +2,13 @@ import { $Enums, AnniMap, Team } from "@prisma/client";
 import { Snowflake } from "discord.js";
 import { PlayerInstance } from "./PlayerInstance";
 import { MapVoteManager } from "../logic/MapVoteManager";
-import { MinerushVoteManager } from "logic/MinerushVoteManager";
-import { MojangAPI } from "api/MojangAPI";
-import { prismaClient } from "database/prismaClient";
+import { MojangAPI } from "../api/MojangAPI";
+import { MinerushVoteManager } from "../logic/MinerushVoteManager";
+import { prismaClient } from "./prismaClient";
 
 // wrapper class for Game
-// todo bad naming
 export class GameInstance {
+  private static instance: GameInstance;
   gameId?: string;
 
   finished?: boolean;
@@ -29,8 +29,40 @@ export class GameInstance {
   mapVoteManager?: MapVoteManager;
   minerushVoteManager?: MinerushVoteManager;
 
-  constructor() {
+  private constructor() {
     this.settings = {};
+  }
+
+  public static getInstance(): GameInstance {
+    if (!GameInstance.instance) {
+      GameInstance.instance = new GameInstance();
+    }
+    return GameInstance.instance;
+  }
+
+  public reset() {
+    this.gameId = undefined;
+    this.finished = undefined;
+    this.announced = false;
+    this.startTime = undefined;
+    this.endTime = undefined;
+    this.settings = {
+      minerushing: undefined,
+      bannedClasses: undefined,
+      map: undefined,
+    };
+    this.teams = { RED: [], BLUE: [], UNDECIDED: [] };
+    this.mapVoteManager = undefined;
+    this.minerushVoteManager = undefined;
+  }
+
+  public static async resetGameInstance() {
+    const currentInstance = this.getInstance();
+    if (currentInstance) {
+      // FIXME commit to database method here
+    }
+    this.instance.reset();
+    this.instance = new GameInstance();
   }
 
   public startMinerushVote() {
@@ -77,7 +109,7 @@ export class GameInstance {
     ignUsed: string
   ) {
     const player = await PlayerInstance.byDiscordSnowflake(discordSnowflake);
-    let uuid: string | undefined;
+    let uuid: string | undefined | null;
 
     if (ignUsed === "") {
       uuid = player.primaryMinecraftAccount;
@@ -186,5 +218,51 @@ export class GameInstance {
       oldCaptain: oldTeamCaptain?.discordSnowflake,
       newCaptain: player.discordSnowflake,
     };
+  }
+
+  public async testValues() {
+    this.gameId = "default-game-id";
+    this.finished = false;
+    this.announced = true;
+    this.startTime = new Date("2025-01-01T00:00:00Z");
+    this.endTime = new Date("2025-01-01T02:00:00Z");
+    this.settings = {
+      minerushing: true,
+      bannedClasses: ["SNIPER"],
+      map: "DUELSTAL",
+    };
+
+    await this.fillTeamsWithTestPlayers(10);
+
+    this.mapVoteManager = new MapVoteManager([
+      "AFTERMATH1V1",
+      "ANDORRA1V1",
+      "DUELSTAL",
+    ] as AnniMap[]);
+
+    this.minerushVoteManager = new MinerushVoteManager();
+
+    // await this.mapVoteManager.startMapVote();
+    // await this.minerushVoteManager.startMinerushVote();
+  }
+
+  private async fillTeamsWithTestPlayers(playerCount: number) {
+    this.teams.RED = [];
+    this.teams.BLUE = [];
+    this.teams.UNDECIDED = [];
+    const playerInstances: PlayerInstance[] = [];
+
+    for (let i = 0; i < playerCount; i++) {
+      const player = await PlayerInstance.testValues();
+      playerInstances.push(player);
+    }
+
+    playerInstances.forEach((player, index) => {
+      if (index % 2 === 0) {
+        this.teams.RED.push(player);
+      } else {
+        this.teams.BLUE.push(player);
+      }
+    });
   }
 }

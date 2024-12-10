@@ -1,4 +1,4 @@
-import { Channels } from "Channels";
+import { Channels } from "../Channels";
 import { Message } from "discord.js";
 import EventEmitter from "events";
 
@@ -23,9 +23,7 @@ export class MinerushVoteManager extends EventEmitter<MinerushVoteManagerEvents>
         .sorted((firstValue, secondValue, firstKey, secondKey) => {
           return secondKey - firstKey;
         })
-        .first()?.text === "Yes"
-        ? true
-        : false;
+        .first()?.text === "Yes";
 
     this.emit("pollEnd", answer);
   }
