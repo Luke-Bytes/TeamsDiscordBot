@@ -2,6 +2,7 @@ import {
   ButtonInteraction,
   ChatInputCommandInteraction,
   EmbedBuilder,
+  Guild,
   GuildMemberRoleManager,
   SlashCommandBuilder,
   SlashCommandSubcommandsOnlyBuilder,
@@ -25,7 +26,7 @@ export default class TeamCommand implements Command {
     "random-team-generate-cancel",
   ];
 
-  private teamPickingSession?: TeamPickingSession;
+  teamPickingSession?: TeamPickingSession;
 
   constructor() {
     this.data = new SlashCommandBuilder()
@@ -173,6 +174,38 @@ export default class TeamCommand implements Command {
             content: "Invalid subcommand!",
             ephemeral: true,
           });
+          return;
+      }
+
+      if (!game.announced) {
+        await interaction.reply({
+          content:
+            "A game has not been announced yet. Please use `/announce start`.",
+          ephemeral: true,
+        });
+        return;
+      }
+
+      if (this.teamPickingSession) {
+        await interaction.reply({
+          content:
+            "A team picking session is already in process. Cancel that one is necessary before creating another.",
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const method = interaction.options.getString("method");
+
+      switch (method) {
+        case "random":
+          this.teamPickingSession = new RandomTeamPickingSession();
+          await this.teamPickingSession.initialize(interaction);
+          break;
+        case "draft":
+          this.teamPickingSession = new DraftTeamPickingSession();
+          await this.teamPickingSession.initialize(interaction);
+          break;
       }
     } catch (error) {
       console.error(error);
@@ -217,13 +250,36 @@ export default class TeamCommand implements Command {
     return { embeds: [embed], ephemeral: false };
   }
 
+  private async setRoles(guild: Guild) {
+    const game = CurrentGameManager.getCurrentGame();
+    const config = ConfigManager.getConfig();
+
+    const redTeam = game.getPlayersOfTeam("RED");
+    for (let i = 0; i < redTeam.length; i++) {
+      const player = redTeam[i];
+      const discordUser = await guild.members.fetch(player.discordSnowflake);
+      await discordUser?.roles.remove(config.roles.blueTeamRole);
+      discordUser?.roles.add(config.roles.redTeamRole);
+    }
+
+    const blueTeam = game.getPlayersOfTeam("BLUE");
+    for (let i = 0; i < blueTeam.length; i++) {
+      const player = blueTeam[i];
+      const discordUser = await guild.members.fetch(player.discordSnowflake);
+      await discordUser?.roles.remove(config.roles.redTeamRole);
+      discordUser?.roles.add(config.roles.blueTeamRole);
+    }
+  }
+
   public async handleButtonPress(interaction: ButtonInteraction) {
+    if (!interaction.guild) return;
     if (this.teamPickingSession) {
       await this.teamPickingSession.handleInteraction(interaction);
-
       const state = this.teamPickingSession.getState();
       switch (state) {
-        case "finalized": //for now these do the same thing but we'll see
+        case "finalized":
+          this.setRoles(interaction.guild);
+          break;
         case "cancelled":
           delete this.teamPickingSession;
           this.teamPickingSession = undefined;
