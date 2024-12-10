@@ -11,8 +11,6 @@ import RoleCommand from "./RoleCommand";
 import StatsCommand from "./StatsCommand";
 import TeamCommand from "./TeamCommand";
 import TestCommand from "./TestCommand";
-import CleanupCommand from "./CleanUpCommand";
-import ScenarioCommand from "./ScenarioCommand";
 
 export class CommandHandler {
   commands: Command[] = [];
@@ -30,7 +28,6 @@ export class CommandHandler {
 
   public loadCommands() {
     this.commands = [
-<<<<<<< HEAD
       this.announcementCommand,
       this.captainCommand,
       this.ignsCommand,
@@ -40,19 +37,6 @@ export class CommandHandler {
       this.statsCommand,
       this.teamCommand,
       this.testCommand,
-=======
-      new AnnouncementCommand(),
-      new CaptainCommand(),
-      new IgnsCommand(),
-      new LeaderboardsCommand(),
-      new RegisterCommand(),
-      new RoleCommand(),
-      new StatsCommand(),
-      new TeamCommand(),
-      new TestCommand(),
-      new CleanupCommand(),
-      new ScenarioCommand(this),
->>>>>>> 19f8ece97510e3f903d4fbea883e4958f8378215
     ];
   }
 
