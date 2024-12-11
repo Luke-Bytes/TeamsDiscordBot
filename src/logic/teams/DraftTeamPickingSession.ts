@@ -15,7 +15,7 @@ import { Channels } from "../../Channels";
 import { CurrentGameManager } from "../CurrentGameManager";
 import { PlayerInstance } from "../../database/PlayerInstance";
 import { Team } from "@prisma/client";
-import { ConfigManager } from "ConfigManager";
+import { ConfigManager } from "../../ConfigManager";
 
 export class DraftTeamPickingSession extends TeamPickingSession {
   state: TeamPickingSessionState = "inProgress";
@@ -183,7 +183,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     }
 
     switch (interaction.customId) {
-      case "draft-accept":
+      case "draft-accept": {
         const embed = this.createDraftEmbed(true, false);
         await this.finalizeMessage?.edit({
           embeds: embed.embeds,
@@ -196,6 +196,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
 
         this.state = "finalized";
         break;
+      }
       case "draft-cancel":
         await this.embedMessage?.delete();
         await interaction.channel.send("Draft picking cancelled.");

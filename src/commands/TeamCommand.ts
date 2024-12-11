@@ -239,6 +239,8 @@ export default class TeamCommand implements Command {
       switch (state) {
         case "finalized":
           this.setRoles(interaction.guild);
+          this.teamPickingSession = undefined;
+          break;
         case "cancelled":
           this.teamPickingSession = undefined;
           break;
