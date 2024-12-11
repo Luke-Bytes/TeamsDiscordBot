@@ -75,19 +75,18 @@ export default class UnregisterCommand implements Command {
         discordUserId
       );
 
-    if (result.error) {
+    if (!result?.error) {
+      const message = PermissionsUtil.isSameUser(interaction, targetUser.id)
+        ? `You have successfully unregistered from the game!`
+        : `${discordUserName} has been successfully unregistered.`;
+
       await interaction.reply({
-        content: result.error,
-        ephemeral: false,
-      });
-    } else if (PermissionsUtil.isSameUser(interaction, targetUser.id)) {
-      await interaction.reply({
-        content: `You have successfully unregistered from the game!`,
+        content: message,
         ephemeral: false,
       });
     } else {
       await interaction.reply({
-        content: `${discordUserName} has been successfully unregistered.`,
+        content: result?.error || `An unexpected error occurred.`,
         ephemeral: false,
       });
     }

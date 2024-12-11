@@ -178,20 +178,6 @@ export class GameInstance {
     this.teams[playerIndex as Team] = this.teams[playerIndex as Team].filter(
       (player) => player.discordSnowflake !== discordSnowflake
     );
-
-    try {
-      await prismaClient.player.removeFromCurrentGame(discordSnowflake);
-
-      return {
-        error: false,
-        removedPlayerId: discordSnowflake,
-      } as const;
-    } catch (error) {
-      console.error(`Error removing player ${discordSnowflake}:`, error);
-      return {
-        error: "Failed to remove the player from the game.",
-      } as const;
-    }
   }
 
   public getPlayers() {

@@ -71,35 +71,6 @@ export const prismaClient = new PrismaClient().$extends({
 
         return { error: false };
       },
-
-      async removeFromCurrentGame(
-        discordSnowflake: string
-      ): Promise<{ error: false } | { error: string }> {
-        try {
-          // Find the player by discord ID
-          const player = await prismaClient.player.findUnique({
-            where: { discordSnowflake },
-          });
-
-          if (!player) {
-            return { error: "Player not found." };
-          }
-
-          await prismaClient.gameParticipation.deleteMany({
-            where: { playerId: player.id },
-          });
-
-          return { error: false };
-        } catch (error) {
-          console.error(
-            `Error removing player ${discordSnowflake} from games:`,
-            error
-          );
-          return {
-            error: "Failed to remove the player from the current game.",
-          };
-        }
-      },
     },
   },
 });
