@@ -24,6 +24,8 @@ export default class TeamCommand implements Command {
     "random-team-accept",
     "random-team-generate-reroll",
     "random-team-generate-cancel",
+    "draft-accept",
+    "draft-cancel",
   ];
 
   teamPickingSession?: TeamPickingSession;
@@ -111,28 +113,6 @@ export default class TeamCommand implements Command {
               await this.teamPickingSession.initialize(interaction);
               break;
           }
-
-          const redTeam = game.getPlayersOfTeam("RED");
-          for (const player of redTeam) {
-            const discordUser = await interaction.guild?.members.fetch(
-              player.discordSnowflake
-            );
-            await discordUser?.roles.remove(config.roles.blueTeamRole);
-            discordUser?.roles.add(config.roles.redTeamRole);
-          }
-
-          const blueTeam = game.getPlayersOfTeam("BLUE");
-          for (const player of blueTeam) {
-            const discordUser = await interaction.guild?.members.fetch(
-              player.discordSnowflake
-            );
-            await discordUser?.roles.remove(config.roles.redTeamRole);
-            discordUser?.roles.add(config.roles.blueTeamRole);
-          }
-
-          await interaction.editReply({
-            content: "Teams generated successfully!",
-          });
           break;
         }
 
@@ -148,6 +128,8 @@ export default class TeamCommand implements Command {
           await interaction.deferReply({ ephemeral: false });
 
           game.resetTeams();
+
+          this.teamPickingSession = undefined;
 
           await interaction.editReply({
             content: "Teams have been reset!",
@@ -184,28 +166,6 @@ export default class TeamCommand implements Command {
           ephemeral: true,
         });
         return;
-      }
-
-      if (this.teamPickingSession) {
-        await interaction.reply({
-          content:
-            "A team picking session is already in process. Cancel that one is necessary before creating another.",
-          ephemeral: true,
-        });
-        return;
-      }
-
-      const method = interaction.options.getString("method");
-
-      switch (method) {
-        case "random":
-          this.teamPickingSession = new RandomTeamPickingSession();
-          await this.teamPickingSession.initialize(interaction);
-          break;
-        case "draft":
-          this.teamPickingSession = new DraftTeamPickingSession();
-          await this.teamPickingSession.initialize(interaction);
-          break;
       }
     } catch (error) {
       console.error(error);
@@ -279,9 +239,7 @@ export default class TeamCommand implements Command {
       switch (state) {
         case "finalized":
           this.setRoles(interaction.guild);
-          break;
         case "cancelled":
-          delete this.teamPickingSession;
           this.teamPickingSession = undefined;
           break;
       }

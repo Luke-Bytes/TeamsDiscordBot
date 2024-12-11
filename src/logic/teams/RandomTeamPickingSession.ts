@@ -34,17 +34,35 @@ export class RandomTeamPickingSession extends TeamPickingSession {
   public async initialize(interaction: ChatInputCommandInteraction) {
     const game = CurrentGameManager.getCurrentGame();
 
+    this.proposedTeams = { ...game.teams };
     this.redCaptain = game.getCaptainOfTeam("RED");
     this.blueCaptain = game.getCaptainOfTeam("BLUE");
 
-    this.proposedTeams = { ...game.teams };
+    if (!this.redCaptain && !this.blueCaptain) {
+      await interaction.editReply({
+        content:
+          "The teams do not have captains. Please use `/captain set` to set the captains of the teams.",
+      });
+      this.state = "cancelled";
+      return;
+    } else if (!this.redCaptain) {
+      await interaction.editReply({
+        content:
+          "Red team does not have a captain. Please use `/captain set` to set the captains of Red team.",
+      });
+      this.state = "cancelled";
+      return;
+    } else if (!this.blueCaptain) {
+      await interaction.editReply({
+        content:
+          "Blue team does not have a captain. Please use `/captain set` to set the captains of Blue team.",
+      });
+      this.state = "cancelled";
+      return;
+    }
 
     this.shuffle();
     const embed = this.createTeamGenerateEmbed(game);
-
-    if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferReply({ ephemeral: true });
-    }
 
     this.embedMessage = await interaction.editReply(embed);
   }
@@ -101,30 +119,31 @@ export class RandomTeamPickingSession extends TeamPickingSession {
     const redPlayers: PlayerInstance[] = this.proposedTeams.RED;
     const bluePlayers: PlayerInstance[] = this.proposedTeams.BLUE;
 
-    const bluePlayersString =
-      bluePlayers.length > 0
-        ? `**${bluePlayers[0].ignUsed ?? "Unknown Player"}**\n` +
-          bluePlayers
-            .slice(1)
-            .map((player) => player.ignUsed ?? "Unknown Player")
-            .join("\n")
+    const getString = (players: PlayerInstance[]) => {
+      const captain = players.filter((p) => p.captain)[0];
+      return players.length > 0
+        ? `**${captain.ignUsed ?? "Unknown Player"}**\n` +
+            players
+              .filter((p) => !p.captain)
+              .map((player) => player.ignUsed ?? "Unknown Player")
+              .join("\n")
         : "No players";
-
-    const redPlayersString =
-      redPlayers.length > 0
-        ? `**${redPlayers[0].ignUsed ?? "Unknown Player"}**\n` +
-          redPlayers
-            .slice(1)
-            .map((player) => player.ignUsed ?? "Unknown Player")
-            .join("\n")
-        : "No players";
+    };
 
     const embed = new EmbedBuilder()
       .setColor("#0099ff")
       .setTitle("Randomised Teams")
       .addFields(
-        { name: "🔵 Blue Team 🔵  ", value: bluePlayersString, inline: true },
-        { name: "🔴 Red Team 🔴   ", value: redPlayersString, inline: true }
+        {
+          name: "🔵 Blue Team 🔵  ",
+          value: getString(bluePlayers),
+          inline: true,
+        },
+        {
+          name: "🔴 Red Team 🔴   ",
+          value: getString(redPlayers),
+          inline: true,
+        }
       )
       .setFooter({ text: "Choose an action below." });
 

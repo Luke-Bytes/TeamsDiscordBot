@@ -173,23 +173,7 @@ export class GameInstance {
   public resetTeams() {
     this.teams["BLUE"] = [];
     this.teams["RED"] = [];
-  }
-
-  public shuffleTeams(shuffleMethod: "random") {
-    switch (shuffleMethod) {
-      case "random":
-        {
-          const shuffled = this.getPlayers().sort(() => Math.random() - 0.5);
-          const half = Math.ceil(shuffled.length / 2);
-
-          const blue = shuffled.slice(0, half);
-          const red = shuffled.slice(half);
-
-          this.teams.BLUE = blue;
-          this.teams.RED = red;
-        }
-        break;
-    }
+    this.teams["UNDECIDED"] = [];
   }
 
   public getCaptainOfTeam(team: Team) {
@@ -207,6 +191,10 @@ export class GameInstance {
 
     if (!this.teams[team].includes(player)) {
       const otherTeam = team === "RED" ? "BLUE" : "RED";
+
+      if (this.teams["UNDECIDED"].includes(player)) {
+        this.teams["UNDECIDED"].splice(this.teams["UNDECIDED"].indexOf(player));
+      }
 
       if (this.teams[otherTeam].includes(player)) {
         this.teams[otherTeam].splice(this.teams[otherTeam].indexOf(player));
