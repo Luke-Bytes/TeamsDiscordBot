@@ -10,7 +10,6 @@ import { prismaClient } from "./prismaClient";
 export class GameInstance {
   private static instance: GameInstance;
   gameId?: string;
-
   finished?: boolean;
   announced = false;
   startTime?: Date;
@@ -19,18 +18,19 @@ export class GameInstance {
     minerushing?: boolean;
     bannedClasses?: $Enums.AnniClass[];
     map?: $Enums.AnniMap;
-  };
+  } = {};
 
   teams: Record<Team | "UNDECIDED", PlayerInstance[]> = {
     RED: [],
     BLUE: [],
     UNDECIDED: [],
   };
+
   mapVoteManager?: MapVoteManager;
   minerushVoteManager?: MinerushVoteManager;
 
   private constructor() {
-    this.settings = {};
+    this.reset();
   }
 
   public static getInstance(): GameInstance {
