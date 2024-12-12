@@ -61,7 +61,6 @@ export class GameInstance {
     if (currentInstance) {
       // FIXME commit to database method here
     }
-    this.instance.reset();
     this.instance = new GameInstance();
   }
 
@@ -189,8 +188,9 @@ export class GameInstance {
   }
 
   public resetTeams() {
-    this.teams["BLUE"] = [];
+    this.teams["UNDECIDED"].push(...this.teams["RED"], ...this.teams["BLUE"]);
     this.teams["RED"] = [];
+    this.teams["BLUE"] = [];
   }
 
   public createTeams(createMethod: "random") {
