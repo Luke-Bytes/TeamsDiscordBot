@@ -2,7 +2,7 @@ import { GuildMember, ChatInputCommandInteraction } from "discord.js";
 import { Config, ConfigManager } from "../ConfigManager";
 
 export class PermissionsUtil {
-  static config: Config = ConfigManager.getConfig();
+  static readonly config: Config = ConfigManager.getConfig();
 
   static isChannel(
     interaction: ChatInputCommandInteraction,

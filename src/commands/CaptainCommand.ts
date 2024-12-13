@@ -103,16 +103,14 @@ export default class CaptainCommand implements Command {
         captains.oldCaptain
       );
       await oldTeamCaptain.roles.remove(
-        PermissionsUtil.config.roles.captainRole as Snowflake
+        PermissionsUtil.config.roles.captainRole
       );
     }
 
     const newTeamCaptain = await interaction.guild.members.fetch(
       captains.newCaptain
     );
-    await newTeamCaptain.roles.add(
-      PermissionsUtil.config.roles.captainRole as Snowflake
-    );
+    await newTeamCaptain.roles.add(PermissionsUtil.config.roles.captainRole);
 
     await interaction.reply({
       content: `Set captain of team **${teamColor}** to **${player.ignUsed}**`,
