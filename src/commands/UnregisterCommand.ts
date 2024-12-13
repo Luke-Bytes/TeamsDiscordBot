@@ -3,26 +3,20 @@ import { Command } from "./CommandInterface.js";
 import { PermissionsUtil } from "../util/PermissionsUtil.js";
 import { CurrentGameManager } from "../logic/CurrentGameManager.js";
 
-export default class RegisterCommand implements Command {
+export default class UnregisterCommand implements Command {
   public data: SlashCommandBuilder;
-  public name = "register";
-  public description = "Register for friendly war!";
+  public name = "unregister";
+  public description = "Unregister from the announced game!";
   public buttonIds: string[] = [];
 
   constructor() {
     this.data = new SlashCommandBuilder()
       .setName(this.name)
       .setDescription(this.description)
-      .addStringOption((option) =>
-        option
-          .setName("ingamename")
-          .setDescription("The in-game name to register")
-          .setRequired(true)
-      )
       .addUserOption((option) =>
         option
           .setName("discorduser")
-          .setDescription("The Discord user to register (organisers only)")
+          .setDescription("The Discord user to unregister (organisers only)")
           .setRequired(false)
       ) as SlashCommandBuilder;
   }
@@ -30,7 +24,7 @@ export default class RegisterCommand implements Command {
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     if (!PermissionsUtil.isChannel(interaction, "registration")) {
       await interaction.reply({
-        content: "You can only register in the registration channel.",
+        content: "You can only unregister in the registration channel.",
         ephemeral: true,
       });
       return;
@@ -44,57 +38,55 @@ export default class RegisterCommand implements Command {
       return;
     }
 
-    const inGameName = interaction.options.getString("ingamename", true);
     const targetUser =
       interaction.options.getUser("discorduser") || interaction.user;
 
-    const discordUserId = targetUser.id;
-    const discordUserName = targetUser.username;
-
-    const member = interaction.guild?.members.cache.get(interaction.user.id);
-
     if (
-      !PermissionsUtil.hasRole(member, "organiserRole") &&
+      !PermissionsUtil.hasRole(
+        interaction.guild?.members.cache.get(interaction.user.id),
+        "organiserRole"
+      ) &&
       !PermissionsUtil.isSameUser(interaction, targetUser.id)
     ) {
       await interaction.reply({
-        content: "You do not have permission to register other users.",
+        content: "You do not have permission to unregister other users.",
         ephemeral: true,
       });
       return;
     }
 
-    const isAlreadyRegistered = CurrentGameManager.getCurrentGame()
+    const discordUserId = targetUser.id;
+    const discordUserName = targetUser.username;
+
+    const isRegistered = CurrentGameManager.getCurrentGame()
       .getPlayers()
       .some((player) => player.discordSnowflake === discordUserId);
 
-    if (isAlreadyRegistered) {
+    if (!isRegistered) {
       await interaction.reply({
-        content: "You have already registered for the announced game!",
+        content: `${discordUserName} is not registered for the announced game.`,
         ephemeral: false,
       });
       return;
     }
 
     const result =
-      await CurrentGameManager.getCurrentGame().addPlayerByDiscordId(
-        discordUserId,
-        inGameName
+      await CurrentGameManager.getCurrentGame().removePlayerByDiscordId(
+        discordUserId
       );
 
-    if (result.error) {
+    if (!result?.error) {
+      const message = PermissionsUtil.isSameUser(interaction, targetUser.id)
+        ? `You have successfully unregistered from the game!`
+        : `${discordUserName} has been successfully unregistered.`;
+
       await interaction.reply({
-        content: result.error,
-        ephemeral: false,
-      });
-    } else if (PermissionsUtil.isSameUser(interaction, targetUser.id)) {
-      await interaction.reply({
-        content: `You have successfully registered as ${inGameName}!`,
+        content: message,
         ephemeral: false,
       });
     } else {
       await interaction.reply({
-        content: `${discordUserName} has been successfully registered as ${inGameName}`,
+        content: result?.error || `An unexpected error occurred.`,
         ephemeral: false,
       });
     }

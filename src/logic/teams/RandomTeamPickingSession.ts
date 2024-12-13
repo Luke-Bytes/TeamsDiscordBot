@@ -14,6 +14,7 @@ import {
 import { GameInstance } from "../../database/GameInstance";
 import { PlayerInstance } from "../../database/PlayerInstance";
 import { CurrentGameManager } from "../../logic/CurrentGameManager";
+import { Team } from "@prisma/client";
 
 export class RandomTeamPickingSession extends TeamPickingSession {
   state: TeamPickingSessionState = "inProgress";
@@ -27,7 +28,7 @@ export class RandomTeamPickingSession extends TeamPickingSession {
   public async initialize(interaction: ChatInputCommandInteraction) {
     const game = CurrentGameManager.getCurrentGame();
 
-    game.shuffleTeams("random");
+    game.createTeams("random");
     const embed = this.createTeamGenerateEmbed(game);
 
     if (!interaction.deferred && !interaction.replied) {
@@ -39,25 +40,40 @@ export class RandomTeamPickingSession extends TeamPickingSession {
 
   public async handleInteraction(interaction: ButtonInteraction) {
     const game = CurrentGameManager.getCurrentGame();
+
     switch (interaction.customId) {
-      case "random-team-accept":
-        {
-          const { embeds } = this.createTeamGenerateEmbed(game);
-          await this.embedMessage?.edit({ embeds, components: [] });
-          await interaction.update({});
-          this.state = "finalized";
-        }
-        break;
-      case "random-team-generate-reroll":
-        {
-          game.shuffleTeams("random");
-          const embed = this.createTeamGenerateEmbed(game);
+      case "random-team-accept": {
+        const simulatedTeams = game.simulateShuffledTeams();
+        game.teams.BLUE = simulatedTeams.BLUE;
+        game.teams.RED = simulatedTeams.RED;
+        game.teams.UNDECIDED = [];
 
-          await this.embedMessage!.edit(embed);
+        const { embeds, components } = this.createTeamGenerateEmbed(game);
+        await this.embedMessage?.edit({
+          embeds,
+          components,
+        });
 
-          await interaction.update({});
-        }
+        await interaction.update({});
+        this.state = "finalized";
         break;
+      }
+
+      case "random-team-generate-reroll": {
+        const simulatedTeams = game.simulateShuffledTeams();
+        const { embeds, components } = this.createTeamGenerateEmbed(
+          game,
+          simulatedTeams
+        );
+        await this.embedMessage?.edit({
+          embeds,
+          components,
+        });
+
+        await interaction.update({});
+        break;
+      }
+
       case "random-team-generate-cancel":
         await this.embedMessage?.delete();
         this.state = "cancelled";
@@ -65,41 +81,39 @@ export class RandomTeamPickingSession extends TeamPickingSession {
     }
   }
 
-  createTeamGenerateEmbed(game: GameInstance) {
-    const redPlayers: PlayerInstance[] = game.getPlayersOfTeam("RED");
-    const bluePlayers: PlayerInstance[] = game.getPlayersOfTeam("BLUE");
+  createTeamGenerateEmbed(
+    game: GameInstance,
+    simulatedTeams?: Record<Team, PlayerInstance[]>
+  ) {
+    const teams = simulatedTeams || game.teams;
 
-    const bluePlayersString =
-      bluePlayers.length > 0
-        ? `**${bluePlayers[0].ignUsed ?? "Unknown Player"}**\n` +
-          bluePlayers
-            .slice(1)
-            .map((player) => player.ignUsed ?? "Unknown Player")
+    const formatTeamString = (players: PlayerInstance[]) =>
+      players.length
+        ? players
+            .map((player, index) =>
+              index === 0
+                ? `**${player.ignUsed ?? "Unknown Player"}**`
+                : `${player.ignUsed ?? "Unknown Player"}`
+            )
             .join("\n")
         : "No players";
 
-    const redPlayersString =
-      redPlayers.length > 0
-        ? `**${redPlayers[0].ignUsed ?? "Unknown Player"}**\n` +
-          redPlayers
-            .slice(1)
-            .map((player) => player.ignUsed ?? "Unknown Player")
-            .join("\n")
-        : "No players";
+    const bluePlayersString = formatTeamString(teams.BLUE);
+    const redPlayersString = formatTeamString(teams.RED);
 
     const embed = new EmbedBuilder()
       .setColor("#0099ff")
       .setTitle("Randomised Teams")
       .addFields(
-        { name: "🔵 Blue Team 🔵  ", value: bluePlayersString, inline: true },
-        { name: "🔴 Red Team 🔴   ", value: redPlayersString, inline: true }
+        { name: "🔵 Blue Team 🔵", value: bluePlayersString, inline: true },
+        { name: "🔴 Red Team 🔴", value: redPlayersString, inline: true }
       )
-      .setFooter({ text: "Choose an action below." });
+      .setFooter({ text: "This is a preview. Confirm to lock teams." });
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId("random-team-accept")
-        .setLabel("Accept")
+        .setLabel("Confirm Teams")
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
         .setCustomId("random-team-generate-reroll")
@@ -110,6 +124,7 @@ export class RandomTeamPickingSession extends TeamPickingSession {
         .setLabel("Cancel")
         .setStyle(ButtonStyle.Danger)
     );
+
     return { embeds: [embed], components: [row] };
   }
 
