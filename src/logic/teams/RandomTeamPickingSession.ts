@@ -47,6 +47,8 @@ export class RandomTeamPickingSession extends TeamPickingSession {
         game.teams.BLUE = simulatedTeams.BLUE;
         game.teams.RED = simulatedTeams.RED;
         game.teams.UNDECIDED = [];
+        simulatedTeams.BLUE = [];
+        simulatedTeams.RED = [];
 
         const { embeds, components } = this.createTeamGenerateEmbed(game);
         await this.embedMessage?.edit({

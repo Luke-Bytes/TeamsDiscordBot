@@ -14,6 +14,7 @@ import TestCommand from "./TestCommand";
 import CleanupCommand from "./CleanUpCommand";
 import ScenarioCommand from "./ScenarioCommand";
 import UnregisterCommand from "./UnregisterCommand";
+import RegisteredCommand from "../commands/RegisteredCommand";
 import RestartCommand from "../commands/RestartCommand";
 
 export class CommandHandler {
@@ -33,6 +34,7 @@ export class CommandHandler {
       new TestCommand(),
       new CleanupCommand(),
       new ScenarioCommand(),
+      new RegisteredCommand(),
       new RestartCommand(),
     ];
   }
