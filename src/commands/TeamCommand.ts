@@ -15,7 +15,7 @@ import { DraftTeamPickingSession } from "../logic/teams/DraftTeamPickingSession"
 import { RandomTeamPickingSession } from "../logic/teams/RandomTeamPickingSession";
 import { TeamPickingSession } from "../logic/teams/TeamPickingSession";
 import { DiscordUtil } from "../util/DiscordUtil";
-import { PermissionsUtil } from "util/PermissionsUtil";
+import { PermissionsUtil } from "../util/PermissionsUtil";
 
 export default class TeamCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;

@@ -5,7 +5,7 @@ import {
 } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
-import { PlayerInstance } from "database/PlayerInstance";
+import { PlayerInstance } from "../database/PlayerInstance";
 
 export default class RegisteredCommand implements Command {
   name = "registered";
