@@ -14,6 +14,7 @@ import TestCommand from "./TestCommand";
 import CleanupCommand from "./CleanUpCommand";
 import ScenarioCommand from "./ScenarioCommand";
 import UnregisterCommand from "./UnregisterCommand";
+import RestartCommand from "../commands/RestartCommand";
 
 export class CommandHandler {
   commands: Command[] = [];
@@ -32,6 +33,7 @@ export class CommandHandler {
       new TestCommand(),
       new CleanupCommand(),
       new ScenarioCommand(),
+      new RestartCommand(),
     ];
   }
 
