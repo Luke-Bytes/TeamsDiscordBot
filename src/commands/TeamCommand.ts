@@ -2,6 +2,7 @@ import {
   ButtonInteraction,
   ChatInputCommandInteraction,
   EmbedBuilder,
+  Guild,
   GuildMemberRoleManager,
   SlashCommandBuilder,
   SlashCommandSubcommandsOnlyBuilder,
@@ -25,9 +26,11 @@ export default class TeamCommand implements Command {
     "random-team-accept",
     "random-team-generate-reroll",
     "random-team-generate-cancel",
+    "draft-accept",
+    "draft-cancel",
   ];
 
-  private teamPickingSession?: TeamPickingSession;
+  teamPickingSession?: TeamPickingSession;
 
   constructor() {
     this.data = new SlashCommandBuilder()
@@ -100,9 +103,20 @@ export default class TeamCommand implements Command {
             );
             return;
           }
+          const method = interaction.options.getString("method");
+          if (
+            method === "draft" &&
+            !game.getCaptainOfTeam("RED") &&
+            !game.getCaptainOfTeam("BLUE")
+          ) {
+            await DiscordUtil.reply(
+              interaction,
+              "You can't draft teams without setting captains for both teams first!"
+            );
+            return;
+          }
 
           await interaction.deferReply({ ephemeral: false });
-          const method = interaction.options.getString("method");
 
           switch (method) {
             case "random":
@@ -193,6 +207,7 @@ export default class TeamCommand implements Command {
 
           await interaction.deferReply({ ephemeral: false });
           game.resetTeams();
+          this.resetTeamPickingSession();
           await DiscordUtil.editReply(interaction, {
             content: "Teams have been reset!",
           });
@@ -241,6 +256,15 @@ export default class TeamCommand implements Command {
 
         default:
           await DiscordUtil.reply(interaction, "Invalid subcommand!");
+
+          if (!game.announced) {
+            await interaction.reply({
+              content:
+                "A game has not been announced yet. Please use `/announce start`.",
+              ephemeral: true,
+            });
+            return;
+          }
       }
     } catch (error) {
       console.error(error);
@@ -285,10 +309,29 @@ export default class TeamCommand implements Command {
     return { embeds: [embed], ephemeral: false };
   }
 
+  private async setRoles(guild: Guild) {
+    const game = CurrentGameManager.getCurrentGame();
+    const config = ConfigManager.getConfig();
+
+    const redTeam = game.getPlayersOfTeam("RED");
+    for (const element of redTeam) {
+      const discordUser = await guild.members.fetch(element.discordSnowflake);
+      await discordUser?.roles.remove(config.roles.blueTeamRole);
+      discordUser?.roles.add(config.roles.redTeamRole);
+    }
+
+    const blueTeam = game.getPlayersOfTeam("BLUE");
+    for (const element of blueTeam) {
+      const discordUser = await guild.members.fetch(element.discordSnowflake);
+      await discordUser?.roles.remove(config.roles.redTeamRole);
+      discordUser?.roles.add(config.roles.blueTeamRole);
+    }
+  }
+
   public async handleButtonPress(interaction: ButtonInteraction) {
+    if (!interaction.guild) return;
     if (this.teamPickingSession) {
       await this.teamPickingSession.handleInteraction(interaction);
-
       const state = this.teamPickingSession.getState();
       switch (state) {
         case "finalized":
@@ -317,5 +360,9 @@ export default class TeamCommand implements Command {
 
   private resetTeamPickingSession(): void {
     this.teamPickingSession = undefined;
+  }
+
+  public isTeamPickingSessionActive(): boolean {
+    return this.teamPickingSession !== undefined;
   }
 }

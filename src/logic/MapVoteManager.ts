@@ -88,7 +88,7 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
 
   async cancelVote() {
     if (this.pollMessage) {
-      this.pollMessage.delete();
+      await this.pollMessage.delete();
     }
   }
 }

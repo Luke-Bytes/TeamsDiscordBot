@@ -17,4 +17,5 @@ export abstract class TeamPickingSession {
   public abstract handleInteraction(
     interaction: ButtonInteraction
   ): Promise<void>;
+  public abstract handleMessage(message: Message<boolean>): Promise<void>;
 }

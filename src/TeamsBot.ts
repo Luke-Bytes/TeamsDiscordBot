@@ -43,6 +43,12 @@ export class TeamsBot {
       await this.commandHandler.handleInteraction(interaction);
     });
 
+    this.client.on("messageCreate", async (msg) => {
+      if (this.commandHandler.teamCommand.teamPickingSession) {
+        this.commandHandler.teamCommand.teamPickingSession.handleMessage(msg);
+      }
+    });
+
     try {
       await this.client.login(process.env.BOT_TOKEN);
       await Channels.initChannels(this.client);

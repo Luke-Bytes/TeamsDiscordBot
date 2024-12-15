@@ -20,22 +20,38 @@ import RestartCommand from "../commands/RestartCommand";
 export class CommandHandler {
   commands: Command[] = [];
 
+  //todo: just make these singletons.
+  announcementCommand = new AnnouncementCommand();
+  ignsCommand = new IgnsCommand();
+  leaderboardsCommand = new LeaderboardsCommand();
+  registerCommand = new RegisterCommand();
+  roleCommand = new RoleCommand();
+  statsCommand = new StatsCommand();
+  teamCommand = new TeamCommand();
+  captainCommand = new CaptainCommand(this.teamCommand);
+  testCommand = new TestCommand();
+  cleanupCommand = new CleanupCommand();
+  scenarioCommand = new ScenarioCommand();
+  registeredCommand = new RegisteredCommand();
+  unregisterCommand = new UnregisterCommand();
+  restartCommand = new RestartCommand();
+
   public loadCommands() {
     this.commands = [
-      new AnnouncementCommand(),
-      new CaptainCommand(),
-      new IgnsCommand(),
-      new LeaderboardsCommand(),
-      new RegisterCommand(),
-      new UnregisterCommand(),
-      new RoleCommand(),
-      new StatsCommand(),
-      new TeamCommand(),
-      new TestCommand(),
-      new CleanupCommand(),
-      new ScenarioCommand(),
-      new RegisteredCommand(),
-      new RestartCommand(),
+      this.announcementCommand,
+      this.ignsCommand,
+      this.leaderboardsCommand,
+      this.registerCommand,
+      this.roleCommand,
+      this.statsCommand,
+      this.teamCommand,
+      this.captainCommand,
+      this.testCommand,
+      this.cleanupCommand,
+      this.scenarioCommand,
+      this.registeredCommand,
+      this.unregisterCommand,
+      this.restartCommand,
     ];
   }
 
