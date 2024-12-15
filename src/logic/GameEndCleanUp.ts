@@ -58,6 +58,30 @@ export async function cleanUpAfterGame(guild: Guild) {
     console.error("Failed to clean up roles or move members:", error);
   }
 
+  const captainRoleId = config.roles.captainRole;
+
+  try {
+    const captainRole = guild.roles.cache.get(captainRoleId);
+    if (captainRole) {
+      for (const [_, member] of captainRole.members) {
+        try {
+          await member.roles.remove(captainRole);
+          console.log(`Removed Captain role from ${member.user.tag}`);
+        } catch (error) {
+          console.error(
+            `Failed to remove Captain role from ${member.user.tag}:`,
+            error
+          );
+        }
+      }
+      console.log("Completed cleaning up captains.");
+    } else {
+      console.error("Captain role not found.");
+    }
+  } catch (error) {
+    console.error("Failed to clean up captains:", error);
+  }
+
   try {
     const chatChannelIds = [
       config.channels.blueTeamChat,

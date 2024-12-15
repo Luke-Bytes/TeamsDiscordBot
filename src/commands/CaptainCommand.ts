@@ -4,7 +4,7 @@ import {
   Snowflake,
 } from "discord.js";
 import { Command } from "../commands/CommandInterface.js";
-import { ConfigManager } from "../ConfigManager.js";
+import { PermissionsUtil } from "../util/PermissionsUtil.js";
 import { Team } from "@prisma/client";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 
@@ -42,12 +42,6 @@ export default class CaptainCommand implements Command {
   }
 
   async execute(interaction: ChatInputCommandInteraction) {
-    const config = ConfigManager.getConfig();
-    const organiserRoleId = config.roles.organiserRole as Snowflake;
-    const captainRoleId = config.roles.captainRole as Snowflake;
-    const blueTeamRoleId = config.roles.blueTeamRole as Snowflake;
-    const redTeamRoleId = config.roles.redTeamRole as Snowflake;
-
     if (!interaction.guild) {
       await interaction.reply({
         content: "This command can only be used in a server.",
@@ -57,9 +51,9 @@ export default class CaptainCommand implements Command {
     }
 
     const member = await interaction.guild.members.fetch(interaction.user.id);
-    if (!member || !member.roles) {
+    if (!PermissionsUtil.hasRole(member, "organiserRole")) {
       await interaction.reply({
-        content: "Couldn't find role data - do I need more permissions?",
+        content: "Only organisers can use this command!",
         ephemeral: true,
       });
       return;
@@ -67,15 +61,8 @@ export default class CaptainCommand implements Command {
 
     const teamColor = interaction.options.getString("team", true);
     const user = interaction.options.getUser("user", true);
-
-    if (!member.roles.cache.has(organiserRoleId)) {
-      await interaction.reply({
-        content: "Only organisers can use this command!",
-        ephemeral: true,
-      });
-      return;
-    }
     const game = CurrentGameManager.getCurrentGame();
+
     if (!game.announced) {
       await interaction.reply({
         content: "No game has been announced yet!",
@@ -86,13 +73,9 @@ export default class CaptainCommand implements Command {
 
     let player = game
       .getPlayers()
-      .find(
-        (player: { discordSnowflake: string }) =>
-          player.discordSnowflake === user.id
-      );
+      .find((player) => player.discordSnowflake === user.id);
 
     if (!player) {
-      //if the player isn't registered then we register them.
       const result =
         await CurrentGameManager.getCurrentGame().addPlayerByDiscordId(
           user.id,
@@ -119,13 +102,15 @@ export default class CaptainCommand implements Command {
       const oldTeamCaptain = await interaction.guild.members.fetch(
         captains.oldCaptain
       );
-      await oldTeamCaptain.roles.remove(captainRoleId);
+      await oldTeamCaptain.roles.remove(
+        PermissionsUtil.config.roles.captainRole
+      );
     }
 
     const newTeamCaptain = await interaction.guild.members.fetch(
       captains.newCaptain
     );
-    await newTeamCaptain.roles.add(captainRoleId);
+    await newTeamCaptain.roles.add(PermissionsUtil.config.roles.captainRole);
 
     await interaction.reply({
       content: `Set captain of team **${teamColor}** to **${player.ignUsed}**`,

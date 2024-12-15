@@ -10,7 +10,6 @@ import { prismaClient } from "./prismaClient";
 export class GameInstance {
   private static instance: GameInstance;
   gameId?: string;
-
   finished?: boolean;
   announced = false;
   startTime?: Date;
@@ -19,18 +18,19 @@ export class GameInstance {
     minerushing?: boolean;
     bannedClasses?: $Enums.AnniClass[];
     map?: $Enums.AnniMap;
-  };
+  } = {};
 
   teams: Record<Team | "UNDECIDED", PlayerInstance[]> = {
     RED: [],
     BLUE: [],
     UNDECIDED: [],
   };
+
   mapVoteManager?: MapVoteManager;
   minerushVoteManager?: MinerushVoteManager;
 
   private constructor() {
-    this.settings = {};
+    this.reset();
   }
 
   public static getInstance(): GameInstance {
@@ -61,7 +61,6 @@ export class GameInstance {
     if (currentInstance) {
       // FIXME commit to database method here
     }
-    this.instance.reset();
     this.instance = new GameInstance();
   }
 
@@ -162,18 +161,58 @@ export class GameInstance {
     } as const;
   }
 
+  public async removePlayerByDiscordId(discordSnowflake: Snowflake) {
+    const playerIndex = Object.keys(this.teams).find((team) =>
+      this.teams[team as Team].some(
+        (player) => player.discordSnowflake === discordSnowflake
+      )
+    );
+
+    if (!playerIndex) {
+      return {
+        error: "Player not found in any team.",
+      } as const;
+    }
+
+    this.teams[playerIndex as Team] = this.teams[playerIndex as Team].filter(
+      (player) => player.discordSnowflake !== discordSnowflake
+    );
+  }
+
   public getPlayers() {
     return Object.values(this.teams).flat(1);
   }
 
-  public getPlayersOfTeam(team: Team) {
+  public getPlayersOfTeam(team: Team | "UNDECIDED") {
     return this.teams[team];
   }
 
   public resetTeams() {
-    this.teams["BLUE"] = [];
+    this.teams["UNDECIDED"].push(...this.teams["RED"], ...this.teams["BLUE"]);
     this.teams["RED"] = [];
-    this.teams["UNDECIDED"] = [];
+    this.teams["BLUE"] = [];
+  }
+
+  public createTeams(createMethod: "random") {
+    switch (createMethod) {
+      case "random": {
+        const simulatedTeams = this.simulateShuffledTeams();
+        this.teams.BLUE = simulatedTeams.BLUE;
+        this.teams.RED = simulatedTeams.RED;
+        break;
+      }
+    }
+  }
+
+  public simulateShuffledTeams(): Record<Team, PlayerInstance[]> {
+    const undecidedPlayers = Array.from(this.getPlayersOfTeam("UNDECIDED"));
+    const shuffled = undecidedPlayers.sort(() => Math.random() - 0.5);
+    const half = Math.ceil(shuffled.length / 2);
+
+    return {
+      BLUE: shuffled.slice(0, half),
+      RED: shuffled.slice(half),
+    };
   }
 
   public getCaptainOfTeam(team: Team) {
@@ -208,7 +247,11 @@ export class GameInstance {
     };
   }
 
-  public async testValues() {
+  public async testValues(fillOption: "red-blue" | "undecided" | "none") {
+    console.info(
+      `[GAME] Initializing test values with fillOption: ${fillOption}`
+    );
+
     this.gameId = "default-game-id";
     this.finished = false;
     this.announced = true;
@@ -220,7 +263,15 @@ export class GameInstance {
       map: "DUELSTAL",
     };
 
-    await this.fillTeamsWithTestPlayers(10);
+    this.teams.RED = [];
+    this.teams.BLUE = [];
+    this.teams.UNDECIDED = [];
+
+    if (fillOption !== "none") {
+      console.info(`[GAME] Filling teams with test players...`);
+      await this.fillTeamsWithTestPlayers(4, fillOption);
+      console.info(`[GAME] Teams filled. Current teams:`, this.teams);
+    }
 
     this.mapVoteManager = new MapVoteManager([
       "AFTERMATH1V1",
@@ -230,27 +281,40 @@ export class GameInstance {
 
     this.minerushVoteManager = new MinerushVoteManager();
 
-    // await this.mapVoteManager.startMapVote();
-    // await this.minerushVoteManager.startMinerushVote();
+    const pollVotes = false;
+    if (pollVotes) {
+      console.info(`[GAME] Starting map and minerush votes.`);
+      await this.mapVoteManager.startMapVote();
+      await this.minerushVoteManager.startMinerushVote();
+    }
   }
 
-  private async fillTeamsWithTestPlayers(playerCount: number) {
-    this.teams.RED = [];
-    this.teams.BLUE = [];
-    this.teams.UNDECIDED = [];
-    const playerInstances: PlayerInstance[] = [];
+  private async fillTeamsWithTestPlayers(
+    playerCount: number,
+    fillOption: "red-blue" | "undecided"
+  ) {
+    console.info(`[GAME] Creating ${playerCount} test player instances...`);
 
+    const playerInstances: PlayerInstance[] = [];
     for (let i = 0; i < playerCount; i++) {
       const player = await PlayerInstance.testValues();
       playerInstances.push(player);
     }
 
-    playerInstances.forEach((player, index) => {
-      if (index % 2 === 0) {
-        this.teams.RED.push(player);
-      } else {
-        this.teams.BLUE.push(player);
-      }
-    });
+    if (fillOption === "red-blue") {
+      playerInstances.forEach((player, index) => {
+        if (index % 2 === 0) {
+          this.teams.RED.push(player);
+        } else {
+          this.teams.BLUE.push(player);
+        }
+      });
+      console.info(`[GAME] Players assigned to RED and BLUE teams.`);
+    } else if (fillOption === "undecided") {
+      this.teams.UNDECIDED.push(...playerInstances);
+      console.info(`[GAME] Players assigned to UNDECIDED team.`);
+    }
+
+    console.info(`[GAME] Final team state:`, this.teams);
   }
 }

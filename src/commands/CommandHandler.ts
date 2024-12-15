@@ -11,8 +11,11 @@ import RoleCommand from "./RoleCommand";
 import StatsCommand from "./StatsCommand";
 import TeamCommand from "./TeamCommand";
 import TestCommand from "./TestCommand";
-import CleanupCommand from "./CleanUpCommand.js";
-import ScenarioCommand from "./ScenarioCommand.js";
+import CleanupCommand from "./CleanUpCommand";
+import ScenarioCommand from "./ScenarioCommand";
+import UnregisterCommand from "./UnregisterCommand";
+import RegisteredCommand from "../commands/RegisteredCommand";
+import RestartCommand from "../commands/RestartCommand";
 
 export class CommandHandler {
   commands: Command[] = [];
@@ -25,13 +28,17 @@ export class CommandHandler {
   leaderboardsCommand = new LeaderboardsCommand();
   registerCommand = new RegisterCommand();
   roleCommand = new RoleCommand();
-  scenarioCommand = new ScenarioCommand(this);
   statsCommand = new StatsCommand();
   teamCommand = new TeamCommand();
   testCommand = new TestCommand();
+  cleanupCommand = new CleanupCommand();
+  scenarioCommand = new ScenarioCommand();
+  registeredCommand = new RegisteredCommand();
+  restartCommand = new RestartCommand();
 
   public loadCommands() {
     this.commands = [
+
       this.announcementCommand,
       this.captainCommand,
       this.cleanupCommand,
@@ -39,10 +46,13 @@ export class CommandHandler {
       this.leaderboardsCommand,
       this.registerCommand,
       this.roleCommand,
-      this.scenarioCommand,
       this.statsCommand,
       this.teamCommand,
       this.testCommand,
+      this.cleanupCommand,
+      this.scenarioCommand,
+      this.registeredCommand,
+      this.restartCommand,
     ];
   }
 

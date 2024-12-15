@@ -7,6 +7,8 @@ import {
 export type TeamPickingSessionState = "inProgress" | "cancelled" | "finalized";
 
 export abstract class TeamPickingSession {
+  public state: TeamPickingSessionState = "inProgress";
+  public embedMessage?: Message<boolean>;
   public abstract getState(): TeamPickingSessionState;
 
   public abstract initialize(
