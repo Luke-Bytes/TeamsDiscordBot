@@ -16,6 +16,7 @@ import { CurrentGameManager } from "../CurrentGameManager";
 import { PlayerInstance } from "../../database/PlayerInstance";
 import { Team } from "@prisma/client";
 import { ConfigManager } from "../../ConfigManager";
+import { EloUtil } from "../../util/EloUtil";
 
 export class DraftTeamPickingSession extends TeamPickingSession {
   state: TeamPickingSessionState = "inProgress";
@@ -104,29 +105,32 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     const bluePlayers = this.proposedTeams.BLUE;
     const undecidedPlayers = this.proposedTeams.UNDECIDED;
 
-    const getString = (players: PlayerInstance[]) => {
+    const getString = (players: PlayerInstance[], includeElo = false) => {
       const captain = players.filter((p) => p.captain)[0];
       const otherThanCaptain = players.filter((p) => !p.captain);
+
+      const formatPlayer = (player: PlayerInstance) => {
+        const baseInfo = `${EloUtil.getEloEmoji(player.elo)} ${player.ignUsed ?? "Unknown Player"}`;
+        return includeElo
+          ? `${baseInfo} ${EloUtil.getEloFormatted(player)}`
+          : baseInfo;
+      };
+
       if (captain) {
         return (
-          `**${captain.ignUsed ?? "Unknown Player"}**\n` +
-          players
-            .filter((p) => !p.captain)
-            .map((player) => player.ignUsed ?? "Unknown Player")
-            .join("\n")
+          `**${formatPlayer(captain)}**\n` +
+          otherThanCaptain.map(formatPlayer).join("\n")
         );
       } else {
         return otherThanCaptain.length > 0
-          ? otherThanCaptain
-              .map((player) => player.ignUsed ?? "Unknown Player")
-              .join("\n")
+          ? otherThanCaptain.map(formatPlayer).join("\n")
           : "No players";
       }
     };
 
     const embed = new EmbedBuilder()
       .setColor("#0099ff")
-      .setTitle("Randomised Teams")
+      .setTitle("Drafting Teams")
       .addFields(
         {
           name: "🔵 Blue Team 🔵",
@@ -143,7 +147,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     if (!finalized) {
       embed.addFields({
         name: "🟢 Up for Grabs 🟢",
-        value: getString(undecidedPlayers),
+        value: getString(undecidedPlayers, true),
         inline: true,
       });
     }
@@ -219,16 +223,24 @@ export class DraftTeamPickingSession extends TeamPickingSession {
 
     if (!teamPickingChannel.isSendable()) {
       console.error(
-        "Could not send message in team picking channel. Maybe messed up permissions?"
+        "Could not send message in team picking channel. Does the bot have perms?"
       );
       return;
     }
 
     const currentCaptain = this.getTurnCaptain();
-
     if (!currentCaptain) {
-      console.error("no current captain!");
+      console.error("No current captain!");
       return;
+    }
+
+    const messages = await teamPickingChannel.messages.fetch({ limit: 10 });
+    const lastTurnMessage = messages.find((msg) =>
+      msg.content.includes("It's your turn to choose!")
+    );
+
+    if (lastTurnMessage) {
+      await lastTurnMessage.delete();
     }
 
     await teamPickingChannel.send(
@@ -241,12 +253,17 @@ export class DraftTeamPickingSession extends TeamPickingSession {
 
     if (!message.channel.isSendable()) {
       console.error(
-        "Can not send messages in the team picking channel! Maybe messed up permissions."
+        "Can not send messages in the team picking channel! Does the bot have perms?"
       );
       return;
     }
 
     const user = message.author;
+    if (user.bot) return;
+    if (this.getTurnCaptain()?.discordSnowflake !== user.id) {
+      await message.delete();
+      return;
+    }
 
     if (this.getTurnCaptain()?.discordSnowflake !== user.id) return; //todo: maybe delete the message?
 
@@ -261,8 +278,9 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       )[0];
       if (!player) {
         await message.channel.send(
-          "Could not recognize that ping. Maybe the player isn't registered?"
+          `Invalid player ping: <@${firstMention.id}> - Did that player register?`
         );
+        await message.delete();
         return;
       }
     } else {
@@ -271,31 +289,69 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       )[0];
       if (!player) {
         await message.channel.send(
-          "Could not recognize that IGN. Please try again."
+          `Invalid player pick: **${content}** - Did that player register?`
         );
+        await message.delete();
         return;
       }
+    }
+
+    const existingTeam = Object.keys(this.proposedTeams).find((team) =>
+      this.proposedTeams[team as Team].some(
+        (p) => p.discordSnowflake === player.discordSnowflake
+      )
+    );
+
+    if (existingTeam && existingTeam !== "UNDECIDED") {
+      await message.channel.send(
+        `Player ${player.ignUsed} is already picked on the other team!`
+      );
+      return;
+    }
+    // TODO fix so these checks actually checked first, issue with disc snowflake being undefined
+    if (
+      this.redCaptain?.discordSnowflake === player.discordSnowflake ||
+      this.blueCaptain?.discordSnowflake === player.discordSnowflake
+    ) {
+      await message.channel.send(
+        `Player ${player.ignUsed} is the captain of the other team and cannot be picked.`
+      );
+      return;
+    }
+
+    if (!player) {
+      await message.channel.send(
+        "Invalid player ping. Did that player register?"
+      );
+      return;
     }
 
     this.proposedTeams[this.turn!].push(player);
     this.proposedTeams.UNDECIDED = this.proposedTeams.UNDECIDED.filter(
       (p) => p !== player
     );
+    await this.embedMessage?.edit(this.createDraftEmbed(false));
+
+    await message.delete();
+    const messages = await message.channel.messages.fetch({ limit: 10 });
+    const invalidMessages = messages.filter(
+      (msg) => msg.author.bot && msg.content.includes("Invalid player pick:")
+    );
+
+    await Promise.all(invalidMessages.map((msg) => msg.delete()));
+
     await message.channel.send(
       `Player ${player.ignUsed} registered for **${this.turn}** team.`
     );
-
-    await this.embedMessage?.edit(this.createDraftEmbed(false));
 
     this.turn = this.turn === "RED" ? "BLUE" : "RED";
 
     if (this.proposedTeams.UNDECIDED.length === 0) {
       const embed = this.createDraftEmbed(true);
       this.finalizeMessage = await message.channel.send({
-        content: "There are no players to draft. Here is the final draft.",
+        content: "All players have been drafted! Here is the final draft.",
         ...embed,
       });
-
       this.finishedPicking = true;
     } else {
       await this.sendTurnMessage();

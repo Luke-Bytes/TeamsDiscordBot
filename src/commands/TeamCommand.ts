@@ -361,4 +361,8 @@ export default class TeamCommand implements Command {
   private resetTeamPickingSession(): void {
     this.teamPickingSession = undefined;
   }
+
+  public isTeamPickingSessionActive(): boolean {
+    return this.teamPickingSession !== undefined;
+  }
 }

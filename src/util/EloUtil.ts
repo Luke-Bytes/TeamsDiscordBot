@@ -1,4 +1,6 @@
 //TODO add relevant emojis and change elo value cut offs
+import { PlayerInstance } from "../database/PlayerInstance";
+
 const eloEmojis = {
   800: ":black_circle:",
   1000: ":radio_button:",
@@ -21,5 +23,9 @@ export const EloUtil = {
     }
 
     return eloEmojis[sortedEloRanks[0] as keyof typeof eloEmojis];
+  },
+
+  getEloFormatted(player: PlayerInstance) {
+    return `[${player.elo}]`;
   },
 };

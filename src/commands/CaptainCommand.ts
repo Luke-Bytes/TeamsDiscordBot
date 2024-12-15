@@ -1,20 +1,19 @@
-import {
-  ChatInputCommandInteraction,
-  SlashCommandBuilder,
-  Snowflake,
-} from "discord.js";
-import { Command } from "../commands/CommandInterface.js";
-import { PermissionsUtil } from "../util/PermissionsUtil.js";
+import { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import { Command } from "../commands/CommandInterface";
+import { PermissionsUtil } from "../util/PermissionsUtil";
 import { Team } from "@prisma/client";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
+import TeamCommand from "../commands/TeamCommand";
 
 export default class CaptainCommand implements Command {
   public data: SlashCommandBuilder;
   public name = "captain";
   public description = "Set or change the captain of a team";
   public buttonIds: string[] = [];
+  private readonly teamCommand: TeamCommand;
 
-  constructor() {
+  constructor(teamCommand: TeamCommand) {
+    this.teamCommand = teamCommand;
     this.data = new SlashCommandBuilder()
       .setName(this.name)
       .setDescription(this.description)
@@ -66,6 +65,14 @@ export default class CaptainCommand implements Command {
     if (!game.announced) {
       await interaction.reply({
         content: "No game has been announced yet!",
+        ephemeral: true,
+      });
+      return;
+    }
+
+    if (this.teamCommand.isTeamPickingSessionActive()) {
+      await interaction.reply({
+        content: "You can't change captains while team picking is in progress!",
         ephemeral: true,
       });
       return;
