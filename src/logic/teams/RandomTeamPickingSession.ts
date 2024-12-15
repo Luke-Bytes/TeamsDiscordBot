@@ -34,41 +34,38 @@ export class RandomTeamPickingSession extends TeamPickingSession {
   public async initialize(interaction: ChatInputCommandInteraction) {
     const game = CurrentGameManager.getCurrentGame();
 
-//     this.proposedTeams = { ...game.teams };
-//     this.redCaptain = game.getCaptainOfTeam("RED");
-//     this.blueCaptain = game.getCaptainOfTeam("BLUE");
+    //     this.proposedTeams = { ...game.teams };
+    //     this.redCaptain = game.getCaptainOfTeam("RED");
+    //     this.blueCaptain = game.getCaptainOfTeam("BLUE");
 
-//     if (!this.redCaptain && !this.blueCaptain) {
-//       await interaction.editReply({
-//         content:
-//           "The teams do not have captains. Please use `/captain set` to set the captains of the teams.",
-//       });
-//       this.state = "cancelled";
-//       return;
-//     } else if (!this.redCaptain) {
-//       await interaction.editReply({
-//         content:
-//           "Red team does not have a captain. Please use `/captain set` to set the captains of Red team.",
-//       });
-//       this.state = "cancelled";
-//       return;
-//     } else if (!this.blueCaptain) {
-//       await interaction.editReply({
-//         content:
-//           "Blue team does not have a captain. Please use `/captain set` to set the captains of Blue team.",
-//       });
-//       this.state = "cancelled";
-//       return;
-
+    //     if (!this.redCaptain && !this.blueCaptain) {
+    //       await interaction.editReply({
+    //         content:
+    //           "The teams do not have captains. Please use `/captain set` to set the captains of the teams.",
+    //       });
+    //       this.state = "cancelled";
+    //       return;
+    //     } else if (!this.redCaptain) {
+    //       await interaction.editReply({
+    //         content:
+    //           "Red team does not have a captain. Please use `/captain set` to set the captains of Red team.",
+    //       });
+    //       this.state = "cancelled";
+    //       return;
+    //     } else if (!this.blueCaptain) {
+    //       await interaction.editReply({
+    //         content:
+    //           "Blue team does not have a captain. Please use `/captain set` to set the captains of Blue team.",
+    //       });
+    //       this.state = "cancelled";
+    //       return;
+    //   }
     game.createTeams("random");
     const embed = this.createTeamGenerateEmbed(game);
 
     if (!interaction.deferred && !interaction.replied) {
       await interaction.deferReply({ ephemeral: true });
     }
-
-    this.shuffle();
-    const embed = this.createTeamGenerateEmbed(game);
 
     this.embedMessage = await interaction.editReply(embed);
   }
@@ -96,24 +93,24 @@ export class RandomTeamPickingSession extends TeamPickingSession {
     const game = CurrentGameManager.getCurrentGame();
 
     switch (interaction.customId) {
-//       case "random-team-accept":
-//         {
-//           const { embeds } = this.createTeamGenerateEmbed(game);
-//           await this.embedMessage?.edit({ embeds, components: [] });
-//           await interaction.update({});
-//           game.teams = this.proposedTeams;
-//           this.state = "finalized";
-//         }
-//         break;
-//       case "random-team-generate-reroll":
-//         {
-//           this.shuffle();
-//           const embed = this.createTeamGenerateEmbed(game);
+      //       case "random-team-accept":
+      //         {
+      //           const { embeds } = this.createTeamGenerateEmbed(game);
+      //           await this.embedMessage?.edit({ embeds, components: [] });
+      //           await interaction.update({});
+      //           game.teams = this.proposedTeams;
+      //           this.state = "finalized";
+      //         }
+      //         break;
+      //       case "random-team-generate-reroll":
+      //         {
+      //           this.shuffle();
+      //           const embed = this.createTeamGenerateEmbed(game);
 
-//           await this.embedMessage!.edit(embed);
+      //           await this.embedMessage!.edit(embed);
 
-//           await interaction.update({});
-//         }
+      //           await interaction.update({});
+      //         }
       case "random-team-accept": {
         const simulatedTeams = game.simulateShuffledTeams();
         game.teams.BLUE = simulatedTeams.BLUE;
@@ -155,20 +152,20 @@ export class RandomTeamPickingSession extends TeamPickingSession {
     }
   }
 
-//   createTeamGenerateEmbed(game: GameInstance) {
-//     const redPlayers: PlayerInstance[] = this.proposedTeams.RED;
-//     const bluePlayers: PlayerInstance[] = this.proposedTeams.BLUE;
+  //   createTeamGenerateEmbed(game: GameInstance) {
+  //     const redPlayers: PlayerInstance[] = this.proposedTeams.RED;
+  //     const bluePlayers: PlayerInstance[] = this.proposedTeams.BLUE;
 
-//     const getString = (players: PlayerInstance[]) => {
-//       const captain = players.filter((p) => p.captain)[0];
-//       return players.length > 0
-//         ? `**${captain.ignUsed ?? "Unknown Player"}**\n` +
-//             players
-//               .filter((p) => !p.captain)
-//               .map((player) => player.ignUsed ?? "Unknown Player")
-//               .join("\n")
-//         : "No players";
-//     };
+  //     const getString = (players: PlayerInstance[]) => {
+  //       const captain = players.filter((p) => p.captain)[0];
+  //       return players.length > 0
+  //         ? `**${captain.ignUsed ?? "Unknown Player"}**\n` +
+  //             players
+  //               .filter((p) => !p.captain)
+  //               .map((player) => player.ignUsed ?? "Unknown Player")
+  //               .join("\n")
+  //         : "No players";
+  //     };
 
   createTeamGenerateEmbed(
     game: GameInstance,
@@ -194,17 +191,16 @@ export class RandomTeamPickingSession extends TeamPickingSession {
       .setColor("#0099ff")
       .setTitle("Randomised Teams")
       .addFields(
-
-//         {
-//           name: "🔵 Blue Team 🔵  ",
-//           value: getString(bluePlayers),
-//           inline: true,
-//         },
-//         {
-//           name: "🔴 Red Team 🔴   ",
-//           value: getString(redPlayers),
-//           inline: true,
-//         }
+        //         {
+        //           name: "🔵 Blue Team 🔵  ",
+        //           value: getString(bluePlayers),
+        //           inline: true,
+        //         },
+        //         {
+        //           name: "🔴 Red Team 🔴   ",
+        //           value: getString(redPlayers),
+        //           inline: true,
+        //         }
         { name: "🔵 Blue Team 🔵", value: bluePlayersString, inline: true },
         { name: "🔴 Red Team 🔴", value: redPlayersString, inline: true }
       )

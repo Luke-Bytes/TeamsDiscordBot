@@ -23,7 +23,6 @@ export class CommandHandler {
   //todo: just make these singletons.
   announcementCommand = new AnnouncementCommand();
   captainCommand = new CaptainCommand();
-  cleanupCommand = new CleanupCommand();
   ignsCommand = new IgnsCommand();
   leaderboardsCommand = new LeaderboardsCommand();
   registerCommand = new RegisterCommand();
@@ -38,10 +37,8 @@ export class CommandHandler {
 
   public loadCommands() {
     this.commands = [
-
       this.announcementCommand,
       this.captainCommand,
-      this.cleanupCommand,
       this.ignsCommand,
       this.leaderboardsCommand,
       this.registerCommand,
