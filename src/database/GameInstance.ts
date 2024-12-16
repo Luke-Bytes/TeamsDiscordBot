@@ -317,4 +317,122 @@ export class GameInstance {
 
     console.info(`[GAME] Final team state:`, this.teams);
   }
+
+  public async addPlayerByNameOrDiscord(
+    identifier: string,
+    team: Team | "UNDECIDED"
+  ): Promise<boolean> {
+    const player = await this.findPlayerByNameOrDiscord(identifier);
+    if (!player || !this.isPlayerInUndecided(player)) return false;
+
+    this.removePlayerFromAllTeams(player);
+    this.teams[team].push(player);
+    return true;
+  }
+
+  public async removePlayerByNameOrDiscord(
+    identifier: string
+  ): Promise<boolean> {
+    const player = await this.findPlayerByNameOrDiscord(identifier);
+    if (!player) return false;
+
+    this.removePlayerFromAllTeams(player);
+    return true;
+  }
+
+  private async findPlayerByNameOrDiscord(
+    identifier: string
+  ): Promise<PlayerInstance | null> {
+    const lowerIdentifier = identifier.toLowerCase();
+
+    const playerByName = this.getPlayers().find(
+      (p) => p.ignUsed?.toLowerCase() === lowerIdentifier
+    );
+    if (playerByName) return playerByName;
+
+    const playerByDiscord = await PlayerInstance.byDiscordSnowflake(identifier);
+    return playerByDiscord
+      ? this.getPlayers().find(
+          (p) => p.discordSnowflake === playerByDiscord.discordSnowflake
+        ) || null
+      : null;
+  }
+
+  private isPlayerInUndecided(player: PlayerInstance): boolean {
+    return this.teams["UNDECIDED"]?.includes(player) || false;
+  }
+
+  private removePlayerFromAllTeams(player: PlayerInstance): void {
+    for (const team of Object.keys(this.teams) as Array<Team | "UNDECIDED">) {
+      this.teams[team] = this.teams[team].filter((p) => p !== player);
+    }
+  }
+
+  public async replacePlayerByNameOrDiscord(
+    oldIdentifier: string,
+    newIdentifier: string
+  ): Promise<boolean> {
+    const oldPlayer = await this.findPlayerByNameOrDiscord(oldIdentifier);
+    const newPlayer = await this.findPlayerByNameOrDiscord(newIdentifier);
+
+    if (
+      !oldPlayer ||
+      !newPlayer ||
+      this.isPlayerInUndecided(oldPlayer) ||
+      !this.isPlayerInUndecided(newPlayer)
+    ) {
+      return false;
+    }
+
+    const oldPlayerTeam = this.getPlayersTeam(oldPlayer);
+    if (!oldPlayerTeam || oldPlayerTeam === "UNDECIDED") {
+      return false;
+    }
+
+    this.removePlayerFromAllTeams(oldPlayer);
+    this.removePlayerFromAllTeams(newPlayer);
+    this.teams[oldPlayerTeam].push(newPlayer);
+
+    return true;
+  }
+
+  private getPlayersTeam(player: PlayerInstance): Team | "UNDECIDED" | null {
+    return (
+      (Object.keys(this.teams) as Array<Team | "UNDECIDED">).find((team) =>
+        this.teams[team]?.includes(player)
+      ) || null
+    );
+  }
+
+  public async movePlayerBetweenTeams(
+    playerName: string,
+    fromTeam: Team,
+    toTeam: Team
+  ): Promise<boolean> {
+    if (
+      !["RED", "BLUE"].includes(fromTeam) ||
+      !["RED", "BLUE"].includes(toTeam)
+    ) {
+      console.error("Invalid teams specified:", { fromTeam, toTeam });
+      return false;
+    }
+
+    const player = await this.findPlayerByNameOrDiscord(playerName);
+    if (!player || this.getPlayersTeam(player) !== fromTeam) {
+      console.error("Player lookup failed or team mismatch:", {
+        playerName,
+        fromTeam,
+      });
+      return false;
+    }
+
+    this.removePlayerFromAllTeams(player);
+    this.teams[toTeam].push(player);
+    console.info("Player successfully moved:", {
+      playerName,
+      fromTeam,
+      toTeam,
+    });
+    return true;
+  }
 }

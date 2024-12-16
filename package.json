@@ -29,7 +29,9 @@
     "chrono-node": "^2.7.7",
     "discord.js": "^14.16.3",
     "dotenv": "^16.0.3",
-    "prisma": "^5.20.0"
+    "prisma": "^5.20.0",
+    "winston": "^3.17.0",
+    "winston-daily-rotate-file": "^5.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.7.5",

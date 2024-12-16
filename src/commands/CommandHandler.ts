@@ -16,6 +16,7 @@ import ScenarioCommand from "./ScenarioCommand";
 import UnregisterCommand from "./UnregisterCommand";
 import RegisteredCommand from "../commands/RegisteredCommand";
 import RestartCommand from "../commands/RestartCommand";
+import PlayerCommand from "../commands/PlayerCommand";
 
 export class CommandHandler {
   commands: Command[] = [];
@@ -35,6 +36,7 @@ export class CommandHandler {
   registeredCommand = new RegisteredCommand();
   unregisterCommand = new UnregisterCommand();
   restartCommand = new RestartCommand();
+  playerCommand = new PlayerCommand();
 
   public loadCommands() {
     this.commands = [
@@ -52,6 +54,7 @@ export class CommandHandler {
       this.registeredCommand,
       this.unregisterCommand,
       this.restartCommand,
+      this.playerCommand,
     ];
   }
 
@@ -63,8 +66,9 @@ export class CommandHandler {
           (cmd) => cmd.name === chatInteraction.commandName
         );
         if (command) {
+          const subCommand = chatInteraction.options.getSubcommand(false);
           console.log(
-            `[${chatInteraction.user.tag}] ran /${chatInteraction.commandName}`
+            `[${chatInteraction.user.tag}] ran /${chatInteraction.commandName}${subCommand ? ` ${subCommand}` : ""}`
           );
           await command.execute(chatInteraction);
         }
@@ -91,7 +95,6 @@ export class CommandHandler {
     } catch (error) {
       console.error("Error handling interaction:", error);
 
-      // Ensure the interaction is replied to if an error occurs
       if (
         interaction.isRepliable() &&
         !interaction.replied &&

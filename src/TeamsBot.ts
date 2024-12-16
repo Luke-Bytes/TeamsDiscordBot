@@ -5,6 +5,7 @@ import { MessageHandler } from "./interactions/MessageHandler";
 import { ReactionHandler } from "./interactions/ReactionHandler";
 import { VoiceChannelHandler } from "./interactions/VoiceChannelHandler";
 import { Channels } from "./Channels";
+import logger from "./util/Logger";
 
 export class TeamsBot {
   client: Client;
@@ -32,6 +33,10 @@ export class TeamsBot {
 
   public async start() {
     this.client.once("ready", async () => {
+      console.log = (...args: any[]) => logger.info(args.join(" "));
+      console.warn = (...args: any[]) => logger.error(args.join(" "));
+      console.error = (...args: any[]) => logger.info(args.join(" "));
+      console.debug = (...args: any[]) => logger.error(args.join(" "));
       console.log(`Logged in as ${this.client.user?.tag}!`);
 
       this.commandHandler.loadCommands();
