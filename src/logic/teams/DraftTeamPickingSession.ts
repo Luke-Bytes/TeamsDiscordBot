@@ -265,7 +265,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       return;
     }
 
-    if (this.getTurnCaptain()?.discordSnowflake !== user.id) return; //todo: maybe delete the message?
+    if (this.getTurnCaptain()?.discordSnowflake !== user.id) return;
 
     const content = message.content;
     const firstMention = message.mentions.users.values().next().value;
@@ -284,12 +284,13 @@ export class DraftTeamPickingSession extends TeamPickingSession {
         return;
       }
     } else {
-      player = this.proposedTeams.UNDECIDED.filter(
-        (p) => p.ignUsed === content
-      )[0];
+      player = this.proposedTeams.UNDECIDED.find(
+        (p) => p.ignUsed?.toLowerCase() === content
+      );
+
       if (!player) {
         await message.channel.send(
-          `Invalid player pick: **${content}** - Did that player register?`
+          `Invalid player pick: **${message.content}** - Did that player register?`
         );
         await message.delete();
         return;
@@ -308,7 +309,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       );
       return;
     }
-    // TODO fix so these checks actually checked first, issue with disc snowflake being undefined
+    // FIXME fix so these checks actually checked first, issue with disc snowflake being undefined
     if (
       this.redCaptain?.discordSnowflake === player.discordSnowflake ||
       this.blueCaptain?.discordSnowflake === player.discordSnowflake
