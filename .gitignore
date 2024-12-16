@@ -11,3 +11,4 @@ config.json
 /httpRequests/
 /dataSources/
 /dataSources.local.xml
+/logs/
