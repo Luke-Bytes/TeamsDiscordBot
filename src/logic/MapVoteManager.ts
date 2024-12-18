@@ -3,6 +3,8 @@ import { Channels } from "../Channels";
 import { Message } from "discord.js";
 import EventEmitter from "events";
 import { prettifyName } from "../util/Utils";
+import { Scheduler } from "../util/SchedulerUtil";
+import { GameInstance } from "../database/GameInstance";
 
 //todo: store these three maps somewhere else?
 const mapToEmojis: Record<AnniMap, string> = {
@@ -37,15 +39,52 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
 
     this.pollMessage.poll?.end();
 
+    if (
+      !this.pollMessage.poll?.answers ||
+      this.pollMessage.poll.answers.size === 0
+    ) {
+      console.log("No answers found.");
+      return;
+    }
+
+    const answersArray = Array.from(this.pollMessage.poll.answers.entries());
+
+    console.log(
+      JSON.stringify(
+        answersArray.map(([key, value]) => ({
+          Key: key,
+          Text: value?.text ?? "N/A",
+          VoteCount: value?.voteCount ?? 0,
+          RawData: JSON.stringify(value),
+        })),
+        null,
+        2
+      )
+    );
+
+    const winningEntry = answersArray.reduce(
+      (prev, current) =>
+        current[1].voteCount > prev[1].voteCount ? current : prev,
+      answersArray[0]
+    );
+
+    const winningText = (winningEntry[1].text ?? "")
+      .toUpperCase()
+      .replace(/\s+/g, "");
     const winningMap = Object.entries(mapToEmojis).find(
-      (v) =>
-        v[1] ===
-        this.pollMessage?.poll?.answers
-          .sorted((_firstAnswer, _secondAnswer, firstCount, secondCount) => {
-            return secondCount - firstCount;
-          })
-          .first()?.emoji?.name
+      ([mapName]) => mapName === winningText
     )?.[0];
+
+    console.log(
+      JSON.stringify(
+        {
+          WinningMap: winningMap ?? "None found",
+          VoteCount: winningEntry[1].voteCount,
+        },
+        null,
+        2
+      )
+    );
 
     if (!winningMap) {
       console.error("Could not find winning map!");
@@ -57,38 +96,63 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
 
   async startMapVote() {
     const channel = Channels.announcements;
-    if (!channel) return;
-    if (!channel.isSendable()) {
-      console.error(`Missing send permissions in channel ${channel.name}`);
+
+    if (!channel || !channel.isSendable()) {
+      console.error(`Missing send permissions in channel ${channel?.name}`);
       return;
     }
 
     this.pollMessage = await channel.send({
       poll: {
-        question: {
-          text: "Map vote",
-        },
-        answers: this.maps.map((v) => {
-          return {
-            text: prettifyName(v),
-            emoji: mapToEmojis[v],
-          };
-        }),
-        duration: 1,
+        question: { text: "Map vote" },
+        answers: this.maps.map((v) => ({
+          text: prettifyName(v),
+          emoji: mapToEmojis[v],
+        })),
+        duration: 48,
         allowMultiselect: false,
       },
     });
 
-    const etaMs = this.pollMessage.poll!.expiresAt.getTime() - Date.now();
+    const gameStartTime = GameInstance.getInstance().startTime;
+    if (!gameStartTime) {
+      console.error("Game start time is not set.");
+      return;
+    }
 
-    setTimeout(() => {
-      this.finalizeVotes();
-    }, etaMs);
+    const fiveMinutesBeforeStart = new Date(
+      gameStartTime.getTime() - 5 * 60 * 1000
+    );
+    const now = new Date();
+
+    if (fiveMinutesBeforeStart > now) {
+      const delay = fiveMinutesBeforeStart.getTime() - now.getTime();
+      console.info(
+        `Scheduling map poll closure in ${delay / 1000}s at ${fiveMinutesBeforeStart.toISOString()}`
+      );
+
+      Scheduler.schedule(
+        "mapVote",
+        async () => {
+          console.info(`Finalizing map vote at ${new Date().toISOString()}`);
+          await this.finalizeVotes();
+        },
+        fiveMinutesBeforeStart
+      );
+    } else {
+      console.warn("Game start time already passed or is within 5 minutes.");
+    }
   }
 
   async cancelVote() {
     if (this.pollMessage) {
+      Scheduler.cancel("mapVote");
       await this.pollMessage.delete();
+      this.pollMessage = undefined;
+
+      console.info("Map vote and its scheduler have been canceled.");
+    } else {
+      console.warn("No poll message to delete or cancel.");
     }
   }
 }
