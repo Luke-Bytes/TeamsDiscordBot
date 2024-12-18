@@ -18,7 +18,7 @@ import RegisteredCommand from "../commands/RegisteredCommand";
 import RestartCommand from "../commands/RestartCommand";
 import PlayerCommand from "../commands/PlayerCommand";
 import WinnerCommand from "../commands/WinnerCommand";
-import PerformanceCommand from "commands/PerformanceCommand";
+import PerformanceCommand from "../commands/PerformanceCommand";
 
 export class CommandHandler {
   commands: Command[] = [];

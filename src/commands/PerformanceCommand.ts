@@ -1,6 +1,6 @@
 import { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
 import { Command } from "./CommandInterface.js";
-import { prismaClient } from "database/prismaClient";
+import { prismaClient } from "../database/prismaClient";
 
 export default class PerformanceCommand implements Command {
   data = new SlashCommandBuilder()
@@ -22,9 +22,10 @@ export default class PerformanceCommand implements Command {
     const uptimeSeconds = process.uptime();
     const memoryUsage = process.memoryUsage();
     const cpuUsage = process.cpuUsage();
-    const websocketPing = interaction.client.ws.ping !== -1
-      ? `${interaction.client.ws.ping} ms`
-      : "N/A (Not Connected)";
+    const websocketPing =
+      interaction.client.ws.ping !== -1
+        ? `${interaction.client.ws.ping} ms`
+        : "N/A (Not Connected)";
 
     const dbLatency = await pingDatabase();
 

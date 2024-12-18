@@ -48,12 +48,22 @@ export class TeamsBot {
 
     // Command + Context Menu Listener
     this.client.on("interactionCreate", async (interaction) => {
-      if (PermissionsUtil.isDebugEnabled() && interaction.guildId !== PermissionsUtil.config.dev.guildId) {return;}
+      if (
+        PermissionsUtil.isDebugEnabled() &&
+        interaction.guildId !== PermissionsUtil.config.dev.guildId
+      ) {
+        return;
+      }
       await this.commandHandler.handleInteraction(interaction);
     });
 
     this.client.on("messageCreate", async (msg) => {
-      if (PermissionsUtil.isDebugEnabled() && msg.guild?.id !== PermissionsUtil.config.dev.guildId) {return;}
+      if (
+        PermissionsUtil.isDebugEnabled() &&
+        msg.guild?.id !== PermissionsUtil.config.dev.guildId
+      ) {
+        return;
+      }
       if (this.commandHandler.teamCommand.teamPickingSession) {
         await this.commandHandler.teamCommand.teamPickingSession.handleMessage(
           msg
