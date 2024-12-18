@@ -34,6 +34,8 @@ export class TeamsBot {
   public async start() {
     this.client.once("ready", async () => {
       console.log = (...args: any[]) => logger.info(args.join(" "));
+      console.table = (...args: any[]) => logger.info(args.join(" "));
+      console.info = (...args: any[]) => logger.info(args.join(" "));
       console.warn = (...args: any[]) => logger.error(args.join(" "));
       console.error = (...args: any[]) => logger.info(args.join(" "));
       console.debug = (...args: any[]) => logger.error(args.join(" "));
@@ -50,7 +52,9 @@ export class TeamsBot {
 
     this.client.on("messageCreate", async (msg) => {
       if (this.commandHandler.teamCommand.teamPickingSession) {
-        this.commandHandler.teamCommand.teamPickingSession.handleMessage(msg);
+        await this.commandHandler.teamCommand.teamPickingSession.handleMessage(
+          msg
+        );
       }
     });
 

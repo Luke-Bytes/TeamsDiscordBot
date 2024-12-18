@@ -59,6 +59,7 @@ export default [
         },
       ],
       "import/no-absolute-path": "error",
+      "no-undef": "off",
     },
     settings: {
       "import/resolver": {

@@ -12,6 +12,7 @@
     "outDir": "./dist",
     "resolveJsonModule": true,
     "typeRoots": ["./node_modules/@types", "./node_modules/discord.js/typings"],
+    "types": ["node"],
     "baseUrl": ".",
     "paths": {
       "*": ["./src/*"]

@@ -59,7 +59,7 @@ model Game {
   endTime   DateTime
 
   settings       GameSettings
-  participations GameParticipation[]
+  participants GameParticipation[]
 
   result GameResult
 

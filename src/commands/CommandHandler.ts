@@ -17,6 +17,7 @@ import UnregisterCommand from "./UnregisterCommand";
 import RegisteredCommand from "../commands/RegisteredCommand";
 import RestartCommand from "../commands/RestartCommand";
 import PlayerCommand from "../commands/PlayerCommand";
+import WinnerCommand from "../commands/WinnerCommand";
 
 export class CommandHandler {
   commands: Command[] = [];
@@ -37,6 +38,7 @@ export class CommandHandler {
   unregisterCommand = new UnregisterCommand();
   restartCommand = new RestartCommand();
   playerCommand = new PlayerCommand();
+  winnerCommand = new WinnerCommand();
 
   public loadCommands() {
     this.commands = [
@@ -55,6 +57,7 @@ export class CommandHandler {
       this.unregisterCommand,
       this.restartCommand,
       this.playerCommand,
+      this.winnerCommand,
     ];
   }
 

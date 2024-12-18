@@ -25,6 +25,7 @@ export class GameInstance {
     BLUE: [],
     UNDECIDED: [],
   };
+  gameWinner?: "RED" | "BLUE";
 
   mapVoteManager?: MapVoteManager;
   minerushVoteManager?: MinerushVoteManager;
@@ -59,19 +60,25 @@ export class GameInstance {
   public static async resetGameInstance() {
     const currentInstance = this.getInstance();
     if (currentInstance) {
-      // FIXME commit to database method here
+      await prismaClient.game.saveGameFromInstance(currentInstance);
     }
     this.instance = new GameInstance();
   }
 
   public startMinerushVote() {
+    if (this.minerushVoteManager) {
+      this.minerushVoteManager.cancelVote();
+    }
     this.minerushVoteManager = new MinerushVoteManager();
-    this.minerushVoteManager.on("pollEnd", (answer) => {
-      this.settings.minerushing = answer;
+    this.minerushVoteManager.on("pollEnd", (minerushWinner) => {
+      this.setMinerushing(minerushWinner);
     });
   }
 
   public startMapVote(maps: AnniMap[]) {
+    if (this.mapVoteManager) {
+      this.mapVoteManager.cancelVote();
+    }
     this.mapVoteManager = new MapVoteManager(maps);
     this.mapVoteManager.on("pollEnd", (winningMap) => {
       this.setMap(winningMap);
@@ -79,11 +86,13 @@ export class GameInstance {
   }
 
   public setMap(map: AnniMap) {
-    if (this.mapVoteManager) {
-      this.mapVoteManager.cancelVote();
-    }
-
     this.settings.map = map;
+    console.log("The winning map was: " + map);
+  }
+
+  public setMinerushing(minerush: boolean) {
+    this.settings.minerushing = minerush;
+    console.log("Minerushing is: " + minerush);
   }
 
   public async announce() {
@@ -255,7 +264,7 @@ export class GameInstance {
     this.gameId = "default-game-id";
     this.finished = false;
     this.announced = true;
-    this.startTime = new Date("2025-01-01T00:00:00Z");
+    this.startTime = new Date(Date.now() + 6 * 60 * 1000); // 6m from now for polls
     this.endTime = new Date("2025-01-01T02:00:00Z");
     this.settings = {
       minerushing: true,
@@ -280,6 +289,13 @@ export class GameInstance {
     ] as AnniMap[]);
 
     this.minerushVoteManager = new MinerushVoteManager();
+
+    if (this.mapVoteManager) {
+      await this.mapVoteManager.startMapVote();
+    }
+    if (this.minerushVoteManager) {
+      await this.minerushVoteManager.startMinerushVote();
+    }
 
     const pollVotes = false;
     if (pollVotes) {
@@ -428,11 +444,13 @@ export class GameInstance {
 
     this.removePlayerFromAllTeams(player);
     this.teams[toTeam].push(player);
-    console.info("Player successfully moved:", {
-      playerName,
-      fromTeam,
-      toTeam,
-    });
+    console.info(
+      `Player ${playerName} successfully moved from ${JSON.stringify(fromTeam)} to ${JSON.stringify(toTeam)}.`
+    );
     return true;
+  }
+
+  public async setGameWinner(team: Team) {
+    this.gameWinner = team;
   }
 }

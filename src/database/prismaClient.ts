@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { GameInstance } from "../database/GameInstance";
 
 export const prismaClient = new PrismaClient().$extends({
   model: {
@@ -70,6 +71,98 @@ export const prismaClient = new PrismaClient().$extends({
         });
 
         return { error: false };
+      },
+    },
+    game: {
+      async saveGameFromInstance(gameInstance: GameInstance) {
+        const {
+          gameId,
+          startTime,
+          endTime,
+          finished,
+          settings,
+          teams,
+          gameWinner,
+        } = gameInstance;
+
+        const newGameId = gameId ?? undefined; // Prisma will create a uuid, not sure if we have reason for a custom system
+
+        const gameSettings = {
+          minerushing: settings.minerushing ?? false,
+          bannedClasses: settings.bannedClasses ?? [],
+          map: settings.map ?? "DUELSTAL",
+        };
+
+        const redTeamParticipants = await Promise.all(
+          teams.RED.map(async (playerInstance) => {
+            const playerRecord = await prismaClient.player.byDiscordSnowflake(
+              playerInstance.discordSnowflake
+            );
+            if (!playerRecord) {
+              console.warn(
+                `Player not found for discordSnowflake: ${playerInstance.discordSnowflake}`
+              );
+              return null;
+            }
+            return {
+              ignUsed: playerInstance.ignUsed ?? "UnknownIGN",
+              team: "RED",
+              playerId: playerRecord.id,
+            };
+          })
+        );
+
+        const blueTeamParticipants = await Promise.all(
+          teams.BLUE.map(async (playerInstance) => {
+            const playerRecord = await prismaClient.player.byDiscordSnowflake(
+              playerInstance.discordSnowflake
+            );
+            if (!playerRecord) {
+              console.warn(
+                `Player not found for discordSnowflake: ${playerInstance.discordSnowflake}`
+              );
+              return null;
+            }
+            return {
+              ignUsed: playerInstance.ignUsed ?? "UnknownIGN",
+              team: "BLUE",
+              playerId: playerRecord.id,
+            };
+          })
+        );
+
+        const allParticipants = [
+          ...redTeamParticipants,
+          ...blueTeamParticipants,
+        ].filter(Boolean);
+
+        const gameRecord = await prismaClient.game.upsert({
+          where: { id: newGameId ?? "" },
+          update: {
+            finished: finished ?? false,
+            startTime: startTime ?? new Date(),
+            endTime: endTime ?? new Date(),
+            settings: gameSettings,
+          },
+          create: {
+            id: newGameId,
+            finished: finished ?? false,
+            startTime: startTime ?? new Date(),
+            endTime: endTime ?? new Date(),
+            settings: gameSettings,
+            participants: {
+              create: allParticipants as any,
+            },
+            result: {
+              winner: gameWinner ?? undefined,
+            },
+          },
+          include: {
+            participants: true,
+          },
+        });
+
+        return gameRecord;
       },
     },
   },

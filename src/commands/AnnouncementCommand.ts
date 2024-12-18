@@ -344,7 +344,14 @@ export default class AnnouncementCommand implements Command {
           inline: false,
         },
         {
-          name: `BANNED CLASSES: ${game.settings.bannedClasses?.length === 0 ? "None" : game.settings.bannedClasses?.map((v) => prettifyName(v)).join(", ")}`,
+          name: `BANNED CLASSES: ${
+            game.settings.bannedClasses &&
+            game.settings.bannedClasses.length > 0
+              ? game.settings.bannedClasses
+                  .map((v) => prettifyName(v))
+                  .join(", ")
+              : "None"
+          }`,
           value: " ",
           inline: false,
         },
