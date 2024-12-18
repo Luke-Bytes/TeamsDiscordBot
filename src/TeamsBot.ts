@@ -6,6 +6,7 @@ import { ReactionHandler } from "./interactions/ReactionHandler";
 import { VoiceChannelHandler } from "./interactions/VoiceChannelHandler";
 import { Channels } from "./Channels";
 import logger from "./util/Logger";
+import { PermissionsUtil } from "./util/PermissionsUtil";
 
 export class TeamsBot {
   client: Client;
@@ -47,10 +48,12 @@ export class TeamsBot {
 
     // Command + Context Menu Listener
     this.client.on("interactionCreate", async (interaction) => {
+      if (PermissionsUtil.isDebugEnabled() && interaction.guildId !== PermissionsUtil.config.dev.guildId) {return;}
       await this.commandHandler.handleInteraction(interaction);
     });
 
     this.client.on("messageCreate", async (msg) => {
+      if (PermissionsUtil.isDebugEnabled() && msg.guild?.id !== PermissionsUtil.config.dev.guildId) {return;}
       if (this.commandHandler.teamCommand.teamPickingSession) {
         await this.commandHandler.teamCommand.teamPickingSession.handleMessage(
           msg
