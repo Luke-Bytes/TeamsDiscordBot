@@ -19,6 +19,7 @@ import RestartCommand from "../commands/RestartCommand";
 import PlayerCommand from "../commands/PlayerCommand";
 import WinnerCommand from "../commands/WinnerCommand";
 import PerformanceCommand from "../commands/PerformanceCommand";
+import MVPCommand from "../commands/MVPCommand";
 
 export class CommandHandler {
   commands: Command[] = [];
@@ -41,6 +42,7 @@ export class CommandHandler {
   playerCommand = new PlayerCommand();
   winnerCommand = new WinnerCommand();
   performanceCommand = new PerformanceCommand();
+  MVPCommand = new MVPCommand();
 
   public loadCommands() {
     this.commands = [
@@ -61,6 +63,7 @@ export class CommandHandler {
       this.playerCommand,
       this.winnerCommand,
       this.performanceCommand,
+      this.MVPCommand,
     ];
   }
 

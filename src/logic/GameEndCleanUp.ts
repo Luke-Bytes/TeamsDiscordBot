@@ -1,6 +1,7 @@
 import { Guild, TextChannel } from "discord.js";
 import { ConfigManager } from "../ConfigManager.js";
 import { GameInstance } from "../database/GameInstance.js";
+import { CurrentGameManager } from "../logic/CurrentGameManager";
 
 export async function cleanUpAfterGame(guild: Guild) {
   const config = ConfigManager.getConfig();
@@ -137,6 +138,7 @@ export async function cleanUpAfterGame(guild: Guild) {
   } catch (error) {
     console.error("Failed to clean up messages:", error);
   }
+  await CurrentGameManager.getCurrentGame().countMVPVotes();
   //FIXME why isnt it resetting announcements
   await GameInstance.resetGameInstance();
   console.log("Game instance reset to default values.");
