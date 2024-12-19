@@ -1,5 +1,6 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Team } from "@prisma/client";
 import { GameInstance } from "../database/GameInstance";
+import { CurrentGameManager } from "../logic/CurrentGameManager";
 
 export const prismaClient = new PrismaClient().$extends({
   model: {
@@ -79,7 +80,7 @@ export const prismaClient = new PrismaClient().$extends({
           gameId,
           startTime,
           endTime,
-          finished,
+          isFinished,
           settings,
           teams,
           gameWinner,
@@ -104,10 +105,16 @@ export const prismaClient = new PrismaClient().$extends({
               );
               return null;
             }
+            const currentGame = CurrentGameManager.getCurrentGame();
+            const mvpRed = currentGame.MVPPlayerRed;
+            const captainRed = currentGame.getCaptainOfTeam("RED");
             return {
               ignUsed: playerInstance.ignUsed ?? "UnknownIGN",
               team: "RED",
               playerId: playerRecord.id,
+              mvp: (playerInstance.ignUsed ?? "UnknownIGN") === mvpRed,
+              captain:
+                captainRed?.discordSnowflake === playerRecord.discordSnowflake,
             };
           })
         );
@@ -123,10 +130,16 @@ export const prismaClient = new PrismaClient().$extends({
               );
               return null;
             }
+            const currentGame = CurrentGameManager.getCurrentGame();
+            const mvpBlue = currentGame.MVPPlayerBlue;
+            const captainBlue = currentGame.getCaptainOfTeam("BLUE");
             return {
               ignUsed: playerInstance.ignUsed ?? "UnknownIGN",
               team: "BLUE",
               playerId: playerRecord.id,
+              mvp: (playerInstance.ignUsed ?? "UnknownIGN") === mvpBlue,
+              captain:
+                captainBlue?.discordSnowflake === playerRecord.discordSnowflake,
             };
           })
         );
@@ -139,29 +152,29 @@ export const prismaClient = new PrismaClient().$extends({
         const gameRecord = await prismaClient.game.upsert({
           where: { id: newGameId ?? "" },
           update: {
-            finished: finished ?? false,
+            finished: isFinished ?? false,
             startTime: startTime ?? new Date(),
             endTime: endTime ?? new Date(),
             settings: gameSettings,
           },
           create: {
             id: newGameId,
-            finished: finished ?? false,
+            finished: isFinished ?? false,
             startTime: startTime ?? new Date(),
             endTime: endTime ?? new Date(),
             settings: gameSettings,
+            winner:
+              gameWinner === "RED" || gameWinner === "BLUE"
+                ? (gameWinner as Team)
+                : undefined,
             participants: {
               create: allParticipants as any,
-            },
-            result: {
-              winner: gameWinner ?? undefined,
             },
           },
           include: {
             participants: true,
           },
         });
-
         return gameRecord;
       },
     },

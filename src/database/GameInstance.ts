@@ -10,7 +10,7 @@ import { prismaClient } from "./prismaClient";
 export class GameInstance {
   private static instance: GameInstance;
   gameId?: string;
-  finished?: boolean;
+  isFinished?: boolean;
   announced = false;
   startTime?: Date;
   endTime?: Date;
@@ -27,8 +27,20 @@ export class GameInstance {
   };
   gameWinner?: "RED" | "BLUE";
 
+  MVPPlayerBlue?: string;
+  MVPPlayerRed?: string;
+
   mapVoteManager?: MapVoteManager;
   minerushVoteManager?: MinerushVoteManager;
+  private readonly mvpVoters = new Set<string>();
+
+  private mvpVotes: {
+    RED: Record<string, number>;
+    BLUE: Record<string, number>;
+  } = {
+    RED: {},
+    BLUE: {},
+  };
 
   private constructor() {
     this.reset();
@@ -43,7 +55,7 @@ export class GameInstance {
 
   public reset() {
     this.gameId = undefined;
-    this.finished = undefined;
+    this.isFinished = undefined;
     this.announced = false;
     this.startTime = undefined;
     this.endTime = undefined;
@@ -55,6 +67,10 @@ export class GameInstance {
     this.teams = { RED: [], BLUE: [], UNDECIDED: [] };
     this.mapVoteManager = undefined;
     this.minerushVoteManager = undefined;
+    this.mvpVoters.clear();
+    this.mvpVotes = { RED: {}, BLUE: {} };
+    this.MVPPlayerBlue = "";
+    this.MVPPlayerRed = "";
   }
 
   public static async resetGameInstance() {
@@ -262,7 +278,7 @@ export class GameInstance {
     );
 
     this.gameId = "default-game-id";
-    this.finished = false;
+    this.isFinished = true;
     this.announced = true;
     this.startTime = new Date(Date.now() + 6 * 60 * 1000); // 6m from now for polls
     this.endTime = new Date("2025-01-01T02:00:00Z");
@@ -356,7 +372,7 @@ export class GameInstance {
     return true;
   }
 
-  private async findPlayerByNameOrDiscord(
+  public async findPlayerByNameOrDiscord(
     identifier: string
   ): Promise<PlayerInstance | null> {
     const lowerIdentifier = identifier.toLowerCase();
@@ -452,5 +468,83 @@ export class GameInstance {
 
   public async setGameWinner(team: Team) {
     this.gameWinner = team;
+  }
+
+  public voteMvp(voterId: string, targetId: string): { error?: string } {
+    if (!this.isFinished) {
+      return { error: "The game is not finished yet." };
+    }
+
+    if (this.mvpVoters.has(voterId)) {
+      return { error: "You have already voted for MVP." };
+    }
+
+    const voterPlayer = this.getPlayers().find(
+      (p) => p.discordSnowflake === voterId
+    );
+    const targetPlayer = this.getPlayers().find(
+      (p) => p.discordSnowflake === targetId
+    );
+
+    if (!voterPlayer || !targetPlayer) {
+      return { error: "Voter or target player not found in the game." };
+    }
+
+    const voterTeam = this.getPlayersTeam(voterPlayer);
+    const targetTeam = this.getPlayersTeam(targetPlayer);
+
+    if (
+      !voterTeam ||
+      voterTeam === "UNDECIDED" ||
+      !targetTeam ||
+      targetTeam === "UNDECIDED"
+    ) {
+      return { error: "Both voter and target must be on a decided team." };
+    }
+
+    if (voterTeam !== targetTeam) {
+      return { error: "You can only vote for a player on your own team!" };
+    }
+
+    if (voterId === targetId) {
+      return { error: "You cannot vote for yourself." };
+    }
+
+    if (!this.mvpVotes[voterTeam][targetId]) {
+      this.mvpVotes[voterTeam][targetId] = 0;
+    }
+    this.mvpVotes[voterTeam][targetId] += 1;
+
+    this.mvpVoters.add(voterId);
+
+    return {};
+  }
+
+  public async countMVPVotes() {
+    this.MVPPlayerRed = this.determineTeamMVP("RED");
+    this.MVPPlayerBlue = this.determineTeamMVP("BLUE");
+  }
+
+  private determineTeamMVP(team: Team): string {
+    const teamVotes = this.mvpVotes[team];
+    const entries = Object.entries(teamVotes);
+
+    if (entries.length === 0) {
+      return "";
+    }
+
+    let maxVotes = 0;
+    let mvpPlayerId = "";
+    for (const [playerId, votes] of entries) {
+      if (votes > maxVotes) {
+        maxVotes = votes;
+        mvpPlayerId = playerId;
+      }
+    }
+
+    const player = this.getPlayers().find(
+      (p) => p.discordSnowflake === mvpPlayerId
+    );
+    return player?.ignUsed ?? "";
   }
 }

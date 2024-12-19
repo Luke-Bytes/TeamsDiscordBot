@@ -46,10 +46,6 @@ type GameSettings {
   map           AnniMap
 }
 
-type GameResult {
-  winner Team
-}
-
 model Game {
   id String @id @default(uuid()) @map("_id")
 
@@ -57,11 +53,10 @@ model Game {
 
   startTime DateTime
   endTime   DateTime
+  settings  GameSettings
+  winner    Team?
 
-  settings       GameSettings
   participants GameParticipation[]
-
-  result GameResult
 
   eloHistories EloHistory[]
 }
