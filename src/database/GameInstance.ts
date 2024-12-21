@@ -274,15 +274,12 @@ export class GameInstance {
 
     player.captain = true;
 
+    Object.keys(this.teams).forEach((teamKey) => {
+      const index = this.teams[teamKey as Team].indexOf(player);
+      if (index !== -1) this.teams[teamKey as Team].splice(index, 1);
+    });
+
     if (!this.teams[team].includes(player)) {
-      const otherTeam = team === "RED" ? "BLUE" : "RED";
-
-      // Correctly remove player from any previous team
-      ["RED", "BLUE", "UNDECIDED"].forEach((currentTeam) => {
-        const index = this.teams[currentTeam as Team].indexOf(player);
-        if (index !== -1) this.teams[currentTeam as Team].splice(index, 1);
-      });
-
       this.teams[team].push(player);
     }
 

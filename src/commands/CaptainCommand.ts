@@ -58,7 +58,9 @@ export default class CaptainCommand implements Command {
       return;
     }
 
-    const teamColor = interaction.options.getString("team", true);
+    const teamColor = interaction.options
+      .getString("team", true)
+      .toUpperCase() as Team;
     const user = interaction.options.getUser("user", true);
     const game = CurrentGameManager.getCurrentGame();
 
@@ -83,44 +85,61 @@ export default class CaptainCommand implements Command {
       .find((player) => player.discordSnowflake === user.id);
 
     if (!player) {
-      const result =
-        await CurrentGameManager.getCurrentGame().addPlayerByDiscordId(
-          user.id,
-          ""
-        );
-
-      if (result.error) {
-        await interaction.reply({
-          content: "Error: " + result.error,
-          ephemeral: true,
-        });
-        return;
-      } else {
-        player = result.playerInstance;
-      }
+      await interaction.reply({
+        content: "Error: Has this player registered yet? ",
+        ephemeral: true,
+      });
+      return;
     }
 
-    const captains = game.setTeamCaptain(
-      teamColor.toUpperCase() as Team,
-      player
-    );
+    const currentTeam = game.getPlayersTeam(player);
+
+    if (
+      currentTeam !== "UNDECIDED" &&
+      currentTeam !== "RED" &&
+      currentTeam !== "BLUE"
+    ) {
+      await interaction.reply({
+        content: `Error: The player must already be in RED, BLUE, or UNDECIDED team to be assigned as captain.`,
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const captains = game.setTeamCaptain(teamColor, player);
 
     if (captains.oldCaptain) {
-      const oldTeamCaptain = await interaction.guild.members.fetch(
+      const oldCaptainMember = await interaction.guild.members.fetch(
         captains.oldCaptain
       );
-      await oldTeamCaptain.roles.remove(
+      await oldCaptainMember.roles.remove(
         PermissionsUtil.config.roles.captainRole
       );
     }
 
-    const newTeamCaptain = await interaction.guild.members.fetch(
+    const newCaptainMember = await interaction.guild.members.fetch(
       captains.newCaptain
     );
-    await newTeamCaptain.roles.add(PermissionsUtil.config.roles.captainRole);
+    await newCaptainMember.roles.add(PermissionsUtil.config.roles.captainRole);
+
+    if (teamColor === "RED") {
+      await newCaptainMember.roles.add(
+        PermissionsUtil.config.roles.redTeamRole
+      );
+      await newCaptainMember.roles.remove(
+        PermissionsUtil.config.roles.blueTeamRole
+      );
+    } else if (teamColor === "BLUE") {
+      await newCaptainMember.roles.add(
+        PermissionsUtil.config.roles.blueTeamRole
+      );
+      await newCaptainMember.roles.remove(
+        PermissionsUtil.config.roles.redTeamRole
+      );
+    }
 
     await interaction.reply({
-      content: `Set captain of team **${teamColor}** to **${player.ignUsed}**`,
+      content: `Successfully set captain of team **${teamColor.toLowerCase()}** to **${player.ignUsed}**.`,
     });
   }
 }

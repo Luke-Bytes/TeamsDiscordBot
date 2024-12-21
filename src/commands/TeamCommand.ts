@@ -282,30 +282,36 @@ export default class TeamCommand implements Command {
   createTeamViewEmbed(game: GameInstance) {
     const redPlayers: PlayerInstance[] = game.getPlayersOfTeam("RED");
     const bluePlayers: PlayerInstance[] = game.getPlayersOfTeam("BLUE");
-    const bluePlayersString =
-      bluePlayers.length > 0
-        ? `**${bluePlayers[0].ignUsed}**\n` +
-          bluePlayers
-            .slice(1)
-            .map((player) => player.ignUsed)
-            .join("\n") // Only the first player bold
-        : "No players";
 
-    const redPlayersString =
-      redPlayers.length > 0
-        ? `**${redPlayers[0].ignUsed}**\n` +
-          redPlayers
-            .slice(1)
-            .map((player) => player.ignUsed)
-            .join("\n") // Only the first player bold
-        : "No players";
+    const redCaptain = game.getCaptainOfTeam("RED");
+    const blueCaptain = game.getCaptainOfTeam("BLUE");
+
+    const formatPlayers = (
+      players: PlayerInstance[],
+      captain: PlayerInstance | undefined
+    ): string => {
+      if (players.length === 0) return "No players";
+      const sortedPlayers = captain
+        ? [captain, ...players.filter((player) => player !== captain)]
+        : players;
+      return (
+        `**${sortedPlayers[0].ignUsed}**\n` +
+        sortedPlayers
+          .slice(1)
+          .map((player) => player.ignUsed)
+          .join("\n")
+      );
+    };
+
+    const bluePlayersString = formatPlayers(bluePlayers, blueCaptain);
+    const redPlayersString = formatPlayers(redPlayers, redCaptain);
 
     const embed = new EmbedBuilder()
       .setColor("#0099ff")
       .setTitle("Teams")
       .addFields(
-        { name: "🔵 Blue Team 🔵  ", value: bluePlayersString, inline: true },
-        { name: "🔴 Red Team 🔴   ", value: redPlayersString, inline: true }
+        { name: "🔵 Blue Team 🔵", value: bluePlayersString, inline: true },
+        { name: "🔴 Red Team 🔴", value: redPlayersString, inline: true }
       );
 
     return { embeds: [embed], ephemeral: false };
