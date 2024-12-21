@@ -26,6 +26,7 @@ export class GameInstance {
     UNDECIDED: [],
   };
   gameWinner?: "RED" | "BLUE";
+  teamsDecidedBy?: "DRAFT" | "RANDOMISED" | null;
 
   MVPPlayerBlue?: string;
   MVPPlayerRed?: string;
@@ -65,6 +66,7 @@ export class GameInstance {
       map: undefined,
     };
     this.teams = { RED: [], BLUE: [], UNDECIDED: [] };
+    this.teamsDecidedBy = null;
     this.mapVoteManager = undefined;
     this.minerushVoteManager = undefined;
     this.mvpVoters.clear();
@@ -152,29 +154,47 @@ export class GameInstance {
       } as const;
     }
 
-    if (!player.minecraftAccounts.includes(uuid)) {
-      const result = await prismaClient.player.addMcAccount(
-        discordSnowflake,
-        uuid
-      );
-      if (result.error) {
-        console.error(
-          `Failed to register UUID for discord user ${discordSnowflake} with UUID ${uuid}: ${result.error}`
-        );
-        return {
-          error: "Something went wrong while adding the IGN! Is it valid?",
-        } as const;
-      }
-      player.minecraftAccounts.push(uuid);
-    }
-
-    const ign = ignUsed === "" ? await MojangAPI.uuidToUsername(uuid) : ignUsed;
-
+    const ign = await MojangAPI.uuidToUsername(uuid);
     if (!ign) {
       return {
         error: "Could not locate IGN of player.",
       } as const;
     }
+
+    if (!player.primaryMinecraftAccount) {
+      await prismaClient.player.update({
+        where: { id: player.playerId },
+        data: { primaryMinecraftAccount: uuid },
+      });
+      player.primaryMinecraftAccount = uuid;
+    }
+
+    if (!player.minecraftAccounts.includes(ign)) {
+      const result = await prismaClient.player.update({
+        where: { id: player.playerId },
+        data: {
+          minecraftAccounts: {
+            push: ign,
+          },
+        },
+      });
+
+      if (!result) {
+        console.error(
+          `Failed to register IGN for discord user ${discordSnowflake} with IGN ${ign}.`
+        );
+        return {
+          error: "Something went wrong while adding the IGN! Is it valid?",
+        } as const;
+      }
+
+      player.minecraftAccounts.push(ign);
+    }
+
+    await prismaClient.player.update({
+      where: { id: player.playerId },
+      data: { latestIGN: ign },
+    });
 
     player.ignUsed = ign;
 
@@ -213,7 +233,12 @@ export class GameInstance {
   }
 
   public resetTeams() {
-    this.teams["UNDECIDED"].push(...this.teams["RED"], ...this.teams["BLUE"]);
+    const combined = new Set([
+      ...this.teams["UNDECIDED"],
+      ...this.teams["RED"],
+      ...this.teams["BLUE"],
+    ]);
+    this.teams["UNDECIDED"] = Array.from(combined);
     this.teams["RED"] = [];
     this.teams["BLUE"] = [];
   }
@@ -240,10 +265,6 @@ export class GameInstance {
     };
   }
 
-  public getCaptainOfTeam(team: Team) {
-    return this.teams[team].find((p) => p.captain);
-  }
-
   public setTeamCaptain(team: Team, player: PlayerInstance) {
     const oldTeamCaptain = this.getCaptainOfTeam(team);
 
@@ -256,20 +277,23 @@ export class GameInstance {
     if (!this.teams[team].includes(player)) {
       const otherTeam = team === "RED" ? "BLUE" : "RED";
 
-      if (this.teams["UNDECIDED"].includes(player)) {
-        this.teams["UNDECIDED"].splice(this.teams["UNDECIDED"].indexOf(player));
-      }
-
-      if (this.teams[otherTeam].includes(player)) {
-        this.teams[otherTeam].splice(this.teams[otherTeam].indexOf(player));
-      }
+      // Correctly remove player from any previous team
+      ["RED", "BLUE", "UNDECIDED"].forEach((currentTeam) => {
+        const index = this.teams[currentTeam as Team].indexOf(player);
+        if (index !== -1) this.teams[currentTeam as Team].splice(index, 1);
+      });
 
       this.teams[team].push(player);
     }
+
     return {
       oldCaptain: oldTeamCaptain?.discordSnowflake,
       newCaptain: player.discordSnowflake,
     };
+  }
+
+  public getCaptainOfTeam(team: Team) {
+    return this.teams[team].find((p) => p.captain === true);
   }
 
   public async testValues(fillOption: "red-blue" | "undecided" | "none") {
@@ -277,7 +301,7 @@ export class GameInstance {
       `[GAME] Initializing test values with fillOption: ${fillOption}`
     );
 
-    this.gameId = "default-game-id";
+    // this.gameId = "default-game-id";
     this.isFinished = true;
     this.announced = true;
     this.startTime = new Date(Date.now() + 6 * 60 * 1000); // 6m from now for polls
@@ -287,7 +311,7 @@ export class GameInstance {
       bannedClasses: ["SNIPER"],
       map: "DUELSTAL",
     };
-
+    this.MVPPlayerBlue = "Ungenes";
     this.teams.RED = [];
     this.teams.BLUE = [];
     this.teams.UNDECIDED = [];
@@ -428,11 +452,11 @@ export class GameInstance {
     return true;
   }
 
-  private getPlayersTeam(player: PlayerInstance): Team | "UNDECIDED" | null {
+  getPlayersTeam(player: PlayerInstance): Team | "UNDECIDED" | null {
     return (
       (Object.keys(this.teams) as Array<Team | "UNDECIDED">).find((team) =>
         this.teams[team]?.includes(player)
-      ) || null
+      ) ?? null
     );
   }
 
@@ -546,5 +570,9 @@ export class GameInstance {
       (p) => p.discordSnowflake === mvpPlayerId
     );
     return player?.ignUsed ?? "";
+  }
+
+  public changeHowTeamsDecided(type: "DRAFT" | "RANDOMISED" | null) {
+    this.teamsDecidedBy = typeof type === "string" ? type : null;
   }
 }

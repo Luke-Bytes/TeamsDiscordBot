@@ -1,10 +1,10 @@
-//TODO add relevant emojis and change elo value cut offs
 import { PlayerInstance } from "../database/PlayerInstance";
 
 const eloEmojis = {
-  800: ":black_circle:",
-  1000: ":radio_button:",
-  1100: ":star2:",
+  800: ":pirate_flag:",
+  900: ":black_circle:",
+  1000: ":white_circle:",
+  1100: ":star:",
   1200: ":gem:",
   1300: ":radioactive:",
   1400: ":cold_face:",

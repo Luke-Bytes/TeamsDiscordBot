@@ -5,6 +5,7 @@ export type Config = {
   winEloGain: number;
   loseEloLoss: number;
   mvpBonus: number;
+  captainBonus: number;
   roles: {
     blueTeamRole: string;
     redTeamRole: string;

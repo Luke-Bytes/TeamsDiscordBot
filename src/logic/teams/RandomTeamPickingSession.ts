@@ -127,6 +127,7 @@ export class RandomTeamPickingSession extends TeamPickingSession {
         });
 
         await interaction.update({});
+        game.changeHowTeamsDecided("RANDOMISED");
         this.state = "finalized";
         break;
       }

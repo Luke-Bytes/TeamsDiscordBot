@@ -20,90 +20,76 @@ export default class LeaderboardsCommand implements Command {
   }
 
   private getLeaderboardEntryString(
+    rank: number,
     ign: string,
     elo: number,
-    emoji: string,
     winLossRatio: number
-  ) {
-    return `${emoji} ${ign} **[${elo} ${EloUtil.getEloEmoji(
-      elo
-    )}]** ${winLossRatio.toFixed(1)} W/L`;
+  ): string {
+    const rankEmojis = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
+    const rankEmoji = rankEmojis[rank - 1] || "🔢";
+    const eloEmoji = EloUtil.getEloEmoji(elo);
+    return `${rankEmoji} **${ign}** ${eloEmoji} ─ ${elo} | W/L: ${winLossRatio.toFixed(1)}`;
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const allPlayers = await prismaClient.player.findMany({
-      orderBy: {
-        elo: "desc",
-      },
-    });
+    try {
+      const allPlayers = await prismaClient.player.findMany({
+        orderBy: {
+          elo: "desc",
+        },
+      });
 
-    const topTen = allPlayers.slice(0, 10).map((playerData, i) => {
-      const placeEmojis = [
-        "first_place",
-        "second_place",
-        "third_place",
-        "four",
-        "five",
-        "six",
-        "seven",
-        "eight",
-        "nine",
-        "keycap_ten",
-      ];
-      return {
-        ign: playerData.primaryMinecraftAccount ?? "N/A",
+      const topTen = allPlayers.slice(0, 10).map((playerData, index) => ({
+        rank: index + 1,
+        ign: playerData.latestIGN ?? "N/A",
         elo: playerData.elo,
-        emoji: `:${placeEmojis[i]}:`,
-        winLossRatio: playerData.wins / playerData.losses,
-      };
-    });
+        winLossRatio: playerData.losses > 0
+          ? playerData.wins / playerData.losses
+          : playerData.wins,
+      }));
 
-    const currentPlace = allPlayers.findIndex(
-      (playerData) => playerData.discordSnowflake === interaction.user.id
-    );
+      const currentPlace = allPlayers.findIndex(
+        (playerData) => playerData.discordSnowflake === interaction.user.id
+      );
 
-    const embed = new EmbedBuilder()
-      .setColor("#0099ff")
-      .setTitle("Friendly Wars Leaderboards");
-    for (let i = 0; i < 3 && topTen[i]; i++) {
-      embed.addFields({
-        name: this.getLeaderboardEntryString(
-          topTen[i].ign,
-          topTen[i].elo,
-          topTen[i].emoji,
-          topTen[i].winLossRatio
-        ),
-        value: " ",
-        inline: false,
+      const embed = new EmbedBuilder()
+        .setColor("#FFD700")
+        .setTitle("🏆 Friendly Wars Leaderboards 🏆")
+        .setDescription("The top rated players this season!")
+        // .setThumbnail("")
+        .setTimestamp();
+
+      topTen.forEach((player) => {
+        embed.addFields({
+          name: this.getLeaderboardEntryString(
+            player.rank,
+            player.ign,
+            player.elo,
+            player.winLossRatio
+          ),
+          value: "\u200b",
+          inline: false,
+        });
+      });
+
+      embed.setFooter({
+        text: `Your ranking: ${
+          currentPlace === -1
+            ? "Unranked"
+            : "#" + (currentPlace + 1).toLocaleString()
+        }`,
+        iconURL: interaction.user.displayAvatarURL(),
+      });
+
+      await interaction.reply({
+        embeds: [embed],
+      });
+    } catch (error) {
+      console.error("Error fetching leaderboards:", error);
+      await interaction.reply({
+        content: "❌ An error occurred while fetching the leaderboards. Please try again later.",
+        ephemeral: true,
       });
     }
-    embed.addFields({
-      name: " ",
-      value:
-        topTen
-          .slice(3)
-          .map((v, i) => {
-            return this.getLeaderboardEntryString(
-              v.ign,
-              v.elo,
-              v.emoji,
-              v.winLossRatio
-            );
-          })
-          .join("\n") || " ",
-      inline: false,
-    });
-
-    embed.setFooter({
-      text: `Your ranking: ${
-        currentPlace === -1
-          ? "(Unranked)"
-          : "#" + (currentPlace + 1).toLocaleString()
-      }`,
-    });
-
-    await interaction.reply({
-      embeds: [embed],
-    });
   }
 }

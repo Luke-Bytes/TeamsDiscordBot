@@ -1,6 +1,7 @@
-import { PrismaClient, Team } from "@prisma/client";
+import { gameType, Prisma, PrismaClient, Team } from "@prisma/client";
 import { GameInstance } from "../database/GameInstance";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
+import { Elo } from "logic/Elo";
 
 export const prismaClient = new PrismaClient().$extends({
   model: {
@@ -18,9 +19,7 @@ export const prismaClient = new PrismaClient().$extends({
           where: {
             OR: [
               {
-                minecraftAccounts: {
-                  has: minecraftAccount,
-                },
+                minecraftAccounts: { has: minecraftAccount },
               },
               {
                 primaryMinecraftAccount: minecraftAccount,
@@ -84,9 +83,8 @@ export const prismaClient = new PrismaClient().$extends({
           settings,
           teams,
           gameWinner,
+          teamsDecidedBy,
         } = gameInstance;
-
-        const newGameId = gameId ?? undefined; // Prisma will create a uuid, not sure if we have reason for a custom system
 
         const gameSettings = {
           minerushing: settings.minerushing ?? false,
@@ -94,71 +92,70 @@ export const prismaClient = new PrismaClient().$extends({
           map: settings.map ?? "DUELSTAL",
         };
 
-        const redTeamParticipants = await Promise.all(
-          teams.RED.map(async (playerInstance) => {
+        const allParticipants = await Promise.all(
+          [...teams.RED, ...teams.BLUE].map(async (playerInstance) => {
             const playerRecord = await prismaClient.player.byDiscordSnowflake(
               playerInstance.discordSnowflake
             );
+
             if (!playerRecord) {
               console.warn(
                 `Player not found for discordSnowflake: ${playerInstance.discordSnowflake}`
               );
               return null;
             }
-            const currentGame = CurrentGameManager.getCurrentGame();
-            const mvpRed = currentGame.MVPPlayerRed;
-            const captainRed = currentGame.getCaptainOfTeam("RED");
-            return {
-              ignUsed: playerInstance.ignUsed ?? "UnknownIGN",
-              team: "RED",
-              playerId: playerRecord.id,
-              mvp: (playerInstance.ignUsed ?? "UnknownIGN") === mvpRed,
-              captain:
-                captainRed?.discordSnowflake === playerRecord.discordSnowflake,
-            };
-          })
-        );
 
-        const blueTeamParticipants = await Promise.all(
-          teams.BLUE.map(async (playerInstance) => {
-            const playerRecord = await prismaClient.player.byDiscordSnowflake(
-              playerInstance.discordSnowflake
-            );
-            if (!playerRecord) {
-              console.warn(
-                `Player not found for discordSnowflake: ${playerInstance.discordSnowflake}`
-              );
-              return null;
+            const team = teams.RED.includes(playerInstance) ? "RED" : "BLUE";
+
+            const currentGame = CurrentGameManager.getCurrentGame();
+            const winningTeam = currentGame.gameWinner;
+            const losingTeam = winningTeam === "RED" ? "BLUE" : "RED";
+
+            if (team === winningTeam) {
+              await prismaClient.player.update({
+                where: { id: playerRecord.id },
+                data: {
+                  wins: { increment: 1 },
+                  winStreak: { increment: 1 },
+                },
+              });
+            } else if (team === losingTeam) {
+              await prismaClient.player.update({
+                where: { id: playerRecord.id },
+                data: {
+                  losses: { increment: 1 },
+                  winStreak: 0,
+                },
+              });
             }
-            const currentGame = CurrentGameManager.getCurrentGame();
-            const mvpBlue = currentGame.MVPPlayerBlue;
-            const captainBlue = currentGame.getCaptainOfTeam("BLUE");
+            const mvp =
+              (team === "RED" &&
+                currentGame.MVPPlayerRed === playerInstance.ignUsed) ||
+              (team === "BLUE" &&
+                currentGame.MVPPlayerBlue === playerInstance.ignUsed);
+
             return {
               ignUsed: playerInstance.ignUsed ?? "UnknownIGN",
-              team: "BLUE",
-              playerId: playerRecord.id,
-              mvp: (playerInstance.ignUsed ?? "UnknownIGN") === mvpBlue,
-              captain:
-                captainBlue?.discordSnowflake === playerRecord.discordSnowflake,
-            };
+              team,
+              player: {
+                connect: { id: playerRecord.id },
+              },
+              mvp,
+              captain: playerInstance.captain === true,
+            } as Prisma.GameParticipationCreateWithoutGameInput;
           })
         );
 
-        const allParticipants = [
-          ...redTeamParticipants,
-          ...blueTeamParticipants,
-        ].filter(Boolean);
+        const validParticipants = allParticipants.filter(
+          (
+            participant
+          ): participant is Prisma.GameParticipationCreateWithoutGameInput =>
+            participant !== null
+        );
 
         const gameRecord = await prismaClient.game.upsert({
-          where: { id: newGameId ?? "" },
+          where: { id: gameId ?? "" },
           update: {
-            finished: isFinished ?? false,
-            startTime: startTime ?? new Date(),
-            endTime: endTime ?? new Date(),
-            settings: gameSettings,
-          },
-          create: {
-            id: newGameId,
             finished: isFinished ?? false,
             startTime: startTime ?? new Date(),
             endTime: endTime ?? new Date(),
@@ -167,14 +164,56 @@ export const prismaClient = new PrismaClient().$extends({
               gameWinner === "RED" || gameWinner === "BLUE"
                 ? (gameWinner as Team)
                 : undefined,
-            participants: {
-              create: allParticipants as any,
+            type: teamsDecidedBy as gameType | null,
+            participantsIGNs: validParticipants.map(
+              (p) => p?.ignUsed || "UnknownIGN"
+            ),
+            gameParticipations: {
+              create: validParticipants,
+            },
+          },
+          create: {
+            id: gameId,
+            finished: isFinished ?? false,
+            startTime: startTime ?? new Date(),
+            endTime: endTime ?? new Date(),
+            settings: gameSettings,
+            winner:
+              gameWinner === "RED" || gameWinner === "BLUE"
+                ? (gameWinner as Team)
+                : undefined,
+            type: teamsDecidedBy as gameType | null,
+            participantsIGNs: validParticipants.map(
+              (p) => p?.ignUsed ?? "UnknownIGN"
+            ),
+            gameParticipations: {
+              create: validParticipants,
             },
           },
           include: {
-            participants: true,
+            gameParticipations: true,
           },
         });
+
+        const eloManager = new Elo();
+
+        for (const playerInstance of [...teams.RED, ...teams.BLUE]) {
+          eloManager.applyEloUpdate(playerInstance);
+
+          await prismaClient.player.update({
+            where: { discordSnowflake: playerInstance.discordSnowflake },
+            data: { elo: playerInstance.elo },
+          });
+
+          await prismaClient.eloHistory.create({
+            data: {
+              playerId: playerInstance.playerId,
+              gameId: gameRecord.id,
+              elo: playerInstance.elo,
+            },
+          });
+        }
+
         return gameRecord;
       },
     },

@@ -196,8 +196,9 @@ export class DraftTeamPickingSession extends TeamPickingSession {
 
         await interaction.channel.send("Teams have been finalized.");
 
-        CurrentGameManager.getCurrentGame().teams = { ...this.proposedTeams };
-
+        const game = CurrentGameManager.getCurrentGame();
+        game.teams = { ...this.proposedTeams };
+        game.changeHowTeamsDecided("DRAFT");
         this.state = "finalized";
         break;
       }
@@ -285,7 +286,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       }
     } else {
       player = this.proposedTeams.UNDECIDED.find(
-        (p) => p.ignUsed?.toLowerCase() === content
+        (p) => p.ignUsed?.toLowerCase() === content.toLowerCase()
       );
 
       if (!player) {

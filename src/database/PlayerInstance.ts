@@ -1,6 +1,7 @@
 import { Snowflake } from "discord.js";
 import { prismaClient } from "./prismaClient.js";
 import { Player } from "@prisma/client";
+import { MojangAPI } from "api/MojangAPI";
 
 // wrapper class for Player
 export class PlayerInstance {
@@ -11,6 +12,7 @@ export class PlayerInstance {
   discordSnowflake: string;
   minecraftAccounts: string[];
   primaryMinecraftAccount?: string;
+  latestIGN?: string;
 
   ignUsed?: string; //in the in-memory game.
   captain?: boolean;
@@ -23,6 +25,7 @@ export class PlayerInstance {
     this.discordSnowflake = data.discordSnowflake;
     this.minecraftAccounts = data.minecraftAccounts;
     this.primaryMinecraftAccount = data.primaryMinecraftAccount ?? undefined;
+    this.latestIGN = data.latestIGN ?? undefined;
   }
 
   public static async byDiscordSnowflake(discordSnowflake: Snowflake) {
@@ -55,7 +58,6 @@ export class PlayerInstance {
         wins: randomWins,
         losses: randomLosses,
         minecraftAccounts: [`Phi${playerCount + 1}`],
-        id: `Chi${playerCount + 1}`,
       },
     });
 
