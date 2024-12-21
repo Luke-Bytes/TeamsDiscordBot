@@ -1,7 +1,8 @@
 {
-  "winEloGain": 20,
+  "winEloGain": 30,
   "loseEloLoss": 15,
-  "mvpBonus": 10,
+  "mvpBonus": 5,
+  "captainBonus": 5,
   "roles": {
     "blueTeamRole": "",
     "redTeamRole": "",

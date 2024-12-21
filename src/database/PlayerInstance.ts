@@ -11,6 +11,7 @@ export class PlayerInstance {
   discordSnowflake: string;
   minecraftAccounts: string[];
   primaryMinecraftAccount?: string;
+  latestIGN?: string;
 
   ignUsed?: string; //in the in-memory game.
   captain?: boolean;
@@ -23,6 +24,7 @@ export class PlayerInstance {
     this.discordSnowflake = data.discordSnowflake;
     this.minecraftAccounts = data.minecraftAccounts;
     this.primaryMinecraftAccount = data.primaryMinecraftAccount ?? undefined;
+    this.latestIGN = data.latestIGN ?? undefined;
   }
 
   public static async byDiscordSnowflake(discordSnowflake: Snowflake) {
@@ -39,8 +41,6 @@ export class PlayerInstance {
     );
   }
 
-  public static async byMinecraftAccount(minecraftAccount: string) {}
-
   public static async testValues(): Promise<PlayerInstance> {
     const playerCount = await prismaClient.player.count();
 
@@ -55,7 +55,6 @@ export class PlayerInstance {
         wins: randomWins,
         losses: randomLosses,
         minecraftAccounts: [`Phi${playerCount + 1}`],
-        id: `Chi${playerCount + 1}`,
       },
     });
 

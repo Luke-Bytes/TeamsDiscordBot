@@ -7,6 +7,7 @@ import { VoiceChannelHandler } from "./interactions/VoiceChannelHandler";
 import { Channels } from "./Channels";
 import logger from "./util/Logger";
 import { PermissionsUtil } from "./util/PermissionsUtil";
+import { MaintenanceLoggingUtil } from "./util/MaintenanceLoggingUtil";
 
 export class TeamsBot {
   client: Client;
@@ -23,6 +24,8 @@ export class TeamsBot {
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.GuildMessagePolls,
         GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildVoiceStates,
       ],
     });
 
@@ -44,20 +47,19 @@ export class TeamsBot {
 
       this.commandHandler.loadCommands();
       await this.commandHandler.registerCommands();
+      MaintenanceLoggingUtil.startLogging();
     });
 
     // Command + Context Menu Listener
     this.client.on("interactionCreate", async (interaction) => {
-      if (
-        PermissionsUtil.isDebugEnabled() &&
-        interaction.guildId !== PermissionsUtil.config.dev.guildId
-      ) {
-        return;
-      }
       await this.commandHandler.handleInteraction(interaction);
     });
 
     this.client.on("messageCreate", async (msg) => {
+      if (msg.content.length > 1900) {
+        return;
+      }
+
       if (
         PermissionsUtil.isDebugEnabled() &&
         msg.guild?.id !== PermissionsUtil.config.dev.guildId

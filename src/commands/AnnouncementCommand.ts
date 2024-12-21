@@ -263,7 +263,7 @@ export default class AnnouncementCommand implements Command {
       return;
     }
 
-    const embed = this.createGameAnnouncementEmbed(true);
+    const embed = this.createGameAnnouncementEmbed(true, organiser, host);
 
     this.announcementPreviewMessage = await interaction.editReply(embed);
   }
@@ -324,73 +324,116 @@ export default class AnnouncementCommand implements Command {
         await this.handleAnnouncementConfirm();
         await interaction.editReply("Sent announcement!");
         break;
+      default:
+        await interaction.editReply("This doesn't do anything yet, sorry!");
+        break;
     }
   }
 
-  private createGameAnnouncementEmbed(preview: boolean) {
+  private createGameAnnouncementEmbed(
+    preview: boolean,
+    organiser?: string | null,
+    host?: string | null
+  ) {
     const game = CurrentGameManager.getCurrentGame();
     const embed = new EmbedBuilder()
-      .setColor("#0099ff")
-      .setTitle(`FRIENDLY WAR ANNOUNCEMENT${preview ? " [preview]" : ""}`)
+      .setColor("#00FF7F")
+      .setTitle(`🎉 FRIENDLY WAR ANNOUNCEMENT ${preview ? "[PREVIEW]" : ""}`)
+      .setDescription(
+        `Get ready to fight! ${
+          preview ? "This is a preview of the announcement." : ""
+        }`
+      )
       .addFields(
         {
-          name: `TIME: ${game.startTime ? formatTimestamp(game.startTime) : "N/A"}`,
-          value: " ",
-          inline: false,
+          name: "🕒 **TIME**",
+          value: game.startTime
+            ? `**${formatTimestamp(game.startTime)}**`
+            : "TBD",
+          inline: true,
         },
         {
-          name: `MAP: ${game.settings.map ? prettifyName(game.settings.map) : game.mapVoteManager ? "Voting..." + (preview ? " [" + game.mapVoteManager.maps.map(prettifyName).join(", ") + "]" : "") : "N/A"}`,
-          value: " ",
-          inline: false,
+          name: "🗺️ **MAP**",
+          value: game.settings.map
+            ? `**${prettifyName(game.settings.map)}**`
+            : game.mapVoteManager
+              ? `Voting... ${
+                  preview
+                    ? `**[${game.mapVoteManager.maps.map(prettifyName).join(", ")}]**`
+                    : ""
+                }`
+              : "TBD",
+          inline: true,
         },
         {
-          name: `BANNED CLASSES: ${
+          name: "⛏️ **MINERUSHING**",
+          value:
+            game.settings.minerushing === true
+              ? "**Yes**"
+              : game.settings.minerushing === false
+                ? "**No**"
+                : game.minerushVoteManager
+                  ? "Voting..."
+                  : "TBD",
+          inline: true,
+        },
+        {
+          name: "🚫 **BANNED CLASSES**",
+          value:
             game.settings.bannedClasses &&
             game.settings.bannedClasses.length > 0
-              ? game.settings.bannedClasses
+              ? `**${game.settings.bannedClasses
                   .map((v) => prettifyName(v))
-                  .join(", ")
-              : "None"
-          }`,
-          value: " ",
-          inline: false,
-        },
-        {
-          name: `MINERUSHING? ${game.settings.minerushing === true ? "Yes" : game.settings.minerushing === false ? "No" : game.minerushVoteManager ? "Voting..." : "N/A"}`,
-          value: " ",
+                  .join(", ")}**`
+              : "**None**",
           inline: false,
         }
       );
+    let footerText = "";
+    if (organiser && host) {
+      footerText = `Organised by ${organiser} - Hosted by ${host}`;
+    } else if (organiser) {
+      footerText = `Organised by ${organiser}`;
+    } else if (host) {
+      footerText = `Hosted by ${host}`;
+    }
+    if (footerText) {
+      embed.setFooter({
+        text: footerText,
+        iconURL: "https://shotbow.net/presskit/images/icon.png",
+      });
+    }
+    embed.setTimestamp();
 
     const confirmButton = new ButtonBuilder()
       .setCustomId("announcement-confirm")
-      .setLabel("Confirm and Send")
-      .setStyle(ButtonStyle.Primary);
+      .setLabel("✅ Confirm and Send")
+      .setStyle(ButtonStyle.Success);
 
     const cancelButton = new ButtonBuilder()
       .setCustomId("announcement-cancel")
-      .setLabel("Cancel")
+      .setLabel("❌ Cancel")
       .setStyle(ButtonStyle.Danger);
+
+    const editTimeButton = new ButtonBuilder()
+      .setCustomId("announcement-edit-time")
+      .setLabel("🕒 Edit Time")
+      .setStyle(ButtonStyle.Secondary);
+
+    const editMapButton = new ButtonBuilder()
+      .setCustomId("announcement-edit-map")
+      .setLabel("🗺️ Edit Map")
+      .setStyle(ButtonStyle.Secondary);
+
+    const editBannedClassesButton = new ButtonBuilder()
+      .setCustomId("announcement-edit-banned-classes")
+      .setLabel("🚫 Edit Banned Classes")
+      .setStyle(ButtonStyle.Secondary);
 
     const firstRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       confirmButton,
       cancelButton
     );
-
-    const editTimeButton = new ButtonBuilder()
-      .setCustomId("announcement-edit-time")
-      .setLabel("Edit Time")
-      .setStyle(ButtonStyle.Secondary);
-
-    const editMapButton = new ButtonBuilder()
-      .setCustomId("announcement-edit-button")
-      .setLabel("Edit Map")
-      .setStyle(ButtonStyle.Secondary);
-
-    const editBannedClassesButton = new ButtonBuilder()
-      .setCustomId("announcement-edit-banned-classes")
-      .setLabel("Edit Banned Classes")
-      .setStyle(ButtonStyle.Secondary);
 
     const secondRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       editTimeButton,
@@ -398,10 +441,8 @@ export default class AnnouncementCommand implements Command {
       editBannedClassesButton
     );
 
-    if (preview) {
-      return { embeds: [embed], components: [firstRow, secondRow] } as const;
-    } else {
-      return { embeds: [embed] } as const;
-    }
+    return preview
+      ? { embeds: [embed], components: [firstRow, secondRow] }
+      : { embeds: [embed] };
   }
 }

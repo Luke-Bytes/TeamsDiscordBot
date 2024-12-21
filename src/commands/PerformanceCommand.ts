@@ -1,6 +1,9 @@
 import { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { prismaClient } from "../database/prismaClient";
+import { exec } from "child_process";
+import { promisify } from "util";
+const execAsync = promisify(exec);
 
 export default class PerformanceCommand implements Command {
   data = new SlashCommandBuilder()
@@ -28,11 +31,14 @@ export default class PerformanceCommand implements Command {
         : "N/A (Not Connected)";
 
     const dbLatency = await pingDatabase();
+    const gitBranch = await getGitBranch();
 
     const usageStats = `
 **Uptime:** ${this.formatUptime(uptimeSeconds)}
 **WebSocket Ping:** ${websocketPing}
 **Database Latency:** ${dbLatency} ms
+**Git Branch:** ${gitBranch}
+
 
 **Memory Usage:**
 - RSS: ${(memoryUsage.rss / 1024 / 1024).toFixed(2)} MB
@@ -56,5 +62,15 @@ async function pingDatabase() {
   } catch (error) {
     console.error("Database ping failed:", error);
     return "Failed to connect";
+  }
+}
+
+async function getGitBranch(): Promise<string> {
+  try {
+    const { stdout } = await execAsync("git rev-parse --abbrev-ref HEAD");
+    return stdout.trim();
+  } catch (error) {
+    console.error("Failed to retrieve Git branch:", error);
+    return "Unknown";
   }
 }

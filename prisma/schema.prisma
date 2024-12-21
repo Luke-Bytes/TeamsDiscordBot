@@ -14,7 +14,7 @@ model EloHistory {
 
   createdAt DateTime @default(now())
 
-  elo Int // elo rating after the match
+  elo Int
 
   gameId String
   game   Game   @relation(fields: [gameId], references: [id])
@@ -26,28 +26,26 @@ model Player {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  elo          Int          @default(1000) // Current Elo rating of the player
+  elo          Int          @default(1000)
   eloHistories EloHistory[]
 
   wins   Int @default(0)
   losses Int @default(0)
+  winStreak Int @default(0)
 
   discordSnowflake String @unique
 
-  minecraftAccounts       String[] @default([])
+  minecraftAccounts String[]
   primaryMinecraftAccount String?
+  latestIGN String?
 
-  games GameParticipation[] // New relation to GameParticipation model
+  games GameParticipation[]
 }
 
 type GameSettings {
   minerushing   Boolean
   bannedClasses AnniClass[]
   map           AnniMap
-}
-
-type GameResult {
-  winner Team
 }
 
 model Game {
@@ -57,13 +55,13 @@ model Game {
 
   startTime DateTime
   endTime   DateTime
+  settings  GameSettings
+  winner    Team?
+  type      gameType?
 
-  settings       GameSettings
-  participants GameParticipation[]
-
-  result GameResult
-
+  participantsIGNs String[]
   eloHistories EloHistory[]
+  gameParticipations GameParticipation[]
 }
 
 model GameParticipation {
@@ -86,6 +84,11 @@ model GameParticipation {
 enum Team {
   RED
   BLUE
+}
+
+enum gameType {
+  DRAFT
+  RANDOMISED
 }
 
 enum AnniClass {

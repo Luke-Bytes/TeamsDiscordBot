@@ -206,6 +206,7 @@ export default class TeamCommand implements Command {
           }
 
           await interaction.deferReply({ ephemeral: false });
+          game.changeHowTeamsDecided(null);
           game.resetTeams();
           this.resetTeamPickingSession();
           await DiscordUtil.editReply(interaction, {
@@ -246,6 +247,7 @@ export default class TeamCommand implements Command {
           }
 
           this.resetTeamPickingSession();
+          game.changeHowTeamsDecided(null);
           await DiscordUtil.reply(
             interaction,
             "The current team picking session has been cancelled.",

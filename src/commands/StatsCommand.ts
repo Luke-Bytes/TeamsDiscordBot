@@ -5,7 +5,7 @@ import {
 } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { EloUtil } from "../util/EloUtil.js";
-import { PlayerInstance } from "../database/PlayerInstance.js";
+import { PrismaUtils } from "../util/PrismaUtils";
 
 export default class StatsCommand implements Command {
   public name = "stats";
@@ -31,46 +31,62 @@ export default class StatsCommand implements Command {
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const input = interaction.options.getString("player", false);
-    const player =
-      input !== null
-        ? await PlayerInstance.byMinecraftAccount(input)
-        : await PlayerInstance.byDiscordSnowflake(interaction.user.id);
-
-    if (player === undefined) {
+    const input =
+      interaction.options.getString("player", false) ?? interaction.user.id;
+    const player = await PrismaUtils.findPlayer(input);
+    if (!player) {
       await interaction.reply({
-        //TODO: better error messages?
-        content:
-          input === null ? "You are not registered." : "Player not found",
+        content: "Player not found.",
         ephemeral: true,
       });
       return;
-    } else {
-      console.log(player);
     }
 
     const winLossRatio =
       player.losses === 0 ? player.wins : player.wins / player.losses;
-
-    //TODO: winstreak
+    const winStreak = player.winStreak;
     const embed = new EmbedBuilder()
-      .setColor("#0099ff")
-      .setTitle("Friendly Wars Stats")
+      .setColor("#5865F2")
+      .setTitle("📊 Friendly Wars Stats")
+      .setDescription("Overall performance:")
+      .setThumbnail(interaction.user.displayAvatarURL())
       .addFields(
         {
-          name: " ",
-          value:
-            "**NAMES**\n**ELO**\n**WINS**\n**LOSSES**\n**W/L**\n**WINSTREAK**",
+          name: "Player",
+          value: `${player.minecraftAccounts.join(", ")}`,
           inline: true,
         },
         {
-          name: " ",
-          value: `${player.minecraftAccounts.join(", ")}\n${player.elo} ${EloUtil.getEloEmoji(
-            player.elo
-          )}\n${player.wins}\n${player.losses}\n${winLossRatio}\n${"(winstreak)"}`,
+          name: "ELO",
+          value: `${player.elo} ${EloUtil.getEloEmoji(player.elo)}`,
+          inline: true,
+        },
+        {
+          name: "Current Win Streak",
+          value: `${winStreak}`,
+          inline: true,
+        },
+        {
+          name: "Wins",
+          value: `${player.wins}`,
+          inline: true,
+        },
+        {
+          name: "Losses",
+          value: `${player.losses}`,
+          inline: true,
+        },
+        {
+          name: "Win/Loss Ratio",
+          value: `${winLossRatio.toFixed(2)}`,
           inline: true,
         }
-      );
+      )
+      .setFooter({
+        text: `Requested by ${interaction.user.tag}`,
+        iconURL: interaction.user.displayAvatarURL(),
+      })
+      .setTimestamp();
 
     await interaction.reply({
       embeds: [embed],
