@@ -1,4 +1,4 @@
-import { prismaClient } from "database/prismaClient";
+import { prismaClient } from "../database/prismaClient";
 
 export class PrismaUtils {
   static async findPlayer(identifier: string) {

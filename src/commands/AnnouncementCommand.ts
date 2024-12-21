@@ -330,7 +330,11 @@ export default class AnnouncementCommand implements Command {
     }
   }
 
-  private createGameAnnouncementEmbed(preview: boolean, organiser?: string | null, host?: string | null) {
+  private createGameAnnouncementEmbed(
+    preview: boolean,
+    organiser?: string | null,
+    host?: string | null
+  ) {
     const game = CurrentGameManager.getCurrentGame();
     const embed = new EmbedBuilder()
       .setColor("#00FF7F")
@@ -343,7 +347,9 @@ export default class AnnouncementCommand implements Command {
       .addFields(
         {
           name: "🕒 **TIME**",
-          value: game.startTime ? `**${formatTimestamp(game.startTime)}**` : "TBD",
+          value: game.startTime
+            ? `**${formatTimestamp(game.startTime)}**`
+            : "TBD",
           inline: true,
         },
         {
@@ -352,10 +358,10 @@ export default class AnnouncementCommand implements Command {
             ? `**${prettifyName(game.settings.map)}**`
             : game.mapVoteManager
               ? `Voting... ${
-                preview
-                  ? `**[${game.mapVoteManager.maps.map(prettifyName).join(", ")}]**`
-                  : ""
-              }`
+                  preview
+                    ? `**[${game.mapVoteManager.maps.map(prettifyName).join(", ")}]**`
+                    : ""
+                }`
               : "TBD",
           inline: true,
         },
@@ -374,14 +380,15 @@ export default class AnnouncementCommand implements Command {
         {
           name: "🚫 **BANNED CLASSES**",
           value:
-            game.settings.bannedClasses && game.settings.bannedClasses.length > 0
+            game.settings.bannedClasses &&
+            game.settings.bannedClasses.length > 0
               ? `**${game.settings.bannedClasses
-                .map((v) => prettifyName(v))
-                .join(", ")}**`
+                  .map((v) => prettifyName(v))
+                  .join(", ")}**`
               : "**None**",
           inline: false,
         }
-      )
+      );
     let footerText = "";
     if (organiser && host) {
       footerText = `Organised by ${organiser} - Hosted by ${host}`;
@@ -396,7 +403,7 @@ export default class AnnouncementCommand implements Command {
         iconURL: "https://shotbow.net/presskit/images/icon.png",
       });
     }
-      embed.setTimestamp();
+    embed.setTimestamp();
 
     const confirmButton = new ButtonBuilder()
       .setCustomId("announcement-confirm")

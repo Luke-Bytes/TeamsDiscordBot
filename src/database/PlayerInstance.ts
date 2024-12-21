@@ -1,7 +1,6 @@
 import { Snowflake } from "discord.js";
 import { prismaClient } from "./prismaClient.js";
 import { Player } from "@prisma/client";
-import { MojangAPI } from "api/MojangAPI";
 
 // wrapper class for Player
 export class PlayerInstance {
@@ -41,8 +40,6 @@ export class PlayerInstance {
       })
     );
   }
-
-  public static async byMinecraftAccount(minecraftAccount: string) {}
 
   public static async testValues(): Promise<PlayerInstance> {
     const playerCount = await prismaClient.player.count();

@@ -25,7 +25,18 @@ export default class LeaderboardsCommand implements Command {
     elo: number,
     winLossRatio: number
   ): string {
-    const rankEmojis = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
+    const rankEmojis = [
+      "🥇",
+      "🥈",
+      "🥉",
+      "4️⃣",
+      "5️⃣",
+      "6️⃣",
+      "7️⃣",
+      "8️⃣",
+      "9️⃣",
+      "🔟",
+    ];
     const rankEmoji = rankEmojis[rank - 1] || "🔢";
     const eloEmoji = EloUtil.getEloEmoji(elo);
     return `${rankEmoji} **${ign}** ${eloEmoji} ─ ${elo} | W/L: ${winLossRatio.toFixed(1)}`;
@@ -43,9 +54,10 @@ export default class LeaderboardsCommand implements Command {
         rank: index + 1,
         ign: playerData.latestIGN ?? "N/A",
         elo: playerData.elo,
-        winLossRatio: playerData.losses > 0
-          ? playerData.wins / playerData.losses
-          : playerData.wins,
+        winLossRatio:
+          playerData.losses > 0
+            ? playerData.wins / playerData.losses
+            : playerData.wins,
       }));
 
       const currentPlace = allPlayers.findIndex(
@@ -87,7 +99,8 @@ export default class LeaderboardsCommand implements Command {
     } catch (error) {
       console.error("Error fetching leaderboards:", error);
       await interaction.reply({
-        content: "❌ An error occurred while fetching the leaderboards. Please try again later.",
+        content:
+          "❌ An error occurred while fetching the leaderboards. Please try again later.",
         ephemeral: true,
       });
     }

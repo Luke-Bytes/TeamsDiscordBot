@@ -1,6 +1,6 @@
 import { ConfigManager } from "../ConfigManager";
 import { PlayerInstance } from "../database/PlayerInstance";
-import { CurrentGameManager } from "logic/CurrentGameManager";
+import { CurrentGameManager } from "../logic/CurrentGameManager";
 
 export class Elo {
   public calculateNewElo(player: PlayerInstance): number {

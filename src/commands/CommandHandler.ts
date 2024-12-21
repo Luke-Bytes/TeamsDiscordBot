@@ -20,7 +20,7 @@ import PlayerCommand from "../commands/PlayerCommand";
 import WinnerCommand from "../commands/WinnerCommand";
 import PerformanceCommand from "../commands/PerformanceCommand";
 import MVPCommand from "../commands/MVPCommand";
-import GameCommand from "commands/GameCommand";
+import GameCommand from "../commands/GameCommand";
 
 export class CommandHandler {
   commands: Command[] = [];

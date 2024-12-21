@@ -5,7 +5,7 @@ import {
 } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { EloUtil } from "../util/EloUtil.js";
-import { PrismaUtils } from "util/PrismaUtils";
+import { PrismaUtils } from "../util/PrismaUtils";
 
 export default class StatsCommand implements Command {
   public name = "stats";
@@ -91,6 +91,5 @@ export default class StatsCommand implements Command {
     await interaction.reply({
       embeds: [embed],
     });
-
   }
 }

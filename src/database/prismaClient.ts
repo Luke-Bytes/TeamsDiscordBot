@@ -1,7 +1,7 @@
 import { gameType, Prisma, PrismaClient, Team } from "@prisma/client";
 import { GameInstance } from "../database/GameInstance";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
-import { Elo } from "logic/Elo";
+import { Elo } from "../logic/Elo";
 
 export const prismaClient = new PrismaClient().$extends({
   model: {
