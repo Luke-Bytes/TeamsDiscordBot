@@ -15,6 +15,7 @@ import { prettifyName, randomEnum, formatTimestamp } from "../util/Utils.js";
 import { parseDate } from "chrono-node";
 import { Channels } from "../Channels";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
+import { ConfigManager } from "../ConfigManager";
 
 export default class AnnouncementCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;
@@ -336,13 +337,15 @@ export default class AnnouncementCommand implements Command {
     host?: string | null
   ) {
     const game = CurrentGameManager.getCurrentGame();
+    const registrationChannelId =
+      ConfigManager.getConfig().channels.registration;
     const embed = new EmbedBuilder()
       .setColor("#00FF7F")
       .setTitle(`🎉 FRIENDLY WAR ANNOUNCEMENT ${preview ? "[PREVIEW]" : ""}`)
       .setDescription(
         `Get ready to fight! ${
           preview ? "This is a preview of the announcement." : ""
-        }`
+        } Go to <#${registrationChannelId}> to join!`
       )
       .addFields(
         {
