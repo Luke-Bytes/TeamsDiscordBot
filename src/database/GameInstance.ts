@@ -403,7 +403,8 @@ export class GameInstance {
     );
     if (playerByName) return playerByName;
 
-    const playerByDiscord = await PlayerInstance.byDiscordSnowflake(identifier);
+    const playerByDiscord =
+      await prismaClient.player.byDiscordSnowflake(identifier);
     return playerByDiscord
       ? this.getPlayers().find(
           (p) => p.discordSnowflake === playerByDiscord.discordSnowflake
