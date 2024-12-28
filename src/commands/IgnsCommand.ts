@@ -99,18 +99,13 @@ export default class IgnsCommand implements Command {
     primaryAccount: string,
     otherAccounts: string[]
   ) {
-    const accounts = [
-      primaryAccount,
-      ...otherAccounts.filter((v) => v !== primaryAccount),
-    ];
-
     const embed = new EmbedBuilder()
       .setColor("#0099ff")
       .setTitle(`IGNs for ${discordDisplayName}`)
       .addFields({
-        name: `1. ${accounts[0]}`,
-        value: ` ${accounts
-          .toSpliced(0, 1)
+        name: `1. ${primaryAccount}`,
+        value: ` ${otherAccounts
+          .filter((v) => v !== primaryAccount)
           .map((v, i) => {
             return `${i + 2}. ${v}`;
           })
