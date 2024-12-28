@@ -310,8 +310,16 @@ export default class TeamCommand implements Command {
       .setColor("#0099ff")
       .setTitle("Teams")
       .addFields(
-        { name: "🔵 Blue Team 🔵", value: bluePlayersString, inline: true },
-        { name: "🔴 Red Team 🔴", value: redPlayersString, inline: true }
+        {
+          name: `🔵 Blue Team [${bluePlayers.length}] 🔵`,
+          value: bluePlayersString,
+          inline: true,
+        },
+        {
+          name: `🔴 Red Team [${redPlayers.length}] 🔴`,
+          value: redPlayersString,
+          inline: true,
+        }
       );
 
     return { embeds: [embed], ephemeral: false };
