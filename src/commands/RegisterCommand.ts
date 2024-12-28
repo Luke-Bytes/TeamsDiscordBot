@@ -53,9 +53,7 @@ export default class RegisterCommand implements Command {
 
     const member = interaction.guild?.members.cache.get(interaction.user.id);
 
-    interaction.deferReply({
-      ephemeral: true,
-    });
+    interaction.deferReply({});
 
     if (
       !PermissionsUtil.hasRole(member, "organiserRole") &&
