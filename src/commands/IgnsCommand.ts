@@ -6,6 +6,7 @@ import {
 import { Command } from "./CommandInterface.js";
 import { prismaClient } from "../database/prismaClient.js";
 import { MojangAPI } from "../api/MojangAPI.js";
+import { log } from "console";
 
 export default class IgnsCommand implements Command {
   public data: SlashCommandBuilder;
@@ -19,17 +20,6 @@ export default class IgnsCommand implements Command {
       .setDescription(this.description)
       .addSubcommand((subcommand) => {
         return subcommand
-          .setName("add")
-          .setDescription("Add an ign")
-          .addStringOption((option) => {
-            return option
-              .setName("ign")
-              .setDescription("The ign to add")
-              .setRequired(true);
-          });
-      })
-      .addSubcommand((subcommand) => {
-        return subcommand
           .setName("list")
           .setDescription("List your registered IGNs.");
       }) as SlashCommandBuilder;
@@ -41,34 +31,6 @@ export default class IgnsCommand implements Command {
     const subcommand = interaction.options.getSubcommand();
 
     switch (subcommand) {
-      case "add":
-        {
-          const ign = interaction.options.getString("ign", true);
-          if (!MojangAPI.validateUsername(ign)) {
-            await interaction.editReply({
-              content: "Could not validate username.",
-            });
-            return;
-          }
-          const uuid = await MojangAPI.usernameToUUID(ign);
-
-          if (!uuid) {
-            await interaction.editReply({
-              content: "Username does not exist.",
-            });
-            return;
-          }
-          const result = await prismaClient.player.addMcAccount(
-            interaction.user.id,
-            uuid
-          );
-          if (result.error) {
-            await interaction.editReply(result.error);
-          } else {
-            await interaction.editReply("IGN added successfully.");
-          }
-        }
-        break;
       case "list":
         {
           const player = await prismaClient.player.findUnique({
@@ -79,14 +41,14 @@ export default class IgnsCommand implements Command {
 
           if (!player) {
             await interaction.editReply(
-              "You are unregistered. Use /ign to add an IGN."
+              "You are unregistered. First play a game!"
             );
             return;
           }
 
           if (!player.primaryMinecraftAccount) {
             await interaction.editReply(
-              "You are unregistered. Use /ign to add an IGN."
+              "You are unregistered. First play a game!"
             );
             return;
           }
@@ -98,18 +60,16 @@ export default class IgnsCommand implements Command {
           if (!primaryMinecraftAccount) {
             //technically this should never happen, because how can you have a uuid saved that doesn't point to a valid minecraft account..
             await interaction.editReply(
-              "You are unregistered. Use /ign to add an IGN."
+              "You are unregistered. First play a game!"
             );
             return;
           }
 
           //same here.
           const others = await Promise.all(
-            player.minecraftAccounts
-              .filter((v) => v !== player.primaryMinecraftAccount)
-              .map(async (v) => {
-                return await MojangAPI.uuidToUsername(v);
-              })
+            player.minecraftAccounts.filter(
+              (v) => v !== player.primaryMinecraftAccount
+            )
           );
 
           //just be sure that they're all valid mc accounts
@@ -145,6 +105,7 @@ export default class IgnsCommand implements Command {
       .addFields({
         name: `1. ${primaryAccount}`,
         value: ` ${otherAccounts
+          .filter((v) => v !== primaryAccount)
           .map((v, i) => {
             return `${i + 2}. ${v}`;
           })
