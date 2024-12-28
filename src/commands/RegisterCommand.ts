@@ -53,13 +53,14 @@ export default class RegisterCommand implements Command {
 
     const member = interaction.guild?.members.cache.get(interaction.user.id);
 
+    interaction.deferReply({});
+
     if (
       !PermissionsUtil.hasRole(member, "organiserRole") &&
       !PermissionsUtil.isSameUser(interaction, targetUser.id)
     ) {
-      await interaction.reply({
+      await interaction.editReply({
         content: "You do not have permission to register other users.",
-        ephemeral: true,
       });
       return;
     }
@@ -69,9 +70,8 @@ export default class RegisterCommand implements Command {
       .some((player) => player.discordSnowflake === discordUserId);
 
     if (isAlreadyRegistered) {
-      await interaction.reply({
+      await interaction.editReply({
         content: "You have already registered for the announced game!",
-        ephemeral: false,
       });
       return;
     }
@@ -83,19 +83,16 @@ export default class RegisterCommand implements Command {
       );
 
     if (result.error) {
-      await interaction.reply({
+      await interaction.editReply({
         content: result.error,
-        ephemeral: false,
       });
     } else if (PermissionsUtil.isSameUser(interaction, targetUser.id)) {
-      await interaction.reply({
+      await interaction.editReply({
         content: `You have successfully registered as ${inGameName}!`,
-        ephemeral: false,
       });
     } else {
-      await interaction.reply({
+      await interaction.editReply({
         content: `${discordUserName} has been successfully registered as ${inGameName}`,
-        ephemeral: false,
       });
     }
   }
