@@ -69,9 +69,9 @@ export default class MVPCommand implements Command {
         });
         return;
       }
-
+      const strippedID = targetIdentifier.replace(/<@([^>]+)>/g, "$1");
       const targetPlayer =
-        await currentGame.findPlayerByNameOrDiscord(targetIdentifier);
+        await currentGame.findPlayerByNameOrDiscord(strippedID);
       if (!targetPlayer) {
         await interaction.reply({
           content: "Player not found.",
