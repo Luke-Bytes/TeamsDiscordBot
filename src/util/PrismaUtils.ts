@@ -4,7 +4,15 @@ export class PrismaUtils {
   static async findPlayer(identifier: string) {
     return await prismaClient.player.findFirst({
       where: {
-        OR: [{ discordSnowflake: identifier }, { latestIGN: identifier }],
+        OR: [
+          { discordSnowflake: identifier },
+          {
+            latestIGN: {
+              equals: identifier,
+              mode: "insensitive",
+            },
+          },
+        ],
       },
     });
   }
