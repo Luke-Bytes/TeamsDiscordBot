@@ -31,13 +31,18 @@ export default class StatsCommand implements Command {
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const input =
+    await interaction.deferReply({});
+
+    let input =
       interaction.options.getString("player", false) ?? interaction.user.id;
+
+    // strip the <@...> from the string if they used a ping.
+    input = input.replace(/<@([^>]+)>/g, "$1");
+
     const player = await PrismaUtils.findPlayer(input);
     if (!player) {
-      await interaction.reply({
+      await interaction.editReply({
         content: "Player not found.",
-        ephemeral: true,
       });
       return;
     }
@@ -45,11 +50,24 @@ export default class StatsCommand implements Command {
     const winLossRatio =
       player.losses === 0 ? player.wins : player.wins / player.losses;
     const winStreak = player.winStreak;
+    let fetchedPlayer =
+      interaction.guild?.members.resolve(player.discordSnowflake) ||
+      (await interaction.guild?.members.fetch(player.discordSnowflake));
+
+    // todo: should we really return from this? we can just not display the
+    // avatar and have a placeholder there instead.
+    if (!fetchedPlayer) {
+      await interaction.editReply({
+        content: "Player not found.",
+      });
+      return;
+    }
+
     const embed = new EmbedBuilder()
       .setColor("#5865F2")
       .setTitle("📊 Friendly Wars Stats")
       .setDescription("Overall performance:")
-      .setThumbnail(interaction.user.displayAvatarURL())
+      .setThumbnail(fetchedPlayer.displayAvatarURL())
       .addFields(
         {
           name: "Player",
@@ -88,8 +106,12 @@ export default class StatsCommand implements Command {
       })
       .setTimestamp();
 
-    await interaction.reply({
+    const msg = await interaction.editReply({
       embeds: [embed],
     });
+
+    setTimeout(async () => {
+      await msg.delete();
+    }, 30 * 1000);
   }
 }
