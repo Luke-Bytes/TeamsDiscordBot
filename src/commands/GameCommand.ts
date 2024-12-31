@@ -3,13 +3,13 @@ import {
   SlashCommandBuilder,
   GuildMember,
   Guild,
-  Snowflake,
 } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { ConfigManager } from "../ConfigManager";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { GameInstance } from "../database/GameInstance";
 import { cleanUpAfterGame } from "../logic/GameEndCleanUp";
+import { DiscordUtil } from "../util/DiscordUtil";
 
 export default class GameCommand implements Command {
   data = new SlashCommandBuilder()
@@ -53,14 +53,14 @@ export default class GameCommand implements Command {
       case "start":
         await interaction.deferReply({ ephemeral: false });
         try {
-          await assignTeamRolesAfterPicking(guild);
           await assignTeamVCAfterPicking(guild);
+          await assignTeamRolesAfterPicking(guild);
 
           await interaction.editReply(
             "Game will begin soon! Roles assigned and players moved to VCs."
           );
         } catch (error) {
-          console.error("Error starting the game:", error);
+          console.error("Error starting the game: ", error);
           await interaction.editReply({
             content: "Failed to start the game.",
           });
@@ -103,47 +103,11 @@ export async function assignTeamVCAfterPicking(guild: Guild) {
 
   const gameInstance = GameInstance.getInstance();
 
-  const movePlayerToTeamVC = async (
-    vcId: string,
-    roleId: string,
-    discordSnowflake: Snowflake
-  ) => {
-    const voiceChannel = guild.channels.cache.get(vcId);
-    const role = guild.roles.cache.get(roleId);
-
-    if (!voiceChannel || !role || !voiceChannel.isVoiceBased()) {
-      console.error(`Invalid setup for VC: ${vcId} or Role: ${roleId}`);
-      return;
-    }
-
-    try {
-      const member = await guild.members.fetch(discordSnowflake);
-      if (
-        !member.roles.cache.has(roleId) ||
-        member.voice.channel?.id === vcId
-      ) {
-        return;
-      }
-
-      console.log(
-        `Attempting to move ${member.user.tag} to ${voiceChannel.name}`
-      );
-      await member.voice.setChannel(voiceChannel);
-      console.log(
-        `Successfully moved ${member.user.tag} to ${voiceChannel.name}`
-      );
-    } catch (error) {
-      console.error(
-        `Failed to move member ${discordSnowflake} to ${voiceChannel?.name}: `,
-        error
-      );
-    }
-  };
-
   try {
     const redPlayers = gameInstance.getPlayersOfTeam("RED");
     for (const player of redPlayers) {
-      await movePlayerToTeamVC(
+      await DiscordUtil.moveToVC(
+        guild,
         config.channels.redTeamVC,
         redTeamRoleId,
         player.discordSnowflake
@@ -152,7 +116,8 @@ export async function assignTeamVCAfterPicking(guild: Guild) {
 
     const bluePlayers = gameInstance.getPlayersOfTeam("BLUE");
     for (const player of bluePlayers) {
-      await movePlayerToTeamVC(
+      await DiscordUtil.moveToVC(
+        guild,
         config.channels.blueTeamVC,
         blueTeamRoleId,
         player.discordSnowflake
@@ -172,27 +137,15 @@ export async function assignTeamRolesAfterPicking(guild: Guild) {
 
   const gameInstance = GameInstance.getInstance();
 
-  const assignRole = async (member: GuildMember, roleId: string) => {
-    try {
-      await member.roles.add(roleId);
-      console.log(`Assigned role ${roleId} to ${member.user.tag}`);
-    } catch (error) {
-      console.error(
-        `Failed to assign role ${roleId} to ${member.user.tag}: `,
-        error
-      );
-    }
-  };
-
   try {
     for (const player of gameInstance.getPlayersOfTeam("RED")) {
       const member = await guild.members.fetch(player.discordSnowflake);
-      if (member) await assignRole(member, redTeamRoleId);
+      if (member) await DiscordUtil.assignRole(member, redTeamRoleId);
     }
 
     for (const player of gameInstance.getPlayersOfTeam("BLUE")) {
       const member = await guild.members.fetch(player.discordSnowflake);
-      if (member) await assignRole(member, blueTeamRoleId);
+      if (member) await DiscordUtil.assignRole(member, blueTeamRoleId);
     }
   } catch (error) {
     console.error("Error assigning roles after team picking:", error);

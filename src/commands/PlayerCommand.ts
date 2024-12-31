@@ -3,6 +3,8 @@ import { Command } from "./CommandInterface";
 import { Team } from "@prisma/client";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 
+type ExtendedTeam = Team | "UNDECIDED";
+
 export default class PlayerCommand implements Command {
   name = "player";
   description = "Manage players and teams";
@@ -28,7 +30,8 @@ export default class PlayerCommand implements Command {
             .setRequired(true)
             .addChoices(
               { name: "RED", value: "RED" },
-              { name: "BLUE", value: "BLUE" }
+              { name: "BLUE", value: "BLUE" },
+              { name: "NONE", value: "UNDECIDED" }
             )
         )
         .addStringOption((option) =>
@@ -38,7 +41,8 @@ export default class PlayerCommand implements Command {
             .setRequired(true)
             .addChoices(
               { name: "RED", value: "RED" },
-              { name: "BLUE", value: "BLUE" }
+              { name: "BLUE", value: "BLUE" },
+              { name: "NONE", value: "UNDECIDED" }
             )
         )
     )
@@ -59,7 +63,8 @@ export default class PlayerCommand implements Command {
             .setRequired(true)
             .addChoices(
               { name: "RED", value: "RED" },
-              { name: "BLUE", value: "BLUE" }
+              { name: "BLUE", value: "BLUE" },
+              { name: "NONE", value: "UNDECIDED" }
             )
         )
     )
@@ -108,13 +113,20 @@ export default class PlayerCommand implements Command {
 
       switch (subcommand) {
         case "move": {
-          const fromTeam = interaction.options.getString("from", true) as Team;
-          const toTeam = interaction.options.getString("to", true) as Team;
+          const fromTeam = interaction.options.getString(
+            "from",
+            true
+          ) as ExtendedTeam;
+          const toTeam = interaction.options.getString(
+            "to",
+            true
+          ) as ExtendedTeam;
 
           const success = await game.movePlayerBetweenTeams(
             playerName,
             fromTeam,
-            toTeam
+            toTeam,
+            interaction.guild
           );
 
           await interaction.reply(
@@ -127,7 +139,11 @@ export default class PlayerCommand implements Command {
 
         case "add": {
           await interaction.reply(
-            (await game.addPlayerByNameOrDiscord(playerName, newTeam as Team))
+            (await game.addPlayerByNameOrDiscord(
+              playerName,
+              newTeam as ExtendedTeam,
+              interaction.guild
+            ))
               ? `Successfully added **${playerName}** to **${newTeam?.toUpperCase()}**.`
               : `Failed to add **${playerName}**. Ensure the player is registered with \`/register\`.`
           );
@@ -136,7 +152,10 @@ export default class PlayerCommand implements Command {
 
         case "remove": {
           await interaction.reply(
-            (await game.removePlayerByNameOrDiscord(playerName))
+            (await game.removePlayerByNameOrDiscord(
+              playerName,
+              interaction.guild
+            ))
               ? `Successfully removed **${playerName}** from the game.`
               : `Failed to remove **${playerName}**. The player could not be found in any team.`
           );
@@ -145,7 +164,11 @@ export default class PlayerCommand implements Command {
 
         case "replace": {
           await interaction.reply(
-            (await game.replacePlayerByNameOrDiscord(oldPlayer, targetPlayer))
+            (await game.replacePlayerByNameOrDiscord(
+              oldPlayer,
+              targetPlayer,
+              interaction.guild
+            ))
               ? `Successfully replaced **${oldPlayer}** with **${targetPlayer}** in their current team.`
               : `Failed to replace **${oldPlayer}**. Ensure both players are correctly registered and in the appropriate teams.`
           );

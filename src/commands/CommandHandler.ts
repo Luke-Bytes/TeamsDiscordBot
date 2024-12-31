@@ -79,9 +79,16 @@ export class CommandHandler {
         );
         if (command) {
           const subCommand = chatInteraction.options.getSubcommand(false);
+
+          const optionValues = chatInteraction.options.data
+            .map((option) => option.value ?? "undefined")
+            .join(" ");
+
           console.log(
-            `[${chatInteraction.user.tag}] ran /${chatInteraction.commandName}${subCommand ? ` ${subCommand}` : ""}`
+            `[${chatInteraction.user.tag}] ran /${chatInteraction.commandName}` +
+              `${subCommand ? ` ${subCommand}` : ""} ${optionValues}`
           );
+
           await command.execute(chatInteraction);
         }
       } else if (interaction.isMessageContextMenuCommand()) {
@@ -106,16 +113,19 @@ export class CommandHandler {
       }
     } catch (error) {
       console.error("Error handling interaction:", error);
-
       if (
         interaction.isRepliable() &&
         !interaction.replied &&
         !interaction.deferred
       ) {
-        await interaction.reply({
-          content: "An error occurred while processing your request.",
-          ephemeral: true,
-        });
+        try {
+          await interaction.reply({
+            content: "An error occurred while processing your request.",
+            ephemeral: true,
+          });
+        } catch (replyError) {
+          console.error("Failed to send error reply:", replyError);
+        }
       }
     }
   }
