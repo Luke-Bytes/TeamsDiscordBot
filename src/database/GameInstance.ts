@@ -1,10 +1,12 @@
 import { $Enums, AnniMap, Team } from "@prisma/client";
-import { Snowflake } from "discord.js";
+import { CacheType, CacheTypeReducer, Guild, Snowflake } from "discord.js";
 import { PlayerInstance } from "./PlayerInstance";
 import { MapVoteManager } from "../logic/MapVoteManager";
 import { MojangAPI } from "../api/MojangAPI";
 import { MinerushVoteManager } from "../logic/MinerushVoteManager";
 import { prismaClient } from "./prismaClient";
+import { ConfigManager } from "../ConfigManager";
+import { DiscordUtil } from "../util/DiscordUtil";
 
 // wrapper class for Game
 export class GameInstance {
@@ -373,23 +375,77 @@ export class GameInstance {
 
   public async addPlayerByNameOrDiscord(
     identifier: string,
-    team: Team | "UNDECIDED"
+    team: Team | "UNDECIDED",
+    guild: CacheTypeReducer<CacheType, Guild, null>
   ): Promise<boolean> {
     const player = await this.findPlayerByNameOrDiscord(identifier);
     if (!player || !this.isPlayerInUndecided(player)) return false;
 
     this.removePlayerFromAllTeams(player);
+    if (!guild) {
+      console.error(`Guild not found for ID: ${player.discordSnowflake}`);
+      return false;
+    }
+    const member = await guild.members
+      .fetch(player.discordSnowflake)
+      .catch(() => null);
+    if (!member) {
+      console.error(`GuildMember not found for ID: ${player.discordSnowflake}`);
+      return false;
+    }
+
+    const config = ConfigManager.getConfig();
+    const blueTeamRoleId = config.roles.blueTeamRole;
+    const redTeamRoleId = config.roles.redTeamRole;
+
+    if (team === "BLUE") {
+      if (member.roles.cache.has(redTeamRoleId)) {
+        await DiscordUtil.removeRole(member, redTeamRoleId);
+      }
+      await DiscordUtil.assignRole(member, blueTeamRoleId);
+    } else if (team === "RED") {
+      if (member.roles.cache.has(blueTeamRoleId)) {
+        await DiscordUtil.removeRole(member, blueTeamRoleId);
+      }
+      await DiscordUtil.assignRole(member, redTeamRoleId);
+    }
+
     this.teams[team].push(player);
     return true;
   }
 
   public async removePlayerByNameOrDiscord(
-    identifier: string
+    identifier: string,
+    guild: CacheTypeReducer<CacheType, Guild, null>
   ): Promise<boolean> {
     const player = await this.findPlayerByNameOrDiscord(identifier);
     if (!player) return false;
 
     this.removePlayerFromAllTeams(player);
+
+    if (!guild) {
+      console.error(`Guild not found for ID: ${player.discordSnowflake}`);
+      return false;
+    }
+
+    const member = await guild.members
+      .fetch(player.discordSnowflake)
+      .catch(() => null);
+    if (!member) {
+      console.error(`GuildMember not found for ID: ${player.discordSnowflake}`);
+      return false;
+    }
+
+    const config = ConfigManager.getConfig();
+    const blueTeamRoleId = config.roles.blueTeamRole;
+    const redTeamRoleId = config.roles.redTeamRole;
+
+    if (member.roles.cache.has(blueTeamRoleId)) {
+      await DiscordUtil.removeRole(member, blueTeamRoleId);
+    }
+    if (member.roles.cache.has(redTeamRoleId)) {
+      await DiscordUtil.removeRole(member, redTeamRoleId);
+    }
     return true;
   }
 
@@ -424,7 +480,8 @@ export class GameInstance {
 
   public async replacePlayerByNameOrDiscord(
     oldIdentifier: string,
-    newIdentifier: string
+    newIdentifier: string,
+    guild: CacheTypeReducer<CacheType, Guild, null>
   ): Promise<boolean> {
     const oldPlayer = await this.findPlayerByNameOrDiscord(oldIdentifier);
     const newPlayer = await this.findPlayerByNameOrDiscord(newIdentifier);
@@ -441,6 +498,52 @@ export class GameInstance {
     const oldPlayerTeam = this.getPlayersTeam(oldPlayer);
     if (!oldPlayerTeam || oldPlayerTeam === "UNDECIDED") {
       return false;
+    }
+
+    if (!guild) {
+      console.error(
+        `Guild not found for replacing players: ${oldPlayer.discordSnowflake}, ${newPlayer.discordSnowflake}`
+      );
+      return false;
+    }
+
+    const oldMember = await guild.members
+      .fetch(oldPlayer.discordSnowflake)
+      .catch(() => null);
+    const newMember = await guild.members
+      .fetch(newPlayer.discordSnowflake)
+      .catch(() => null);
+
+    if (!oldMember || !newMember) {
+      console.error(
+        `Guild members not found for players: ${oldPlayer.discordSnowflake}, ${newPlayer.discordSnowflake}`
+      );
+      return false;
+    }
+
+    const config = ConfigManager.getConfig();
+    const blueTeamRoleId = config.roles.blueTeamRole;
+    const redTeamRoleId = config.roles.redTeamRole;
+
+    // Remove roles from oldPlayer
+    if (oldMember.roles.cache.has(blueTeamRoleId)) {
+      await DiscordUtil.removeRole(oldMember, blueTeamRoleId);
+    }
+    if (oldMember.roles.cache.has(redTeamRoleId)) {
+      await DiscordUtil.removeRole(oldMember, redTeamRoleId);
+    }
+
+    if (newMember.roles.cache.has(blueTeamRoleId)) {
+      await DiscordUtil.removeRole(newMember, blueTeamRoleId);
+    }
+    if (newMember.roles.cache.has(redTeamRoleId)) {
+      await DiscordUtil.removeRole(newMember, redTeamRoleId);
+    }
+
+    if (oldPlayerTeam === "BLUE") {
+      await DiscordUtil.assignRole(newMember, blueTeamRoleId);
+    } else if (oldPlayerTeam === "RED") {
+      await DiscordUtil.assignRole(newMember, redTeamRoleId);
     }
 
     this.removePlayerFromAllTeams(oldPlayer);
@@ -460,12 +563,13 @@ export class GameInstance {
 
   public async movePlayerBetweenTeams(
     playerName: string,
-    fromTeam: Team,
-    toTeam: Team
+    fromTeam: Team | "UNDECIDED",
+    toTeam: Team | "UNDECIDED",
+    guild: CacheTypeReducer<CacheType, Guild, null>
   ): Promise<boolean> {
     if (
-      !["RED", "BLUE"].includes(fromTeam) ||
-      !["RED", "BLUE"].includes(toTeam)
+      !["RED", "BLUE", "UNDECIDED"].includes(fromTeam) ||
+      !["RED", "BLUE", "UNDECIDED"].includes(toTeam)
     ) {
       console.error("Invalid teams specified:", { fromTeam, toTeam });
       return false;
@@ -478,6 +582,49 @@ export class GameInstance {
         fromTeam,
       });
       return false;
+    }
+
+    if (!guild) {
+      console.error(
+        `Guild not found for moving player: ${player.discordSnowflake}`
+      );
+      return false;
+    }
+
+    const member = await guild.members
+      .fetch(player.discordSnowflake)
+      .catch(() => null);
+    if (!member) {
+      console.error(
+        `GuildMember not found for moving player: ${player.discordSnowflake}`
+      );
+      return false;
+    }
+
+    const config = ConfigManager.getConfig();
+    const blueTeamRoleId = config.roles.blueTeamRole;
+    const redTeamRoleId = config.roles.redTeamRole;
+
+    if (fromTeam === "BLUE") {
+      if (member.roles.cache.has(blueTeamRoleId)) {
+        await DiscordUtil.removeRole(member, blueTeamRoleId);
+      }
+    } else if (fromTeam === "RED") {
+      if (member.roles.cache.has(redTeamRoleId)) {
+        await DiscordUtil.removeRole(member, redTeamRoleId);
+      }
+    }
+
+    if (toTeam === "BLUE") {
+      if (member.roles.cache.has(redTeamRoleId)) {
+        await DiscordUtil.removeRole(member, redTeamRoleId);
+      }
+      await DiscordUtil.assignRole(member, blueTeamRoleId);
+    } else if (toTeam === "RED") {
+      if (member.roles.cache.has(blueTeamRoleId)) {
+        await DiscordUtil.removeRole(member, blueTeamRoleId);
+      }
+      await DiscordUtil.assignRole(member, redTeamRoleId);
     }
 
     this.removePlayerFromAllTeams(player);

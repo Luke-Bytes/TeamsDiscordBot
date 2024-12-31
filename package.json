@@ -12,13 +12,16 @@
     "dev": "tsx watch src/main.ts",
     "prod": "npm run build && npm run start:bot:prod",
     "dev:pm2": "pm2 start src/main.ts --name 'TeamsBot' --watch --interpreter tsx",
-    "prod:pm2": "pm2 start dist/main.js --name 'TeamsBot' --max-restarts 5",
+    "prod:pm2": "pm2 start dist/main.js --name 'TeamsBot' --max-restarts 10",
     "stop:pm2": "pm2 stop TeamsBot",
     "clean": "rimraf dist",
     "lint": "eslint .",
     "format": "prettier --write .",
     "lint:fix": "eslint . --fix",
-    "check-format": "prettier --check ."
+    "check-format": "prettier --check .",
+    "rollback-master": "git checkout master && git checkout -b master-rollback && git reset --hard HEAD~1",
+    "logs": "node scripts/tail-logs.js",
+    "backup": "node scripts/db-backups.js"
   },
   "author": "Luke and Eric",
   "license": "GNU",
