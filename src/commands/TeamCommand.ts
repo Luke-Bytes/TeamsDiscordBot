@@ -191,7 +191,7 @@ export default class TeamCommand implements Command {
           }
 
           await DiscordUtil.editReply(interaction, {
-            content: `Team picking in progress..`,
+            content: `Team picking now in progress..`,
           });
           break;
         }

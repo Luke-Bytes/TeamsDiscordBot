@@ -525,7 +525,6 @@ export class GameInstance {
     const blueTeamRoleId = config.roles.blueTeamRole;
     const redTeamRoleId = config.roles.redTeamRole;
 
-    // Remove roles from oldPlayer
     if (oldMember.roles.cache.has(blueTeamRoleId)) {
       await DiscordUtil.removeRole(oldMember, blueTeamRoleId);
     }
