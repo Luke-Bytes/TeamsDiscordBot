@@ -81,11 +81,12 @@ export class CommandHandler {
           const subCommand = chatInteraction.options.getSubcommand(false);
 
           const optionValues = chatInteraction.options.data
-            .map((option) => `${option.value}`)
+            .map((option) => option.value ?? "undefined")
             .join(" ");
 
           console.log(
-            `[${chatInteraction.user.tag}] ran /${chatInteraction.commandName}${subCommand ? ` ${subCommand}` : ""} ${optionValues}`
+            `[${chatInteraction.user.tag}] ran /${chatInteraction.commandName}` +
+              `${subCommand ? ` ${subCommand}` : ""} ${optionValues}`
           );
 
           await command.execute(chatInteraction);
