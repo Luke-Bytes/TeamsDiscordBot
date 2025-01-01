@@ -15,6 +15,7 @@ export type Config = {
   channels: {
     registration: string;
     announcements: string;
+    gameFeed: string;
     teamPickingVC: string;
     teamPickingChat: string;
     redTeamVC: string;

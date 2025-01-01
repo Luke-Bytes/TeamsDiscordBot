@@ -12,6 +12,7 @@
   "channels": {
     "registration": "",
     "announcements": "",
+    "gameFeed": "",
     "teamPickingVC": "",
     "teamPickingChat": "",
     "redTeamVC": "",

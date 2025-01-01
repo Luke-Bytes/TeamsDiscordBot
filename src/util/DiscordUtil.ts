@@ -6,7 +6,9 @@ import {
   InteractionReplyOptions,
   MessagePayload,
   Snowflake,
+  TextChannel,
 } from "discord.js";
+import { Channels } from "../Channels";
 
 export class DiscordUtil {
   static getGuildMember(
@@ -98,6 +100,22 @@ export class DiscordUtil {
         `Failed to move member ${discordSnowflake} to ${voiceChannel?.name}: `,
         error
       );
+    }
+  }
+
+  static async sendMessage(
+    channel: Exclude<keyof typeof Channels, "initChannels">,
+    content: string
+  ): Promise<void> {
+    try {
+      const textChannel = Channels[channel] as TextChannel;
+      if (!textChannel) {
+        console.error(`Channel "${channel}" is not a valid TextChannel.`);
+        return;
+      }
+      await textChannel.send(content);
+    } catch (error) {
+      console.error(`Failed to send message to channel "${channel}": `, error);
     }
   }
 }

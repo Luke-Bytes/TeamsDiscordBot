@@ -16,6 +16,9 @@ import { parseDate } from "chrono-node";
 import { Channels } from "../Channels";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { ConfigManager } from "../ConfigManager";
+import { activateFeed } from "../logic/gameFeed/ActivateFeed";
+import { addRegisteredPlayersFeed } from "../logic/gameFeed/RegisteredGameFeed";
+import { addTeamsGameFeed } from "../logic/gameFeed/TeamsGameFeed";
 
 export default class AnnouncementCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;
@@ -301,6 +304,16 @@ export default class AnnouncementCommand implements Command {
 
     this.announcementMessage = await Channels.announcements.send(embed);
 
+    if (Channels.registration.isTextBased()) {
+      await Channels.registration.send(
+        "**A friendly wars game has been announced!** 🎉\n" +
+          "Sign up by typing the `/register [MCID]` command in this chat."
+      );
+    }
+
+    await activateFeed(Channels.gameFeed, addRegisteredPlayersFeed);
+    await activateFeed(Channels.gameFeed, addTeamsGameFeed);
+
     await CurrentGameManager.getCurrentGame().announce();
   }
 
@@ -343,9 +356,9 @@ export default class AnnouncementCommand implements Command {
       .setColor("#00FF7F")
       .setTitle(`🎉 FRIENDLY WAR ANNOUNCEMENT ${preview ? "[PREVIEW]" : ""}`)
       .setDescription(
-        `Get ready to fight! ${
+        `${
           preview ? "This is a preview of the announcement." : ""
-        } Go to <#${registrationChannelId}> to join!`
+        } Get ready to fight! Go to <#${registrationChannelId}> to join!`
       )
       .addFields(
         {

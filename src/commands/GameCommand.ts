@@ -19,10 +19,14 @@ export default class GameCommand implements Command {
       sub.setName("start").setDescription("Move players to team vcs")
     )
     .addSubcommand((sub) =>
-      sub.setName("end").setDescription("Move players to 1 vc")
+      sub
+        .setName("end")
+        .setDescription("Move players to 1 vc and start MVP vote")
     )
     .addSubcommand((sub) =>
-      sub.setName("finish").setDescription("End the game and calculate elo")
+      sub
+        .setName("shutdown")
+        .setDescription("Complete the game and calculate elo")
     );
 
   name = "game";
@@ -67,13 +71,30 @@ export default class GameCommand implements Command {
         }
         break;
 
-      case "end":
+      case "end": {
         gameInstance.isFinished = true;
-        await interaction.reply("Moving players back to team picking..");
+        await interaction.reply(
+          "Moving players back to team picking and starting MVP votes.."
+        );
         await movePlayersToTeamPickingAfterGameEnd(guild);
-        break;
 
-      case "finish":
+        const config = ConfigManager.getConfig();
+        const blueTeamRoleId = config.roles.blueTeamRole;
+        const redTeamRoleId = config.roles.redTeamRole;
+
+        await DiscordUtil.sendMessage(
+          "redTeamChat",
+          `The game has now ended, voting for the team MVP is now open! Type \`/MVP Vote [MCID]\` to pick for <@&${redTeamRoleId}>!`
+        );
+
+        await DiscordUtil.sendMessage(
+          "blueTeamChat",
+          `The game has now ended, voting for the team MVP is now open! Type \`/MVP Vote [MCID]\` to pick for <@&${blueTeamRoleId}>!`
+        );
+        break;
+      }
+
+      case "shutdown":
         if (!gameInstance.gameWinner) {
           await interaction.reply({
             content: "Please set a winner via /winner before ending the game.",
@@ -81,7 +102,14 @@ export default class GameCommand implements Command {
           });
           return;
         }
-        gameInstance.isFinished = true;
+        if (!gameInstance.isFinished) {
+          await interaction.reply({
+            content:
+              "The game should be finished first in order to wait for mvp votes, /game finish",
+            ephemeral: false,
+          });
+          return;
+        }
         await interaction.reply(
           "Beginning post game clean up of channels and calculating elo.."
         );

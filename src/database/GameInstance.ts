@@ -301,7 +301,7 @@ export class GameInstance {
     );
 
     // this.gameId = "default-game-id";
-    this.isFinished = true;
+    this.isFinished = false;
     this.announced = true;
     this.startTime = new Date(Date.now() + 6 * 60 * 1000); // 6m from now for polls
     this.endTime = new Date("2025-01-01T02:00:00Z");
@@ -691,6 +691,13 @@ export class GameInstance {
   public async countMVPVotes() {
     this.MVPPlayerRed = this.determineTeamMVP("RED");
     this.MVPPlayerBlue = this.determineTeamMVP("BLUE");
+    const redMVP = this.MVPPlayerRed || "no body";
+    const blueMVP = this.MVPPlayerBlue || "no body";
+    await DiscordUtil.sendMessage("gameFeed", "\u200b");
+
+    const messageText = `🏆 **Game MVPs** 🏆\n🔴 **RED Team:** ${redMVP}\n🔵 **BLUE Team:** ${blueMVP}`;
+    await DiscordUtil.sendMessage("gameFeed", messageText);
+    await DiscordUtil.sendMessage("gameFeed", "\u200b");
   }
 
   private determineTeamMVP(team: Team): string {
