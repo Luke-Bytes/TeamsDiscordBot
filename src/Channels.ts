@@ -1,34 +1,45 @@
+import { Client, TextChannel } from "discord.js";
 import { ConfigManager } from "./ConfigManager";
-import { Client, GuildBasedChannel } from "discord.js";
 
 export class Channels {
-  public static announcements: GuildBasedChannel;
-  public static teamPicking: GuildBasedChannel;
+  public static announcements: TextChannel;
+  public static teamPicking: TextChannel;
+  public static gameFeed: TextChannel;
+  public static registration: TextChannel;
+  public static redTeamChat: TextChannel;
+  public static blueTeamChat: TextChannel;
 
   public static async initChannels(client: Client) {
-    //TODO add other channels like registration and organiser-commands etc
     const config = ConfigManager.getConfig();
 
     const fetchedAnnouncements = await client.channels.fetch(
       config.channels.announcements
     );
-
-    if (fetchedAnnouncements === null) {
-      console.error("Could not find announcements channel!");
-      return;
-    }
-
-    this.announcements = fetchedAnnouncements as GuildBasedChannel;
+    this.announcements = fetchedAnnouncements as TextChannel;
 
     const fetchedTeamPicking = await client.channels.fetch(
       config.channels.teamPickingChat
     );
+    this.teamPicking = fetchedTeamPicking as TextChannel;
 
-    if (fetchedTeamPicking === null) {
-      console.error("Could not find team picking channel!");
-      return;
-    }
+    const fetchedGameFeed = await client.channels.fetch(
+      config.channels.gameFeed
+    );
+    this.gameFeed = fetchedGameFeed as TextChannel;
 
-    this.teamPicking = fetchedTeamPicking as GuildBasedChannel;
+    const fetchedRegistration = await client.channels.fetch(
+      config.channels.registration
+    );
+    this.registration = fetchedRegistration as TextChannel;
+
+    const fetchedRedTeamChat = await client.channels.fetch(
+      config.channels.redTeamChat
+    );
+    this.redTeamChat = fetchedRedTeamChat as TextChannel;
+
+    const fetchedBlueTeamChat = await client.channels.fetch(
+      config.channels.blueTeamChat
+    );
+    this.blueTeamChat = fetchedBlueTeamChat as TextChannel;
   }
 }

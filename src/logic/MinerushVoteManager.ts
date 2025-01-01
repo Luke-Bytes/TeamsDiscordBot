@@ -66,7 +66,7 @@ export class MinerushVoteManager extends EventEmitter<MinerushVoteManagerEvents>
     const channel = Channels.announcements;
 
     if (!channel || !channel.isSendable()) {
-      console.error(`Missing send permissions in channel ${channel?.name}`);
+      console.error(`Missing send permissions in channel ${channel}`);
       return;
     }
 

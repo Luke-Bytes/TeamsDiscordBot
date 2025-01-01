@@ -2,6 +2,10 @@ import { Guild, TextChannel } from "discord.js";
 import { ConfigManager } from "../ConfigManager.js";
 import { GameInstance } from "../database/GameInstance.js";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
+import { gameFeed } from "../logic/gameFeed/GameFeed";
+import { DiscordUtil } from "../util/DiscordUtil";
+import { LeaderBoardFeed } from "../logic/gameFeed/LeaderBoardFeed";
+import { Channels } from "../Channels";
 
 export async function cleanUpAfterGame(guild: Guild) {
   const config = ConfigManager.getConfig();
@@ -59,6 +63,26 @@ export async function cleanUpAfterGame(guild: Guild) {
     console.error("Failed to clean up roles or move members:", error);
   }
 
+  const game = CurrentGameManager.getCurrentGame();
+  await game.countMVPVotes();
+  // TODO thank admin also
+  const messageText = `🎉 **The Game is Over!** 🎉\n🏅 **Winning Team:** ${game.gameWinner}\n👏 Thanks for playing everyone!`;
+
+  await DiscordUtil.sendMessage("gameFeed", messageText);
+
+  //FIXME why isnt it resetting announcements
+  await GameInstance.resetGameInstance();
+  console.log("Game instance reset to default values.");
+  gameFeed.removeAllFeedMessages();
+
+  await DiscordUtil.sendMessage("gameFeed", "\u200b");
+  const leaderboardFeed = new LeaderBoardFeed();
+  const leaderboardEmbed = await leaderboardFeed.generateEmbed();
+  await Channels.gameFeed.send({ embeds: [leaderboardEmbed] });
+
+  // 5m delay before clearing all messages
+  await new Promise((resolve) => setTimeout(resolve, 5 * 60 * 1000));
+
   const captainRoleId = config.roles.captainRole;
 
   try {
@@ -89,6 +113,7 @@ export async function cleanUpAfterGame(guild: Guild) {
       config.channels.redTeamChat,
       config.channels.teamPickingChat,
       config.channels.registration,
+      config.channels.gameFeed,
     ];
 
     for (const channelId of chatChannelIds) {
@@ -138,8 +163,4 @@ export async function cleanUpAfterGame(guild: Guild) {
   } catch (error) {
     console.error("Failed to clean up messages:", error);
   }
-  await CurrentGameManager.getCurrentGame().countMVPVotes();
-  //FIXME why isnt it resetting announcements
-  await GameInstance.resetGameInstance();
-  console.log("Game instance reset to default values.");
 }
