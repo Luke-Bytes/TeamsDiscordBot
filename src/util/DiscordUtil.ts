@@ -6,7 +6,6 @@ import {
   InteractionReplyOptions,
   MessagePayload,
   Snowflake,
-  TextChannel,
 } from "discord.js";
 import { Channels } from "../Channels";
 
