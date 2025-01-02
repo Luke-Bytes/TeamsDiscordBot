@@ -65,8 +65,8 @@ export async function cleanUpAfterGame(guild: Guild) {
 
   const game = CurrentGameManager.getCurrentGame();
   await game.countMVPVotes();
-  // TODO thank admin also
-  const messageText = `🎉 **The Game is Over!** 🎉\n🏅 **Winning Team:** ${game.gameWinner}\n👏 Thanks for playing everyone!`;
+
+  const messageText = `🎉 **The Game is Over!** 🎉\n🏅 **Winning Team:** ${game.gameWinner}\n👏 Thanks for playing everyone, and a special thanks to ${game.host} for hosting!`;
 
   await DiscordUtil.sendMessage("gameFeed", messageText);
 

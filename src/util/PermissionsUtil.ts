@@ -5,13 +5,18 @@ export class PermissionsUtil {
   static readonly config: Config = ConfigManager.getConfig();
 
   static isChannel(
-    interaction: ChatInputCommandInteraction,
+    source: { channelId?: string } | { channel: { id: string } },
     channelKeyOrId: keyof Config["channels"] | string
   ): boolean {
     const channelId =
       this.config.channels[channelKeyOrId as keyof Config["channels"]] ??
       channelKeyOrId;
-    return interaction.channelId === channelId;
+    if ("channelId" in source) {
+      return source.channelId === channelId;
+    } else if ("channel" in source && source.channel.id) {
+      return source.channel.id === channelId;
+    }
+    return false;
   }
 
   static hasRole(

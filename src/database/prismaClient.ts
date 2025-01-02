@@ -84,6 +84,8 @@ export const prismaClient = new PrismaClient().$extends({
           teams,
           gameWinner,
           teamsDecidedBy,
+          organiser,
+          host,
         } = gameInstance;
 
         const gameSettings = {
@@ -112,22 +114,41 @@ export const prismaClient = new PrismaClient().$extends({
             const losingTeam = winningTeam === "RED" ? "BLUE" : "RED";
 
             if (team === winningTeam) {
+              const player = await prismaClient.player.findUnique({
+                where: { id: playerRecord.id },
+              });
+
               await prismaClient.player.update({
                 where: { id: playerRecord.id },
                 data: {
                   wins: { increment: 1 },
                   winStreak: { increment: 1 },
+                  loseStreak: 0,
+                  biggestWinStreak: Math.max(
+                    player!.winStreak + 1,
+                    player!.biggestWinStreak
+                  ),
                 },
               });
             } else if (team === losingTeam) {
+              const player = await prismaClient.player.findUnique({
+                where: { id: playerRecord.id },
+              });
+
               await prismaClient.player.update({
                 where: { id: playerRecord.id },
                 data: {
                   losses: { increment: 1 },
+                  loseStreak: { increment: 1 },
                   winStreak: 0,
+                  biggestLosingStreak: Math.max(
+                    player!.loseStreak + 1,
+                    player!.biggestLosingStreak
+                  ),
                 },
               });
             }
+
             const mvp =
               (team === "RED" &&
                 currentGame.MVPPlayerRed === playerInstance.ignUsed) ||
@@ -171,6 +192,8 @@ export const prismaClient = new PrismaClient().$extends({
             gameParticipations: {
               create: validParticipants,
             },
+            organiser: organiser,
+            host: host,
           },
           create: {
             id: gameId,
@@ -183,6 +206,8 @@ export const prismaClient = new PrismaClient().$extends({
                 ? (gameWinner as Team)
                 : undefined,
             type: teamsDecidedBy as gameType | null,
+            organiser: organiser,
+            host: host,
             participantsIGNs: validParticipants.map(
               (p) => p?.ignUsed ?? "UnknownIGN"
             ),
