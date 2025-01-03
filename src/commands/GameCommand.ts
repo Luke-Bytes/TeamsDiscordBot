@@ -10,6 +10,7 @@ import { PermissionsUtil } from "../util/PermissionsUtil";
 import { GameInstance } from "../database/GameInstance";
 import { cleanUpAfterGame } from "../logic/GameEndCleanUp";
 import { DiscordUtil } from "../util/DiscordUtil";
+import { setTimeout as delay } from "timers/promises";
 
 export default class GameCommand implements Command {
   data = new SlashCommandBuilder()
@@ -57,8 +58,9 @@ export default class GameCommand implements Command {
       case "start":
         await interaction.deferReply({ ephemeral: false });
         try {
-          await assignTeamVCAfterPicking(guild);
           await assignTeamRolesAfterPicking(guild);
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          await assignTeamVCAfterPicking(guild);
 
           await interaction.editReply(
             "Game will begin soon! Roles assigned and players moved to VCs."
@@ -122,7 +124,7 @@ export default class GameCommand implements Command {
   }
 }
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+// const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function assignTeamVCAfterPicking(guild: Guild) {
   const config = ConfigManager.getConfig();
@@ -162,19 +164,43 @@ export async function assignTeamRolesAfterPicking(guild: Guild) {
   const config = ConfigManager.getConfig();
   const blueTeamRoleId = config.roles.blueTeamRole;
   const redTeamRoleId = config.roles.redTeamRole;
-
   const gameInstance = GameInstance.getInstance();
 
-  try {
-    for (const player of gameInstance.getPlayersOfTeam("RED")) {
-      const member = await guild.members.fetch(player.discordSnowflake);
-      if (member) await DiscordUtil.assignRole(member, redTeamRoleId);
-    }
+  const BATCH_SIZE = 5;
+  const DELAY_MS = 200;
 
-    for (const player of gameInstance.getPlayersOfTeam("BLUE")) {
-      const member = await guild.members.fetch(player.discordSnowflake);
-      if (member) await DiscordUtil.assignRole(member, blueTeamRoleId);
+  async function assignRolesForTeam(team: "RED" | "BLUE", roleId: string) {
+    const players = gameInstance.getPlayersOfTeam(team);
+
+    for (let i = 0; i < players.length; i += BATCH_SIZE) {
+      const batch = players.slice(i, i + BATCH_SIZE);
+
+      await Promise.allSettled(
+        batch.map(async (player) => {
+          try {
+            const member = await guild.members.fetch(player.discordSnowflake);
+            if (member) {
+              await DiscordUtil.assignRole(member, roleId);
+            }
+          } catch (error) {
+            console.error(
+              `Failed to assign role to ${player.discordSnowflake}:`,
+              error
+            );
+          }
+        })
+      );
+
+      if (i + BATCH_SIZE < players.length) {
+        await delay(DELAY_MS); // Delay between batches
+      }
     }
+  }
+
+  try {
+    await assignRolesForTeam("RED", redTeamRoleId);
+    await assignRolesForTeam("BLUE", blueTeamRoleId);
+    console.log("Roles assigned successfully for both teams.");
   } catch (error) {
     console.error("Error assigning roles after team picking:", error);
   }

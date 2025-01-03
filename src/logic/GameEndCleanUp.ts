@@ -1,4 +1,4 @@
-import { Guild, TextChannel } from "discord.js";
+import { Guild, Message, TextChannel } from "discord.js";
 import { ConfigManager } from "../ConfigManager.js";
 import { GameInstance } from "../database/GameInstance.js";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
@@ -12,55 +12,44 @@ export async function cleanUpAfterGame(guild: Guild) {
   const blueTeamRoleId = config.roles.blueTeamRole;
   const redTeamRoleId = config.roles.redTeamRole;
   const teamPickingVCId = config.channels.teamPickingVC;
+  const blueTeamVCId = config.channels.blueTeamVC;
+  const redTeamVCId = config.channels.redTeamVC;
   const roleIds = [blueTeamRoleId, redTeamRoleId];
+  const BATCH_SIZE = 5;
+  const DELAY_MS = 1000;
 
   try {
     for (const roleId of roleIds) {
-      const role = guild.roles.cache.get(roleId);
-      if (!role) {
-        console.log(`Role with ID ${roleId} not found in guild ${guild.name}`);
-        continue;
-      }
-
-      // Filters by blue + red roles
-      for (const [_, member] of role.members) {
-        try {
-          await member.roles.remove(role);
-          console.log(`Removed role ${role.name} from ${member.user.tag}`);
-        } catch (error) {
-          console.error(
-            `Failed to remove role ${role.name} from ${member.user.tag}: `,
-            error
-          );
-        }
-      }
+      await DiscordUtil.batchRemoveRoleFromMembers(
+        guild,
+        roleId,
+        BATCH_SIZE,
+        DELAY_MS
+      );
     }
-
-    const moveMembers = async (vcId: string) => {
-      const voiceChannel = guild.channels.cache.get(vcId);
-      if (voiceChannel && voiceChannel.isVoiceBased() && voiceChannel.members) {
-        for (const [_, member] of voiceChannel.members) {
-          try {
-            await member.voice.setChannel(teamPickingVCId);
-            console.log(
-              `Moved ${member.user.tag} from ${voiceChannel.name} to Team Picking VC`
-            );
-          } catch (error) {
-            console.error(
-              `Failed to move ${member.user.tag} from ${voiceChannel.name}: `,
-              error
-            );
-          }
-        }
-      }
-    };
-
-    await moveMembers(config.channels.blueTeamVC);
-    await moveMembers(config.channels.redTeamVC);
-
-    console.log("Completed cleaning up members.");
+    console.log("Completed cleaning up roles.");
   } catch (error) {
-    console.error("Failed to clean up roles or move members:", error);
+    console.error("Failed to clean up roles:", error);
+  }
+
+  try {
+    await DiscordUtil.batchMoveMembersToChannel(
+      guild,
+      blueTeamVCId,
+      teamPickingVCId,
+      BATCH_SIZE,
+      DELAY_MS
+    );
+    await DiscordUtil.batchMoveMembersToChannel(
+      guild,
+      redTeamVCId,
+      teamPickingVCId,
+      BATCH_SIZE,
+      DELAY_MS
+    );
+    console.log("Completed moving members to Team Picking VC.");
+  } catch (error) {
+    console.error("Failed to move members:", error);
   }
 
   const game = CurrentGameManager.getCurrentGame();
@@ -81,7 +70,7 @@ export async function cleanUpAfterGame(guild: Guild) {
   await Channels.gameFeed.send({ embeds: [leaderboardEmbed] });
 
   // 5m delay before clearing all messages
-  await new Promise((resolve) => setTimeout(resolve, 5 * 60 * 1000));
+  // await new Promise((resolve) => setTimeout(resolve, 5 * 60 * 1000));
 
   const captainRoleId = config.roles.captainRole;
 
@@ -118,47 +107,46 @@ export async function cleanUpAfterGame(guild: Guild) {
 
     for (const channelId of chatChannelIds) {
       const channel = guild.channels.cache.get(channelId) as TextChannel;
-      if (channel?.isTextBased()) {
+      if (!channel?.isTextBased()) continue;
+
+      while (true) {
         try {
-          let fetched;
-          do {
-            fetched = await channel.messages.fetch({ limit: 100 });
+          const messages = await channel.messages.fetch({ limit: 100 });
+          if (messages.size === 0) break;
 
-            const recentMessages = fetched.filter(
-              (msg) =>
-                Date.now() - msg.createdTimestamp < 14 * 24 * 60 * 60 * 1000
-            );
+          const recentMessages: string[] = [];
+          const oldMessages: Message[] = [];
 
-            if (recentMessages.size > 0) {
-              await channel.bulkDelete(recentMessages);
-              console.log(
-                `Cleared ${recentMessages.size} recent messages in ${channel.name}`
-              );
+          messages.forEach((msg) => {
+            const isOld =
+              Date.now() - msg.createdTimestamp >= 14 * 24 * 60 * 60 * 1000;
+            if (isOld) {
+              oldMessages.push(msg);
+            } else {
+              recentMessages.push(msg.id);
             }
+          });
 
-            const oldMessages = fetched.filter(
-              (msg) =>
-                Date.now() - msg.createdTimestamp >= 14 * 24 * 60 * 60 * 1000
+          if (recentMessages.length > 0) {
+            await channel.bulkDelete(recentMessages, true);
+            console.log(
+              `Cleared ${recentMessages.length} recent messages in ${channel.name}`
             );
+          }
 
-            for (const [id, msg] of oldMessages) {
-              try {
-                await msg.delete();
-                console.log(`Deleted old message ${msg.id} in ${channel.name}`);
-              } catch (error) {
-                console.error(`Failed to delete old message ${msg.id}:`, error);
-              }
-            }
-          } while (fetched.size >= 2);
+          for (const msg of oldMessages) {
+            await msg.delete();
+            console.log(`Deleted old message ${msg.id} in ${channel.name}`);
+          }
         } catch (error) {
           console.error(
-            `Failed to clean up messages in ${channel?.name || "unknown channel"}:`,
+            `Error cleaning messages in ${channel?.name || "unknown channel"}:`,
             error
           );
+          break;
         }
       }
     }
-
     console.log("Completed cleaning up messages.");
   } catch (error) {
     console.error("Failed to clean up messages:", error);

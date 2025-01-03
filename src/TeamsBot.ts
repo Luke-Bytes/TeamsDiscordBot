@@ -29,6 +29,10 @@ export class TeamsBot {
       ],
     });
 
+    this.client.on("rateLimit", (warn) => {
+      console.warn("Rate limit hit:", warn);
+    });
+
     this.commandHandler = new CommandHandler();
     this.messageHandler = new MessageHandler(this.client);
     this.reactionHandler = new ReactionHandler();

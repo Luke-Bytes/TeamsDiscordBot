@@ -3,7 +3,9 @@ import { GameInstance } from "../database/GameInstance";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { Elo } from "../logic/Elo";
 
-export const prismaClient = new PrismaClient().$extends({
+export const prismaClient = new PrismaClient({
+  log: ["query", "info", "warn", "error"],
+}).$extends({
   model: {
     player: {
       async byDiscordSnowflake(discordSnowflake: string) {
