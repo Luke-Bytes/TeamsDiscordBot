@@ -7,7 +7,9 @@ export class LeaderBoardFeed {
     rank: number,
     ign: string,
     elo: number,
-    winLossRatio: number
+    winLossRatio: number,
+    wins: number,
+    losses: number
   ): string {
     const rankEmojis = [
       "🥇",
@@ -23,7 +25,11 @@ export class LeaderBoardFeed {
     ];
     const rankEmoji = rankEmojis[rank - 1] || "🔢";
     const eloEmoji = EloUtil.getEloEmoji(elo);
-    return `${rankEmoji} **${ign}** ${eloEmoji} ─ ${elo} | W/L: ${winLossRatio.toFixed(1)}`;
+    let winLossDisplay = winLossRatio.toFixed(1);
+    if (wins > 0 && losses === 0) {
+      winLossDisplay += " 🔥";
+    }
+    return `${rankEmoji} **${ign}** ${eloEmoji} ─ ${elo} | W/L: ${winLossDisplay}`;
   }
 
   public async generateEmbed(): Promise<EmbedBuilder> {
@@ -47,6 +53,8 @@ export class LeaderBoardFeed {
           rank: index + 1,
           ign: playerData.latestIGN ?? "N/A",
           elo: playerData.elo,
+          wins: playerData.wins,
+          losses: playerData.losses,
           winLossRatio:
             playerData.losses > 0
               ? playerData.wins / playerData.losses
@@ -57,7 +65,7 @@ export class LeaderBoardFeed {
       const embed = new EmbedBuilder()
         .setColor("#FFD700")
         .setTitle("🏆 Friendly Wars Leaderboards 🏆")
-        .setDescription("The top-rated players this season!")
+        .setDescription("The top rated players after the game!")
         .setTimestamp();
 
       topTen.forEach(
@@ -65,6 +73,8 @@ export class LeaderBoardFeed {
           rank: number;
           ign: string;
           elo: number;
+          wins: number;
+          losses: number;
           winLossRatio: number;
         }) => {
           embed.addFields({
@@ -72,7 +82,9 @@ export class LeaderBoardFeed {
               player.rank,
               player.ign,
               player.elo,
-              player.winLossRatio
+              player.winLossRatio,
+              player.wins,
+              player.losses
             ),
             value: "\u200b",
             inline: false,

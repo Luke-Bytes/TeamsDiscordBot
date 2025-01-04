@@ -21,6 +21,11 @@ import WinnerCommand from "../commands/WinnerCommand";
 import PerformanceCommand from "../commands/PerformanceCommand";
 import MVPCommand from "../commands/MVPCommand";
 import GameCommand from "../commands/GameCommand";
+import MissingCommand from "../commands/MissingCommand";
+import CaptainNominateCommand from "../commands/CaptainNominate";
+import TeamlessCommand from "../commands/TeamlessCommand";
+import PlanCommand from "../commands/PlanCommand";
+import MassRegisterCommand from "../commands/MassRegisterCommand";
 
 export class CommandHandler {
   commands: Command[] = [];
@@ -45,6 +50,11 @@ export class CommandHandler {
   performanceCommand = new PerformanceCommand();
   MVPCommand = new MVPCommand();
   gameCommand = new GameCommand();
+  missingCommand = new MissingCommand();
+  captainNominateCommand = new CaptainNominateCommand();
+  teamlessCommand = new TeamlessCommand();
+  planCommand = new PlanCommand();
+  massRegisterCommand = new MassRegisterCommand();
 
   public loadCommands() {
     this.commands = [
@@ -67,6 +77,11 @@ export class CommandHandler {
       this.performanceCommand,
       this.MVPCommand,
       this.gameCommand,
+      this.missingCommand,
+      this.captainNominateCommand,
+      this.teamlessCommand,
+      this.planCommand,
+      this.massRegisterCommand,
     ];
   }
 
@@ -77,16 +92,24 @@ export class CommandHandler {
         const command = this.commands.find(
           (cmd) => cmd.name === chatInteraction.commandName
         );
+
         if (command) {
           const subCommand = chatInteraction.options.getSubcommand(false);
 
-          const optionValues = chatInteraction.options.data
-            .map((option) => option.value ?? "undefined")
+          const options = subCommand
+            ? chatInteraction.options.data.find(
+                (option) => option.name === subCommand
+              )?.options || []
+            : chatInteraction.options.data;
+
+          const optionsLog = options
+            .map((opt) => `${opt.name}: ${opt.value}`)
             .join(" ");
 
           console.log(
             `[${chatInteraction.user.tag}] ran /${chatInteraction.commandName}` +
-              `${subCommand ? ` ${subCommand}` : ""} ${optionValues}`
+              (subCommand ? ` ${subCommand}` : "") +
+              (optionsLog ? ` ${optionsLog}` : "")
           );
 
           await command.execute(chatInteraction);

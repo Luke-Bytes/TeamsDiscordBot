@@ -97,3 +97,14 @@ export function randomEnum<T extends object>(anEnum: T): T[keyof T] {
 export function formatTimestamp(date: Date): string {
   return `<t:${Math.round(date.getTime() / 1000)}:f>`;
 }
+
+export const withTimeout = <T>(
+  promise: Promise<T>,
+  timeoutMs: number
+): Promise<T> =>
+  Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error("Operation timed out")), timeoutMs)
+    ),
+  ]);

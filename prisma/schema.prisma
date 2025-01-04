@@ -32,6 +32,9 @@ model Player {
   wins   Int @default(0)
   losses Int @default(0)
   winStreak Int @default(0)
+  loseStreak Int @default(0)
+  biggestWinStreak Int @default(0)
+  biggestLosingStreak Int @default(0)
 
   discordSnowflake String @unique
 
@@ -40,6 +43,7 @@ model Player {
   latestIGN String?
 
   games GameParticipation[]
+  punishments PlayerPunishment[]
 }
 
 type GameSettings {
@@ -58,6 +62,9 @@ model Game {
   settings  GameSettings
   winner    Team?
   type      gameType?
+
+  organiser    String?
+  host    String?
 
   participantsIGNs String[]
   eloHistories EloHistory[]
@@ -79,6 +86,21 @@ model GameParticipation {
   captain Boolean @default(false)
 
   @@unique([playerId, gameId]) // only 1 playerId for per player per game
+}
+
+model PlayerPunishment {
+  id String @id @default(uuid()) @map("_id")
+
+  playerId String
+  player   Player @relation(fields: [playerId], references: [id])
+
+  reasons           String[]
+  strikeCount       Int
+  dates             DateTime[]
+  punishmentExpiry  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum Team {

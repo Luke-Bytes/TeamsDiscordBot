@@ -14,6 +14,7 @@ export class GameInstance {
   gameId?: string;
   isFinished?: boolean;
   announced = false;
+  isRestarting = false;
   startTime?: Date;
   endTime?: Date;
   settings: {
@@ -32,6 +33,9 @@ export class GameInstance {
 
   MVPPlayerBlue?: string;
   MVPPlayerRed?: string;
+
+  organiser?: string | null;
+  host?: string | null;
 
   mapVoteManager?: MapVoteManager;
   minerushVoteManager?: MinerushVoteManager;
@@ -60,6 +64,7 @@ export class GameInstance {
     this.gameId = undefined;
     this.isFinished = undefined;
     this.announced = false;
+    this.isRestarting = false;
     this.startTime = undefined;
     this.endTime = undefined;
     this.settings = {
@@ -83,6 +88,7 @@ export class GameInstance {
       await prismaClient.game.saveGameFromInstance(currentInstance);
     }
     this.instance = new GameInstance();
+    this.instance.reset();
   }
 
   public startMinerushVote() {
@@ -317,7 +323,7 @@ export class GameInstance {
 
     if (fillOption !== "none") {
       console.info(`[GAME] Filling teams with test players...`);
-      await this.fillTeamsWithTestPlayers(4, fillOption);
+      await this.fillTeamsWithTestPlayers(10, fillOption);
       console.info(`[GAME] Teams filled. Current teams:`, this.teams);
     }
 

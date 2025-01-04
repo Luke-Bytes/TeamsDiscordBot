@@ -113,11 +113,11 @@ export default class MVPCommand implements Command {
       if (result.error) {
         await interaction.reply({
           content: result.error,
-          ephemeral: true,
+          ephemeral: false,
         });
       } else {
         await interaction.reply({
-          content: "Your MVP vote has been recorded!",
+          content: `Your MVP vote for ${targetPlayer.ignUsed} has been recorded!`,
           ephemeral: false,
         });
       }
