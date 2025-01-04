@@ -14,6 +14,7 @@ export class GameInstance {
   gameId?: string;
   isFinished?: boolean;
   announced = false;
+  isRestarting = false;
   startTime?: Date;
   endTime?: Date;
   settings: {
@@ -63,6 +64,7 @@ export class GameInstance {
     this.gameId = undefined;
     this.isFinished = undefined;
     this.announced = false;
+    this.isRestarting = false;
     this.startTime = undefined;
     this.endTime = undefined;
     this.settings = {

@@ -16,7 +16,7 @@ export async function cleanUpAfterGame(guild: Guild) {
   const redTeamVCId = config.channels.redTeamVC;
   const roleIds = [blueTeamRoleId, redTeamRoleId];
   const BATCH_SIZE = 5;
-  const DELAY_MS = 1000;
+  const DELAY_MS = 200;
 
   try {
     for (const roleId of roleIds) {

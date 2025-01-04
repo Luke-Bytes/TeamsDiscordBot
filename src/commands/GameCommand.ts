@@ -112,6 +112,14 @@ export default class GameCommand implements Command {
           });
           return;
         }
+        if (gameInstance.isRestarting) {
+          await interaction.reply({
+            content: "A game shutdown is already in progress!",
+            ephemeral: false,
+          });
+          return;
+        }
+        GameInstance.getInstance().isRestarting = true;
         await interaction.reply(
           "Beginning post game clean up of channels and calculating elo.."
         );
@@ -123,8 +131,6 @@ export default class GameCommand implements Command {
     }
   }
 }
-
-// const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function assignTeamVCAfterPicking(guild: Guild) {
   const config = ConfigManager.getConfig();
@@ -192,7 +198,7 @@ export async function assignTeamRolesAfterPicking(guild: Guild) {
       );
 
       if (i + BATCH_SIZE < players.length) {
-        await delay(DELAY_MS); // Delay between batches
+        await delay(DELAY_MS);
       }
     }
   }
