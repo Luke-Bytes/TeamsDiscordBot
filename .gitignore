@@ -13,3 +13,5 @@ config.json
 /dataSources.local.xml
 logs/*
 !logs/.gitkeep
+backups/*
+!backups.gitkeep

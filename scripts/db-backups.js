@@ -1,6 +1,7 @@
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, "../.env") });
 const { exec } = require("child_process");
 const fs = require("fs");
-const path = require("path");
 
 const BACKUP_DIR = path.join(__dirname, "../backups");
 const DAYS_TO_KEEP = 14;
@@ -43,10 +44,7 @@ exec(
 
     fs.readdir(BACKUP_DIR, (readErr, files) => {
       if (readErr) {
-        console.error(
-          "[Database backup] Error reading backup directory:",
-          readErr
-        );
+        console.error("[Database backup] Error reading backup directory:", readErr);
         return;
       }
 
@@ -61,10 +59,7 @@ exec(
         const filePath = path.join(BACKUP_DIR, file.name);
         fs.unlink(filePath, (unlinkErr) => {
           if (unlinkErr) {
-            console.error(
-              `[Database backup] Error deleting old backup ${file.name}:`,
-              unlinkErr
-            );
+            console.error(`[Database backup] Error deleting old backup ${file.name}:`, unlinkErr);
           } else {
             console.log(`[Database backup] Deleted old backup: ${file.name}`);
           }
@@ -76,10 +71,7 @@ exec(
       `mongorestore --uri="${DATABASE_BACKUP_URL}" --archive="${backupFilePath}" --gzip --drop`,
       (restoreErr, stderr) => {
         if (restoreErr) {
-          console.error(
-            "[Database backup] Error pushing backup to Atlas:",
-            restoreErr
-          );
+          console.error("[Database backup] Error pushing backup to Atlas:", restoreErr);
           console.error("[Database backup] stderr:", stderr);
         } else {
           console.log("[Database backup] Backup successfully pushed to Atlas.");
