@@ -1,10 +1,9 @@
-require("dotenv").config();
 const { exec } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
 const BACKUP_DIR = path.join(__dirname, "../backups");
-const DAYS_TO_KEEP = 10;
+const DAYS_TO_KEEP = 14;
 let DATABASE_URL = process.env.DATABASE_URL;
 let DATABASE_BACKUP_URL = process.env.DATABASE_BACKUP_URL;
 
@@ -15,7 +14,7 @@ function trimMongoURI(uri) {
     urlObj.search = "";
     return urlObj.toString();
   } catch (error) {
-    console.error("Invalid MongoDB URI:", uri);
+    console.error("[Database backup] Invalid MongoDB URI:", uri);
     process.exit(1);
   }
 }
@@ -35,16 +34,19 @@ exec(
   `mongodump --uri="${DATABASE_URL}" --archive="${backupFilePath}" --gzip`,
   (err, stdout, stderr) => {
     if (err) {
-      console.error("Error creating backup:", err);
-      console.error("stderr:", stderr);
+      console.error("[Database backup] Error creating backup:", err);
+      console.error("[Database backup] stderr:", stderr);
       return;
     }
 
-    console.log(`Backup created: ${backupFilePath}`);
+    console.log(`[Database backup] Backup created: ${backupFilePath}`);
 
     fs.readdir(BACKUP_DIR, (readErr, files) => {
       if (readErr) {
-        console.error("Error reading backup directory:", readErr);
+        console.error(
+          "[Database backup] Error reading backup directory:",
+          readErr
+        );
         return;
       }
 
@@ -59,9 +61,12 @@ exec(
         const filePath = path.join(BACKUP_DIR, file.name);
         fs.unlink(filePath, (unlinkErr) => {
           if (unlinkErr) {
-            console.error(`Error deleting old backup ${file.name}:`, unlinkErr);
+            console.error(
+              `[Database backup] Error deleting old backup ${file.name}:`,
+              unlinkErr
+            );
           } else {
-            console.log(`Deleted old backup: ${file.name}`);
+            console.log(`[Database backup] Deleted old backup: ${file.name}`);
           }
         });
       });
@@ -71,10 +76,13 @@ exec(
       `mongorestore --uri="${DATABASE_BACKUP_URL}" --archive="${backupFilePath}" --gzip --drop`,
       (restoreErr, stderr) => {
         if (restoreErr) {
-          console.error("Error pushing backup to Atlas:", restoreErr);
-          console.error("stderr:", stderr);
+          console.error(
+            "[Database backup] Error pushing backup to Atlas:",
+            restoreErr
+          );
+          console.error("[Database backup] stderr:", stderr);
         } else {
-          console.log("Backup successfully pushed to Atlas.");
+          console.log("[Database backup] Backup successfully pushed to Atlas.");
         }
       }
     );
