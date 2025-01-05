@@ -74,6 +74,8 @@ class GameFeed {
 
   removeAllFeedMessages(): void {
     for (const channelId of this.managedChannels) {
+      console.log(`Removing managed channel: ${channelId}`);
+
       const intervalId = this.updateIntervals.get(channelId);
       if (intervalId) clearInterval(intervalId);
 

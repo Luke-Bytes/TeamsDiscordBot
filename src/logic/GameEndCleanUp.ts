@@ -51,6 +51,7 @@ export async function cleanUpAfterGame(guild: Guild) {
   } catch (error) {
     console.error("Failed to move members:", error);
   }
+  gameFeed.removeAllFeedMessages();
   const game = CurrentGameManager.getCurrentGame();
   await game.countMVPVotes();
 
@@ -61,7 +62,6 @@ export async function cleanUpAfterGame(guild: Guild) {
   //FIXME why isnt it resetting announcements
   await GameInstance.resetGameInstance();
   console.log("Game instance reset to default values.");
-  gameFeed.removeAllFeedMessages();
 
   await DiscordUtil.sendMessage("gameFeed", "\u200b");
   const leaderboardFeed = new LeaderBoardFeed();
