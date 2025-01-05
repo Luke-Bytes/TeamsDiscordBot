@@ -110,7 +110,11 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       const otherThanCaptain = players.filter((p) => !p.captain);
 
       const formatPlayer = (player: PlayerInstance) => {
-        const baseInfo = `${EloUtil.getEloEmoji(player.elo)} ${player.ignUsed ?? "Unknown Player"}`;
+        const safeIgnUsed = (player.ignUsed ?? "Unknown Player").replace(
+          /__/g,
+          "\\_\\_"
+        );
+        const baseInfo = `${EloUtil.getEloEmoji(player.elo)} ${safeIgnUsed}`;
         return includeElo
           ? `${baseInfo} ${EloUtil.getEloFormatted(player)}`
           : baseInfo;

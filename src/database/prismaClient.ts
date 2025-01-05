@@ -4,7 +4,7 @@ import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { Elo } from "../logic/Elo";
 
 export const prismaClient = new PrismaClient({
-  log: ["query", "info", "warn", "error"],
+  log: ["info", "warn", "error"],
 }).$extends({
   model: {
     player: {

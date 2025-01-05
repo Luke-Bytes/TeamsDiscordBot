@@ -87,7 +87,7 @@ export default class PlanCommand implements Command {
       const gameInstance = GameInstance.getInstance();
       const teamPlayers = gameInstance
         .getPlayersOfTeam(team)
-        .map((p) => p.ignUsed || "Unknown");
+        .map((p) => p.ignUsed ?? "Unknown");
 
       if (!teamPlayers.length) {
         console.warn(`No players found in ${team} team.`);

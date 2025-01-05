@@ -51,7 +51,6 @@ export async function cleanUpAfterGame(guild: Guild) {
   } catch (error) {
     console.error("Failed to move members:", error);
   }
-
   const game = CurrentGameManager.getCurrentGame();
   await game.countMVPVotes();
 

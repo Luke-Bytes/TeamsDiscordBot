@@ -7,6 +7,10 @@ import { MinerushVoteManager } from "../logic/MinerushVoteManager";
 import { prismaClient } from "./prismaClient";
 import { ConfigManager } from "../ConfigManager";
 import { DiscordUtil } from "../util/DiscordUtil";
+import { activateFeed } from "../logic/gameFeed/ActivateFeed";
+import { Channels } from "../Channels";
+import { addRegisteredPlayersFeed } from "../logic/gameFeed/RegisteredGameFeed";
+import { addTeamsGameFeed } from "../logic/gameFeed/TeamsGameFeed";
 
 // wrapper class for Game
 export class GameInstance {
@@ -321,10 +325,26 @@ export class GameInstance {
     this.teams.BLUE = [];
     this.teams.UNDECIDED = [];
 
+    await activateFeed(Channels.gameFeed, addRegisteredPlayersFeed);
+    await activateFeed(Channels.gameFeed, addTeamsGameFeed);
+
     if (fillOption !== "none") {
       console.info(`[GAME] Filling teams with test players...`);
-      await this.fillTeamsWithTestPlayers(10, fillOption);
+      await this.fillTeamsWithTestPlayers(40, fillOption);
       console.info(`[GAME] Teams filled. Current teams:`, this.teams);
+
+      this.teams.RED.forEach((player) => {
+        this.mvpVotes.RED[player.discordSnowflake] = Math.floor(
+          Math.random() * 20
+        );
+      });
+      this.teams.BLUE.forEach((player) => {
+        this.mvpVotes.BLUE[player.discordSnowflake] = Math.floor(
+          Math.random() * 20
+        );
+      });
+
+      console.info(`[GAME] MVP votes populated with test players.`);
     }
 
     this.mapVoteManager = new MapVoteManager([
@@ -695,10 +715,14 @@ export class GameInstance {
   }
 
   public async countMVPVotes() {
-    this.MVPPlayerRed = this.determineTeamMVP("RED");
-    this.MVPPlayerBlue = this.determineTeamMVP("BLUE");
-    const redMVP = this.MVPPlayerRed || "no body";
-    const blueMVP = this.MVPPlayerBlue || "no body";
+    console.log("Starting to count MVP votes now...");
+    this.MVPPlayerRed = await this.determineTeamMVP("RED");
+    console.log("Determined red team MVP.");
+    this.MVPPlayerBlue = await this.determineTeamMVP("BLUE");
+    console.log("Determined blue team MVP.");
+    const redMVP = this.MVPPlayerRed ?? "no body";
+    const blueMVP = this.MVPPlayerBlue ?? "no body";
+    console.log("Sending MVPees announcement");
     await DiscordUtil.sendMessage("gameFeed", "\u200b");
 
     const messageText = `🏆 **Game MVPs** 🏆\n🔴 **RED Team:** ${redMVP}\n🔵 **BLUE Team:** ${blueMVP}`;
@@ -706,26 +730,40 @@ export class GameInstance {
     await DiscordUtil.sendMessage("gameFeed", "\u200b");
   }
 
-  private determineTeamMVP(team: Team): string {
+  private async determineTeamMVP(team: Team): Promise<string> {
+    console.log("Determining MVP for ", team);
     const teamVotes = this.mvpVotes[team];
     const entries = Object.entries(teamVotes);
 
-    if (entries.length === 0) {
-      return "";
+    if (entries.length === 0) return "";
+
+    console.log("Finding the maximum votes...");
+    const maxVotes = Math.max(...entries.map(([, votes]) => votes));
+    const tiedPlayers = entries
+      .filter(([, votes]) => votes === maxVotes)
+      .map(([playerId]) => playerId);
+
+    let selectedPlayerId: string;
+    if (tiedPlayers.length > 1) {
+      console.log("A tie detected among players: ", tiedPlayers);
+      selectedPlayerId =
+        tiedPlayers[Math.floor(Math.random() * tiedPlayers.length)];
+      console.log(
+        `Randomly selected ${selectedPlayerId} as the MVP in case of a tie.`
+      );
+      await DiscordUtil.sendMessage(
+        "gameFeed",
+        `💥 There has been a tie for the MVP of ${team} team! There can only be one, one of them will be randomly selected.`
+      );
+    } else {
+      selectedPlayerId = tiedPlayers[0];
     }
 
-    let maxVotes = 0;
-    let mvpPlayerId = "";
-    for (const [playerId, votes] of entries) {
-      if (votes > maxVotes) {
-        maxVotes = votes;
-        mvpPlayerId = playerId;
-      }
-    }
-
+    console.log("Finding and returning MVP player...");
     const player = this.getPlayers().find(
-      (p) => p.discordSnowflake === mvpPlayerId
+      (p) => p.discordSnowflake === selectedPlayerId
     );
+
     return player?.ignUsed ?? "";
   }
 

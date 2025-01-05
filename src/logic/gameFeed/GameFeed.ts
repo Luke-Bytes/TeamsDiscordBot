@@ -7,9 +7,9 @@ type FeedMessage = {
 };
 
 class GameFeed {
-  private feedMessages: Map<string, FeedMessage[]> = new Map();
-  private updateIntervals: Map<string, NodeJS.Timeout> = new Map();
-  private managedChannels: Set<string> = new Set();
+  private readonly feedMessages: Map<string, FeedMessage[]> = new Map();
+  private readonly updateIntervals: Map<string, NodeJS.Timeout> = new Map();
+  private readonly managedChannels: Set<string> = new Set();
 
   async startFeed(channel: TextChannel): Promise<void> {
     if (this.updateIntervals.has(channel.id)) return;
@@ -19,28 +19,27 @@ class GameFeed {
       const feedData = this.feedMessages.get(channel.id);
       if (!feedData) return;
 
-      for (const feed of feedData) {
-        const embed = await feed.updateFn();
-
-        if (feed.id) {
-          const message = await channel.messages
-            .fetch(feed.id)
-            .catch(() => null);
-          if (message) {
-            await message.edit({ embeds: [embed] });
+      await Promise.all(
+        feedData.map(async (feed) => {
+          const embed = await feed.updateFn();
+          if (feed.id) {
+            const message = await channel.messages
+              .fetch(feed.id)
+              .catch(() => null);
+            if (message) {
+              await message.edit({ embeds: [embed] });
+            } else {
+              const newMessage = await channel.send({ embeds: [embed] });
+              feed.id = newMessage.id;
+            }
           } else {
-            // Message might have been deleted, reinitialize
             const newMessage = await channel.send({ embeds: [embed] });
             feed.id = newMessage.id;
           }
-        } else {
-          const newMessage = await channel.send({ embeds: [embed] });
-          feed.id = newMessage.id;
-        }
-      }
+        })
+      );
     };
-
-    const intervalId = setInterval(update, 10000); // Update every 10 seconds
+    const intervalId = setInterval(update, 20000); // Update every 20 seconds
     this.updateIntervals.set(channel.id, intervalId);
 
     await update();
