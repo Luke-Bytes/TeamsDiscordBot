@@ -5,6 +5,7 @@ import {
 } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { ConfigManager } from "../ConfigManager.js";
+import { PermissionsUtil } from "../util/PermissionsUtil";
 
 export default class RoleCommand implements Command {
   public data: SlashCommandBuilder;
@@ -43,6 +44,9 @@ export default class RoleCommand implements Command {
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
+    const isAuthorized = await PermissionsUtil.isUserAuthorised(interaction);
+    if (!isAuthorized) return;
+
     const roleType = interaction.options.getString("type", true);
     const role = interaction.options.getRole("role", true) as Role;
     const config = ConfigManager.getConfig();

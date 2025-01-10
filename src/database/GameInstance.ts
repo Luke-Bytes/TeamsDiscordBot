@@ -144,19 +144,22 @@ export class GameInstance {
 
   public async addPlayerByDiscordId(
     discordSnowflake: Snowflake,
-    ignUsed: string
+    ignUsed: string,
+    uuid?: string
   ) {
     const player = await PlayerInstance.byDiscordSnowflake(discordSnowflake);
-    let uuid: string | undefined | null;
 
-    if (ignUsed === "") {
-      uuid = player.primaryMinecraftAccount;
-    } else {
-      uuid = await MojangAPI.usernameToUUID(ignUsed);
-      if (!uuid) {
-        return {
-          error: "That IGN doesn't exist! Did you spell it correctly?",
-        } as const;
+    if (!uuid) {
+      if (ignUsed === "") {
+        uuid = player.primaryMinecraftAccount ?? undefined;
+      } else {
+        const fetchedUuid = await MojangAPI.usernameToUUID(ignUsed);
+        if (!fetchedUuid) {
+          return {
+            error: "That IGN doesn't exist! Did you spell it correctly?",
+          } as const;
+        }
+        uuid = fetchedUuid;
       }
     }
 
@@ -731,7 +734,7 @@ export class GameInstance {
   }
 
   private async determineTeamMVP(team: Team): Promise<string> {
-    console.log("Determining MVP for ", team);
+    console.log("Determining MVP for", team);
     const teamVotes = this.mvpVotes[team];
     const entries = Object.entries(teamVotes);
 

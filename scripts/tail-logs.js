@@ -13,7 +13,7 @@ const logFileName = `teams_bot-${year}-${month}-${day}.log`;
 const logFilePath = path.join(logsDir, logFileName);
 
 if (fs.existsSync(logFilePath)) {
-  const tailCommand = `tail -n 150 -f ${logFilePath}`;
+  const tailCommand = `tail -n 500 -f ${logFilePath}`;
   console.log(`Running: ${tailCommand}`);
   const tailProcess = exec(tailCommand);
 

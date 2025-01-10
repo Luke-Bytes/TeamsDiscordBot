@@ -1,7 +1,6 @@
 import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
-  GuildMember,
   Guild,
 } from "discord.js";
 import { Command } from "./CommandInterface.js";
@@ -36,30 +35,15 @@ export default class GameCommand implements Command {
 
   async execute(interaction: ChatInputCommandInteraction) {
     const subCommand = interaction.options.getSubcommand();
-    const member = interaction.member as GuildMember;
-
-    if (!member || !PermissionsUtil.hasRole(member, "organiserRole")) {
-      await interaction.reply({
-        content: "You do not have permission to run this command.",
-        ephemeral: false,
-      });
-      return;
-    }
-    const guild = interaction.guild;
-    if (!guild) {
-      await interaction.reply({
-        content: "This command can only be used in a server.",
-        ephemeral: true,
-      });
-      return;
-    }
+    const isAuthorized = await PermissionsUtil.isUserAuthorised(interaction);
+    if (!isAuthorized) return;
+    const guild = interaction.guild!;
     const gameInstance = GameInstance.getInstance();
     switch (subCommand) {
       case "start":
         await interaction.deferReply({ ephemeral: false });
         try {
           await assignTeamRolesAfterPicking(guild);
-          await new Promise((resolve) => setTimeout(resolve, 1000));
           await assignTeamVCAfterPicking(guild);
 
           await interaction.editReply(

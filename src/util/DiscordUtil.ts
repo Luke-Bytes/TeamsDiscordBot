@@ -4,6 +4,7 @@ import {
   Guild,
   GuildMember,
   InteractionReplyOptions,
+  Message,
   MessagePayload,
   Snowflake,
   TextChannel,
@@ -236,5 +237,60 @@ export class DiscordUtil {
     console.log(
       `Completed moving members from ${fromChannel.name} to ${toChannel.name}.`
     );
+  }
+
+  static async cleanUpAllChannelMessages(
+    guild: Guild,
+    channelIds: string[],
+    messageAgeDays = 14
+  ): Promise<void> {
+    try {
+      for (const channelId of channelIds) {
+        const channel = guild.channels.cache.get(channelId) as TextChannel;
+        if (!channel?.isTextBased()) continue;
+
+        while (true) {
+          try {
+            const messages = await channel.messages.fetch({ limit: 100 });
+            if (messages.size === 0) break;
+
+            const recentMessages: string[] = [];
+            const oldMessages: Message[] = [];
+
+            messages.forEach((msg) => {
+              const isOld =
+                Date.now() - msg.createdTimestamp >=
+                messageAgeDays * 24 * 60 * 60 * 1000;
+              if (isOld) {
+                oldMessages.push(msg);
+              } else {
+                recentMessages.push(msg.id);
+              }
+            });
+
+            if (recentMessages.length > 0) {
+              await channel.bulkDelete(recentMessages, true);
+              console.log(
+                `Cleared ${recentMessages.length} recent messages in ${channel.name}`
+              );
+            }
+
+            for (const msg of oldMessages) {
+              await msg.delete();
+              console.log(`Deleted old message ${msg.id} in ${channel.name}`);
+            }
+          } catch (error) {
+            console.error(
+              `Error cleaning messages in ${channel?.name || "unknown channel"}:`,
+              error
+            );
+            break;
+          }
+        }
+      }
+      console.log("Completed cleaning up messages.");
+    } catch (error) {
+      console.error("Failed to clean up messages:", error);
+    }
   }
 }

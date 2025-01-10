@@ -209,6 +209,24 @@ export default class TeamCommand implements Command {
           game.changeHowTeamsDecided(null);
           game.resetTeams();
           this.resetTeamPickingSession();
+          try {
+            const members = await interaction.guild?.members.fetch();
+
+            if (members) {
+              for (const member of members.values()) {
+                if (member.roles.cache.has(config.roles.redTeamRole)) {
+                  await member.roles.remove(config.roles.redTeamRole);
+                }
+                if (member.roles.cache.has(config.roles.blueTeamRole)) {
+                  await member.roles.remove(config.roles.blueTeamRole);
+                }
+              }
+            }
+          } catch (error) {
+            if (!PermissionsUtil.isDebugEnabled()) {
+              console.error(`Failed to remove roles from members:`, error);
+            }
+          }
           await DiscordUtil.editReply(interaction, {
             content: "Teams have been reset!",
           });

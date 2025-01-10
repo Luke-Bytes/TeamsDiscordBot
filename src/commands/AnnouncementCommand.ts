@@ -8,6 +8,7 @@ import {
   ActionRowBuilder,
   ButtonStyle,
   SlashCommandSubcommandsOnlyBuilder,
+  Guild,
 } from "discord.js";
 import { Command } from "../commands/CommandInterface.js";
 import { AnniClass, AnniMap } from "@prisma/client";
@@ -20,6 +21,7 @@ import { activateFeed } from "../logic/gameFeed/ActivateFeed";
 import { addRegisteredPlayersFeed } from "../logic/gameFeed/RegisteredGameFeed";
 import { addTeamsGameFeed } from "../logic/gameFeed/TeamsGameFeed";
 import { GameInstance } from "../database/GameInstance";
+import { DiscordUtil } from "../util/DiscordUtil";
 
 export default class AnnouncementCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;
@@ -273,8 +275,8 @@ export default class AnnouncementCommand implements Command {
     this.announcementPreviewMessage = await interaction.editReply(embed);
   }
 
-  private async handleAnnouncementCancel() {
-    CurrentGameManager.cancelCurrentGame();
+  private async handleAnnouncementCancel(guild: Guild) {
+    await CurrentGameManager.cancelCurrentGame(guild);
     if (this.announcementMessage) {
       await this.announcementMessage.delete();
       delete this.announcementMessage;
@@ -295,11 +297,11 @@ export default class AnnouncementCommand implements Command {
         await this.handleAnnouncementStart(interaction);
         break;
       case "cancel":
-        await this.handleAnnouncementCancel();
+        await this.handleAnnouncementCancel(interaction.guild!);
     }
   }
 
-  private async handleAnnouncementConfirm() {
+  private async handleAnnouncementConfirm(guild: Guild) {
     const embed = this.createGameAnnouncementEmbed(false).embeds?.[0];
     if (!Channels.announcements.isSendable()) return;
 
@@ -313,7 +315,14 @@ export default class AnnouncementCommand implements Command {
           "Sign up by typing the `/register [MCID]` command in this chat. If you sign up but can't play then run `/unregister`."
       );
     }
+    const config = ConfigManager.getConfig();
+    const chatChannelIds = [config.channels.gameFeed];
 
+    try {
+      await DiscordUtil.cleanUpAllChannelMessages(guild, chatChannelIds);
+    } catch (error) {
+      console.error("Failed to clean up game-feed while announcing:", error);
+    }
     await activateFeed(Channels.gameFeed, addRegisteredPlayersFeed);
     await activateFeed(Channels.gameFeed, addTeamsGameFeed);
 
@@ -335,11 +344,11 @@ export default class AnnouncementCommand implements Command {
     });
     switch (interaction.customId) {
       case "announcement-cancel":
-        await this.handleAnnouncementCancel();
+        await this.handleAnnouncementCancel(interaction.guild!);
         await interaction.editReply("Cancelled announcement.");
         break;
       case "announcement-confirm":
-        await this.handleAnnouncementConfirm();
+        await this.handleAnnouncementConfirm(interaction.guild!);
         await interaction.editReply("Announcement sent!");
         break;
       default:

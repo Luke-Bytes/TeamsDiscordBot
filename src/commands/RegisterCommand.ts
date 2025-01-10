@@ -2,6 +2,8 @@ import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { PermissionsUtil } from "../util/PermissionsUtil.js";
 import { CurrentGameManager } from "../logic/CurrentGameManager.js";
+import { prismaClient } from "../database/prismaClient";
+import { MojangAPI } from "../api/MojangAPI";
 
 export default class RegisterCommand implements Command {
   public data: SlashCommandBuilder;
@@ -65,6 +67,29 @@ export default class RegisterCommand implements Command {
       return;
     }
 
+    let player = await prismaClient.player.byDiscordSnowflake(discordUserId);
+
+    const uuid = await MojangAPI.usernameToUUID(inGameName);
+    if (!uuid) {
+      await interaction.editReply({
+        content:
+          "That Minecraft username does not exist. Please check the spelling!",
+      });
+      return;
+    }
+
+    if (player) {
+      if (
+        player.primaryMinecraftAccount &&
+        player.primaryMinecraftAccount !== uuid
+      ) {
+        await interaction.editReply({
+          content: `You are already registered with a different Minecraft account (\`${player.latestIGN}\`). You cannot register with another account.`,
+        });
+        return;
+      }
+    }
+
     const isAlreadyRegistered = CurrentGameManager.getCurrentGame()
       .getPlayers()
       .some((player) => player.discordSnowflake === discordUserId);
@@ -79,7 +104,8 @@ export default class RegisterCommand implements Command {
     const result =
       await CurrentGameManager.getCurrentGame().addPlayerByDiscordId(
         discordUserId,
-        inGameName
+        inGameName,
+        uuid
       );
 
     if (result.error) {
@@ -88,11 +114,11 @@ export default class RegisterCommand implements Command {
       });
     } else if (PermissionsUtil.isSameUser(interaction, targetUser.id)) {
       await interaction.editReply({
-        content: `You have successfully registered as ${inGameName}!`,
+        content: `You have successfully registered as \`${inGameName}\`!`,
       });
     } else {
       await interaction.editReply({
-        content: `${discordUserName} has been successfully registered as ${inGameName}`,
+        content: `${discordUserName} has been successfully registered as \`${inGameName}\``,
       });
     }
   }

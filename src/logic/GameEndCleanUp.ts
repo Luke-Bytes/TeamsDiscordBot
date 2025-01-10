@@ -6,6 +6,7 @@ import { gameFeed } from "../logic/gameFeed/GameFeed";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { LeaderBoardFeed } from "../logic/gameFeed/LeaderBoardFeed";
 import { Channels } from "../Channels";
+import RestartCommand from "../commands/RestartCommand";
 
 export async function cleanUpAfterGame(guild: Guild) {
   const config = ConfigManager.getConfig();
@@ -95,59 +96,20 @@ export async function cleanUpAfterGame(guild: Guild) {
     console.error("Failed to clean up captains:", error);
   }
 
+  const chatChannelIds = [
+    config.channels.blueTeamChat,
+    config.channels.redTeamChat,
+    config.channels.teamPickingChat,
+    config.channels.registration,
+  ];
+
   try {
-    const chatChannelIds = [
-      config.channels.blueTeamChat,
-      config.channels.redTeamChat,
-      config.channels.teamPickingChat,
-      config.channels.registration,
-      config.channels.gameFeed,
-    ];
-
-    for (const channelId of chatChannelIds) {
-      const channel = guild.channels.cache.get(channelId) as TextChannel;
-      if (!channel?.isTextBased()) continue;
-
-      while (true) {
-        try {
-          const messages = await channel.messages.fetch({ limit: 100 });
-          if (messages.size === 0) break;
-
-          const recentMessages: string[] = [];
-          const oldMessages: Message[] = [];
-
-          messages.forEach((msg) => {
-            const isOld =
-              Date.now() - msg.createdTimestamp >= 14 * 24 * 60 * 60 * 1000;
-            if (isOld) {
-              oldMessages.push(msg);
-            } else {
-              recentMessages.push(msg.id);
-            }
-          });
-
-          if (recentMessages.length > 0) {
-            await channel.bulkDelete(recentMessages, true);
-            console.log(
-              `Cleared ${recentMessages.length} recent messages in ${channel.name}`
-            );
-          }
-
-          for (const msg of oldMessages) {
-            await msg.delete();
-            console.log(`Deleted old message ${msg.id} in ${channel.name}`);
-          }
-        } catch (error) {
-          console.error(
-            `Error cleaning messages in ${channel?.name || "unknown channel"}:`,
-            error
-          );
-          break;
-        }
-      }
-    }
-    console.log("Completed cleaning up messages.");
+    await DiscordUtil.cleanUpAllChannelMessages(guild, chatChannelIds);
   } catch (error) {
     console.error("Failed to clean up messages:", error);
   }
+
+  await new Promise((resolve) => setTimeout(resolve, 10 * 1000));
+  const restartCommand = new RestartCommand();
+  restartCommand.restartBot();
 }

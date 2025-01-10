@@ -44,7 +44,10 @@ exec(
 
     fs.readdir(BACKUP_DIR, (readErr, files) => {
       if (readErr) {
-        console.error("[Database backup] Error reading backup directory:", readErr);
+        console.error(
+          "[Database backup] Error reading backup directory:",
+          readErr
+        );
         return;
       }
 
@@ -59,7 +62,10 @@ exec(
         const filePath = path.join(BACKUP_DIR, file.name);
         fs.unlink(filePath, (unlinkErr) => {
           if (unlinkErr) {
-            console.error(`[Database backup] Error deleting old backup ${file.name}:`, unlinkErr);
+            console.error(
+              `[Database backup] Error deleting old backup ${file.name}:`,
+              unlinkErr
+            );
           } else {
             console.log(`[Database backup] Deleted old backup: ${file.name}`);
           }
@@ -71,7 +77,10 @@ exec(
       `mongorestore --uri="${DATABASE_BACKUP_URL}" --archive="${backupFilePath}" --gzip --drop`,
       (restoreErr, stderr) => {
         if (restoreErr) {
-          console.error("[Database backup] Error pushing backup to Atlas:", restoreErr);
+          console.error(
+            "[Database backup] Error pushing backup to Atlas:",
+            restoreErr
+          );
           console.error("[Database backup] stderr:", stderr);
         } else {
           console.log("[Database backup] Backup successfully pushed to Atlas.");

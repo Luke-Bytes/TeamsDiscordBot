@@ -11,21 +11,6 @@ import { Command } from "./CommandInterface";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { exec } from "child_process";
 
-function restartBot() {
-  console.log("Bot is being restarted.. byebye!");
-  exec("pm2 restart TeamsBot", (error, stdout, stderr) => {
-    if (error) {
-      console.error(`Error restarting bot: ${error.message}`);
-      return;
-    }
-    if (stderr) {
-      console.error(`PM2 stderr: ${stderr}`);
-      return;
-    }
-    console.log(`PM2 stdout: ${stdout}`);
-  });
-}
-
 export default class RestartCommand implements Command {
   data = new SlashCommandBuilder()
     .setName("restart")
@@ -68,7 +53,22 @@ export default class RestartCommand implements Command {
         content: "Restarting the bot...",
         components: [],
       });
-      restartBot();
+      this.restartBot();
     }
+  }
+
+  public restartBot(): void {
+    console.log("Bot is being restarted.. byebye!");
+    exec("pm2 restart TeamsBot", (error, stdout, stderr) => {
+      if (error) {
+        console.error(`Error restarting bot: ${error.message}`);
+        return;
+      }
+      if (stderr) {
+        console.error(`PM2 stderr: ${stderr}`);
+        return;
+      }
+      console.log(`PM2 stdout: ${stdout}`);
+    });
   }
 }
