@@ -54,13 +54,16 @@ export default class StatsCommand implements Command {
       interaction.guild?.members.resolve(player.discordSnowflake) ||
       (await interaction.guild?.members.fetch(player.discordSnowflake));
 
-    // todo: should we really return from this? we can just not display the
-    // avatar and have a placeholder there instead.
     if (!fetchedPlayer) {
       await interaction.editReply({
         content: "Player not found.",
       });
       return;
+    }
+
+    let winLossDisplay = winLossRatio.toFixed(2);
+    if (player.wins > 0 && player.losses === 0) {
+      winLossDisplay += " 🔥";
     }
 
     const embed = new EmbedBuilder()
@@ -96,7 +99,7 @@ export default class StatsCommand implements Command {
         },
         {
           name: "Win/Loss Ratio",
-          value: `${winLossRatio.toFixed(2)}`,
+          value: `${winLossDisplay}`,
           inline: true,
         }
       )
@@ -110,8 +113,11 @@ export default class StatsCommand implements Command {
       embeds: [embed],
     });
 
-    setTimeout(async () => {
-      await msg.delete();
-    }, 30 * 1000);
+    setTimeout(
+      async () => {
+        await msg.delete();
+      },
+      2 * 60 * 1000
+    );
   }
 }

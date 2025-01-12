@@ -6,11 +6,10 @@ import {
   ButtonBuilder,
   ButtonStyle,
   PermissionFlagsBits,
-  GuildMemberRoleManager,
 } from "discord.js";
 import { Command } from "../commands/CommandInterface.js";
-import { ConfigManager } from "../ConfigManager.js";
 import { cleanUpAfterGame } from "../logic/GameEndCleanUp.js";
+import { PermissionsUtil } from "../util/PermissionsUtil";
 
 export default class CleanupCommand implements Command {
   name = "cleanup";
@@ -31,20 +30,8 @@ export default class CleanupCommand implements Command {
     const subcommand = interaction.options.getSubcommand();
 
     if (subcommand === "force") {
-      const config = ConfigManager.getConfig();
-      const organiserRole = config.roles.organiserRole;
-
-      const roles = interaction.member?.roles;
-      if (
-        !(roles instanceof GuildMemberRoleManager) ||
-        !roles.cache.has(organiserRole)
-      ) {
-        await interaction.reply({
-          content: "You must have the organiser role to use this command.",
-          ephemeral: true,
-        });
-        return;
-      }
+      const isAuthorized = await PermissionsUtil.isUserAuthorised(interaction);
+      if (!isAuthorized) return;
 
       const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()

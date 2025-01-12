@@ -8,6 +8,7 @@ import {
   ActionRowBuilder,
   ButtonStyle,
   SlashCommandSubcommandsOnlyBuilder,
+  Guild,
 } from "discord.js";
 import { Command } from "../commands/CommandInterface.js";
 import { AnniClass, AnniMap } from "@prisma/client";
@@ -19,6 +20,8 @@ import { ConfigManager } from "../ConfigManager";
 import { activateFeed } from "../logic/gameFeed/ActivateFeed";
 import { addRegisteredPlayersFeed } from "../logic/gameFeed/RegisteredGameFeed";
 import { addTeamsGameFeed } from "../logic/gameFeed/TeamsGameFeed";
+import { GameInstance } from "../database/GameInstance";
+import { DiscordUtil } from "../util/DiscordUtil";
 
 export default class AnnouncementCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;
@@ -70,13 +73,10 @@ export default class AnnouncementCommand implements Command {
             option
               .setName("organiser")
               .setDescription("Organiser Name")
-              .setRequired(false)
+              .setRequired(true)
           )
           .addStringOption((option) =>
-            option
-              .setName("host")
-              .setDescription("Host Name")
-              .setRequired(false)
+            option.setName("host").setDescription("Host Name").setRequired(true)
           );
       })
       .addSubcommand((subcommand) => {
@@ -269,18 +269,21 @@ export default class AnnouncementCommand implements Command {
 
     const embed = this.createGameAnnouncementEmbed(true, organiser, host);
 
+    GameInstance.getInstance().organiser = organiser;
+    GameInstance.getInstance().host = host;
+
     this.announcementPreviewMessage = await interaction.editReply(embed);
   }
 
-  private async handleAnnouncementCancel() {
-    CurrentGameManager.cancelCurrentGame();
+  private async handleAnnouncementCancel(guild: Guild) {
+    await CurrentGameManager.cancelCurrentGame(guild);
     if (this.announcementMessage) {
       await this.announcementMessage.delete();
       delete this.announcementMessage;
     }
 
     if (this.announcementPreviewMessage) {
-      console.log("attempt to delete announcement preview message");
+      console.log("Attempting to delete announcement preview message");
       await this.announcementPreviewMessage.delete();
       delete this.announcementPreviewMessage;
     }
@@ -294,27 +297,43 @@ export default class AnnouncementCommand implements Command {
         await this.handleAnnouncementStart(interaction);
         break;
       case "cancel":
-        await this.handleAnnouncementCancel();
+        await this.handleAnnouncementCancel(interaction.guild!);
     }
   }
 
-  private async handleAnnouncementConfirm() {
-    const embed = this.createGameAnnouncementEmbed(false);
+  private async handleAnnouncementConfirm(guild: Guild) {
+    const embed = this.createGameAnnouncementEmbed(false).embeds?.[0];
     if (!Channels.announcements.isSendable()) return;
 
-    this.announcementMessage = await Channels.announcements.send(embed);
+    this.announcementMessage = await Channels.announcements.send({
+      embeds: [embed],
+    });
 
     if (Channels.registration.isTextBased()) {
       await Channels.registration.send(
         "**A friendly wars game has been announced!** 🎉\n" +
-          "Sign up by typing the `/register [MCID]` command in this chat."
+          "Sign up by typing the `/register [MCID]` command in this chat. If you sign up but can't play then run `/unregister`."
       );
     }
+    const config = ConfigManager.getConfig();
+    const chatChannelIds = [config.channels.gameFeed];
 
+    try {
+      await DiscordUtil.cleanUpAllChannelMessages(guild, chatChannelIds);
+    } catch (error) {
+      console.error("Failed to clean up game-feed while announcing:", error);
+    }
     await activateFeed(Channels.gameFeed, addRegisteredPlayersFeed);
     await activateFeed(Channels.gameFeed, addTeamsGameFeed);
 
     await CurrentGameManager.getCurrentGame().announce();
+
+    if (this.announcementPreviewMessage) {
+      await this.announcementPreviewMessage.edit({
+        embeds: [embed],
+        components: [],
+      });
+    }
   }
 
   public async handleButtonPress(
@@ -325,18 +344,12 @@ export default class AnnouncementCommand implements Command {
     });
     switch (interaction.customId) {
       case "announcement-cancel":
-        if (CurrentGameManager.getCurrentGame().announced) {
-          await interaction.editReply(
-            "Game has already been announced. Cancel the announcement with /announce cancel."
-          );
-        } else {
-          await this.handleAnnouncementCancel();
-          await interaction.editReply("Cancelled announcement.");
-        }
+        await this.handleAnnouncementCancel(interaction.guild!);
+        await interaction.editReply("Cancelled announcement.");
         break;
       case "announcement-confirm":
-        await this.handleAnnouncementConfirm();
-        await interaction.editReply("Sent announcement!");
+        await this.handleAnnouncementConfirm(interaction.guild!);
+        await interaction.editReply("Announcement sent!");
         break;
       default:
         await interaction.editReply("This doesn't do anything yet, sorry!");

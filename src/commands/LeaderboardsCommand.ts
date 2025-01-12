@@ -23,7 +23,9 @@ export default class LeaderboardsCommand implements Command {
     rank: number,
     ign: string,
     elo: number,
-    winLossRatio: number
+    winLossRatio: number,
+    wins: number,
+    losses: number
   ): string {
     const rankEmojis = [
       "🥇",
@@ -39,7 +41,11 @@ export default class LeaderboardsCommand implements Command {
     ];
     const rankEmoji = rankEmojis[rank - 1] || "🔢";
     const eloEmoji = EloUtil.getEloEmoji(elo);
-    return `${rankEmoji} **${ign}** ${eloEmoji} ─ ${elo} | W/L: ${winLossRatio.toFixed(1)}`;
+    let winLossDisplay = winLossRatio.toFixed(1);
+    if (wins > 0 && losses === 0) {
+      winLossDisplay += " 🔥";
+    }
+    return `${rankEmoji} **${ign}** ${eloEmoji} ─ ${elo} | W/L: ${winLossDisplay}`;
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -58,6 +64,8 @@ export default class LeaderboardsCommand implements Command {
           playerData.losses > 0
             ? playerData.wins / playerData.losses
             : playerData.wins,
+        wins: playerData.wins,
+        losses: playerData.losses,
       }));
 
       const currentPlace = allPlayers.findIndex(
@@ -77,7 +85,9 @@ export default class LeaderboardsCommand implements Command {
             player.rank,
             player.ign,
             player.elo,
-            player.winLossRatio
+            player.winLossRatio,
+            player.wins,
+            player.losses
           ),
           value: "\u200b",
           inline: false,

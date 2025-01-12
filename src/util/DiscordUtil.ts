@@ -4,11 +4,13 @@ import {
   Guild,
   GuildMember,
   InteractionReplyOptions,
+  Message,
   MessagePayload,
   Snowflake,
   TextChannel,
 } from "discord.js";
 import { Channels } from "../Channels";
+import { setTimeout as delay } from "timers/promises";
 
 export class DiscordUtil {
   static getGuildMember(
@@ -116,6 +118,179 @@ export class DiscordUtil {
       await textChannel.send(content);
     } catch (error) {
       console.error(`Failed to send message to channel "${channel}": `, error);
+    }
+  }
+
+  static async removeRoleFromMembers(
+    guild: Guild,
+    roleId: string
+  ): Promise<void> {
+    const role = guild.roles.cache.get(roleId);
+    if (!role) {
+      console.log(`Role with ID ${roleId} not found in guild ${guild.name}`);
+      return;
+    }
+
+    for (const [_, member] of role.members) {
+      try {
+        await member.roles.remove(role);
+        console.log(`Removed role ${role.name} from ${member.user.tag}`);
+      } catch (error) {
+        console.error(
+          `Failed to remove role ${role.name} from ${member.user.tag}:`,
+          error
+        );
+      }
+    }
+  }
+
+  static async moveMembersToChannel(
+    guild: Guild,
+    fromChannelId: string,
+    toChannelId: string
+  ): Promise<void> {
+    const fromChannel = guild.channels.cache.get(fromChannelId);
+    const toChannel = guild.channels.cache.get(toChannelId);
+
+    if (
+      !fromChannel ||
+      !toChannel ||
+      !fromChannel.isVoiceBased() ||
+      !toChannel.isVoiceBased()
+    ) {
+      console.error(
+        `Invalid channels provided for moving members: ${fromChannelId}, ${toChannelId}`
+      );
+      return;
+    }
+
+    for (const [_, member] of fromChannel.members) {
+      try {
+        await member.voice.setChannel(toChannelId);
+        console.log(
+          `Moved ${member.user.tag} from ${fromChannel.name} to ${toChannel.name}`
+        );
+      } catch (error) {
+        console.error(
+          `Failed to move ${member.user.tag} from ${fromChannel.name}:`,
+          error
+        );
+      }
+    }
+  }
+
+  static async batchRemoveRoleFromMembers(
+    guild: Guild,
+    roleId: string,
+    batchSize: number,
+    delayMs: number
+  ): Promise<void> {
+    const role = guild.roles.cache.get(roleId);
+    if (!role) {
+      console.log(`Role with ID ${roleId} not found in guild ${guild.name}`);
+      return;
+    }
+
+    const members = Array.from(role.members.values());
+    for (let i = 0; i < members.length; i += batchSize) {
+      const batch = members.slice(i, i + batchSize);
+      await Promise.allSettled(
+        batch.map((member) => member.roles.remove(role).catch(console.error))
+      );
+      await delay(delayMs);
+    }
+    console.log(`Completed removing role ${role.name} from members.`);
+  }
+
+  static async batchMoveMembersToChannel(
+    guild: Guild,
+    fromChannelId: string,
+    toChannelId: string,
+    batchSize: number,
+    delayMs: number
+  ): Promise<void> {
+    const fromChannel = guild.channels.cache.get(fromChannelId);
+    const toChannel = guild.channels.cache.get(toChannelId);
+
+    if (
+      !fromChannel ||
+      !toChannel ||
+      !fromChannel.isVoiceBased() ||
+      !toChannel.isVoiceBased()
+    ) {
+      console.error(
+        `Invalid channels provided for moving members: ${fromChannelId}, ${toChannelId}`
+      );
+      return;
+    }
+
+    const members = Array.from(fromChannel.members.values());
+    for (let i = 0; i < members.length; i += batchSize) {
+      const batch = members.slice(i, i + batchSize);
+      await Promise.allSettled(
+        batch.map((member) =>
+          member.voice.setChannel(toChannel).catch(console.error)
+        )
+      );
+      await delay(delayMs);
+    }
+    console.log(
+      `Completed moving members from ${fromChannel.name} to ${toChannel.name}.`
+    );
+  }
+
+  static async cleanUpAllChannelMessages(
+    guild: Guild,
+    channelIds: string[],
+    messageAgeDays = 14
+  ): Promise<void> {
+    try {
+      for (const channelId of channelIds) {
+        const channel = guild.channels.cache.get(channelId) as TextChannel;
+        if (!channel?.isTextBased()) continue;
+
+        while (true) {
+          try {
+            const messages = await channel.messages.fetch({ limit: 100 });
+            if (messages.size === 0) break;
+
+            const recentMessages: string[] = [];
+            const oldMessages: Message[] = [];
+
+            messages.forEach((msg) => {
+              const isOld =
+                Date.now() - msg.createdTimestamp >=
+                messageAgeDays * 24 * 60 * 60 * 1000;
+              if (isOld) {
+                oldMessages.push(msg);
+              } else {
+                recentMessages.push(msg.id);
+              }
+            });
+
+            if (recentMessages.length > 0) {
+              await channel.bulkDelete(recentMessages, true);
+              console.log(
+                `Cleared ${recentMessages.length} recent messages in ${channel.name}`
+              );
+            }
+
+            for (const msg of oldMessages) {
+              await msg.delete();
+              console.log(`Deleted old message ${msg.id} in ${channel.name}`);
+            }
+          } catch (error) {
+            console.error(
+              `Error cleaning messages in ${channel?.name || "unknown channel"}:`,
+              error
+            );
+            break;
+          }
+        }
+      }
+      console.log("Completed cleaning up messages.");
+    } catch (error) {
+      console.error("Failed to clean up messages:", error);
     }
   }
 }

@@ -61,8 +61,7 @@ export class Elo {
   }
 
   public applyEloUpdate(player: PlayerInstance): void {
-    const newElo = this.calculateNewElo(player);
-    player.elo = newElo;
+    player.elo = this.calculateNewElo(player);
     console.log(`Elo updated for ${player.ignUsed}: ${player.elo}`);
   }
 }

@@ -28,4 +28,13 @@ export const EloUtil = {
   getEloFormatted(player: PlayerInstance) {
     return `[${player.elo}]`;
   },
+
+  calculateMeanElo(players: PlayerInstance[]) {
+    if (players.length === 0) return 1000;
+    const totalElo = players.reduce(
+      (sum, player) => sum + (player.elo || 1000),
+      0
+    );
+    return Math.round(totalElo / players.length);
+  },
 };

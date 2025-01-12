@@ -1,7 +1,7 @@
-// WinnerCommand.ts
 import { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
 import { Command } from "./CommandInterface";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
+import { PermissionsUtil } from "../util/PermissionsUtil";
 
 export default class WinnerCommand implements Command {
   name = "winner";
@@ -28,6 +28,9 @@ export default class WinnerCommand implements Command {
     );
 
   async execute(interaction: ChatInputCommandInteraction) {
+    const isAuthorized = await PermissionsUtil.isUserAuthorised(interaction);
+    if (!isAuthorized) return;
+
     const team = interaction.options.getString("team", true).toUpperCase();
 
     if (team !== "BLUE" && team !== "RED") {

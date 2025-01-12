@@ -81,7 +81,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       const embed = this.createDraftEmbed(false);
       this.embedMessage = await teamPickingChannel.send(embed);
 
-      if (Math.random() === 5) {
+      if (Math.random() < 0.5) {
         this.turn = "RED";
         await teamPickingChannel.send(
           "**Red** team has been randomly picked to select first."
@@ -110,7 +110,11 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       const otherThanCaptain = players.filter((p) => !p.captain);
 
       const formatPlayer = (player: PlayerInstance) => {
-        const baseInfo = `${EloUtil.getEloEmoji(player.elo)} ${player.ignUsed ?? "Unknown Player"}`;
+        const safeIgnUsed = (player.ignUsed ?? "Unknown Player").replace(
+          /_/g,
+          "\\_"
+        );
+        const baseInfo = `${EloUtil.getEloEmoji(player.elo)} ${safeIgnUsed}`;
         return includeElo
           ? `${baseInfo} ${EloUtil.getEloFormatted(player)}`
           : baseInfo;
@@ -118,27 +122,35 @@ export class DraftTeamPickingSession extends TeamPickingSession {
 
       if (captain) {
         return (
-          `**${formatPlayer(captain)}**\n` +
-          otherThanCaptain.map(formatPlayer).join("\n")
+          `**\t\t${formatPlayer(captain)}**\n` +
+          otherThanCaptain
+            .map((player) => `\t\t${formatPlayer(player)}`)
+            .join("\n")
         );
       } else {
         return otherThanCaptain.length > 0
-          ? otherThanCaptain.map(formatPlayer).join("\n")
+          ? otherThanCaptain
+              .map((player) => `\t\t${formatPlayer(player)}`)
+              .join("\n")
           : "No players";
       }
     };
+
+    const redEloMean = EloUtil.calculateMeanElo(redPlayers);
+    const blueEloMean = EloUtil.calculateMeanElo(bluePlayers);
+    const undecidedEloMean = EloUtil.calculateMeanElo(undecidedPlayers);
 
     const embed = new EmbedBuilder()
       .setColor("#0099ff")
       .setTitle("Drafting Teams")
       .addFields(
         {
-          name: "🔵 Blue Team 🔵",
+          name: "🔵  Blue Team  🔵  ",
           value: getString(bluePlayers),
           inline: true,
         },
         {
-          name: "🔴 Red Team 🔴",
+          name: " 🔴  Red Team  🔴  ",
           value: getString(redPlayers),
           inline: true,
         }
@@ -146,7 +158,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
 
     if (!finalized) {
       embed.addFields({
-        name: "🟢 Up for Grabs 🟢",
+        name: " 🟢 Up for Grabs  🟢 ",
         value: getString(undecidedPlayers, true),
         inline: true,
       });
@@ -155,6 +167,10 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     if (finalized && finalizeFooter) {
       embed.setFooter({
         text: "Select an action below.",
+      });
+    } else {
+      embed.setFooter({
+        text: `Blue Team: ${blueEloMean}              Red Team: ${redEloMean}               Up for Grabs: ${undecidedEloMean}`,
       });
     }
 
@@ -197,7 +213,15 @@ export class DraftTeamPickingSession extends TeamPickingSession {
         await interaction.channel.send("Teams have been finalized.");
 
         const game = CurrentGameManager.getCurrentGame();
-        game.teams = { ...this.proposedTeams };
+        game.teams.RED = [...this.proposedTeams.RED];
+        game.teams.BLUE = [...this.proposedTeams.BLUE];
+        const allPickedPlayers = new Set([
+          ...this.proposedTeams.RED.map((p) => p.discordSnowflake),
+          ...this.proposedTeams.BLUE.map((p) => p.discordSnowflake),
+        ]);
+        game.teams.UNDECIDED = this.proposedTeams.UNDECIDED.filter(
+          (p) => !allPickedPlayers.has(p.discordSnowflake)
+        );
         game.changeHowTeamsDecided("DRAFT");
         this.state = "finalized";
         break;
