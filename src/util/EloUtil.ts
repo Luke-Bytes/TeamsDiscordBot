@@ -37,4 +37,10 @@ export const EloUtil = {
     );
     return Math.round(totalElo / players.length);
   },
+
+  calculateExpectedScore(blueMeanElo: number, redMeanElo: number): [number, number] {
+    const blueExpectedScore = Number((1 / (1 + Math.pow(10, (redMeanElo - blueMeanElo) / 400))).toFixed(2));
+    const redExpectedScore = Number((1 - blueExpectedScore).toFixed(2));
+    return [blueExpectedScore, redExpectedScore];
+  }
 };
