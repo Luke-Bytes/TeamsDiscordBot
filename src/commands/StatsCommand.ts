@@ -79,7 +79,7 @@ export default class StatsCommand implements Command {
         },
         {
           name: "ELO",
-          value: `${player.elo} ${EloUtil.getEloEmoji(player.elo)}`,
+          value: `${Math.round(player.elo)} ${EloUtil.getEloEmoji(player.elo)}`,
           inline: true,
         },
         {
