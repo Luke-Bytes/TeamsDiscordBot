@@ -170,7 +170,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       });
     } else {
       embed.setFooter({
-        text: `Blue Team: ${blueEloMean}              Red Team: ${redEloMean}                       Up for Grabs: ${undecidedEloMean}`,
+        text: `Blue Team: ${blueEloMean}              Red Team: ${redEloMean}                      Up for Grabs: ${undecidedEloMean}`,
       });
     }
 

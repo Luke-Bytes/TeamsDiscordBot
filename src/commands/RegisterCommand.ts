@@ -97,7 +97,7 @@ export default class RegisterCommand implements Command {
         });
       } else {
         await interaction.editReply({
-          content: `You have successfully registered as \`${inGameName}\`, but please note that the Mojang API encountered an issue.`,
+          content: `You have successfully registered as \`${inGameName}\` (Although the Mojang & fallback API seems to be down).`,
         });
       }
       return;
