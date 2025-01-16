@@ -167,7 +167,7 @@ export class GameInstance {
           uuid = fetchedUuid;
         } else {
           console.warn(
-            `No UUID found for IGN ${ignUsed}. Proceeding unverified.`
+            `No UUID found for IGN ${ignUsed}. Proceeding with fallback.`
           );
         }
       }
@@ -175,10 +175,28 @@ export class GameInstance {
 
     let ign: string | null = ignUsed;
     if (uuid) {
-      ign = await MojangAPI.uuidToUsername(uuid);
-      if (!ign) {
+      const resolvedIgn = await MojangAPI.uuidToUsername(uuid);
+      if (resolvedIgn) {
+        ign = resolvedIgn;
+      } else {
         console.warn(`UUID ${uuid} does not resolve to a valid IGN.`);
       }
+    }
+
+    if (!uuid || !ign) {
+      console.warn(
+        `Fallback triggered for player ${discordSnowflake} with IGN ${ignUsed}.`
+      );
+
+      player.ignUsed = ignUsed;
+
+      this.teams["UNDECIDED"].push(player);
+
+      return {
+        error: false,
+        playerInstance: player,
+        fallback: true,
+      } as const;
     }
 
     if (uuid && !player.primaryMinecraftAccount) {
