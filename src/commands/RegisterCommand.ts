@@ -83,9 +83,23 @@ export default class RegisterCommand implements Command {
       console.warn(
         `Treating username ${inGameName} as valid despite API errors.`
       );
-      await interaction.editReply({
-        content: `You have successfully registered as \`${inGameName}\`, but please note that the Mojang API encountered an issue.`,
-      });
+
+      const result =
+        await CurrentGameManager.getCurrentGame().addPlayerByDiscordId(
+          discordUserId,
+          inGameName,
+          uuid
+        );
+
+      if (result.error) {
+        await interaction.editReply({
+          content: result.error,
+        });
+      } else {
+        await interaction.editReply({
+          content: `You have successfully registered as \`${inGameName}\`, but please note that the Mojang API encountered an issue.`,
+        });
+      }
       return;
     }
 
