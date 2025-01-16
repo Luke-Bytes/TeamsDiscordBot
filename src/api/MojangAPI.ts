@@ -1,8 +1,8 @@
 export class MojangAPI {
-  // Store in DB
   public static async usernameToUUID(username: string): Promise<string | null> {
     if (!this.validateUsername(username)) {
       console.error("Invalid username format for " + username);
+      return null;
     }
 
     try {
@@ -10,26 +10,24 @@ export class MojangAPI {
         encodeURI(`https://api.mojang.com/users/profiles/minecraft/${username}`)
       );
 
-      if (!response.ok) {
-        console.error(
-          `Mojang API error for username ${username}: ${response.status} ${response.statusText}`
-        );
-      }
-
-      const data = await response.json();
-
-      if (!data?.id) {
+      if (response.status === 200) {
+        const data = await response.json();
+        return data?.id || null;
+      } else if (response.status === 404) {
+        console.warn(`Username ${username} not found in Mojang API.`);
         return null;
+      } else {
+        console.error(
+          `Unexpected Mojang API error for username ${username}: ${response.status} ${response.statusText}`
+        );
+        return username;
       }
-
-      return data.id as string;
     } catch (error) {
-      console.error("Error fetching UUID from username:", error);
-      return null;
+      console.error("Error fetching UUID from Mojang API:", error);
+      return username;
     }
   }
 
-  // Display
   public static async uuidToUsername(uuid: string): Promise<string | null> {
     if (!uuid || !/^[0-9a-f]{32}$/.test(uuid)) {
       console.error("Invalid UUID format.");
@@ -43,22 +41,17 @@ export class MojangAPI {
         )
       );
 
-      if (!response.ok) {
+      if (response.ok) {
+        const data = await response.json();
+        return data?.name || null; // Return username if available
+      } else {
         console.error(
-          `Mojang API error for UUID ${uuid}: ${response.status} ${response.statusText}`
+          `Unexpected Mojang API error for UUID ${uuid}: ${response.status} ${response.statusText}`
         );
         return null;
       }
-
-      const data = await response.json();
-
-      if (!data?.name) {
-        return null; // UUID not found
-      }
-
-      return data.name as string;
     } catch (error) {
-      console.error("Error fetching username from UUID:", error);
+      console.error("Error fetching username from Mojang API:", error);
       return null;
     }
   }

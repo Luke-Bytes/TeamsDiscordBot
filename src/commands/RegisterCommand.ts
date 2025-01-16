@@ -70,10 +70,21 @@ export default class RegisterCommand implements Command {
     let player = await prismaClient.player.byDiscordSnowflake(discordUserId);
 
     const uuid = await MojangAPI.usernameToUUID(inGameName);
+
     if (!uuid) {
       await interaction.editReply({
         content:
           "That Minecraft username does not exist. Please check the spelling!",
+      });
+      return;
+    }
+
+    if (uuid === inGameName) {
+      console.warn(
+        `Treating username ${inGameName} as valid despite API errors.`
+      );
+      await interaction.editReply({
+        content: `You have successfully registered as \`${inGameName}\`, but please note that the Mojang API encountered an issue.`,
       });
       return;
     }
