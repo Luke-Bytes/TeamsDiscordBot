@@ -163,29 +163,25 @@ export class GameInstance {
         uuid = player.primaryMinecraftAccount ?? undefined;
       } else {
         const fetchedUuid = await MojangAPI.usernameToUUID(ignUsed);
-        if (!fetchedUuid) {
-          return {
-            error: "That IGN doesn't exist! Did you spell it correctly?",
-          } as const;
+        if (fetchedUuid) {
+          uuid = fetchedUuid;
+        } else {
+          console.warn(
+            `No UUID found for IGN ${ignUsed}. Proceeding unverified.`
+          );
         }
-        uuid = fetchedUuid;
       }
     }
 
-    if (!uuid) {
-      return {
-        error: "The player does not have a primary minecraft account.",
-      } as const;
+    let ign: string | null = ignUsed;
+    if (uuid) {
+      ign = await MojangAPI.uuidToUsername(uuid);
+      if (!ign) {
+        console.warn(`UUID ${uuid} does not resolve to a valid IGN.`);
+      }
     }
 
-    const ign = await MojangAPI.uuidToUsername(uuid);
-    if (!ign) {
-      return {
-        error: "Could not locate IGN of player.",
-      } as const;
-    }
-
-    if (!player.primaryMinecraftAccount) {
+    if (uuid && !player.primaryMinecraftAccount) {
       await prismaClient.player.update({
         where: { id: player.playerId },
         data: { primaryMinecraftAccount: uuid },
@@ -193,7 +189,7 @@ export class GameInstance {
       player.primaryMinecraftAccount = uuid;
     }
 
-    if (!player.minecraftAccounts.includes(ign)) {
+    if (ign && !player.minecraftAccounts.includes(ign)) {
       const result = await prismaClient.player.update({
         where: { id: player.playerId },
         data: {
@@ -215,12 +211,13 @@ export class GameInstance {
       player.minecraftAccounts.push(ign);
     }
 
-    await prismaClient.player.update({
-      where: { id: player.playerId },
-      data: { latestIGN: ign },
-    });
-
-    player.ignUsed = ign;
+    if (ign) {
+      await prismaClient.player.update({
+        where: { id: player.playerId },
+        data: { latestIGN: ign },
+      });
+      player.ignUsed = ign;
+    }
 
     this.teams["UNDECIDED"].push(player);
 
