@@ -113,9 +113,16 @@ export default class RegisterCommand implements Command {
         content: result.error,
       });
     } else if (PermissionsUtil.isSameUser(interaction, targetUser.id)) {
-      await interaction.editReply({
-        content: `You have successfully registered as \`${inGameName}\`!`,
-      });
+      if (CurrentGameManager.getCurrentGame().teamsDecidedBy !== null) {
+        CurrentGameManager.getCurrentGame().addLateSignup(discordUserId);
+        await interaction.editReply({
+          content: `You have successfully registered as \`${inGameName}\` but please note this is a late sign up. You may be unable to play.`,
+        });
+      } else {
+        await interaction.editReply({
+          content: `You have successfully registered as \`${inGameName}\`!`,
+        });
+      }
     } else {
       await interaction.editReply({
         content: `${discordUserName} has been successfully registered as \`${inGameName}\``,

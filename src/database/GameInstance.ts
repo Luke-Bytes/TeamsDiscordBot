@@ -32,6 +32,7 @@ export class GameInstance {
     BLUE: [],
     UNDECIDED: [],
   };
+  lateSignups: Set<string> = new Set();
   gameWinner?: "RED" | "BLUE";
   teamsDecidedBy?: "DRAFT" | "RANDOMISED" | null;
 
@@ -140,6 +141,14 @@ export class GameInstance {
     return Object.keys(this.teams).sort(
       (a, b) => this.teams[a as Team].length - this.teams[b as Team].length
     )[0] as Team;
+  }
+
+  public addLateSignup(discordSnowflake: string): void {
+    this.lateSignups.add(discordSnowflake);
+  }
+
+  public isLateSignup(discordSnowflake: string): boolean {
+    return this.lateSignups.has(discordSnowflake);
   }
 
   public async addPlayerByDiscordId(
@@ -333,7 +342,7 @@ export class GameInstance {
 
     if (fillOption !== "none") {
       console.info(`[GAME] Filling teams with test players...`);
-      await this.fillTeamsWithTestPlayers(40, fillOption);
+      await this.fillTeamsWithTestPlayers(6, fillOption);
       console.info(`[GAME] Teams filled. Current teams:`, this.teams);
 
       this.teams.RED.forEach((player) => {
