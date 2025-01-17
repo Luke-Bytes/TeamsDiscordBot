@@ -6,6 +6,7 @@ import {
 import { Command } from "./CommandInterface.js";
 import { EloUtil } from "../util/EloUtil.js";
 import { PrismaUtils } from "../util/PrismaUtils";
+import { Channels } from "../Channels";
 
 export default class StatsCommand implements Command {
   public name = "stats";
@@ -32,18 +33,21 @@ export default class StatsCommand implements Command {
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     await interaction.deferReply({});
+    const botCommandsChannelId = Channels.botCommands.id;
 
     let input =
       interaction.options.getString("player", false) ?? interaction.user.id;
 
-    // strip the <@...> from the string if they used a ping.
     input = input.replace(/<@([^>]+)>/g, "$1");
 
     const player = await PrismaUtils.findPlayer(input);
     if (!player) {
-      await interaction.editReply({
+      const notFoundMessage = await interaction.editReply({
         content: "Player not found.",
       });
+      setTimeout(async () => {
+        await notFoundMessage.delete();
+      }, 15 * 1000);
       return;
     }
 
@@ -55,9 +59,12 @@ export default class StatsCommand implements Command {
       (await interaction.guild?.members.fetch(player.discordSnowflake));
 
     if (!fetchedPlayer) {
-      await interaction.editReply({
+      const notFoundMessage = await interaction.editReply({
         content: "Player not found.",
       });
+      setTimeout(async () => {
+        await notFoundMessage.delete();
+      }, 15 * 1000);
       return;
     }
 
@@ -113,11 +120,13 @@ export default class StatsCommand implements Command {
       embeds: [embed],
     });
 
-    setTimeout(
-      async () => {
-        await msg.delete();
-      },
-      2 * 60 * 1000
-    );
+    if (interaction.channelId !== botCommandsChannelId) {
+      setTimeout(
+        async () => {
+          await msg.delete();
+        },
+        2 * 60 * 1000
+      );
+    }
   }
 }
