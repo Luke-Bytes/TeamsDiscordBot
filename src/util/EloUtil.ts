@@ -68,11 +68,27 @@ export const EloUtil = {
   calculateEloChange(game: GameInstance, player: PlayerInstance, isWin: boolean) {
     const kFactor = this.getKFactor(player.elo);
     const expectedScore = game.getPlayersTeam(player) === "BLUE" ? game.blueExpectedScore : game.redExpectedScore;
+    let eloChange = 0;
     if (expectedScore !== undefined) {
       const actualScore = isWin ? 1 : 0;
-      const eloChange = Math.abs(kFactor * (actualScore - expectedScore));
-      return Number(eloChange.toFixed(1));
+      eloChange = Math.abs(kFactor * (actualScore - expectedScore));
+
+      if (player.winStreak >= 3 && isWin) {
+        if (player.winStreak > 5) eloChange *= (1.3 + (player.winStreak - 5) * 0.05);
+        else eloChange *= (1 + (player.winStreak - 2) * 0.1);
+        console.log(`Win streak detected! (${player.winStreak}) Applying bonus Elo.`);
+      }
     }
-    return 0;
+    return Number(eloChange.toFixed(1));
+
+  },
+
+  calculateWinStreak(player: PlayerInstance) {
+    if (player.winStreak < 5) {
+
+    }
+
+
   }
+
 };

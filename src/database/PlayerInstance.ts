@@ -8,6 +8,7 @@ export class PlayerInstance {
   elo: number;
   wins: number;
   losses: number;
+  winStreak: number;
   discordSnowflake: string;
   minecraftAccounts: string[];
   primaryMinecraftAccount?: string;
@@ -21,6 +22,7 @@ export class PlayerInstance {
     this.elo = data.elo;
     this.wins = data.wins;
     this.losses = data.losses;
+    this.winStreak = data.winStreak;
     this.discordSnowflake = data.discordSnowflake;
     this.minecraftAccounts = data.minecraftAccounts;
     this.primaryMinecraftAccount = data.primaryMinecraftAccount ?? undefined;
@@ -47,6 +49,7 @@ export class PlayerInstance {
     const randomElo = Math.floor(Math.random() * (1500 - 800 + 1)) + 800;
     const randomWins = Math.floor(Math.random() * 21);
     const randomLosses = Math.floor(Math.random() * 21);
+    const randomWinStreak = Math.floor(Math.random() * 11);
 
     const newPlayer = await prismaClient.player.create({
       data: {
@@ -54,6 +57,7 @@ export class PlayerInstance {
         elo: randomElo,
         wins: randomWins,
         losses: randomLosses,
+        winStreak: randomWinStreak,
         minecraftAccounts: [`Phi${playerCount + 1}`],
       },
     });
