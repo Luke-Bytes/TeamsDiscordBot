@@ -1,4 +1,4 @@
-import { EloUtil } from "util/EloUtil";
+import { EloUtil } from "../util/EloUtil";
 import { ConfigManager } from "../ConfigManager";
 import { PlayerInstance } from "../database/PlayerInstance";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
@@ -28,15 +28,11 @@ export class Elo {
     if (game.gameWinner && playerTeam === game.gameWinner) {
       let winEloGain = EloUtil.calculateEloChange(game, player, true);
       currentElo += winEloGain;
-      console.log(
-        `Win bonus applied to ${player.ignUsed}: +${winEloGain}`
-      );
+      console.log(`Win bonus applied to ${player.ignUsed}: +${winEloGain}`);
     } else if (game.gameWinner) {
       let loseEloLoss = EloUtil.calculateEloChange(game, player, false);
       currentElo -= loseEloLoss;
-      console.log(
-        `Loss penalty applied to ${player.ignUsed}: -${loseEloLoss}`
-      );
+      console.log(`Loss penalty applied to ${player.ignUsed}: -${loseEloLoss}`);
     }
 
     if (

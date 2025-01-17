@@ -784,10 +784,15 @@ export class GameInstance {
   public calculateMeanEloAndExpectedScore() {
     this.blueMeanElo = EloUtil.calculateMeanElo(this.teams.BLUE);
     this.redMeanElo = EloUtil.calculateMeanElo(this.teams.RED);
-    [this.blueExpectedScore, this.redExpectedScore] = EloUtil.calculateExpectedScore(this.blueMeanElo, this.redMeanElo);
+    [this.blueExpectedScore, this.redExpectedScore] =
+      EloUtil.calculateExpectedScore(this.blueMeanElo, this.redMeanElo);
 
     console.log(`[GAME] Calculated mean ELO and expected scores.`);
-    console.log(`Blue Mean Elo = ${this.blueMeanElo} | Red Mean Elo = ${this.redMeanElo}`);
-    console.log(`Blue Expected Score = ${this.blueExpectedScore} | Red Expected Score = ${this.redExpectedScore}`);
+    console.log(
+      `Blue Mean Elo = ${this.blueMeanElo} | Red Mean Elo = ${this.redMeanElo}`
+    );
+    console.log(
+      `Blue Expected Score = ${this.blueExpectedScore} | Red Expected Score = ${this.redExpectedScore}`
+    );
   }
 }
