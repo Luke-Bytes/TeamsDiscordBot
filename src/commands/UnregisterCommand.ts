@@ -2,6 +2,7 @@ import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { PermissionsUtil } from "../util/PermissionsUtil.js";
 import { CurrentGameManager } from "../logic/CurrentGameManager.js";
+import { Team } from "@prisma/client";
 
 export default class UnregisterCommand implements Command {
   public data: SlashCommandBuilder;
@@ -30,7 +31,9 @@ export default class UnregisterCommand implements Command {
       return;
     }
 
-    if (!CurrentGameManager.getCurrentGame().announced) {
+    const game = CurrentGameManager.getCurrentGame();
+
+    if (!game.announced) {
       await interaction.reply({
         content: "No game has been announced yet!",
         ephemeral: true,
@@ -68,6 +71,35 @@ export default class UnregisterCommand implements Command {
         ephemeral: false,
       });
       return;
+    }
+
+    const now = new Date();
+    const startTime = game.startTime || now;
+    const isLate =
+      game.isFinished ||
+      (game.teamsDecidedBy &&
+        now.getTime() - startTime.getTime() > 30 * 60 * 1000);
+
+    if (isLate) {
+      await interaction.reply({
+        content:
+          "The game has already started, it's too late to unregister now!",
+        ephemeral: false,
+      });
+      return;
+    }
+
+    const userTeam = Object.keys(game.teams).find((team) =>
+      game.teams[team as Team].some(
+        (player) => player.discordSnowflake === discordUserId
+      )
+    );
+
+    if (userTeam && userTeam !== "UNDECIDED" && game.teamsDecidedBy) {
+      await interaction.reply({
+        content: `${discordUserName} has been unregistered but will be punished for unregistering after teams were decided.`,
+        ephemeral: false,
+      });
     }
 
     const result =

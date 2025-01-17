@@ -170,7 +170,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       });
     } else {
       embed.setFooter({
-        text: `Blue Team: ${blueEloMean}              Red Team: ${redEloMean}               Up for Grabs: ${undecidedEloMean}`,
+        text: `Blue Team: ${blueEloMean}              Red Team: ${redEloMean}                      Up for Grabs: ${undecidedEloMean}`,
       });
     }
 
@@ -215,13 +215,18 @@ export class DraftTeamPickingSession extends TeamPickingSession {
         const game = CurrentGameManager.getCurrentGame();
         game.teams.RED = [...this.proposedTeams.RED];
         game.teams.BLUE = [...this.proposedTeams.BLUE];
+
         const allPickedPlayers = new Set([
           ...this.proposedTeams.RED.map((p) => p.discordSnowflake),
           ...this.proposedTeams.BLUE.map((p) => p.discordSnowflake),
         ]);
-        game.teams.UNDECIDED = this.proposedTeams.UNDECIDED.filter(
-          (p) => !allPickedPlayers.has(p.discordSnowflake)
-        );
+
+        game.teams.UNDECIDED = [
+          ...this.proposedTeams.UNDECIDED,
+          ...game.teams.UNDECIDED.filter(
+            (p) => !allPickedPlayers.has(p.discordSnowflake)
+          ),
+        ];
         game.changeHowTeamsDecided("DRAFT");
         this.state = "finalized";
         break;

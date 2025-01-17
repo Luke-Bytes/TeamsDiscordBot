@@ -22,6 +22,8 @@ export default class PerformanceCommand implements Command {
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
+    await interaction.deferReply({ ephemeral: false }); // Ensure interaction stays active
+
     const uptimeSeconds = process.uptime();
     const memoryUsage = process.memoryUsage();
     const cpuUsage = process.cpuUsage();
@@ -31,12 +33,14 @@ export default class PerformanceCommand implements Command {
         : "N/A (Not Connected)";
 
     const dbLatency = await pingDatabase();
+    const mojangPing = await pingMojangAPI();
     const gitBranch = await getGitBranch();
 
     const usageStats = `
 **Uptime:** ${this.formatUptime(uptimeSeconds)}
 **WebSocket Ping:** ${websocketPing}
 **Database Latency:** ${dbLatency} ms
+**Mojang API Ping:** ${mojangPing}
 **Git Branch:** ${gitBranch}
 
 
@@ -49,7 +53,7 @@ export default class PerformanceCommand implements Command {
 - User: ${(cpuUsage.user / 1e6).toFixed(2)} ms
 - System: ${(cpuUsage.system / 1e6).toFixed(2)} ms
 `;
-    await interaction.reply({ content: usageStats, ephemeral: false });
+    await interaction.editReply({ content: usageStats });
   }
 }
 
@@ -61,6 +65,30 @@ async function pingDatabase() {
     return (end - start).toFixed(2);
   } catch (error) {
     console.error("Database ping failed:", error);
+    return "Failed to connect";
+  }
+}
+
+async function pingMojangAPI(): Promise<string> {
+  const start = performance.now();
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000); // Timeout after 5 seconds
+
+    const response = await fetch("https://api.mojang.com/", {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (response.ok) {
+      const end = performance.now();
+      return `${(end - start).toFixed(2)} ms`;
+    } else {
+      console.warn(`Mojang API returned status ${response.status}`);
+      return `Error: ${response.status}`;
+    }
+  } catch (error) {
+    console.error("Failed to connect to Mojang API:", error);
     return "Failed to connect";
   }
 }

@@ -19,7 +19,7 @@ export default class RegisterCommand implements Command {
         option
           .setName("ingamename")
           .setDescription("The in-game name to register")
-          .setRequired(true)
+          .setRequired(false)
       )
       .addUserOption((option) =>
         option
@@ -46,16 +46,14 @@ export default class RegisterCommand implements Command {
       return;
     }
 
-    const inGameName = interaction.options.getString("ingamename", true);
+    const inGameNameOption = interaction.options.getString("ingamename");
     const targetUser =
       interaction.options.getUser("discorduser") || interaction.user;
-
     const discordUserId = targetUser.id;
     const discordUserName = targetUser.username;
 
     const member = interaction.guild?.members.cache.get(interaction.user.id);
-
-    await interaction.deferReply({});
+    await interaction.deferReply();
 
     if (
       !PermissionsUtil.hasRole(member, "organiserRole") &&
@@ -69,17 +67,44 @@ export default class RegisterCommand implements Command {
 
     let player = await prismaClient.player.byDiscordSnowflake(discordUserId);
 
-    const uuid = await MojangAPI.usernameToUUID(inGameName);
-    if (!uuid) {
-      await interaction.editReply({
-        content:
-          "That Minecraft username does not exist. Please check the spelling!",
-      });
-      return;
-    }
+    let uuid: string | null = null;
+    let resolvedUsername: string | null = null;
 
-    if (player) {
+    if (!inGameNameOption) {
+      if (!player || !player.primaryMinecraftAccount) {
+        await interaction.editReply({
+          content:
+            "You have not registered before. Please specify your in-game name with `/register <ingamename>`.",
+        });
+        return;
+      }
+
+      // Use stored UUID and retrieve the current username from Mojang
+      uuid = player.primaryMinecraftAccount;
+      resolvedUsername = await MojangAPI.uuidToUsername(uuid);
+
+      //  A3) If Mojang lookup fails, tell user to specify ingamename manually
+      if (!resolvedUsername) {
+        await interaction.editReply({
+          content:
+            "Error retrieving your username from the Mojang API. Please specify your in-game name manually with `/register <ingamename>`.",
+        });
+        return;
+      }
+    } else {
+      // Validate ign if provided by converting it to a UUID
+      uuid = await MojangAPI.usernameToUUID(inGameNameOption);
+      if (!uuid) {
+        await interaction.editReply({
+          content:
+            "That Minecraft username does not exist. Please check the spelling!",
+        });
+        return;
+      }
+
+      // If user is already in DB with a different UUID, block them from registering a new account
       if (
+        player &&
         player.primaryMinecraftAccount &&
         player.primaryMinecraftAccount !== uuid
       ) {
@@ -88,11 +113,26 @@ export default class RegisterCommand implements Command {
         });
         return;
       }
+
+      resolvedUsername = inGameNameOption;
     }
 
+    if (!uuid || !resolvedUsername) {
+      console.warn("Invalid UUID/Resolved Username but continuing anyway..");
+      await interaction.editReply({
+        content:
+          "We could not resolve a valid Minecraft UUID and username probably due to an API issue, continuing anyway..",
+      });
+    }
+
+    // Check if this user/UUID is already registered for the announced game
     const isAlreadyRegistered = CurrentGameManager.getCurrentGame()
       .getPlayers()
-      .some((player) => player.discordSnowflake === discordUserId);
+      .some(
+        (existingPlayer) =>
+          existingPlayer.discordSnowflake === discordUserId ||
+          existingPlayer.primaryMinecraftAccount === uuid
+      );
 
     if (isAlreadyRegistered) {
       await interaction.editReply({
@@ -104,7 +144,7 @@ export default class RegisterCommand implements Command {
     const result =
       await CurrentGameManager.getCurrentGame().addPlayerByDiscordId(
         discordUserId,
-        inGameName,
+        resolvedUsername,
         uuid
       );
 
@@ -112,13 +152,31 @@ export default class RegisterCommand implements Command {
       await interaction.editReply({
         content: result.error,
       });
-    } else if (PermissionsUtil.isSameUser(interaction, targetUser.id)) {
+      return;
+    }
+
+    // late signups
+    if (CurrentGameManager.getCurrentGame().teamsDecidedBy !== null) {
+      if (PermissionsUtil.isSameUser(interaction, targetUser.id)) {
+        await interaction.editReply({
+          content: `You have successfully registered as \`${resolvedUsername}\` but please note this is a late sign-up. You may be unable to play.`,
+        });
+      } else {
+        await interaction.editReply({
+          content: `${discordUserName} has been successfully registered as \`${resolvedUsername}\`, but it's a late sign-up.`,
+        });
+      }
+      return;
+    }
+
+    // success messages
+    if (PermissionsUtil.isSameUser(interaction, targetUser.id)) {
       await interaction.editReply({
-        content: `You have successfully registered as \`${inGameName}\`!`,
+        content: `You have successfully registered as \`${resolvedUsername}\`!`,
       });
     } else {
       await interaction.editReply({
-        content: `${discordUserName} has been successfully registered as \`${inGameName}\``,
+        content: `${discordUserName} has been successfully registered as \`${resolvedUsername}\`!`,
       });
     }
   }

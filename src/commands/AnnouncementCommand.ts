@@ -225,15 +225,24 @@ export default class AnnouncementCommand implements Command {
 
     if (minerushingOption === "poll") {
       game.startMinerushVote();
-    } else if (minerushingOption === "yes") {
+    } else if (minerushingOption.toLowerCase() === "yes") {
       game.settings.minerushing = true;
-    } else if (minerushingOption === "no") {
+    } else if (minerushingOption.toLowerCase() === "no") {
       game.settings.minerushing = false;
     } else {
-      await interaction.reply(
-        `Minerushing option '${minerushingOption}' unrecognized.`
-      );
+      game.settings.minerushing = false;
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.reply(
+          `Minerushing option '${minerushingOption}' unrecognized.`
+        );
+      } else {
+        console.warn(
+          `Attempted to reply with an unrecognized minerushing option '${minerushingOption}' but the interaction was already replied to or deferred.`
+        );
+      }
+      return false;
     }
+    return true;
   }
 
   private async handleAnnouncementStart(

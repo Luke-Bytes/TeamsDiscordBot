@@ -24,6 +24,7 @@ export default class RegisteredCommand implements Command {
       "RED",
       "BLUE",
     ];
+    const lateSignups = game.lateSignups;
     const allPlayers: PlayerInstance[] = teams
       .map((team) => game.getPlayersOfTeam(team))
       .flat();
@@ -36,14 +37,36 @@ export default class RegisteredCommand implements Command {
       return;
     }
 
-    const playerList = allPlayers
+    const regularPlayers = allPlayers.filter(
+      (p) => !lateSignups.has(p.discordSnowflake)
+    );
+    const latePlayers = allPlayers.filter((p) =>
+      lateSignups.has(p.discordSnowflake)
+    );
+
+    const regularList = regularPlayers
+      .map((p) => `${p.ignUsed ?? "Unknown Player"}`)
+      .join("\n");
+    const lateList = latePlayers
       .map((p) => `${p.ignUsed ?? "Unknown Player"}`)
       .join("\n");
 
     const embed = new EmbedBuilder()
-      .setTitle(`Registered Players (${allPlayers.length})`)
-      .setDescription(`\`\`\`\n${playerList}\n\`\`\``)
+      .setTitle(`Registered Players (${regularPlayers.length})`)
       .setColor(0x00ae86);
+
+    if (allPlayers.length > 0) {
+      embed.setDescription(`\`\`\`\n${regularList}\n\`\`\``);
+    } else {
+      embed.setDescription("No players have registered yet.");
+    }
+
+    if (latePlayers.length > 0) {
+      embed.addFields({
+        name: `Late Signups (${latePlayers.length})`,
+        value: `\`\`\`\n${lateList}\n\`\`\``,
+      });
+    }
 
     await interaction.reply({ embeds: [embed] });
   }

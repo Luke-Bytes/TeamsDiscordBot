@@ -19,7 +19,8 @@ const createTeamsGameFeed = async (): Promise<EmbedBuilder> => {
     players: PlayerInstance[],
     captain: PlayerInstance | undefined
   ): string => {
-    const escapeUnderscores = (name: string) => name.replace(/__/g, "\\_\\_");
+    const escapeUnderscores = (name: string): string =>
+      name.replace(/_/g, "\\_");
 
     const sortedPlayers = captain
       ? [captain, ...players.filter((player) => player !== captain)]

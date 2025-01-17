@@ -32,6 +32,7 @@ export class GameInstance {
     BLUE: [],
     UNDECIDED: [],
   };
+  lateSignups: Set<string> = new Set();
   gameWinner?: "RED" | "BLUE";
   teamsDecidedBy?: "DRAFT" | "RANDOMISED" | null;
 
@@ -142,6 +143,14 @@ export class GameInstance {
     )[0] as Team;
   }
 
+  public addLateSignup(discordSnowflake: string): void {
+    this.lateSignups.add(discordSnowflake);
+  }
+
+  public isLateSignup(discordSnowflake: string): boolean {
+    return this.lateSignups.has(discordSnowflake);
+  }
+
   public async addPlayerByDiscordId(
     discordSnowflake: Snowflake,
     ignUsed: string,
@@ -154,29 +163,43 @@ export class GameInstance {
         uuid = player.primaryMinecraftAccount ?? undefined;
       } else {
         const fetchedUuid = await MojangAPI.usernameToUUID(ignUsed);
-        if (!fetchedUuid) {
-          return {
-            error: "That IGN doesn't exist! Did you spell it correctly?",
-          } as const;
+        if (fetchedUuid) {
+          uuid = fetchedUuid;
+        } else {
+          console.warn(
+            `No UUID found for IGN ${ignUsed}. Proceeding with fallback.`
+          );
         }
-        uuid = fetchedUuid;
       }
     }
 
-    if (!uuid) {
+    let ign: string | null = ignUsed;
+    if (uuid) {
+      const resolvedIgn = await MojangAPI.uuidToUsername(uuid);
+      if (resolvedIgn) {
+        ign = resolvedIgn;
+      } else {
+        console.warn(`UUID ${uuid} does not resolve to a valid IGN.`);
+      }
+    }
+
+    if (!uuid || !ign) {
+      console.warn(
+        `Fallback triggered for player ${discordSnowflake} with IGN ${ignUsed}.`
+      );
+
+      player.ignUsed = ignUsed;
+
+      this.teams["UNDECIDED"].push(player);
+
       return {
-        error: "The player does not have a primary minecraft account.",
+        error: false,
+        playerInstance: player,
+        fallback: true,
       } as const;
     }
 
-    const ign = await MojangAPI.uuidToUsername(uuid);
-    if (!ign) {
-      return {
-        error: "Could not locate IGN of player.",
-      } as const;
-    }
-
-    if (!player.primaryMinecraftAccount) {
+    if (uuid && !player.primaryMinecraftAccount) {
       await prismaClient.player.update({
         where: { id: player.playerId },
         data: { primaryMinecraftAccount: uuid },
@@ -184,7 +207,7 @@ export class GameInstance {
       player.primaryMinecraftAccount = uuid;
     }
 
-    if (!player.minecraftAccounts.includes(ign)) {
+    if (ign && !player.minecraftAccounts.includes(ign)) {
       const result = await prismaClient.player.update({
         where: { id: player.playerId },
         data: {
@@ -206,12 +229,13 @@ export class GameInstance {
       player.minecraftAccounts.push(ign);
     }
 
-    await prismaClient.player.update({
-      where: { id: player.playerId },
-      data: { latestIGN: ign },
-    });
-
-    player.ignUsed = ign;
+    if (ign) {
+      await prismaClient.player.update({
+        where: { id: player.playerId },
+        data: { latestIGN: ign },
+      });
+      player.ignUsed = ign;
+    }
 
     this.teams["UNDECIDED"].push(player);
 
@@ -333,7 +357,7 @@ export class GameInstance {
 
     if (fillOption !== "none") {
       console.info(`[GAME] Filling teams with test players...`);
-      await this.fillTeamsWithTestPlayers(40, fillOption);
+      await this.fillTeamsWithTestPlayers(6, fillOption);
       console.info(`[GAME] Teams filled. Current teams:`, this.teams);
 
       this.teams.RED.forEach((player) => {

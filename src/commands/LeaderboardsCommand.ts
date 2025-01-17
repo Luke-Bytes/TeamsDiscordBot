@@ -6,6 +6,7 @@ import {
 import { Command } from "./CommandInterface";
 import { EloUtil } from "../util/EloUtil";
 import { prismaClient } from "../database/prismaClient";
+import { Channels } from "../Channels";
 
 export default class LeaderboardsCommand implements Command {
   public data: SlashCommandBuilder;
@@ -50,6 +51,8 @@ export default class LeaderboardsCommand implements Command {
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     try {
+      const botCommandsChannelId = Channels.botCommands.id;
+
       const allPlayers = await prismaClient.player.findMany({
         orderBy: {
           elo: "desc",
@@ -103,9 +106,19 @@ export default class LeaderboardsCommand implements Command {
         iconURL: interaction.user.displayAvatarURL(),
       });
 
-      await interaction.reply({
+      const msg = await interaction.reply({
         embeds: [embed],
+        fetchReply: true,
       });
+
+      if (interaction.channelId !== botCommandsChannelId) {
+        setTimeout(
+          async () => {
+            await msg.delete();
+          },
+          2 * 60 * 1000
+        ); // Delete after 2 minutes
+      }
     } catch (error) {
       console.error("Error fetching leaderboards:", error);
       await interaction.reply({
