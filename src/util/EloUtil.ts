@@ -88,7 +88,7 @@ export const EloUtil = {
       eloChange = Math.abs(kFactor * (actualScore - expectedScore));
 
       if (player.winStreak >= 3 && isWin) {
-        if (player.winStreak > 5)
+        if (player.winStreak > 5 && player.winStreak <= 10)
           eloChange *= 1.3 + (player.winStreak - 5) * 0.05;
         else eloChange *= 1 + (player.winStreak - 2) * 0.1;
         console.log(
