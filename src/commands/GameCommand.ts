@@ -46,6 +46,8 @@ export default class GameCommand implements Command {
           await assignTeamRolesAfterPicking(guild);
           await assignTeamVCAfterPicking(guild);
 
+          gameInstance.calculateMeanEloAndExpectedScore();
+
           await interaction.editReply(
             "Game will begin soon! Roles assigned and players moved to VCs."
           );

@@ -45,7 +45,7 @@ export default class LeaderboardsCommand implements Command {
     if (wins > 0 && losses === 0) {
       winLossDisplay += " 🔥";
     }
-    return `${rankEmoji} **${ign}** ${eloEmoji} ─ ${elo} | W/L: ${winLossDisplay}`;
+    return `${rankEmoji} **${ign}** ${eloEmoji} ─ ${Math.round(elo)} | W/L: ${winLossDisplay}`;
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
