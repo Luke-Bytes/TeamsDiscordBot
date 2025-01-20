@@ -16,6 +16,7 @@ const mapToEmojis: Record<AnniMap, string> = {
   CHEROKEE1V1: "🎌",
   DREDGE1V1: "🧙",
   DUELSTAL: "💫 ",
+  CLASHSTAL: "🪵 ",
   NATURE1V1: "🌲 ",
   SIEGE1V1: "🪄",
 };

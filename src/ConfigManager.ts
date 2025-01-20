@@ -16,6 +16,7 @@ export type Config = {
     registration: string;
     announcements: string;
     gameFeed: string;
+    botCommands: string;
     teamPickingVC: string;
     teamPickingChat: string;
     redTeamVC: string;
