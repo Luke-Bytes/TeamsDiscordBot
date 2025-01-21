@@ -1,5 +1,6 @@
 import { GameInstance } from "../database/GameInstance";
 import { PlayerInstance } from "../database/PlayerInstance";
+import { ConfigManager } from "../ConfigManager";
 
 const eloEmojis = {
   800: ":pirate_flag:",
@@ -13,14 +14,26 @@ const eloEmojis = {
 };
 
 const kFactorRanges = {
-  0: 50,
-  1300: 40,
-  1600: 30,
-  1900: 20,
-  2200: 10,
+  800: 50,
+  900: 45,
+  1000: 40,
+  1100: 35,
+  1200: 30,
+  1300: 25,
+  1400: 20,
+  1500: 15,
+  1600: 10,
+  1700: 5,
 };
 
 export const EloUtil = {
+  WIN_STREAK_MIN: 3,
+  WIN_STREAK_MEDIUM_THRESHOLD: 5,
+  WIN_STREAK_MAX_THRESHOLD: 10,
+  BONUS_MULTIPLIER_MEDIUM: 1.3,
+  BONUS_MULTIPLIER_INCREMENT_HIGH: 0.05,
+  BONUS_MULTIPLIER_INCREMENT_LOW: 0.1,
+
   getEloEmoji(elo: number) {
     const sortedEloRanks = Object.keys(eloEmojis)
       .map(Number)
@@ -38,9 +51,9 @@ export const EloUtil = {
     const sortedKFactors = Object.keys(kFactorRanges)
       .map(Number)
       .sort((a, b) => b - a);
-    for (let i = 0; i < sortedKFactors.length; i++) {
-      if (elo >= sortedKFactors[i]) {
-        return kFactorRanges[sortedKFactors[i] as keyof typeof kFactorRanges];
+    for (const element of sortedKFactors) {
+      if (elo >= element) {
+        return kFactorRanges[element as keyof typeof kFactorRanges];
       }
     }
     return kFactorRanges[
@@ -76,26 +89,80 @@ export const EloUtil = {
     game: GameInstance,
     player: PlayerInstance,
     isWin: boolean
-  ) {
+  ): number {
     const kFactor = this.getKFactor(player.elo);
-    const expectedScore =
-      game.getPlayersTeam(player) === "BLUE"
-        ? game.blueExpectedScore
-        : game.redExpectedScore;
-    let eloChange = 0;
-    if (expectedScore !== undefined) {
-      const actualScore = isWin ? 1 : 0;
-      eloChange = Math.abs(kFactor * (actualScore - expectedScore));
+    const expectedScore = this.getPlayerExpectedScore(game, player);
+    if (!expectedScore) return 0;
 
-      if (player.winStreak >= 3 && isWin) {
-        if (player.winStreak > 5 && player.winStreak <= 10)
-          eloChange *= 1.3 + (player.winStreak - 5) * 0.05;
-        else eloChange *= 1 + (player.winStreak - 2) * 0.1;
-        console.log(
-          `Win streak detected! (${player.winStreak}) Applying bonus Elo.`
-        );
-      }
+    const actualScore = isWin ? 1 : 0;
+    let eloChange = Math.abs(kFactor * (actualScore - expectedScore));
+    eloChange = this.applyWinStreakBonus(player, eloChange, isWin);
+
+    const meanEloDifference = Math.abs(
+      (game.blueMeanElo ?? 0) - (game.redMeanElo ?? 0)
+    );
+    if (meanEloDifference < 25) {
+      const underdogWeightingFactor =
+        ConfigManager.getConfig().underdogMultiplier;
+      eloChange = this.applyUnderdogWeighting(
+        eloChange,
+        expectedScore,
+        underdogWeightingFactor,
+        isWin
+      );
     }
+
     return Number(eloChange.toFixed(1));
+  },
+
+  getPlayerExpectedScore(
+    game: GameInstance,
+    player: PlayerInstance
+  ): number | undefined {
+    const team = game.getPlayersTeam(player);
+    return team === "BLUE" ? game.blueExpectedScore : game.redExpectedScore;
+  },
+
+  applyWinStreakBonus(
+    player: PlayerInstance,
+    eloChange: number,
+    isWin: boolean
+  ): number {
+    if (!isWin || player.winStreak < this.WIN_STREAK_MIN) return eloChange;
+
+    const winStreak = Math.min(player.winStreak, this.WIN_STREAK_MAX_THRESHOLD);
+
+    const bonusMultiplier =
+      winStreak > this.WIN_STREAK_MEDIUM_THRESHOLD
+        ? this.BONUS_MULTIPLIER_MEDIUM +
+          (winStreak - this.WIN_STREAK_MEDIUM_THRESHOLD) *
+            this.BONUS_MULTIPLIER_INCREMENT_HIGH
+        : 1 +
+          (winStreak - (this.WIN_STREAK_MIN - 1)) *
+            this.BONUS_MULTIPLIER_INCREMENT_LOW;
+
+    console.log(
+      `${player.latestIGN} is on a (${player.winStreak}) win streak! Applying bonus Elo with multiplier: ${bonusMultiplier.toFixed(2)}`
+    );
+    return eloChange * bonusMultiplier;
+  },
+
+  applyUnderdogWeighting(
+    eloChange: number,
+    expectedScore: number,
+    weightFactor: number,
+    isWin: boolean
+  ): number {
+    const adjustment = (0.5 - expectedScore) * weightFactor;
+    const role = expectedScore > 0.5 ? "favoured" : "underdog";
+    const difference = Math.abs(0.5 - expectedScore).toFixed(2);
+
+    console.log(
+      `Player is ${role} with expected score of ${expectedScore.toFixed(2)} (${role === "favoured" ? "+" : "-"}${difference}).`
+    );
+
+    return isWin
+      ? eloChange + eloChange * adjustment
+      : eloChange + eloChange * -adjustment;
   },
 };

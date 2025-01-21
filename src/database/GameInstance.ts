@@ -11,7 +11,7 @@ import { activateFeed } from "../logic/gameFeed/ActivateFeed";
 import { Channels } from "../Channels";
 import { addRegisteredPlayersFeed } from "../logic/gameFeed/RegisteredGameFeed";
 import { addTeamsGameFeed } from "../logic/gameFeed/TeamsGameFeed";
-import { EloUtil } from "../util/EloUtil";
+import { Elo } from "../logic/Elo";
 
 // wrapper class for Game
 export class GameInstance {
@@ -782,17 +782,12 @@ export class GameInstance {
   }
 
   public calculateMeanEloAndExpectedScore() {
-    this.blueMeanElo = EloUtil.calculateMeanElo(this.teams.BLUE);
-    this.redMeanElo = EloUtil.calculateMeanElo(this.teams.RED);
-    [this.blueExpectedScore, this.redExpectedScore] =
-      EloUtil.calculateExpectedScore(this.blueMeanElo, this.redMeanElo);
+    const { blueMeanElo, redMeanElo, blueExpectedScore, redExpectedScore } =
+      Elo.calculateMeanEloAndExpectedScore(this.teams);
 
-    console.log(`[GAME] Calculated mean ELO and expected scores.`);
-    console.log(
-      `Blue Mean Elo = ${this.blueMeanElo} | Red Mean Elo = ${this.redMeanElo}`
-    );
-    console.log(
-      `Blue Expected Score = ${this.blueExpectedScore} | Red Expected Score = ${this.redExpectedScore}`
-    );
+    this.blueMeanElo = blueMeanElo;
+    this.redMeanElo = redMeanElo;
+    this.blueExpectedScore = blueExpectedScore;
+    this.redExpectedScore = redExpectedScore;
   }
 }

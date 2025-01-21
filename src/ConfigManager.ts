@@ -4,6 +4,7 @@ import conf from "../config.json";
 export type Config = {
   mvpBonus: number;
   captainBonus: number;
+  underdogMultiplier: number;
   roles: {
     blueTeamRole: string;
     redTeamRole: string;

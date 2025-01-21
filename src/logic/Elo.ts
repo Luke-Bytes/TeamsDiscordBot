@@ -63,4 +63,34 @@ export class Elo {
     player.elo = this.calculateNewElo(player);
     console.log(`Elo updated for ${player.ignUsed}: ${player.elo}`);
   }
+
+  public static calculateMeanEloAndExpectedScore(teams: {
+    RED: PlayerInstance[];
+    BLUE: PlayerInstance[];
+  }): {
+    blueMeanElo: number;
+    redMeanElo: number;
+    blueExpectedScore: number;
+    redExpectedScore: number;
+  } {
+    const blueMeanElo = EloUtil.calculateMeanElo(teams.BLUE);
+    const redMeanElo = EloUtil.calculateMeanElo(teams.RED);
+    const [blueExpectedScore, redExpectedScore] =
+      EloUtil.calculateExpectedScore(blueMeanElo, redMeanElo);
+
+    console.log(`[ELO] Calculated mean ELO and expected scores.`);
+    console.log(
+      `[ELO] Blue Mean Elo = ${blueMeanElo} | Red Mean Elo = ${redMeanElo}`
+    );
+    console.log(
+      `[ELO] Blue Expected Score = ${blueExpectedScore} | Red Expected Score = ${redExpectedScore}`
+    );
+
+    return {
+      blueMeanElo,
+      redMeanElo,
+      blueExpectedScore,
+      redExpectedScore,
+    };
+  }
 }

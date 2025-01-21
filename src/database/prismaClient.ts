@@ -223,7 +223,19 @@ export const prismaClient = new PrismaClient({
         });
 
         const eloManager = new Elo();
-
+        const game = GameInstance.getInstance();
+        const meanEloDifference = Math.abs(
+          (game.blueMeanElo ?? 0) - (game.redMeanElo ?? 0)
+        );
+        if (meanEloDifference < 25) {
+          console.log(
+            `Mean Elo difference (${meanEloDifference}) is less than 25. Skipping weighting adjustments.`
+          );
+        } else {
+          console.log(
+            `Mean Elo difference (${meanEloDifference}) is greater than 25. Adding weighting adjustments.`
+          );
+        }
         for (const playerInstance of [...teams.RED, ...teams.BLUE]) {
           eloManager.applyEloUpdate(playerInstance);
 

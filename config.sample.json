@@ -1,6 +1,7 @@
 {
   "mvpBonus": 5,
   "captainBonus": 5,
+  "underdogMultiplier": 1.5,
   "roles": {
     "blueTeamRole": "",
     "redTeamRole": "",

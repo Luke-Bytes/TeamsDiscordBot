@@ -46,8 +46,6 @@ export default class GameCommand implements Command {
           await assignTeamRolesAfterPicking(guild);
           await assignTeamVCAfterPicking(guild);
 
-          gameInstance.calculateMeanEloAndExpectedScore();
-
           await interaction.editReply(
             "Game will begin soon! Roles assigned and players moved to VCs."
           );
@@ -79,6 +77,9 @@ export default class GameCommand implements Command {
           "blueTeamChat",
           `The game has now ended, voting for the team MVP is now open! Type \`/MVP Vote [MCID]\` to pick for <@&${blueTeamRoleId}>!`
         );
+
+        gameInstance.calculateMeanEloAndExpectedScore();
+
         break;
       }
 
