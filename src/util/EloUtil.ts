@@ -3,7 +3,7 @@ import { PlayerInstance } from "../database/PlayerInstance";
 import { ConfigManager } from "../ConfigManager";
 
 const eloEmojis = {
-  800: ":pirate_flag:",
+  800: ":skull_crossbones:",
   900: ":black_circle:",
   1000: ":white_circle:",
   1100: ":star:",
