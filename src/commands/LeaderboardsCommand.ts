@@ -46,7 +46,7 @@ export default class LeaderboardsCommand implements Command {
     const winStreakEmoji = winStreak >= 3 ? " 🔥" : "";
     let winLossDisplay = winLossRatio.toFixed(1);
     if (wins > 0 && losses === 0) {
-      winLossDisplay += " 🔥";
+      winLossDisplay += " 💯";
     }
     return `${rankEmoji} **${ign}** ${eloEmoji} ─ ${elo}${winStreakEmoji} | W/L: ${winLossDisplay}`;
   }
@@ -71,7 +71,7 @@ export default class LeaderboardsCommand implements Command {
             : playerData.wins,
         wins: playerData.wins,
         losses: playerData.losses,
-        winStreak: playerData.winStreak
+        winStreak: playerData.winStreak,
       }));
 
       const currentPlace = allPlayers.findIndex(

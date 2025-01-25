@@ -70,9 +70,9 @@ export default class StatsCommand implements Command {
 
     let winLossDisplay = winLossRatio.toFixed(2);
     if (player.wins > 0 && player.losses === 0) {
-      winLossDisplay += " 🔥";
+      winLossDisplay += " 💯";
     }
-    
+
     let winStreakDisplay = winStreak >= 3 ? `${winStreak} 🔥` : winStreak;
 
     const embed = new EmbedBuilder()
