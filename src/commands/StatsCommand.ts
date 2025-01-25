@@ -72,6 +72,8 @@ export default class StatsCommand implements Command {
     if (player.wins > 0 && player.losses === 0) {
       winLossDisplay += " 🔥";
     }
+    
+    let winStreakDisplay = winStreak >= 3 ? `${winStreak} 🔥` : winStreak;
 
     const embed = new EmbedBuilder()
       .setColor("#5865F2")
@@ -91,7 +93,7 @@ export default class StatsCommand implements Command {
         },
         {
           name: "Current Win Streak",
-          value: `${winStreak}`,
+          value: `${winStreakDisplay}`,
           inline: true,
         },
         {
