@@ -17,7 +17,15 @@ export default class LeaderboardsCommand implements Command {
   constructor() {
     this.data = new SlashCommandBuilder()
       .setName(this.name)
-      .setDescription(this.description);
+      .setDescription(this.description)
+      .addIntegerOption((option) =>
+        option
+          .setName("page")
+          .setDescription(
+            "the page number to view more players, or blank for the first page"
+          )
+          .setRequired(false)
+      ) as SlashCommandBuilder;
   }
 
   private getLeaderboardEntryString(
@@ -41,7 +49,7 @@ export default class LeaderboardsCommand implements Command {
       "9️⃣",
       "🔟",
     ];
-    const rankEmoji = rankEmojis[rank - 1] || "🔢";
+    const rankEmoji = rank <= 10 ? rankEmojis[rank - 1] : `#${rank}`;
     const eloEmoji = EloUtil.getEloEmoji(elo);
     const winStreakEmoji = winStreak >= 3 ? " 🔥" : "";
     let winLossDisplay = winLossRatio.toFixed(1);
@@ -55,24 +63,29 @@ export default class LeaderboardsCommand implements Command {
     try {
       const botCommandsChannelId = Channels.botCommands.id;
 
+      let page = interaction.options.getInteger("page", false) ?? 1;
+      const pageIndex = (page - 1) * 10;
+
       const allPlayers = await prismaClient.player.findMany({
         orderBy: {
           elo: "desc",
         },
       });
 
-      const topTen = allPlayers.slice(0, 10).map((playerData, index) => ({
-        rank: index + 1,
-        ign: playerData.latestIGN ?? "N/A",
-        elo: playerData.elo,
-        winLossRatio:
-          playerData.losses > 0
-            ? playerData.wins / playerData.losses
-            : playerData.wins,
-        wins: playerData.wins,
-        losses: playerData.losses,
-        winStreak: playerData.winStreak,
-      }));
+      const topTen = allPlayers
+        .slice(pageIndex, pageIndex + 10)
+        .map((playerData, index) => ({
+          rank: pageIndex + index + 1,
+          ign: playerData.latestIGN ?? "N/A",
+          elo: playerData.elo,
+          winLossRatio:
+            playerData.losses > 0
+              ? playerData.wins / playerData.losses
+              : playerData.wins,
+          wins: playerData.wins,
+          losses: playerData.losses,
+          winStreak: playerData.winStreak,
+        }));
 
       const currentPlace = allPlayers.findIndex(
         (playerData) => playerData.discordSnowflake === interaction.user.id
