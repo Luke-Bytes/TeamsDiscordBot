@@ -467,7 +467,6 @@ export default class AnnouncementCommand implements Command {
     const registrationChannelId =
       ConfigManager.getConfig().channels.registration;
 
-    // Add the special message if double elo is enabled
     const doubleEloMessage = game.isDoubleElo
       ? "\n\n**🌟 A special DOUBLE ELO game! 🌟**\n\n"
       : "";
