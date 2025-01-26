@@ -224,6 +224,9 @@ export const prismaClient = new PrismaClient({
 
         const eloManager = new Elo();
 
+        if (CurrentGameManager.getCurrentGame().isDoubleElo) {
+          console.log("Double elo is active this game!");
+        }
         for (const playerInstance of [...teams.RED, ...teams.BLUE]) {
           eloManager.applyEloUpdate(playerInstance);
 

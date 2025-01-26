@@ -375,6 +375,17 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       `Player ${player.ignUsed} registered for **${this.turn}** team.`
     );
 
+    if (this.proposedTeams.UNDECIDED.length === 1) {
+      const lastPlayer = this.proposedTeams.UNDECIDED[0];
+      this.proposedTeams[this.turn === "RED" ? "BLUE" : "RED"].push(lastPlayer);
+      this.proposedTeams.UNDECIDED = [];
+      await this.embedMessage?.edit(this.createDraftEmbed(false));
+
+      await message.channel.send(
+        `Player ${lastPlayer.ignUsed} was automatically assigned to **${this.turn === "RED" ? "BLUE" : "RED"}** team.`
+      );
+    }
+
     this.turn = this.turn === "RED" ? "BLUE" : "RED";
 
     if (this.proposedTeams.UNDECIDED.length === 0) {

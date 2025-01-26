@@ -2,6 +2,7 @@ import { prismaClient } from "../database/prismaClient";
 
 export class PrismaUtils {
   static async findPlayer(identifier: string) {
+    identifier = identifier.replace(/<@([^>]+)>/g, "$1");
     return await prismaClient.player.findFirst({
       where: {
         OR: [
@@ -32,5 +33,33 @@ export class PrismaUtils {
       where: { id: player.id },
       select: selectFields,
     });
+  }
+
+  static async updatePunishmentsForExpiry() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const punishments = await prismaClient.playerPunishment.findMany({
+      where: {
+        punishmentExpiry: { not: null },
+      },
+    });
+
+    const punishmentsToUpdate = punishments.filter((punishment) => {
+      const expiryDate = punishment.punishmentExpiry;
+      if (!expiryDate) return false;
+
+      expiryDate.setHours(0, 0, 0, 0);
+      return expiryDate.getTime() === today.getTime();
+    });
+
+    for (const punishment of punishmentsToUpdate) {
+      await prismaClient.playerPunishment.update({
+        where: { id: punishment.id },
+        data: { punishmentExpiry: null },
+      });
+    }
+
+    return punishmentsToUpdate.length;
   }
 }

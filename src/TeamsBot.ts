@@ -8,6 +8,7 @@ import { Channels } from "./Channels";
 import logger from "./util/Logger";
 import { PermissionsUtil } from "./util/PermissionsUtil";
 import { MaintenanceLoggingUtil } from "./util/MaintenanceLoggingUtil";
+import { PrismaUtils } from "./util/PrismaUtils";
 
 export class TeamsBot {
   client: Client;
@@ -52,6 +53,13 @@ export class TeamsBot {
       this.commandHandler.loadCommands();
       await this.commandHandler.registerCommands();
       MaintenanceLoggingUtil.startLogging();
+
+      const updatedCount = await PrismaUtils.updatePunishmentsForExpiry();
+      if (updatedCount > 0) {
+        console.log(`${updatedCount} punishment(s) expired today.`);
+      } else {
+        console.log("No punishments expired today.");
+      }
     });
 
     // Command + Context Menu Listener

@@ -67,6 +67,32 @@ export default class RegisterCommand implements Command {
 
     let player = await prismaClient.player.byDiscordSnowflake(discordUserId);
 
+    const activePunishment = await prismaClient.playerPunishment.findFirst({
+      where: {
+        playerId: player?.id,
+        AND: [
+          { punishmentExpiry: { not: null } },
+          { punishmentExpiry: { gt: new Date() } },
+        ],
+      },
+    });
+
+    if (activePunishment) {
+      const expiryDate = activePunishment.punishmentExpiry
+        ? new Intl.DateTimeFormat("en-US", {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          }).format(activePunishment.punishmentExpiry)
+        : "unknown";
+
+      await interaction.editReply({
+        content: `You cannot register because you are currently banned from friendly wars. Your punishment will expire on **${expiryDate}**.`,
+      });
+      return;
+    }
+
     let uuid: string | null = null;
     let resolvedUsername: string | null = null;
 
