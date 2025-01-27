@@ -2,6 +2,7 @@ import { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { PrismaClient } from "@prisma/client";
 import { PrismaUtils } from "../util/PrismaUtils";
+import { PermissionsUtil } from "../util/PermissionsUtil";
 
 const prisma = new PrismaClient();
 
@@ -35,11 +36,20 @@ export default class PunishCommand implements Command {
   async execute(interaction: ChatInputCommandInteraction) {
     await interaction.deferReply();
 
+    const member = interaction.guild?.members.cache.get(interaction.user.id);
+
     const playerInput = interaction.options.getString("player", true);
     const reason = interaction.options.getString("reason", true);
     const duration = interaction.options.getString("duration", true);
 
     try {
+      if (!PermissionsUtil.hasRole(member, "organiserRole")) {
+        await interaction.editReply({
+          content: "You do not have permission to punish other players.",
+        });
+        return;
+      }
+
       const player = await PrismaUtils.findPlayer(playerInput);
 
       if (!player) {
