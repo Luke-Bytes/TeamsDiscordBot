@@ -2,11 +2,16 @@ import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
   EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ButtonInteraction,
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { EloUtil } from "../util/EloUtil";
 import { prismaClient } from "../database/prismaClient";
 import { Channels } from "../Channels";
+import { Console } from "console";
 
 export default class LeaderboardsCommand implements Command {
   public data: SlashCommandBuilder;
@@ -86,7 +91,13 @@ export default class LeaderboardsCommand implements Command {
           losses: playerData.losses,
           winStreak: playerData.winStreak,
         }));
-
+      if (topTen.length === 0) {
+        await interaction.reply({
+          content: "❌ No players found.",
+          ephemeral: true,
+        });
+        return;
+      }
       const currentPlace = allPlayers.findIndex(
         (playerData) => playerData.discordSnowflake === interaction.user.id
       );
@@ -123,8 +134,22 @@ export default class LeaderboardsCommand implements Command {
         iconURL: interaction.user.displayAvatarURL(),
       });
 
+      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId("prev-page")
+          .setLabel("Prev Page ⏪")
+          .setStyle(ButtonStyle.Primary)
+          .setDisabled(page === 1),
+        new ButtonBuilder()
+          .setCustomId("next-page")
+          .setLabel("Next Page ⏭️")
+          .setStyle(ButtonStyle.Primary)
+          .setDisabled(pageIndex + 10 >= allPlayers.length)
+      );
+
       const msg = await interaction.reply({
         embeds: [embed],
+        components: [row],
         fetchReply: true,
       });
 
