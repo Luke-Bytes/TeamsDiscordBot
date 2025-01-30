@@ -227,6 +227,7 @@ export default class AnnouncementCommand implements Command {
     date.setSeconds(0);
 
     CurrentGameManager.getCurrentGame().startTime = date;
+    CurrentGameManager.schedulePollCloseTime(date);
 
     return true;
   }
@@ -294,7 +295,7 @@ export default class AnnouncementCommand implements Command {
     const doubleEloOption = interaction.options
       .getString("doubleelo")
       ?.toLowerCase();
-    const doubleElo = doubleEloOption === "yes" ? true : false;
+    const doubleElo = doubleEloOption === "yes";
     CurrentGameManager.getCurrentGame().isDoubleElo = doubleElo;
 
     const embed = this.createGameAnnouncementEmbed(true, organiser, host);
@@ -630,6 +631,10 @@ export default class AnnouncementCommand implements Command {
 
       date.setSeconds(0);
       CurrentGameManager.getCurrentGame().startTime = date;
+
+      if (CurrentGameManager.pollCloseTimeout) {
+        clearTimeout(CurrentGameManager.pollCloseTimeout);
+      }
 
       await this.updateAnnouncementMessages(); // Update both messages
       await interaction.followUp(

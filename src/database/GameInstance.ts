@@ -118,6 +118,18 @@ export class GameInstance {
     });
   }
 
+  public closePolls() {
+    if (this.mapVoteManager) {
+      this.mapVoteManager.cancelVote();
+      console.log("Map vote has been closed.");
+    }
+
+    if (this.minerushVoteManager) {
+      this.minerushVoteManager.cancelVote();
+      console.log("Minerush vote has been closed.");
+    }
+  }
+
   public setMap(map: AnniMap) {
     this.settings.map = map;
     console.log("The winning map was: " + map);
