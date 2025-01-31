@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { Client, GatewayIntentBits } from "discord.js";
+import { Client, GatewayIntentBits, ActivityType } from "discord.js";
 import { CommandHandler } from "./commands/CommandHandler";
 import { MessageHandler } from "./interactions/MessageHandler";
 import { ReactionHandler } from "./interactions/ReactionHandler";
@@ -52,6 +52,9 @@ export class TeamsBot {
       this.commandHandler.loadCommands();
       await this.commandHandler.registerCommands();
       MaintenanceLoggingUtil.startLogging();
+      this.client.user?.setActivity("Season 2!", {
+        type: ActivityType.Competing,
+      });
     });
 
     // Command + Context Menu Listener
