@@ -26,9 +26,8 @@ export class Elo {
     }
 
     if (game.gameWinner && playerTeam === game.gameWinner) {
-
       let winEloGain = EloUtil.calculateEloChange(game, player, true);
-      
+
       if (game.isDoubleElo) {
         winEloGain = winEloGain * 2;
       }

@@ -235,10 +235,12 @@ export const prismaClient = new PrismaClient({
           console.log(
             `Mean Elo difference (${meanEloDifference}) is greater than 25. Adding weighting adjustments.`
           );
+        }
 
         if (CurrentGameManager.getCurrentGame().isDoubleElo) {
           console.log("Double elo is active this game!");
         }
+
         for (const playerInstance of [...teams.RED, ...teams.BLUE]) {
           eloManager.applyEloUpdate(playerInstance);
 
