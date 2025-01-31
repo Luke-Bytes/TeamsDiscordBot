@@ -156,7 +156,6 @@ enum AnniClass {
   WIZARD
 }
 
-// TODO
 enum AnniMap {
   AFTERMATH1V1
   ANDORRA1V1
