@@ -2,11 +2,14 @@ import { gameFeed } from "../../logic/gameFeed/GameFeed";
 import { CurrentGameManager } from "../../logic/CurrentGameManager";
 import { EmbedBuilder, TextChannel } from "discord.js";
 import { PlayerInstance } from "../../database/PlayerInstance";
+import { EloUtil } from "../../util/EloUtil";
 
 let cachedRedPlayersList = "";
 let cachedBluePlayersList = "";
 let cachedRedPlayersCount = 0;
 let cachedBluePlayersCount = 0;
+let redEloMean = 1000;
+let blueEloMean = 1000;
 
 const createTeamsGameFeed = async (): Promise<EmbedBuilder> => {
   const game = CurrentGameManager.getCurrentGame();
@@ -45,6 +48,8 @@ const createTeamsGameFeed = async (): Promise<EmbedBuilder> => {
     cachedBluePlayersList = formatPlayers(bluePlayers, blueCaptain);
     cachedRedPlayersCount = redPlayers.length;
     cachedBluePlayersCount = bluePlayers.length;
+    redEloMean = EloUtil.calculateMeanElo(redPlayers);
+    blueEloMean = EloUtil.calculateMeanElo(bluePlayers);
   }
 
   return new EmbedBuilder()
@@ -59,7 +64,10 @@ const createTeamsGameFeed = async (): Promise<EmbedBuilder> => {
         name: `🔵 Blue Team [${bluePlayers.length}]`,
         value: cachedBluePlayersList || "No players",
       }
-    );
+    )
+    .setFooter({
+      text: `Red Team: ${redEloMean}    |     Blue Team: ${blueEloMean}`,
+    });
 };
 
 export const addTeamsGameFeed = async (channel: TextChannel): Promise<void> => {

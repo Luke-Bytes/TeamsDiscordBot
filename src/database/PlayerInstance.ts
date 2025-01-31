@@ -59,6 +59,7 @@ export class PlayerInstance {
         losses: randomLosses,
         winStreak: randomWinStreak,
         minecraftAccounts: [`Phi${playerCount + 1}`],
+        latestIGN: `Phi${playerCount + 1}`,
       },
     });
 

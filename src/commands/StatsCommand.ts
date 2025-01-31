@@ -81,7 +81,7 @@ export default class StatsCommand implements Command {
       .addFields(
         {
           name: "Player",
-          value: `${player.minecraftAccounts.join(", ")}`,
+          value: `${player.minecraftAccounts.map((name) => name.replace(/_/g, "\\_")).join(", ")}`,
           inline: true,
         },
         {

@@ -94,7 +94,7 @@ export default class GameCommand implements Command {
         if (!gameInstance.isFinished) {
           await interaction.reply({
             content:
-              "The game should be finished first in order to wait for mvp votes, /game finish",
+              "The game should be finished first in order to wait for mvp votes, /game end",
             ephemeral: false,
           });
           return;

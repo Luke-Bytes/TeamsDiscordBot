@@ -69,9 +69,6 @@ export async function cleanUpAfterGame(guild: Guild) {
   const leaderboardEmbed = await leaderboardFeed.generateEmbed();
   await Channels.gameFeed.send({ embeds: [leaderboardEmbed] });
 
-  // 5m delay before clearing all messages
-  // await new Promise((resolve) => setTimeout(resolve, 5 * 60 * 1000));
-
   const captainRoleId = config.roles.captainRole;
 
   try {

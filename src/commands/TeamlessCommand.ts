@@ -23,7 +23,11 @@ export default class TeamlessCommand implements Command {
       .setTitle("Teamless Players")
       .setDescription(
         undecidedPlayers.length
-          ? undecidedPlayers.map((player) => player.ignUsed).join("\n")
+          ? undecidedPlayers
+              .map((player) =>
+                (player.ignUsed ?? "Unknown Player").replace(/_/g, "\\_")
+              )
+              .join("\n")
           : "No registered players without a team."
       )
       .setColor("Yellow");

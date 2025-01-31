@@ -26,6 +26,8 @@ import CaptainNominateCommand from "../commands/CaptainNominate";
 import TeamlessCommand from "../commands/TeamlessCommand";
 import PlanCommand from "../commands/PlanCommand";
 import MassRegisterCommand from "../commands/MassRegisterCommand";
+import PunishCommand from "../commands/PunishCommand";
+import PunishedCommand from "../commands/PunishedCommand";
 
 export class CommandHandler {
   commands: Command[] = [];
@@ -55,6 +57,8 @@ export class CommandHandler {
   teamlessCommand = new TeamlessCommand();
   planCommand = new PlanCommand();
   massRegisterCommand = new MassRegisterCommand();
+  punishCommand = new PunishCommand();
+  punishedCommand = new PunishedCommand();
 
   public loadCommands() {
     this.commands = [
@@ -82,6 +86,8 @@ export class CommandHandler {
       this.teamlessCommand,
       this.planCommand,
       this.massRegisterCommand,
+      this.punishCommand,
+      this.punishedCommand,
     ];
   }
 

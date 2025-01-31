@@ -31,7 +31,7 @@ export default class AnnouncementCommand implements Command {
     "announcement-confirm",
     "announcement-cancel",
     "announcement-edit-time",
-    "announcement-edit-maps",
+    "announcement-edit-map",
     "announcement-edit-banned-classes",
   ];
 
@@ -54,6 +54,11 @@ export default class AnnouncementCommand implements Command {
               .setName("minerushing")
               .setDescription("Minerushing? (poll/yes/no)")
               .setRequired(true)
+              .addChoices(
+                { name: "Yes", value: "yes" },
+                { name: "No", value: "no" },
+                { name: "Poll", value: "poll" }
+              )
           )
           .addStringOption((option) =>
             option
@@ -77,6 +82,16 @@ export default class AnnouncementCommand implements Command {
           )
           .addStringOption((option) =>
             option.setName("host").setDescription("Host Name").setRequired(true)
+          )
+          .addStringOption((option) =>
+            option
+              .setName("doubleelo")
+              .setDescription("Enable double elo for this game? (yes/no)")
+              .setRequired(false)
+              .addChoices(
+                { name: "Yes", value: "yes" },
+                { name: "No", value: "no" }
+              )
           );
       })
       .addSubcommand((subcommand) => {
@@ -212,6 +227,7 @@ export default class AnnouncementCommand implements Command {
     date.setSeconds(0);
 
     CurrentGameManager.getCurrentGame().startTime = date;
+    CurrentGameManager.schedulePollCloseTime(date);
 
     return true;
   }
@@ -276,6 +292,12 @@ export default class AnnouncementCommand implements Command {
       return;
     }
 
+    const doubleEloOption = interaction.options
+      .getString("doubleelo")
+      ?.toLowerCase();
+    const doubleElo = doubleEloOption === "yes";
+    CurrentGameManager.getCurrentGame().isDoubleElo = doubleElo;
+
     const embed = this.createGameAnnouncementEmbed(true, organiser, host);
 
     GameInstance.getInstance().organiser = organiser;
@@ -324,6 +346,7 @@ export default class AnnouncementCommand implements Command {
           "Sign up by typing the `/register [MCID]` command in this chat. If you sign up but can't play then run `/unregister`."
       );
     }
+
     const config = ConfigManager.getConfig();
     const chatChannelIds = [config.channels.gameFeed];
 
@@ -340,9 +363,50 @@ export default class AnnouncementCommand implements Command {
     if (this.announcementPreviewMessage) {
       await this.announcementPreviewMessage.edit({
         embeds: [embed],
-        components: [],
+        components: this.getEditComponents(true),
       });
     }
+  }
+
+  private getEditComponents(isConfirmed: boolean) {
+    const confirmButton = new ButtonBuilder()
+      .setCustomId("announcement-confirm")
+      .setLabel("✅ Confirm and Send")
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(isConfirmed);
+
+    const cancelButton = new ButtonBuilder()
+      .setCustomId("announcement-cancel")
+      .setLabel("❌ Cancel")
+      .setStyle(ButtonStyle.Danger);
+
+    const editTimeButton = new ButtonBuilder()
+      .setCustomId("announcement-edit-time")
+      .setLabel("🕒 Edit Time")
+      .setStyle(ButtonStyle.Secondary);
+
+    const editMapButton = new ButtonBuilder()
+      .setCustomId("announcement-edit-map")
+      .setLabel("🗺️ Edit Map")
+      .setStyle(ButtonStyle.Secondary);
+
+    const editBannedClassesButton = new ButtonBuilder()
+      .setCustomId("announcement-edit-banned-classes")
+      .setLabel("🚫 Edit Banned Classes")
+      .setStyle(ButtonStyle.Secondary);
+
+    const firstRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      confirmButton,
+      cancelButton
+    );
+
+    const secondRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      editTimeButton,
+      editMapButton,
+      editBannedClassesButton
+    );
+
+    return [firstRow, secondRow];
   }
 
   public async handleButtonPress(
@@ -351,18 +415,47 @@ export default class AnnouncementCommand implements Command {
     await interaction.deferReply({
       ephemeral: false,
     });
+
+    const isConfirmed = !!this.announcementMessage;
+
     switch (interaction.customId) {
       case "announcement-cancel":
         await this.handleAnnouncementCancel(interaction.guild!);
         await interaction.editReply("Cancelled announcement.");
         break;
+
       case "announcement-confirm":
-        await this.handleAnnouncementConfirm(interaction.guild!);
-        await interaction.editReply("Announcement sent!");
+        if (!isConfirmed) {
+          await this.handleAnnouncementConfirm(interaction.guild!);
+          await interaction.editReply("Announcement sent!");
+        } else {
+          await interaction.editReply("The announcement is already confirmed.");
+        }
         break;
+
+      case "announcement-edit-time":
+        await this.handleEditTime(interaction);
+        break;
+
+      case "announcement-edit-map":
+        await this.handleEditMap(interaction);
+        break;
+
+      case "announcement-edit-banned-classes":
+        await this.handleEditBannedClasses(interaction);
+        break;
+
       default:
         await interaction.editReply("This doesn't do anything yet, sorry!");
         break;
+    }
+
+    // If confirmed, update the live announcement
+    if (isConfirmed) {
+      const embed = this.createGameAnnouncementEmbed(false).embeds?.[0];
+      if (this.announcementMessage && embed) {
+        await this.announcementMessage.edit({ embeds: [embed] });
+      }
     }
   }
 
@@ -374,13 +467,18 @@ export default class AnnouncementCommand implements Command {
     const game = CurrentGameManager.getCurrentGame();
     const registrationChannelId =
       ConfigManager.getConfig().channels.registration;
+
+    const doubleEloMessage = game.isDoubleElo
+      ? "\n\n**🌟 A special DOUBLE ELO game! 🌟**\n\n"
+      : "";
+
     const embed = new EmbedBuilder()
       .setColor("#00FF7F")
       .setTitle(`🎉 FRIENDLY WAR ANNOUNCEMENT ${preview ? "[PREVIEW]" : ""}`)
       .setDescription(
         `${
           preview ? "This is a preview of the announcement." : ""
-        } Get ready to fight! Go to <#${registrationChannelId}> to join!`
+        }${doubleEloMessage}Get ready to fight! Go to <#${registrationChannelId}> to join!`
       )
       .addFields(
         {
@@ -427,6 +525,7 @@ export default class AnnouncementCommand implements Command {
           inline: false,
         }
       );
+
     let footerText = "";
     if (organiser && host) {
       footerText = `Organised by ${organiser} - Hosted by ${host}`;
@@ -482,5 +581,175 @@ export default class AnnouncementCommand implements Command {
     return preview
       ? { embeds: [embed], components: [firstRow, secondRow] }
       : { embeds: [embed] };
+  }
+
+  private async updateAnnouncementMessages() {
+    const embed = this.createGameAnnouncementEmbed(false).embeds?.[0];
+    const isConfirmed = !!this.announcementMessage;
+
+    if (this.announcementPreviewMessage) {
+      await this.announcementPreviewMessage.edit({
+        embeds: [embed],
+        components: this.getEditComponents(isConfirmed),
+      });
+    }
+
+    if (this.announcementMessage) {
+      await this.announcementMessage.edit({
+        embeds: [embed],
+      });
+    }
+  }
+
+  private async handleEditTime(interaction: ButtonInteraction) {
+    await interaction.editReply(
+      "Please enter the new time in your next message."
+    );
+
+    const channel = interaction.channel;
+    if (!channel || !("createMessageCollector" in channel)) {
+      await interaction.followUp(
+        "This interaction must be used in a text-based channel."
+      );
+      return;
+    }
+
+    const filter = (msg: Message) => msg.author.id === interaction.user.id;
+    const collector = channel.createMessageCollector({
+      filter,
+      max: 1,
+      time: 30000,
+    });
+
+    collector.on("collect", async (msg) => {
+      const date = parseDate(msg.content, undefined, { forwardDate: true });
+
+      if (!date) {
+        await interaction.followUp("Invalid date format. Please try again.");
+        return;
+      }
+
+      date.setSeconds(0);
+      CurrentGameManager.getCurrentGame().startTime = date;
+
+      if (CurrentGameManager.pollCloseTimeout) {
+        clearTimeout(CurrentGameManager.pollCloseTimeout);
+      }
+
+      await this.updateAnnouncementMessages(); // Update both messages
+      await interaction.followUp(
+        `The announcement time has been updated to ${formatTimestamp(date)}.`
+      );
+      collector.stop();
+    });
+
+    collector.on("end", async (_, reason) => {
+      if (reason === "time") {
+        await interaction.followUp("Time input timed out. Please try again.");
+      }
+    });
+  }
+
+  private async handleEditMap(interaction: ButtonInteraction) {
+    await interaction.editReply(
+      "Please enter the new map in your next message."
+    );
+
+    const channel = interaction.channel;
+    if (!channel || !("createMessageCollector" in channel)) {
+      await interaction.followUp(
+        "This interaction must be used in a text-based channel."
+      );
+      return;
+    }
+
+    const filter = (msg: Message) => msg.author.id === interaction.user.id;
+    const collector = channel.createMessageCollector({
+      filter,
+      max: 1,
+      time: 30000,
+    });
+
+    collector.on("collect", async (msg) => {
+      const chosenMap = this.getMap(msg.content);
+
+      if (chosenMap.error) {
+        await interaction.followUp(chosenMap.error);
+        return;
+      }
+
+      switch (chosenMap.chooseMapType) {
+        case "vote":
+          CurrentGameManager.getCurrentGame().startMapVote(chosenMap.maps);
+          break;
+        case "random":
+        case "specific":
+          CurrentGameManager.getCurrentGame().setMap(chosenMap.map);
+          break;
+      }
+
+      await this.updateAnnouncementMessages(); // Update both messages
+      await interaction.followUp(
+        `The map has been updated to ${chosenMap.map ?? "a voting map list."}`
+      );
+      collector.stop();
+    });
+
+    collector.on("end", async (_, reason) => {
+      if (reason === "time") {
+        await interaction.followUp("Map input timed out. Please try again.");
+      }
+    });
+  }
+
+  private async handleEditBannedClasses(interaction: ButtonInteraction) {
+    await interaction.editReply(
+      "Please enter the new banned classes separated by commas, or type `none` for no banned classes."
+    );
+
+    const channel = interaction.channel;
+    if (!channel || !("createMessageCollector" in channel)) {
+      await interaction.followUp(
+        "This interaction must be used in a text-based channel."
+      );
+      return;
+    }
+
+    const filter = (msg: Message) => msg.author.id === interaction.user.id;
+    const collector = channel.createMessageCollector({
+      filter,
+      max: 1,
+      time: 30000,
+    });
+
+    collector.on("collect", async (msg) => {
+      const bannedClasses = this.getBannedClasses(msg.content);
+
+      if (bannedClasses.error) {
+        await interaction.followUp(bannedClasses.error);
+        return;
+      }
+
+      CurrentGameManager.getCurrentGame().settings.bannedClasses =
+        bannedClasses.bannedClasses;
+
+      await this.updateAnnouncementMessages(); // Update both messages
+      await interaction.followUp(
+        `The banned classes have been updated to ${
+          bannedClasses.bannedClasses.length > 0
+            ? bannedClasses.bannedClasses.join(", ")
+            : "None"
+        }.`
+      );
+      collector.stop();
+    });
+
+    collector.on("end", async (_, reason) => {
+      if (reason === "time") {
+        await interaction.followUp(
+          "Banned classes input timed out. Please try again."
+        );
+      }
+    });
   }
 }

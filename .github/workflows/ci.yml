@@ -80,6 +80,13 @@ jobs:
       - name: Check Prettier
         run: npm run check-format
 
+      - name: Create mock config.json
+        run: |
+          echo '{
+            "key1": "mockValue1",
+            "key2": "mockValue2"
+          }' > config.json
+
   # Job 4: Run Build
   run-build:
     runs-on: windows-latest

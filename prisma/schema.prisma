@@ -29,20 +29,20 @@ model Player {
   elo          Int          @default(1000)
   eloHistories EloHistory[]
 
-  wins   Int @default(0)
-  losses Int @default(0)
-  winStreak Int @default(0)
-  loseStreak Int @default(0)
-  biggestWinStreak Int @default(0)
+  wins                Int @default(0)
+  losses              Int @default(0)
+  winStreak           Int @default(0)
+  loseStreak          Int @default(0)
+  biggestWinStreak    Int @default(0)
   biggestLosingStreak Int @default(0)
 
   discordSnowflake String @unique
 
-  minecraftAccounts String[]
+  minecraftAccounts       String[]
   primaryMinecraftAccount String?
-  latestIGN String?
+  latestIGN               String?
 
-  games GameParticipation[]
+  games       GameParticipation[]
   punishments PlayerPunishment[]
 }
 
@@ -63,11 +63,11 @@ model Game {
   winner    Team?
   type      gameType?
 
-  organiser    String?
-  host    String?
+  organiser String?
+  host      String?
 
-  participantsIGNs String[]
-  eloHistories EloHistory[]
+  participantsIGNs   String[]
+  eloHistories       EloHistory[]
   gameParticipations GameParticipation[]
 }
 
@@ -94,10 +94,10 @@ model PlayerPunishment {
   playerId String
   player   Player @relation(fields: [playerId], references: [id])
 
-  reasons           String[]
-  strikeCount       Int
-  dates             DateTime[]
-  punishmentExpiry  DateTime?
+  reasons          String[]
+  strikeCount      Int
+  punishmentDates  DateTime[]
+  punishmentExpiry DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -156,7 +156,6 @@ enum AnniClass {
   WIZARD
 }
 
-// TODO
 enum AnniMap {
   AFTERMATH1V1
   ANDORRA1V1
@@ -169,4 +168,7 @@ enum AnniMap {
   CLASHSTAL
   NATURE1V1
   SIEGE1V1
+  HAANSKAAR1V1
+  VILLAGES1V1
+  ANCHORAGE1V1
 }
