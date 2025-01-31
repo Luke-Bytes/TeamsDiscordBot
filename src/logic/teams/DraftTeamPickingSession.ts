@@ -192,7 +192,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     const member = interaction.guild?.members.cache.get(interaction.user.id);
     const isOrganiser = member?.roles.cache.has(organiserRoleId);
 
-    await interaction.update({});
+    await interaction.deferUpdate().catch(console.error);
 
     if (
       !isOrganiser ||
@@ -210,7 +210,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
           components: [],
         });
 
-        await interaction.channel.send("Teams have been finalized.");
+        await interaction.channel.send("Teams have been finalised!");
 
         const game = CurrentGameManager.getCurrentGame();
         game.teams.RED = [...this.proposedTeams.RED];
@@ -372,8 +372,19 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     await Promise.all(invalidMessages.map((msg) => msg.delete()));
 
     await message.channel.send(
-      `Player ${player.ignUsed} registered for **${this.turn}** team.`
+      `Player ${(player.ignUsed ?? "Unknown Player").replace(/_/g, "\\_")} registered for **${this.turn}** team.`
     );
+
+    if (this.proposedTeams.UNDECIDED.length === 1) {
+      const lastPlayer = this.proposedTeams.UNDECIDED[0];
+      this.proposedTeams[this.turn === "RED" ? "BLUE" : "RED"].push(lastPlayer);
+      this.proposedTeams.UNDECIDED = [];
+      await this.embedMessage?.edit(this.createDraftEmbed(false));
+
+      await message.channel.send(
+        `Player ${(lastPlayer.ignUsed ?? "Unknown Player").replace(/_/g, "\\_")} was automatically assigned to **${this.turn === "RED" ? "BLUE" : "RED"}** team.`
+      );
+    }
 
     this.turn = this.turn === "RED" ? "BLUE" : "RED";
 

@@ -96,7 +96,7 @@ model PlayerPunishment {
 
   reasons          String[]
   strikeCount      Int
-  dates            DateTime[]
+  punishmentDates  DateTime[]
   punishmentExpiry DateTime?
 
   createdAt DateTime @default(now())
@@ -168,4 +168,7 @@ enum AnniMap {
   CLASHSTAL
   NATURE1V1
   SIEGE1V1
+  HAANSKAAR1V1
+  VILLAGES1V1
+  ANCHORAGE1V1
 }

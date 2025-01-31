@@ -25,10 +25,12 @@ export class Elo {
     }
 
     if (game.gameWinner && playerTeam === game.gameWinner) {
-      currentElo += config.winEloGain;
-      console.log(
-        `Win bonus applied to ${player.ignUsed}: +${config.winEloGain}`
-      );
+      let winEloGain = config.winEloGain;
+      if (game.isDoubleElo) {
+        winEloGain = winEloGain * 2;
+      }
+      currentElo += winEloGain;
+      console.log(`Win bonus applied to ${player.ignUsed}: +${winEloGain}`);
     } else if (game.gameWinner) {
       currentElo -= config.loseEloLoss;
       console.log(
@@ -40,10 +42,12 @@ export class Elo {
       (playerTeam === "BLUE" && game.MVPPlayerBlue === player.ignUsed) ||
       (playerTeam === "RED" && game.MVPPlayerRed === player.ignUsed)
     ) {
-      currentElo += config.mvpBonus;
-      console.log(
-        `MVP bonus applied to ${player.ignUsed}: +${config.mvpBonus}`
-      );
+      let mvpBonus = config.mvpBonus;
+      if (game.isDoubleElo) {
+        mvpBonus = mvpBonus * 2;
+      }
+      currentElo += mvpBonus;
+      console.log(`MVP bonus applied to ${player.ignUsed}: +${mvpBonus}`);
     }
 
     const captain = game.getCaptainOfTeam(playerTeam);
