@@ -1,9 +1,19 @@
+import { MongoClient } from 'mongodb';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
+const client = new MongoClient(process.env.DATABASE_URL);
 
 async function migratePlayerDataToPlayerStats() {
   try {
+    await client.connect();
+    const database = client.db();
+    const playersCollection = database.collection('Player');
+
+    const players = await playersCollection.find().toArray();
+
+    console.log(`Found ${players.length} players. Migrating...`);
+
     const season = await prisma.season.findFirst({
       where: { number: 1 }
     });
@@ -13,42 +23,31 @@ async function migratePlayerDataToPlayerStats() {
       return;
     }
 
-    const players = await prisma.player.findMany();
-
-    console.log(`Found ${players.length} players. Migrating...`);
-
     for (const player of players) {
-      console.log(`Player Data (ID: ${player.id}):`, player);
-
-      const playerElo = player.elo ?? 1000;
-      const playerWins = player.wins ?? 0;
-      const playerLosses = player.losses ?? 0;
-      const playerWinStreak = player.winStreak ?? 0;
-      const playerLoseStreak = player.loseStreak ?? 0;
-      const playerBiggestWinStreak = player.biggestWinStreak ?? 0;
-      const playerBiggestLosingStreak = player.biggestLosingStreak ?? 0;
+      console.log(`Player Data (ID: ${player._id}):`, player);
 
       await prisma.playerStats.create({
         data: {
-          playerId: player.id,
+          playerId: player._id.toString(),
           seasonId: season.id,
-          elo: playerElo,
-          wins: playerWins,
-          losses: playerLosses,
-          winStreak: playerWinStreak,
-          loseStreak: playerLoseStreak,
-          biggestWinStreak: playerBiggestWinStreak,
-          biggestLosingStreak: playerBiggestLosingStreak
+          elo: player.elo ?? 1000,
+          wins: player.wins ?? 0,
+          losses: player.losses ?? 0,
+          winStreak: player.winStreak ?? 0,
+          loseStreak: player.loseStreak ?? 0,
+          biggestWinStreak: player.biggestWinStreak ?? 0,
+          biggestLosingStreak: player.biggestLosingStreak ?? 0
         }
       });
 
-      console.log(`Migrated stats for Player ${player.id}`);
+      console.log(`Migrated stats for Player ${player._id}`);
     }
 
     console.log("Migration completed successfully.");
   } catch (error) {
     console.error("Error during migration:", error);
   } finally {
+    await client.close();
     await prisma.$disconnect();
   }
 }
