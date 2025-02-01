@@ -9,7 +9,7 @@ async function migratePlayerDataToPlayerStats() {
     });
 
     if (!season) {
-      console.error("Season not found. Please create it before running the migration.");
+      console.error("Season 1 not found. Please create it before running the migration.");
       return;
     }
 
@@ -22,17 +22,17 @@ async function migratePlayerDataToPlayerStats() {
         data: {
           playerId: player.id,
           seasonId: season.id,
-          elo: player.elo,
-          wins: player.wins,
-          losses: player.losses,
-          winStreak: player.winStreak,
-          loseStreak: player.loseStreak,
-          biggestWinStreak: player.biggestWinStreak,
-          biggestLosingStreak: player.biggestLosingStreak
+          elo: player.elo ?? 1000,
+          wins: player.wins ?? 0,
+          losses: player.losses ?? 0,
+          winStreak: player.winStreak ?? 0,
+          loseStreak: player.loseStreak ?? 0,
+          biggestWinStreak: player.biggestWinStreak ?? 0,
+          biggestLosingStreak: player.biggestLosingStreak ?? 0
         }
       });
 
-      console.log(`PlayerStats created for Player ${player.id}`);
+      console.log(`Migrated stats for Player ${player.id}`);
     }
 
     console.log("Migration completed successfully.");
