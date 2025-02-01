@@ -1,70 +1,62 @@
-import { PrismaClient } from "@prisma/client";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from 'mongodb';
+import dotenv from 'dotenv';
 
-const prisma = new PrismaClient();
-const mongo = new MongoClient(process.env.DATABASE_URL);
+dotenv.config();
 
-async function main() {
-  const season1 = await prisma.season.create({
-    data: {
-      number: 1,
-      name: "Season 1",
-      startDate: new Date("2024-12-28"),
-      isActive: true,
-    },
-  });
+const DATABASE_URL = process.env.DATABASE_URL;
+const DATABASE_NAME = 'AnniBot';
 
-  await mongo.connect();
-  const db = mongo.db();
-  const playersCollection = db.collection("Player");
+async function addSeasonToCollections(seasonId, seasonNumber) {
+  const client = new MongoClient(DATABASE_URL);
+  try {
+    await client.connect();
+    const db = client.db(DATABASE_NAME);
 
-  const players = await playersCollection.find({}).toArray();
+    const collections = ['Game', 'GameParticipation', 'EloHistory', 'PlayerStats'];
 
-  for (const p of players) {
-    const oldElo = p.elo ?? 1000;
-    const oldWins = p.wins ?? 0;
-    const oldLosses = p.losses ?? 0;
-    const oldWinStreak = p.winStreak ?? 0;
-    const oldLoseStreak = p.loseStreak ?? 0;
-    const oldBiggestWinStreak = p.biggestWinStreak ?? 0;
-    const oldBiggestLosingStreak = p.biggestLosingStreak ?? 0;
+    for (const collectionName of collections) {
+      const collection = db.collection(collectionName);
 
-    await prisma.playerStats.create({
-      data: {
-        playerId: p._id.toString(),
-        seasonId: season1.id,
-        elo: oldElo,
-        wins: oldWins,
-        losses: oldLosses,
-        winStreak: oldWinStreak,
-        loseStreak: oldLoseStreak,
-        biggestWinStreak: oldBiggestWinStreak,
-        biggestLosingStreak: oldBiggestLosingStreak,
-      },
-    });
+      const updateResult = await collection.updateMany(
+        { seasonId: { $exists: false } },
+        { $set: { seasonId: seasonId } }
+      );
+
+      console.log(`Updated ${updateResult.modifiedCount} documents in ${collectionName}`);
+    }
+
+  } catch (error) {
+    console.error("Error updating collections:", error);
+  } finally {
+    await client.close();
   }
-
-  await prisma.game.updateMany({
-    data: { seasonId: season1.id },
-  });
-
-  await prisma.gameParticipation.updateMany({
-    data: { seasonId: season1.id },
-  });
-
-  await prisma.eloHistory.updateMany({
-    data: { seasonId: season1.id },
-  });
-
-  console.log("Migration to Season 1 complete!");
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
+async function getSeasonIdByNumber(seasonNumber) {
+  const client = new MongoClient(DATABASE_URL);
+  try {
+    await client.connect();
+    const db = client.db(DATABASE_NAME);
+    const season = await db.collection('Season').findOne({ number: seasonNumber });
+    if (!season) {
+      throw new Error(`Season with number ${seasonNumber} not found.`);
+    }
+    return season._id.toString();
+  } catch (error) {
+    console.error("Error fetching seasonId:", error);
     process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-    await mongo.close();
-  });
+  } finally {
+    await client.close();
+  }
+}
+
+(async () => {
+  const seasonNumber = parseInt(process.argv[2], 10);
+  if (isNaN(seasonNumber)) {
+    console.error("Please provide a valid season number.");
+    process.exit(1);
+  }
+
+  const seasonId = await getSeasonIdByNumber(seasonNumber);
+  await addSeasonToCollections(seasonId, seasonNumber);
+})();
