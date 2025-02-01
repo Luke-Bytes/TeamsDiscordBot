@@ -7,17 +7,40 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model EloHistory {
+model Season {
+  id        String    @id @default(uuid()) @map("_id")
+  number    Int       @unique
+  name      String?
+  startDate DateTime
+  endDate   DateTime?
+  isActive  Boolean   @default(true)
+
+  games              Game[]
+  gameParticipations GameParticipation[]
+  eloHistories       EloHistory[]
+  playerStats        PlayerStats[]
+}
+
+model PlayerStats {
   id       String @id @default(uuid()) @map("_id")
   playerId String
   player   Player @relation(fields: [playerId], references: [id])
 
+  seasonId String
+  season   Season @relation(fields: [seasonId], references: [id])
+
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  elo Int
+  elo                 Int @default(1000)
+  wins                Int @default(0)
+  losses              Int @default(0)
+  winStreak           Int @default(0)
+  loseStreak          Int @default(0)
+  biggestWinStreak    Int @default(0)
+  biggestLosingStreak Int @default(0)
 
-  gameId String
-  game   Game   @relation(fields: [gameId], references: [id])
+  @@unique([playerId, seasonId])
 }
 
 model Player {
@@ -26,35 +49,20 @@ model Player {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  elo          Int          @default(1000)
-  eloHistories EloHistory[]
-
-  wins                Int @default(0)
-  losses              Int @default(0)
-  winStreak           Int @default(0)
-  loseStreak          Int @default(0)
-  biggestWinStreak    Int @default(0)
-  biggestLosingStreak Int @default(0)
-
   discordSnowflake String @unique
 
   minecraftAccounts       String[]
   primaryMinecraftAccount String?
   latestIGN               String?
 
-  games       GameParticipation[]
-  punishments PlayerPunishment[]
-}
-
-type GameSettings {
-  minerushing   Boolean
-  bannedClasses AnniClass[]
-  map           AnniMap
+  eloHistories EloHistory[]
+  games        GameParticipation[]
+  punishments  PlayerPunishment[]
+  PlayerStats  PlayerStats[]
 }
 
 model Game {
-  id String @id @default(uuid()) @map("_id")
-
+  id       String  @id @default(uuid()) @map("_id")
   finished Boolean @default(false)
 
   startTime DateTime
@@ -66,15 +74,19 @@ model Game {
   organiser String?
   host      String?
 
-  participantsIGNs   String[]
+  participantsIGNs String[]
+
   eloHistories       EloHistory[]
   gameParticipations GameParticipation[]
+
+  seasonId String
+  season   Season @relation(fields: [seasonId], references: [id])
 }
 
 model GameParticipation {
   id String @id @default(uuid()) @map("_id")
 
-  ignUsed String //ign, not uuid.
+  ignUsed String
   team    Team
 
   playerId String
@@ -85,7 +97,31 @@ model GameParticipation {
   mvp     Boolean @default(false)
   captain Boolean @default(false)
 
-  @@unique([playerId, gameId]) // only 1 playerId for per player per game
+  seasonId String
+  season   Season @relation(fields: [seasonId], references: [id])
+
+  @@unique([playerId, gameId])
+}
+
+model EloHistory {
+  id       String @id @default(uuid()) @map("_id")
+  playerId String
+  player   Player @relation(fields: [playerId], references: [id])
+
+  createdAt DateTime @default(now())
+  elo       Int
+
+  gameId String
+  game   Game   @relation(fields: [gameId], references: [id])
+
+  seasonId String
+  season   Season @relation(fields: [seasonId], references: [id])
+}
+
+type GameSettings {
+  minerushing   Boolean
+  bannedClasses AnniClass[]
+  map           AnniMap
 }
 
 model PlayerPunishment {

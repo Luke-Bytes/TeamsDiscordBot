@@ -2,6 +2,7 @@ import { writeFileSync } from "fs";
 import conf from "../config.json";
 
 export type Config = {
+  season: number;
   mvpBonus: number;
   captainBonus: number;
   underdogMultiplier: number;

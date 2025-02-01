@@ -153,6 +153,10 @@ export const EloUtil = {
     weightFactor: number,
     isWin: boolean
   ): number {
+    if (expectedScore >= 0.4 && expectedScore <= 0.6) {
+      return eloChange;
+    }
+
     const adjustment = (0.5 - expectedScore) * weightFactor;
     const role = expectedScore > 0.5 ? "favoured" : "underdog";
     const difference = Math.abs(0.5 - expectedScore).toFixed(2);

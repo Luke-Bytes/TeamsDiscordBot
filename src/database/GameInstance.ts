@@ -137,6 +137,20 @@ export class GameInstance {
     }
   }
 
+  public stopVoting() {
+    if (this.mapVoteManager) {
+      this.mapVoteManager.stopVote();
+      console.log("Map vote has been stopped without deleting the message.");
+    }
+
+    if (this.minerushVoteManager) {
+      this.minerushVoteManager.stopVote();
+      console.log(
+        "Minerush vote has been stopped without deleting the message."
+      );
+    }
+  }
+
   public setMap(map: AnniMap) {
     this.settings.map = map;
     console.log("The winning map was: " + map);
