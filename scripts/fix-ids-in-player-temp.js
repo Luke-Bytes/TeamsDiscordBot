@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 config()
 
 const client = new MongoClient(process.env.DATABASE_URL);
-async function fixMigratedPlayerRecords() {
+async function fixPlayerIds() {
   try {
     await client.connect();
     const database = client.db();
@@ -14,7 +14,7 @@ async function fixMigratedPlayerRecords() {
     const players = await playersCollection.find().toArray();
 
     for (const player of players) {
-      if (player._id.toString() === player.id && player.id.length === 36) {
+      if (player.id && player.id.length === 36) {
         continue;
       }
 
@@ -22,15 +22,15 @@ async function fixMigratedPlayerRecords() {
 
       const newId = uuidv4();
 
-      // Replace the existing record with the new UUID-based record
       await playersCollection.deleteOne({ _id: player._id });
+
       await playersCollection.insertOne({
-        _id: newId,
         id: newId,
         ...player,
+        _id: undefined,
       });
 
-      console.log(`Migrated player _id: ${player._id} to new UUID: ${newId}`);
+      console.log(`Migrated player from ObjectId to new UUID id: ${newId}`);
     }
 
     console.log("Migration of Player records to UUIDs completed successfully.");
@@ -41,4 +41,4 @@ async function fixMigratedPlayerRecords() {
   }
 }
 
-fixMigratedPlayerRecords();
+fixPlayerIds();
