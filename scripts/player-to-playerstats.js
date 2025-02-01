@@ -18,17 +18,27 @@ async function migratePlayerDataToPlayerStats() {
     console.log(`Found ${players.length} players. Migrating...`);
 
     for (const player of players) {
+      console.log(`Player Data (ID: ${player.id}):`, player);
+
+      const playerElo = player.elo ?? 1000;
+      const playerWins = player.wins ?? 0;
+      const playerLosses = player.losses ?? 0;
+      const playerWinStreak = player.winStreak ?? 0;
+      const playerLoseStreak = player.loseStreak ?? 0;
+      const playerBiggestWinStreak = player.biggestWinStreak ?? 0;
+      const playerBiggestLosingStreak = player.biggestLosingStreak ?? 0;
+
       await prisma.playerStats.create({
         data: {
           playerId: player.id,
           seasonId: season.id,
-          elo: player.elo ?? 1000,
-          wins: player.wins ?? 0,
-          losses: player.losses ?? 0,
-          winStreak: player.winStreak ?? 0,
-          loseStreak: player.loseStreak ?? 0,
-          biggestWinStreak: player.biggestWinStreak ?? 0,
-          biggestLosingStreak: player.biggestLosingStreak ?? 0
+          elo: playerElo,
+          wins: playerWins,
+          losses: playerLosses,
+          winStreak: playerWinStreak,
+          loseStreak: playerLoseStreak,
+          biggestWinStreak: playerBiggestWinStreak,
+          biggestLosingStreak: playerBiggestLosingStreak
         }
       });
 
