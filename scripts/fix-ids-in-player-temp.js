@@ -1,7 +1,8 @@
 import { MongoClient, ObjectId } from "mongodb";
-require('dotenv').config();
+import { config } from 'dotenv';
 
 (async function main() {
+  config()
   const uri = process.env.MONGODB_URI || process.env.DATABASE_URL;
   if (!uri) {
     console.error('Please set MONGODB_URI or DATABASE_URL in your environment.');
