@@ -64,7 +64,9 @@ export default class LeaderboardsCommand implements Command {
       }
 
       const topTenStats = await prismaClient.playerStats.findMany({
-        where: { seasonId: season.id },
+        where: {
+          seasonId: season.id,
+        },
         orderBy: { elo: "desc" },
         take: 10,
         include: {
@@ -77,12 +79,16 @@ export default class LeaderboardsCommand implements Command {
         },
       });
 
-      const topTen = topTenStats.map((stats, index) => {
+      const filteredTopTenStats = topTenStats.filter(
+        (stats) => stats.player !== null
+      );
+
+      const topTen = filteredTopTenStats.map((stats, index) => {
         const wins = stats.wins;
         const losses = stats.losses;
         return {
           rank: index + 1,
-          ign: stats.player.latestIGN ?? "N/A",
+          ign: stats.player?.latestIGN ?? "Unknown Player",
           elo: stats.elo,
           wins,
           losses,
@@ -90,7 +96,6 @@ export default class LeaderboardsCommand implements Command {
           discordSnowflake: stats.player?.discordSnowflake ?? "N/A",
         };
       });
-
       const allStats = await prismaClient.playerStats.findMany({
         where: { seasonId: season.id },
         orderBy: { elo: "desc" },
