@@ -22,9 +22,9 @@ model Season {
 }
 
 model PlayerStats {
-  id       String @id @default(uuid()) @map("_id")
+  id       String  @id @default(uuid()) @map("_id")
   playerId String
-  player   Player @relation(fields: [playerId], references: [id])
+  player   Player? @relation(fields: [playerId], references: [id])
 
   seasonId String
   season   Season @relation(fields: [seasonId], references: [id])
