@@ -22,6 +22,7 @@ import { addRegisteredPlayersFeed } from "../logic/gameFeed/RegisteredGameFeed";
 import { addTeamsGameFeed } from "../logic/gameFeed/TeamsGameFeed";
 import { GameInstance } from "../database/GameInstance";
 import { DiscordUtil } from "../util/DiscordUtil";
+import { PermissionsUtil } from "../util/PermissionsUtil";
 
 export default class AnnouncementCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;
@@ -321,6 +322,18 @@ export default class AnnouncementCommand implements Command {
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
+    const member = interaction.guild?.members.cache.get(interaction.user.id);
+    const hasPermission = PermissionsUtil.hasRole(member, "organiserRole");
+
+    if (!hasPermission) {
+      await interaction.reply({
+        content:
+          "You do not have permission to use this command. Only organisers can execute it.",
+        ephemeral: true,
+      });
+      return;
+    }
+
     const subcommand = interaction.options.getSubcommand(true);
 
     switch (subcommand) {
@@ -450,7 +463,6 @@ export default class AnnouncementCommand implements Command {
         break;
     }
 
-    // If confirmed, update the live announcement
     if (isConfirmed) {
       const embed = this.createGameAnnouncementEmbed(false).embeds?.[0];
       if (this.announcementMessage && embed) {
@@ -636,7 +648,7 @@ export default class AnnouncementCommand implements Command {
         clearTimeout(CurrentGameManager.pollCloseTimeout);
       }
 
-      await this.updateAnnouncementMessages(); // Update both messages
+      await this.updateAnnouncementMessages();
       await interaction.followUp(
         `The announcement time has been updated to ${formatTimestamp(date)}.`
       );

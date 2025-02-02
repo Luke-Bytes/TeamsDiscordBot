@@ -36,6 +36,7 @@
     "mongodb": "^6.12.0",
     "prisma": "^5.20.0",
     "source-map-support": "^0.5.21",
+    "uuid": "^11.0.5",
     "winston": "^3.17.0",
     "winston-daily-rotate-file": "^5.0.0"
   },

@@ -7,6 +7,7 @@ import { Command } from "./CommandInterface";
 import { EloUtil } from "../util/EloUtil";
 import { prismaClient } from "../database/prismaClient";
 import { Channels } from "../Channels";
+import { ConfigManager } from "../ConfigManager";
 
 export default class LeaderboardsCommand implements Command {
   public data: SlashCommandBuilder;
@@ -46,51 +47,79 @@ export default class LeaderboardsCommand implements Command {
     if (wins > 0 && losses === 0) {
       winLossDisplay += " 🔥";
     }
-    return `${rankEmoji} **${ign}** ${eloEmoji} ─ ${elo} | W/L: ${winLossDisplay}`;
+    return `${rankEmoji} **${ign}** ${eloEmoji} ─ ${Math.round(elo)} | W/L: ${winLossDisplay}`;
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     try {
       const botCommandsChannelId = Channels.botCommands.id;
+      const config = ConfigManager.getConfig();
+      const seasonNumber = config.season;
 
-      const allPlayers = await prismaClient.player.findMany({
-        orderBy: {
-          elo: "desc",
+      const season = await prismaClient.season.findUnique({
+        where: { number: seasonNumber },
+      });
+      if (!season) {
+        throw new Error(`Season #${seasonNumber} not found!`);
+      }
+
+      const topTenStats = await prismaClient.playerStats.findMany({
+        where: {
+          seasonId: season.id,
+        },
+        orderBy: { elo: "desc" },
+        take: 10,
+        include: {
+          player: {
+            select: {
+              latestIGN: true,
+              discordSnowflake: true,
+            },
+          },
         },
       });
 
-      const topTen = allPlayers.slice(0, 10).map((playerData, index) => ({
-        rank: index + 1,
-        ign: playerData.latestIGN ?? "N/A",
-        elo: playerData.elo,
-        winLossRatio:
-          playerData.losses > 0
-            ? playerData.wins / playerData.losses
-            : playerData.wins,
-        wins: playerData.wins,
-        losses: playerData.losses,
-      }));
+      const filteredTopTenStats = topTenStats.filter(
+        (stats) => stats.player !== null
+      );
 
-      const currentPlace = allPlayers.findIndex(
-        (playerData) => playerData.discordSnowflake === interaction.user.id
+      const topTen = filteredTopTenStats.map((stats, index) => {
+        const wins = stats.wins;
+        const losses = stats.losses;
+        return {
+          rank: index + 1,
+          ign: stats.player?.latestIGN ?? "Unknown Player",
+          elo: stats.elo,
+          wins,
+          losses,
+          winLossRatio: losses > 0 ? wins / losses : wins,
+          discordSnowflake: stats.player?.discordSnowflake ?? "N/A",
+        };
+      });
+      const allStats = await prismaClient.playerStats.findMany({
+        where: { seasonId: season.id },
+        orderBy: { elo: "desc" },
+        include: { player: { select: { discordSnowflake: true } } },
+      });
+      const currentPlace = allStats.findIndex(
+        (s) => s.player?.discordSnowflake === interaction.user.id
       );
 
       const embed = new EmbedBuilder()
         .setColor("#FFD700")
         .setTitle("🏆 Friendly Wars Leaderboards 🏆")
-        .setDescription("The top rated players this season!")
-        // .setThumbnail("")
+        .setDescription(`The top rated players for Season ${seasonNumber}!`)
         .setTimestamp();
 
-      topTen.forEach((player) => {
+      topTen.forEach((p) => {
         embed.addFields({
           name: this.getLeaderboardEntryString(
-            player.rank,
-            player.ign,
-            player.elo,
-            player.winLossRatio,
-            player.wins,
-            player.losses
+            p.rank,
+            p.ign,
+            p.elo,
+            p.winLossRatio,
+            p.wins,
+            p.losses
           ),
           value: "\u200b",
           inline: false,
@@ -114,10 +143,14 @@ export default class LeaderboardsCommand implements Command {
       if (interaction.channelId !== botCommandsChannelId) {
         setTimeout(
           async () => {
-            await msg.delete();
+            try {
+              await msg.delete();
+            } catch (error) {
+              console.error("Failed to delete leaderboards message:", error);
+            }
           },
           2 * 60 * 1000
-        ); // Delete after 2 minutes
+        );
       }
     } catch (error) {
       console.error("Error fetching leaderboards:", error);

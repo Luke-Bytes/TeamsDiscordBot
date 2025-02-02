@@ -127,4 +127,12 @@ export class MinerushVoteManager extends EventEmitter<MinerushVoteManagerEvents>
       console.warn("No poll message to delete or cancel.");
     }
   }
+
+  async stopVote() {
+    Scheduler.cancel("mapVote");
+    if (this.pollMessage) {
+      console.info("Minerush voting has been ended.");
+      this.pollMessage.poll?.end();
+    }
+  }
 }

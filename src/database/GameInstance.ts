@@ -11,6 +11,7 @@ import { activateFeed } from "../logic/gameFeed/ActivateFeed";
 import { Channels } from "../Channels";
 import { addRegisteredPlayersFeed } from "../logic/gameFeed/RegisteredGameFeed";
 import { addTeamsGameFeed } from "../logic/gameFeed/TeamsGameFeed";
+import { Elo } from "../logic/Elo";
 
 // wrapper class for Game
 export class GameInstance {
@@ -34,6 +35,12 @@ export class GameInstance {
     UNDECIDED: [],
   };
   lateSignups: Set<string> = new Set();
+
+  blueMeanElo?: number;
+  redMeanElo?: number;
+  blueExpectedScore?: number;
+  redExpectedScore?: number;
+
   gameWinner?: "RED" | "BLUE";
   teamsDecidedBy?: "DRAFT" | "RANDOMISED" | null;
 
@@ -127,6 +134,20 @@ export class GameInstance {
     if (this.minerushVoteManager) {
       this.minerushVoteManager.cancelVote();
       console.log("Minerush vote has been closed.");
+    }
+  }
+
+  public stopVoting() {
+    if (this.mapVoteManager) {
+      this.mapVoteManager.stopVote();
+      console.log("Map vote has been stopped without deleting the message.");
+    }
+
+    if (this.minerushVoteManager) {
+      this.minerushVoteManager.stopVote();
+      console.log(
+        "Minerush vote has been stopped without deleting the message."
+      );
     }
   }
 
@@ -810,5 +831,15 @@ export class GameInstance {
 
   public changeHowTeamsDecided(type: "DRAFT" | "RANDOMISED" | null) {
     this.teamsDecidedBy = typeof type === "string" ? type : null;
+  }
+
+  public calculateMeanEloAndExpectedScore() {
+    const { blueMeanElo, redMeanElo, blueExpectedScore, redExpectedScore } =
+      Elo.calculateMeanEloAndExpectedScore(this.teams);
+
+    this.blueMeanElo = blueMeanElo;
+    this.redMeanElo = redMeanElo;
+    this.blueExpectedScore = blueExpectedScore;
+    this.redExpectedScore = redExpectedScore;
   }
 }

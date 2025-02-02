@@ -34,16 +34,18 @@ export class CurrentGameManager {
 
   public static schedulePollCloseTime(startTime: Date) {
     if (this.pollCloseTimeout) {
-      clearTimeout(this.pollCloseTimeout); // Clear any previously scheduled timeout
+      clearTimeout(this.pollCloseTimeout);
     }
 
-    const pollCloseTime = new Date(startTime.getTime() - 5 * 60 * 1000); // 5 minutes before start time
+    const pollCloseTime = new Date(startTime.getTime() - 5 * 60 * 1000);
     const delay = pollCloseTime.getTime() - Date.now();
 
     if (delay > 0) {
       this.pollCloseTimeout = setTimeout(() => {
-        this.getCurrentGame().closePolls();
-        console.log("Poll has been closed automatically.");
+        this.getCurrentGame().stopVoting();
+        console.log(
+          "Poll has been stopped automatically without deleting messages."
+        );
       }, delay);
     } else {
       console.warn("Poll close time is in the past. Skipping scheduling.");

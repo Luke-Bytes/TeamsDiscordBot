@@ -77,6 +77,9 @@ export default class GameCommand implements Command {
           "blueTeamChat",
           `The game has now ended, voting for the team MVP is now open! Type \`/MVP Vote [MCID]\` to pick for <@&${blueTeamRoleId}>!`
         );
+
+        gameInstance.calculateMeanEloAndExpectedScore();
+
         break;
       }
 
