@@ -1,5 +1,5 @@
-import { MongoClient } from 'mongodb';
-import { PrismaClient } from '@prisma/client';
+import { MongoClient } from "mongodb";
+import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 const client = new MongoClient(process.env.DATABASE_URL);
@@ -8,18 +8,20 @@ async function migratePlayerDataToPlayerStats() {
   try {
     await client.connect();
     const database = client.db();
-    const playersCollection = database.collection('Player');
+    const playersCollection = database.collection("Player");
 
     const players = await playersCollection.find().toArray();
 
     console.log(`Found ${players.length} players. Migrating...`);
 
     const season = await prisma.season.findFirst({
-      where: { number: 1 }
+      where: { number: 1 },
     });
 
     if (!season) {
-      console.error("Season 1 not found. Please create it before running the migration.");
+      console.error(
+        "Season 1 not found. Please create it before running the migration."
+      );
       return;
     }
 
@@ -36,8 +38,8 @@ async function migratePlayerDataToPlayerStats() {
           winStreak: player.winStreak ?? 0,
           loseStreak: player.loseStreak ?? 0,
           biggestWinStreak: player.biggestWinStreak ?? 0,
-          biggestLosingStreak: player.biggestLosingStreak ?? 0
-        }
+          biggestLosingStreak: player.biggestLosingStreak ?? 0,
+        },
       });
 
       console.log(`Migrated stats for Player ${player._id}`);

@@ -1,15 +1,17 @@
 import { MongoClient, ObjectId } from "mongodb";
-import { config } from 'dotenv';
+import { config } from "dotenv";
 
 async function main() {
   config();
   const uri = process.env.MONGODB_URI || process.env.DATABASE_URL;
   if (!uri) {
-    console.error('Please set MONGODB_URI or DATABASE_URL in your environment.');
+    console.error(
+      "Please set MONGODB_URI or DATABASE_URL in your environment."
+    );
     process.exit(1);
   }
 
-  const dbName = 'AnniBot';
+  const dbName = "AnniBot";
   const client = new MongoClient(uri, { useUnifiedTopology: true });
 
   try {
@@ -19,7 +21,7 @@ async function main() {
     const db = client.db(dbName);
     console.log(`Using DB: ${db.databaseName}`);
 
-    const seasonCollection = db.collection('Season');
+    const seasonCollection = db.collection("Season");
     const seasonNumber = 1;
     let season = await seasonCollection.findOne({ number: seasonNumber });
     if (!season) {
@@ -37,7 +39,7 @@ async function main() {
       console.log(`Found existing Season #${seasonNumber}, _id=${season._id}`);
     }
 
-    const playerCol = db.collection('Player');
+    const playerCol = db.collection("Player");
     const playersCursor = playerCol.find({});
     let migratedPlayers = 0;
     while (await playersCursor.hasNext()) {
@@ -46,7 +48,9 @@ async function main() {
       console.log(`---\nOriginal Player doc:`, playerDoc);
 
       if (playerDoc.id && playerDoc.id !== playerDoc._id) {
-        console.log(`  Found separate \`id\` field = ${playerDoc.id}, \`_id\` = ${playerDoc._id}`);
+        console.log(
+          `  Found separate \`id\` field = ${playerDoc.id}, \`_id\` = ${playerDoc._id}`
+        );
         playerDoc._id = playerDoc.id;
         delete playerDoc.id;
         console.log(`  Unifying _id to ${playerDoc._id}`);
@@ -71,22 +75,24 @@ async function main() {
 
       console.log(
         `  replaceOne matchedCount=${result.matchedCount}, ` +
-        `modifiedCount=${result.modifiedCount}`
+          `modifiedCount=${result.modifiedCount}`
       );
       if (result.matchedCount === 0) {
         console.warn(
           `  WARNING: No document found with _id=${playerDoc._id}. ` +
-          `Check your collection name and DB.`
+            `Check your collection name and DB.`
         );
       }
 
       migratedPlayers += result.modifiedCount;
     }
-    console.log(`Migration step for Player docs completed. Updated ${migratedPlayers} documents.`);
+    console.log(
+      `Migration step for Player docs completed. Updated ${migratedPlayers} documents.`
+    );
 
     // 4) Convert references in GameParticipation
     //    If you need to unify _id or fix "playerId" "gameId" references
-    const gpCol = db.collection('GameParticipation');
+    const gpCol = db.collection("GameParticipation");
     const gpCursor = gpCol.find({});
     let gpUpdates = 0;
     while (await gpCursor.hasNext()) {
@@ -115,10 +121,12 @@ async function main() {
         gpUpdates += result.modifiedCount;
       }
     }
-    console.log(`GameParticipation references updated. Modified ${gpUpdates} docs.`);
+    console.log(
+      `GameParticipation references updated. Modified ${gpUpdates} docs.`
+    );
 
     // 5) Convert references in EloHistory
-    const eloHistoryCol = db.collection('EloHistory');
+    const eloHistoryCol = db.collection("EloHistory");
     const ehCursor = eloHistoryCol.find({});
     let ehUpdates = 0;
     while (await ehCursor.hasNext()) {
@@ -146,13 +154,13 @@ async function main() {
     }
     console.log(`EloHistory references updated. Modified ${ehUpdates} docs.`);
 
-    console.log('Migration complete!');
+    console.log("Migration complete!");
   } catch (error) {
-    console.error('Migration error:', error);
+    console.error("Migration error:", error);
   } finally {
     await client.close();
-    console.log('Disconnected from MongoDB.');
+    console.log("Disconnected from MongoDB.");
   }
 }
 
-main().catch(err => console.error(err));
+main().catch((err) => console.error(err));

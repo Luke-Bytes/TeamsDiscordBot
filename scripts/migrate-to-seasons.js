@@ -1,10 +1,10 @@
-import { MongoClient, ObjectId } from 'mongodb';
-import dotenv from 'dotenv';
+import { MongoClient, ObjectId } from "mongodb";
+import dotenv from "dotenv";
 
 dotenv.config();
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const DATABASE_NAME = 'AnniBot';
+const DATABASE_NAME = "AnniBot";
 
 async function addSeasonToCollections(seasonId, seasonNumber) {
   const client = new MongoClient(DATABASE_URL);
@@ -12,7 +12,12 @@ async function addSeasonToCollections(seasonId, seasonNumber) {
     await client.connect();
     const db = client.db(DATABASE_NAME);
 
-    const collections = ['Game', 'GameParticipation', 'EloHistory', 'PlayerStats'];
+    const collections = [
+      "Game",
+      "GameParticipation",
+      "EloHistory",
+      "PlayerStats",
+    ];
 
     for (const collectionName of collections) {
       const collection = db.collection(collectionName);
@@ -22,9 +27,10 @@ async function addSeasonToCollections(seasonId, seasonNumber) {
         { $set: { seasonId: seasonId } }
       );
 
-      console.log(`Updated ${updateResult.modifiedCount} documents in ${collectionName}`);
+      console.log(
+        `Updated ${updateResult.modifiedCount} documents in ${collectionName}`
+      );
     }
-
   } catch (error) {
     console.error("Error updating collections:", error);
   } finally {
@@ -37,7 +43,9 @@ async function getSeasonIdByNumber(seasonNumber) {
   try {
     await client.connect();
     const db = client.db(DATABASE_NAME);
-    const season = await db.collection('Season').findOne({ number: seasonNumber });
+    const season = await db
+      .collection("Season")
+      .findOne({ number: seasonNumber });
     if (!season) {
       throw new Error(`Season with number ${seasonNumber} not found.`);
     }

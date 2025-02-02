@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -36,7 +36,7 @@ async function createOrActivateSeason(seasonNumber) {
 
     console.log(`Season ${seasonNumber} is now the active season.`);
   } catch (error) {
-    console.error('Error updating seasons:', error);
+    console.error("Error updating seasons:", error);
   } finally {
     await prisma.$disconnect();
   }
@@ -46,5 +46,5 @@ const seasonNumber = parseInt(process.argv[2]);
 if (!isNaN(seasonNumber)) {
   createOrActivateSeason(seasonNumber);
 } else {
-  console.error('Please provide a valid season number.');
+  console.error("Please provide a valid season number.");
 }
