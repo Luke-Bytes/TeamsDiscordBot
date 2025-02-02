@@ -108,7 +108,7 @@ export default class LeaderboardsCommand implements Command {
       const embed = new EmbedBuilder()
         .setColor("#FFD700")
         .setTitle("🏆 Friendly Wars Leaderboards 🏆")
-        .setDescription(`The top-rated players for Season ${seasonNumber}!`)
+        .setDescription(`The top rated players for Season ${seasonNumber}!`)
         .setTimestamp();
 
       topTen.forEach((p) => {

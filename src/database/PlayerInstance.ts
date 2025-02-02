@@ -135,7 +135,7 @@ export class PlayerInstance {
         losses: randomLosses,
         winStreak: randomWinStreak,
         loseStreak: randomLoseStreak,
-        biggestWinStreak: randomWinStreak, // or you might want a separate random
+        biggestWinStreak: randomWinStreak,
         biggestLosingStreak: randomLoseStreak,
       },
     });

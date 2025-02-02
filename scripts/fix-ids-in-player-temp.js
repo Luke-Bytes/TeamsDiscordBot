@@ -69,7 +69,6 @@ async function main() {
       delete playerDoc.biggestWinStreak;
       delete playerDoc.biggestLosingStreak;
 
-      // Attempt an update using replaceOne
       const filter = { _id: playerDoc._id };
       const result = await playerCol.replaceOne(filter, playerDoc);
 
@@ -90,8 +89,6 @@ async function main() {
       `Migration step for Player docs completed. Updated ${migratedPlayers} documents.`
     );
 
-    // 4) Convert references in GameParticipation
-    //    If you need to unify _id or fix "playerId" "gameId" references
     const gpCol = db.collection("GameParticipation");
     const gpCursor = gpCol.find({});
     let gpUpdates = 0;
@@ -99,17 +96,14 @@ async function main() {
       const gpDoc = await gpCursor.next();
       let changed = false;
 
-      // unify gpDoc._id if needed
       if (gpDoc._id instanceof ObjectId) {
         gpDoc._id = gpDoc._id.toHexString();
         changed = true;
       }
-      // unify playerId if needed
       if (gpDoc.playerId instanceof ObjectId) {
         gpDoc.playerId = gpDoc.playerId.toHexString();
         changed = true;
       }
-      // unify gameId if needed
       if (gpDoc.gameId instanceof ObjectId) {
         gpDoc.gameId = gpDoc.gameId.toHexString();
         changed = true;
@@ -125,7 +119,6 @@ async function main() {
       `GameParticipation references updated. Modified ${gpUpdates} docs.`
     );
 
-    // 5) Convert references in EloHistory
     const eloHistoryCol = db.collection("EloHistory");
     const ehCursor = eloHistoryCol.find({});
     let ehUpdates = 0;
