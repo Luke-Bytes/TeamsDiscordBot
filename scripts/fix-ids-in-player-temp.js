@@ -1,7 +1,5 @@
 import { MongoClient, ObjectId } from "mongodb";
-import { config } from 'dotenv';
-
-config()
+require('dotenv').config();
 
 (async function main() {
   const uri = process.env.MONGODB_URI || process.env.DATABASE_URL;
