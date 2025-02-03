@@ -113,6 +113,19 @@ export default class TeamCommand implements Command {
             return;
           }
 
+          const teamPickingChannelIds = [config.channels.teamPickingChat];
+          try {
+            await DiscordUtil.cleanUpAllChannelMessages(
+              interaction.guild!,
+              teamPickingChannelIds
+            );
+          } catch (error) {
+            console.error(
+              "Failed to clean up team picking chat while generating teams:",
+              error
+            );
+          }
+
           await interaction.deferReply({ ephemeral: false });
 
           switch (method) {

@@ -2,16 +2,12 @@ import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
   EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  ButtonInteraction,
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { EloUtil } from "../util/EloUtil";
 import { prismaClient } from "../database/prismaClient";
 import { Channels } from "../Channels";
-import { Console } from "console";
+import { ConfigManager } from "../ConfigManager";
 
 export default class LeaderboardsCommand implements Command {
   public data: SlashCommandBuilder;
@@ -22,15 +18,7 @@ export default class LeaderboardsCommand implements Command {
   constructor() {
     this.data = new SlashCommandBuilder()
       .setName(this.name)
-      .setDescription(this.description)
-      .addIntegerOption((option) =>
-        option
-          .setName("page")
-          .setDescription(
-            "the page number to view more players, or blank for the first page"
-          )
-          .setRequired(false)
-      ) as SlashCommandBuilder;
+      .setDescription(this.description);
   }
 
   private getLeaderboardEntryString(
@@ -39,8 +27,7 @@ export default class LeaderboardsCommand implements Command {
     elo: number,
     winLossRatio: number,
     wins: number,
-    losses: number,
-    winStreak: number
+    losses: number
   ): string {
     const rankEmojis = [
       "🥇",
@@ -54,71 +41,85 @@ export default class LeaderboardsCommand implements Command {
       "9️⃣",
       "🔟",
     ];
-    const rankEmoji = rank <= 10 ? rankEmojis[rank - 1] : `#${rank}`;
+    const rankEmoji = rankEmojis[rank - 1] || "🔢";
     const eloEmoji = EloUtil.getEloEmoji(elo);
-    const winStreakEmoji = winStreak >= 3 ? " 🔥" : "";
     let winLossDisplay = winLossRatio.toFixed(1);
     if (wins > 0 && losses === 0) {
-      winLossDisplay += " 💯";
+      winLossDisplay += " 🔥";
     }
-    return `${rankEmoji} **${ign}** ${eloEmoji} ─ ${elo}${winStreakEmoji} | W/L: ${winLossDisplay}`;
+    return `${rankEmoji} **${ign}** ${eloEmoji} ─ ${Math.round(elo)} | W/L: ${winLossDisplay}`;
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     try {
       const botCommandsChannelId = Channels.botCommands.id;
+      const config = ConfigManager.getConfig();
+      const seasonNumber = config.season;
 
-      let page = interaction.options.getInteger("page", false) ?? 1;
-      const pageIndex = (page - 1) * 10;
+      const season = await prismaClient.season.findUnique({
+        where: { number: seasonNumber },
+      });
+      if (!season) {
+        throw new Error(`Season #${seasonNumber} not found!`);
+      }
 
-      const allPlayers = await prismaClient.player.findMany({
-        orderBy: {
-          elo: "desc",
+      const topTenStats = await prismaClient.playerStats.findMany({
+        where: {
+          seasonId: season.id,
+        },
+        orderBy: { elo: "desc" },
+        take: 10,
+        include: {
+          player: {
+            select: {
+              latestIGN: true,
+              discordSnowflake: true,
+            },
+          },
         },
       });
 
-      const topTen = allPlayers
-        .slice(pageIndex, pageIndex + 10)
-        .map((playerData, index) => ({
-          rank: pageIndex + index + 1,
-          ign: playerData.latestIGN ?? "N/A",
-          elo: playerData.elo,
-          winLossRatio:
-            playerData.losses > 0
-              ? playerData.wins / playerData.losses
-              : playerData.wins,
-          wins: playerData.wins,
-          losses: playerData.losses,
-          winStreak: playerData.winStreak,
-        }));
-      if (topTen.length === 0) {
-        await interaction.reply({
-          content: "❌ No players found.",
-          ephemeral: true,
-        });
-        return;
-      }
-      const currentPlace = allPlayers.findIndex(
-        (playerData) => playerData.discordSnowflake === interaction.user.id
+      const filteredTopTenStats = topTenStats.filter(
+        (stats) => stats.player !== null
+      );
+
+      const topTen = filteredTopTenStats.map((stats, index) => {
+        const wins = stats.wins;
+        const losses = stats.losses;
+        return {
+          rank: index + 1,
+          ign: stats.player?.latestIGN ?? "Unknown Player",
+          elo: stats.elo,
+          wins,
+          losses,
+          winLossRatio: losses > 0 ? wins / losses : wins,
+          discordSnowflake: stats.player?.discordSnowflake ?? "N/A",
+        };
+      });
+      const allStats = await prismaClient.playerStats.findMany({
+        where: { seasonId: season.id },
+        orderBy: { elo: "desc" },
+        include: { player: { select: { discordSnowflake: true } } },
+      });
+      const currentPlace = allStats.findIndex(
+        (s) => s.player?.discordSnowflake === interaction.user.id
       );
 
       const embed = new EmbedBuilder()
         .setColor("#FFD700")
         .setTitle("🏆 Friendly Wars Leaderboards 🏆")
-        .setDescription("The top rated players this season!")
-        // .setThumbnail("")
+        .setDescription(`The top rated players for Season ${seasonNumber}!`)
         .setTimestamp();
 
-      topTen.forEach((player) => {
+      topTen.forEach((p) => {
         embed.addFields({
           name: this.getLeaderboardEntryString(
-            player.rank,
-            player.ign,
-            player.elo,
-            player.winLossRatio,
-            player.wins,
-            player.losses,
-            player.winStreak
+            p.rank,
+            p.ign,
+            p.elo,
+            p.winLossRatio,
+            p.wins,
+            p.losses
           ),
           value: "\u200b",
           inline: false,
@@ -134,32 +135,22 @@ export default class LeaderboardsCommand implements Command {
         iconURL: interaction.user.displayAvatarURL(),
       });
 
-      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId("prev-page")
-          .setLabel("Prev Page ⏪")
-          .setStyle(ButtonStyle.Primary)
-          .setDisabled(page === 1),
-        new ButtonBuilder()
-          .setCustomId("next-page")
-          .setLabel("Next Page ⏭️")
-          .setStyle(ButtonStyle.Primary)
-          .setDisabled(pageIndex + 10 >= allPlayers.length)
-      );
-
       const msg = await interaction.reply({
         embeds: [embed],
-        components: [row],
         fetchReply: true,
       });
 
       if (interaction.channelId !== botCommandsChannelId) {
         setTimeout(
           async () => {
-            await msg.delete();
+            try {
+              await msg.delete();
+            } catch (error) {
+              console.error("Failed to delete leaderboards message:", error);
+            }
           },
           2 * 60 * 1000
-        ); // Delete after 2 minutes
+        );
       }
     } catch (error) {
       console.error("Error fetching leaderboards:", error);

@@ -2,6 +2,7 @@ import { gameType, Prisma, PrismaClient, Team } from "@prisma/client";
 import { GameInstance } from "../database/GameInstance";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { Elo } from "../logic/Elo";
+import { ConfigManager } from "../ConfigManager";
 
 export const prismaClient = new PrismaClient({
   log: ["info", "warn", "error"],
@@ -56,7 +57,9 @@ export const prismaClient = new PrismaClient({
         });
 
         if (otherPlayers.length) {
-          return { error: "This user is already registered by another user." };
+          return {
+            error: "This username is already registered by another user.",
+          };
         }
 
         player.minecraftAccounts.push(ign);
@@ -74,7 +77,42 @@ export const prismaClient = new PrismaClient({
 
         return { error: false };
       },
+
+      async getPlayerStatsForCurrentSeason(playerId: string) {
+        const config = ConfigManager.getConfig();
+        const seasonNumber = config.season;
+        const season = await prismaClient.season.findUnique({
+          where: { number: seasonNumber },
+        });
+
+        if (!season) {
+          throw new Error(
+            `Season with number=${seasonNumber} not found. Please create it first.`
+          );
+        }
+
+        let playerStats = await prismaClient.playerStats.findUnique({
+          where: {
+            playerId_seasonId: {
+              playerId,
+              seasonId: season.id,
+            },
+          },
+        });
+
+        if (!playerStats) {
+          playerStats = await prismaClient.playerStats.create({
+            data: {
+              playerId,
+              seasonId: season.id,
+              elo: 1000,
+            },
+          });
+        }
+        return playerStats;
+      },
     },
+
     game: {
       async saveGameFromInstance(gameInstance: GameInstance) {
         const {
@@ -89,6 +127,17 @@ export const prismaClient = new PrismaClient({
           organiser,
           host,
         } = gameInstance;
+
+        const config = ConfigManager.getConfig();
+        const seasonNumber = config.season;
+        const season = await prismaClient.season.findUnique({
+          where: { number: seasonNumber },
+        });
+        if (!season) {
+          throw new Error(
+            `Season with number=${seasonNumber} not found. Please create it first.`
+          );
+        }
 
         const gameSettings = {
           minerushing: settings.minerushing ?? false,
@@ -110,42 +159,48 @@ export const prismaClient = new PrismaClient({
             }
 
             const team = teams.RED.includes(playerInstance) ? "RED" : "BLUE";
-
             const currentGame = CurrentGameManager.getCurrentGame();
             const winningTeam = currentGame.gameWinner;
             const losingTeam = winningTeam === "RED" ? "BLUE" : "RED";
 
-            if (team === winningTeam) {
-              const player = await prismaClient.player.findUnique({
-                where: { id: playerRecord.id },
-              });
+            const pStats =
+              await prismaClient.player.getPlayerStatsForCurrentSeason(
+                playerRecord.id
+              );
 
-              await prismaClient.player.update({
-                where: { id: playerRecord.id },
+            if (team === winningTeam) {
+              await prismaClient.playerStats.update({
+                where: {
+                  playerId_seasonId: {
+                    playerId: playerRecord.id,
+                    seasonId: pStats.seasonId,
+                  },
+                },
                 data: {
                   wins: { increment: 1 },
                   winStreak: { increment: 1 },
                   loseStreak: 0,
                   biggestWinStreak: Math.max(
-                    player!.winStreak + 1,
-                    player!.biggestWinStreak
+                    pStats.winStreak + 1,
+                    pStats.biggestWinStreak
                   ),
                 },
               });
             } else if (team === losingTeam) {
-              const player = await prismaClient.player.findUnique({
-                where: { id: playerRecord.id },
-              });
-
-              await prismaClient.player.update({
-                where: { id: playerRecord.id },
+              await prismaClient.playerStats.update({
+                where: {
+                  playerId_seasonId: {
+                    playerId: playerRecord.id,
+                    seasonId: pStats.seasonId,
+                  },
+                },
                 data: {
                   losses: { increment: 1 },
                   loseStreak: { increment: 1 },
                   winStreak: 0,
                   biggestLosingStreak: Math.max(
-                    player!.loseStreak + 1,
-                    player!.biggestLosingStreak
+                    pStats.loseStreak + 1,
+                    pStats.biggestLosingStreak
                   ),
                 },
               });
@@ -160,20 +215,16 @@ export const prismaClient = new PrismaClient({
             return {
               ignUsed: playerInstance.ignUsed ?? "UnknownIGN",
               team,
-              player: {
-                connect: { id: playerRecord.id },
-              },
+              player: { connect: { id: playerRecord.id } },
               mvp,
               captain: playerInstance.captain === true,
+              season: { connect: { id: season.id } },
             } as Prisma.GameParticipationCreateWithoutGameInput;
           })
         );
 
         const validParticipants = allParticipants.filter(
-          (
-            participant
-          ): participant is Prisma.GameParticipationCreateWithoutGameInput =>
-            participant !== null
+          (p): p is Prisma.GameParticipationCreateWithoutGameInput => p !== null
         );
 
         const gameRecord = await prismaClient.game.upsert({
@@ -188,14 +239,15 @@ export const prismaClient = new PrismaClient({
                 ? (gameWinner as Team)
                 : undefined,
             type: teamsDecidedBy as gameType | null,
+            organiser,
+            host,
             participantsIGNs: validParticipants.map(
-              (p) => p?.ignUsed || "UnknownIGN"
+              (p) => p.ignUsed || "UnknownIGN"
             ),
             gameParticipations: {
               create: validParticipants,
             },
-            organiser: organiser,
-            host: host,
+            season: { connect: { id: season.id } },
           },
           create: {
             id: gameId,
@@ -208,14 +260,15 @@ export const prismaClient = new PrismaClient({
                 ? (gameWinner as Team)
                 : undefined,
             type: teamsDecidedBy as gameType | null,
-            organiser: organiser,
-            host: host,
+            organiser,
+            host,
             participantsIGNs: validParticipants.map(
-              (p) => p?.ignUsed ?? "UnknownIGN"
+              (p) => p.ignUsed ?? "UnknownIGN"
             ),
             gameParticipations: {
               create: validParticipants,
             },
+            season: { connect: { id: season.id } },
           },
           include: {
             gameParticipations: true,
@@ -223,24 +276,56 @@ export const prismaClient = new PrismaClient({
         });
 
         const eloManager = new Elo();
+        const currentGame = CurrentGameManager.getCurrentGame();
+
+        const meanEloDifference = Math.abs(
+          (gameInstance.blueMeanElo ?? 0) - (gameInstance.redMeanElo ?? 0)
+        );
+        if (meanEloDifference < 25) {
+          console.log(
+            `Mean Elo difference (${meanEloDifference}) < 25. Skipping weighting adjustments.`
+          );
+        } else {
+          console.log(
+            `Mean Elo difference (${meanEloDifference}) >= 25. Applying weighting adjustments.`
+          );
+        }
+
+        if (currentGame.isDoubleElo) {
+          console.log("Double Elo is active this game!");
+        }
 
         for (const playerInstance of [...teams.RED, ...teams.BLUE]) {
           eloManager.applyEloUpdate(playerInstance);
 
-          await prismaClient.player.update({
-            where: { discordSnowflake: playerInstance.discordSnowflake },
+          const playerRecord = await prismaClient.player.byDiscordSnowflake(
+            playerInstance.discordSnowflake
+          );
+          if (!playerRecord) continue;
+
+          const pStats =
+            await prismaClient.player.getPlayerStatsForCurrentSeason(
+              playerRecord.id
+            );
+          await prismaClient.playerStats.update({
+            where: {
+              playerId_seasonId: {
+                playerId: playerRecord.id,
+                seasonId: pStats.seasonId,
+              },
+            },
             data: { elo: playerInstance.elo },
           });
 
           await prismaClient.eloHistory.create({
             data: {
-              playerId: playerInstance.playerId,
+              playerId: playerRecord.id,
               gameId: gameRecord.id,
               elo: playerInstance.elo,
+              seasonId: season.id,
             },
           });
         }
-
         return gameRecord;
       },
     },

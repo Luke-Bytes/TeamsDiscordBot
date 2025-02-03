@@ -1,6 +1,7 @@
 import { EmbedBuilder } from "discord.js";
 import { prismaClient } from "../../database/prismaClient";
 import { EloUtil } from "../../util/EloUtil";
+import { ConfigManager } from "../../ConfigManager";
 
 export class LeaderBoardFeed {
   private getLeaderboardEntryString(
@@ -34,63 +35,62 @@ export class LeaderBoardFeed {
 
   public async generateEmbed(): Promise<EmbedBuilder> {
     try {
-      const allPlayers = await prismaClient.player.findMany({
-        orderBy: {
-          elo: "desc",
+      const config = ConfigManager.getConfig();
+      const seasonNumber = config.season;
+      const season = await prismaClient.season.findUnique({
+        where: { number: seasonNumber },
+      });
+
+      if (!season) {
+        throw new Error(
+          `Season with number=${seasonNumber} not found. Please create it first.`
+        );
+      }
+
+      const topTenPlayerStats = await prismaClient.playerStats.findMany({
+        where: { seasonId: season.id },
+        orderBy: { elo: "desc" },
+        take: 10,
+        include: {
+          player: {
+            select: { latestIGN: true },
+          },
         },
       });
 
-      const topTen = allPlayers.slice(0, 10).map(
-        (
-          playerData: {
-            latestIGN: any;
-            elo: any;
-            losses: number;
-            wins: number;
-          },
-          index: number
-        ) => ({
+      const topTen = topTenPlayerStats.map((stats, index) => {
+        const wins = stats.wins;
+        const losses = stats.losses;
+        return {
           rank: index + 1,
-          ign: playerData.latestIGN ?? "N/A",
-          elo: playerData.elo,
-          wins: playerData.wins,
-          losses: playerData.losses,
-          winLossRatio:
-            playerData.losses > 0
-              ? playerData.wins / playerData.losses
-              : playerData.wins,
-        })
-      );
+          ign: stats.player.latestIGN ?? "N/A",
+          elo: stats.elo,
+          wins,
+          losses,
+          winLossRatio: losses > 0 ? wins / losses : wins,
+        };
+      });
 
       const embed = new EmbedBuilder()
         .setColor("#FFD700")
         .setTitle("🏆 Friendly Wars Leaderboards 🏆")
-        .setDescription("The top rated players after the game!")
+        .setDescription(`Top rated players for Season ${seasonNumber}!`)
         .setTimestamp();
 
-      topTen.forEach(
-        (player: {
-          rank: number;
-          ign: string;
-          elo: number;
-          wins: number;
-          losses: number;
-          winLossRatio: number;
-        }) => {
-          embed.addFields({
-            name: this.getLeaderboardEntryString(
-              player.rank,
-              player.ign,
-              player.elo,
-              player.winLossRatio,
-              player.wins,
-              player.losses
-            ),
-            value: "\u200b",
-            inline: false,
-          });
-        }
-      );
+      topTen.forEach((player) => {
+        embed.addFields({
+          name: this.getLeaderboardEntryString(
+            player.rank,
+            player.ign,
+            player.elo,
+            player.winLossRatio,
+            player.wins,
+            player.losses
+          ),
+          value: "\u200b",
+          inline: false,
+        });
+      });
 
       return embed;
     } catch (error) {

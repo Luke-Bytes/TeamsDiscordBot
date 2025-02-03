@@ -7,6 +7,8 @@ import { Command } from "./CommandInterface.js";
 import { EloUtil } from "../util/EloUtil.js";
 import { PrismaUtils } from "../util/PrismaUtils";
 import { Channels } from "../Channels";
+import { prismaClient } from "../database/prismaClient.js";
+import { ConfigManager } from "../ConfigManager";
 
 export default class StatsCommand implements Command {
   public name = "stats";
@@ -46,49 +48,98 @@ export default class StatsCommand implements Command {
         content: "Player not found.",
       });
       setTimeout(async () => {
-        await notFoundMessage.delete();
+        try {
+          await notFoundMessage.delete();
+        } catch (error) {
+          console.error("Failed to delete notFoundMessage:", error);
+        }
       }, 15 * 1000);
       return;
     }
 
-    const winLossRatio =
-      player.losses === 0 ? player.wins : player.wins / player.losses;
-    const winStreak = player.winStreak;
+    const config = ConfigManager.getConfig();
+    const seasonNumber = config.season;
+    const season = await prismaClient.season.findUnique({
+      where: { number: seasonNumber },
+    });
+    if (!season) {
+      await interaction.editReply(
+        `No season with number=${seasonNumber} found. Please create it first.`
+      );
+      return;
+    }
+
+    const stats = await prismaClient.playerStats.findUnique({
+      where: {
+        playerId_seasonId: {
+          playerId: player.id,
+          seasonId: season.id,
+        },
+      },
+    });
+
+    if (!stats) {
+      const noStatsMsg = await interaction.editReply({
+        content: "No stats found for this player in the current season.",
+      });
+      setTimeout(async () => {
+        try {
+          await noStatsMsg.delete();
+        } catch (error) {
+          console.error("Failed to delete noStatsMsg:", error);
+        }
+      }, 15 * 1000);
+      return;
+    }
+
+    const wins = stats.wins;
+    const losses = stats.losses;
+    const winLossRatio = losses === 0 ? wins : wins / losses;
+
     let fetchedPlayer =
       interaction.guild?.members.resolve(player.discordSnowflake) ||
-      (await interaction.guild?.members.fetch(player.discordSnowflake));
+      (await interaction.guild?.members
+        .fetch(player.discordSnowflake)
+        .catch(() => null));
 
     if (!fetchedPlayer) {
       const notFoundMessage = await interaction.editReply({
-        content: "Player not found.",
+        content:
+          "Discord member not found. (Maybe they're not in this server?)",
       });
       setTimeout(async () => {
-        await notFoundMessage.delete();
+        try {
+          await notFoundMessage.delete();
+        } catch (error) {
+          console.error("Failed to delete notFoundMessage:", error);
+        }
       }, 15 * 1000);
       return;
     }
 
     let winLossDisplay = winLossRatio.toFixed(2);
-    if (player.wins > 0 && player.losses === 0) {
+    if (stats.wins > 0 && stats.losses === 0) {
       winLossDisplay += " 💯";
     }
 
-    let winStreakDisplay = winStreak >= 3 ? `${winStreak} 🔥` : winStreak;
+    let winStreakDisplay = stats.winStreak >= 3 ? `${stats.winStreak} 🔥` : stats.winStreak;
 
     const embed = new EmbedBuilder()
       .setColor("#5865F2")
       .setTitle("📊 Friendly Wars Stats")
-      .setDescription("Overall performance:")
+      .setDescription(`Current Season: ${seasonNumber}`)
       .setThumbnail(fetchedPlayer.displayAvatarURL())
       .addFields(
         {
           name: "Player",
-          value: `${player.minecraftAccounts.join(", ")}`,
+          value: player.minecraftAccounts
+            .map((name) => name.replace(/_/g, "\\_"))
+            .join(", "),
           inline: true,
         },
         {
           name: "ELO",
-          value: `${player.elo} ${EloUtil.getEloEmoji(player.elo)}`,
+          value: `${Math.round(stats.elo)} ${EloUtil.getEloEmoji(stats.elo)}`,
           inline: true,
         },
         {
@@ -98,12 +149,12 @@ export default class StatsCommand implements Command {
         },
         {
           name: "Wins",
-          value: `${player.wins}`,
+          value: `${wins}`,
           inline: true,
         },
         {
           name: "Losses",
-          value: `${player.losses}`,
+          value: `${losses}`,
           inline: true,
         },
         {
@@ -125,7 +176,11 @@ export default class StatsCommand implements Command {
     if (interaction.channelId !== botCommandsChannelId) {
       setTimeout(
         async () => {
-          await msg.delete();
+          try {
+            await msg.delete();
+          } catch (error) {
+            console.error("Failed to delete stats message:", error);
+          }
         },
         2 * 60 * 1000
       );

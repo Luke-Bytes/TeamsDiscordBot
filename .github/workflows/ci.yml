@@ -101,5 +101,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-
 
+      - name: Create mock config.json
+        run: |
+          echo '{
+            "key1": "mockValue1",
+            "key2": "mockValue2"
+          }' > config.json
+
       - name: Run build
         run: npm run build

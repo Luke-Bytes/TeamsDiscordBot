@@ -8,17 +8,20 @@ import { GameInstance } from "../database/GameInstance";
 
 //todo: store these three maps somewhere else?
 const mapToEmojis: Record<AnniMap, string> = {
-  AFTERMATH1V1: "🕸️",
-  ANDORRA1V1: "🏔️",
-  ARID1V1: "❓",
-  CANYON1V1: "🏜️",
-  CHASM1V1: "🏝️",
-  CHEROKEE1V1: "🎌",
-  DREDGE1V1: "🧙",
-  DUELSTAL: "💫 ",
+  AFTERMATH1V1: "🌸 ",
+  ANDORRA1V1: "🏟️ ",
+  ARID1V1: "🏗️ ",
+  CANYON1V1: "🏜️ ",
+  CHASM1V1: "🏝️ ",
+  CHEROKEE1V1: "🪐 ",
+  DREDGE1V1: "🧙 ",
+  DUELSTAL: "™️ ",
   CLASHSTAL: "🪵 ",
   NATURE1V1: "🌲 ",
-  SIEGE1V1: "🪄",
+  SIEGE1V1: "♟️ ",
+  HAANSKAAR1V1: "🌋 ",
+  VILLAGES1V1: "🕍 ",
+  ANCHORAGE1V1: "⚓ ",
 };
 
 interface MapVoteManagerEvents {
@@ -154,6 +157,14 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
       console.info("Map vote and its scheduler have been canceled.");
     } else {
       console.warn("No poll message to delete or cancel.");
+    }
+  }
+
+  async stopVote() {
+    Scheduler.cancel("minerushVote");
+    if (this.pollMessage) {
+      console.info("Minerushing voting has been ended.");
+      this.pollMessage.poll?.end();
     }
   }
 }

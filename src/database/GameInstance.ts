@@ -11,6 +11,7 @@ import { activateFeed } from "../logic/gameFeed/ActivateFeed";
 import { Channels } from "../Channels";
 import { addRegisteredPlayersFeed } from "../logic/gameFeed/RegisteredGameFeed";
 import { addTeamsGameFeed } from "../logic/gameFeed/TeamsGameFeed";
+import { Elo } from "../logic/Elo";
 
 // wrapper class for Game
 export class GameInstance {
@@ -19,6 +20,7 @@ export class GameInstance {
   isFinished?: boolean;
   announced = false;
   isRestarting = false;
+  isDoubleElo = false;
   startTime?: Date;
   endTime?: Date;
   settings: {
@@ -33,6 +35,12 @@ export class GameInstance {
     UNDECIDED: [],
   };
   lateSignups: Set<string> = new Set();
+
+  blueMeanElo?: number;
+  redMeanElo?: number;
+  blueExpectedScore?: number;
+  redExpectedScore?: number;
+
   gameWinner?: "RED" | "BLUE";
   teamsDecidedBy?: "DRAFT" | "RANDOMISED" | null;
 
@@ -70,6 +78,7 @@ export class GameInstance {
     this.isFinished = undefined;
     this.announced = false;
     this.isRestarting = false;
+    this.isDoubleElo = false;
     this.startTime = undefined;
     this.endTime = undefined;
     this.settings = {
@@ -114,6 +123,32 @@ export class GameInstance {
     this.mapVoteManager.on("pollEnd", (winningMap) => {
       this.setMap(winningMap);
     });
+  }
+
+  public closePolls() {
+    if (this.mapVoteManager) {
+      this.mapVoteManager.cancelVote();
+      console.log("Map vote has been closed.");
+    }
+
+    if (this.minerushVoteManager) {
+      this.minerushVoteManager.cancelVote();
+      console.log("Minerush vote has been closed.");
+    }
+  }
+
+  public stopVoting() {
+    if (this.mapVoteManager) {
+      this.mapVoteManager.stopVote();
+      console.log("Map vote has been stopped without deleting the message.");
+    }
+
+    if (this.minerushVoteManager) {
+      this.minerushVoteManager.stopVote();
+      console.log(
+        "Minerush vote has been stopped without deleting the message."
+      );
+    }
   }
 
   public setMap(map: AnniMap) {
@@ -357,7 +392,7 @@ export class GameInstance {
 
     if (fillOption !== "none") {
       console.info(`[GAME] Filling teams with test players...`);
-      await this.fillTeamsWithTestPlayers(6, fillOption);
+      await this.fillTeamsWithTestPlayers(3, fillOption);
       console.info(`[GAME] Teams filled. Current teams:`, this.teams);
 
       this.teams.RED.forEach((player) => {
@@ -796,5 +831,15 @@ export class GameInstance {
 
   public changeHowTeamsDecided(type: "DRAFT" | "RANDOMISED" | null) {
     this.teamsDecidedBy = typeof type === "string" ? type : null;
+  }
+
+  public calculateMeanEloAndExpectedScore() {
+    const { blueMeanElo, redMeanElo, blueExpectedScore, redExpectedScore } =
+      Elo.calculateMeanEloAndExpectedScore(this.teams);
+
+    this.blueMeanElo = blueMeanElo;
+    this.redMeanElo = redMeanElo;
+    this.blueExpectedScore = blueExpectedScore;
+    this.redExpectedScore = redExpectedScore;
   }
 }
