@@ -63,7 +63,7 @@ export class LeaderBoardFeed {
         const losses = stats.losses;
         return {
           rank: index + 1,
-          ign: stats.player.latestIGN ?? "N/A",
+          ign: stats.player?.latestIGN ?? "N/A",
           elo: stats.elo,
           wins,
           losses,
