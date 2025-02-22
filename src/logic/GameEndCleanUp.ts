@@ -1,4 +1,4 @@
-import { Guild, Message, TextChannel } from "discord.js";
+import { Guild } from "discord.js";
 import { ConfigManager } from "../ConfigManager.js";
 import { GameInstance } from "../database/GameInstance.js";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
@@ -74,7 +74,7 @@ export async function cleanUpAfterGame(guild: Guild) {
   try {
     const captainRole = guild.roles.cache.get(captainRoleId);
     if (captainRole) {
-      for (const [_, member] of captainRole.members) {
+      for (const [, member] of captainRole.members) {
         try {
           await member.roles.remove(captainRole);
           console.log(`Removed Captain role from ${member.user.tag}`);

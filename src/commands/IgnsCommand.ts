@@ -6,7 +6,6 @@ import {
 import { Command } from "./CommandInterface.js";
 import { prismaClient } from "../database/prismaClient.js";
 import { MojangAPI } from "../api/MojangAPI.js";
-import { log } from "console";
 
 export default class IgnsCommand implements Command {
   public data: SlashCommandBuilder;

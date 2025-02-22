@@ -1,4 +1,4 @@
-import { TextChannel, Message, EmbedBuilder } from "discord.js";
+import { TextChannel, EmbedBuilder } from "discord.js";
 
 type FeedMessage = {
   id?: string;
@@ -39,7 +39,7 @@ class GameFeed {
         })
       );
     };
-    const intervalId = setInterval(update, 20000); // Update every 20 seconds
+    const intervalId = setInterval(update, 20000);
     this.updateIntervals.set(channel.id, intervalId);
 
     await update();

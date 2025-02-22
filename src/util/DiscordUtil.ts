@@ -131,7 +131,7 @@ export class DiscordUtil {
       return;
     }
 
-    for (const [_, member] of role.members) {
+    for (const [, member] of role.members) {
       try {
         await member.roles.remove(role);
         console.log(`Removed role ${role.name} from ${member.user.tag}`);
@@ -164,7 +164,7 @@ export class DiscordUtil {
       return;
     }
 
-    for (const [_, member] of fromChannel.members) {
+    for (const [, member] of fromChannel.members) {
       try {
         await member.voice.setChannel(toChannelId);
         console.log(

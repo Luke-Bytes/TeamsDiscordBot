@@ -207,7 +207,7 @@ export async function movePlayersToTeamPickingAfterGameEnd(guild: Guild) {
     const moveMembers = async (vcId: string) => {
       const voiceChannel = guild.channels.cache.get(vcId);
       if (voiceChannel && voiceChannel.isVoiceBased()) {
-        for (const [_, member] of voiceChannel.members) {
+        for (const [, member] of voiceChannel.members) {
           try {
             await member.voice.setChannel(teamPickingVCId);
             console.log(

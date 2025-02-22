@@ -7,8 +7,6 @@ import { Command } from "./CommandInterface.js";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { PlayerInstance } from "../database/PlayerInstance";
 
-type Team = "UNDECIDED" | "RED" | "BLUE";
-
 export default class RegisteredCommand implements Command {
   name = "registered";
   description = "Displays currently registered players";

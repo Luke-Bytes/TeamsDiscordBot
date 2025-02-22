@@ -95,10 +95,6 @@ export default class StatsCommand implements Command {
     const wins = stats.wins;
     const losses = stats.losses;
     const winLossRatio = losses === 0 ? wins : wins / losses;
-    let winLossDisplay = winLossRatio.toFixed(2);
-    if (wins > 0 && losses === 0) {
-      winLossDisplay += " 🔥";
-    }
 
     let fetchedPlayer =
       interaction.guild?.members.resolve(player.discordSnowflake) ||
@@ -121,6 +117,14 @@ export default class StatsCommand implements Command {
       return;
     }
 
+    let winLossDisplay = winLossRatio.toFixed(2);
+    if (stats.wins > 0 && stats.losses === 0) {
+      winLossDisplay += " 💯";
+    }
+
+    let winStreakDisplay =
+      stats.winStreak >= 3 ? `${stats.winStreak} 🔥` : stats.winStreak;
+
     const embed = new EmbedBuilder()
       .setColor("#5865F2")
       .setTitle("📊 Friendly Wars Stats")
@@ -141,7 +145,7 @@ export default class StatsCommand implements Command {
         },
         {
           name: "Current Win Streak",
-          value: `${stats.winStreak}`,
+          value: `${winStreakDisplay}`,
           inline: true,
         },
         {
