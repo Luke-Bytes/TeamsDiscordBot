@@ -22,6 +22,7 @@ const mapToEmojis: Record<AnniMap, string> = {
   HAANSKAAR1V1: "🌋 ",
   VILLAGES1V1: "🕍 ",
   ANCHORAGE1V1: "⚓ ",
+  GRASSLANDS1V1: "🍀 ",
 };
 
 interface MapVoteManagerEvents {
