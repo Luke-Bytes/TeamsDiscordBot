@@ -21,7 +21,8 @@
     "check-format": "prettier --check .",
     "rollback-master": "git checkout master && git checkout -b master-rollback && git reset --hard HEAD~1",
     "logs": "node scripts/tail-logs.js",
-    "backup": "node scripts/db-backups.js"
+    "backup": "node scripts/db-backups.js",
+    "rebuild": "git pull && npm run stop:pm2 && npm run build && npm run prod:pm2"
   },
   "author": "Luke and Eric",
   "license": "GNU",

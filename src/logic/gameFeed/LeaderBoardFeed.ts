@@ -10,7 +10,9 @@ export class LeaderBoardFeed {
     elo: number,
     winLossRatio: number,
     wins: number,
-    losses: number
+    losses: number,
+    winStreak: number,
+    loseStreak: number
   ): string {
     const rankEmojis = [
       "🥇",
@@ -27,10 +29,19 @@ export class LeaderBoardFeed {
     const rankEmoji = rankEmojis[rank - 1] || "🔢";
     const eloEmoji = EloUtil.getEloEmoji(elo);
     let winLossDisplay = winLossRatio.toFixed(1);
+
+    let extraEmojis = "";
     if (wins > 0 && losses === 0) {
-      winLossDisplay += " 🔥";
+      extraEmojis += " 💯";
     }
-    return `${rankEmoji} **${ign}** ${eloEmoji} ─ ${elo} | W/L: ${winLossDisplay}`;
+    if (winStreak >= 3) {
+      extraEmojis += " 🔥";
+    }
+    if (loseStreak >= 3) {
+      extraEmojis += " 😢";
+    }
+
+    return `${rankEmoji} **${ign}** ${eloEmoji} ─ ${elo} | W/L: ${winLossDisplay}${extraEmojis}`;
   }
 
   public async generateEmbed(): Promise<EmbedBuilder> {
@@ -63,11 +74,13 @@ export class LeaderBoardFeed {
         const losses = stats.losses;
         return {
           rank: index + 1,
-          ign: stats.player.latestIGN ?? "N/A",
+          ign: stats.player?.latestIGN ?? "N/A",
           elo: stats.elo,
           wins,
           losses,
           winLossRatio: losses > 0 ? wins / losses : wins,
+          winStreak: stats.winStreak,
+          loseStreak: stats.loseStreak,
         };
       });
 
@@ -85,7 +98,9 @@ export class LeaderBoardFeed {
             player.elo,
             player.winLossRatio,
             player.wins,
-            player.losses
+            player.losses,
+            player.winStreak,
+            player.loseStreak
           ),
           value: "\u200b",
           inline: false,

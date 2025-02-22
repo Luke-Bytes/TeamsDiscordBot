@@ -122,7 +122,8 @@ export default class StatsCommand implements Command {
       winLossDisplay += " 💯";
     }
 
-    let winStreakDisplay = stats.winStreak >= 3 ? `${stats.winStreak} 🔥` : stats.winStreak;
+    let winStreakDisplay =
+      stats.winStreak >= 3 ? `${stats.winStreak} 🔥` : stats.winStreak;
 
     const embed = new EmbedBuilder()
       .setColor("#5865F2")
