@@ -84,6 +84,9 @@ export default class AnnouncementCommand implements Command {
           .addStringOption((option) =>
             option.setName("host").setDescription("Host Name").setRequired(true)
           )
+          .addStringOption(option =>
+            option.setName("rules").setDescription("Ruleset").setRequired(true)
+          )
           .addStringOption((option) =>
             option
               .setName("doubleelo")
@@ -267,6 +270,7 @@ export default class AnnouncementCommand implements Command {
   ) {
     const organiser = interaction.options.getString("organiser");
     const host = interaction.options.getString("host");
+    const rules = interaction.options.getString("rules");
 
     await interaction.deferReply();
 
@@ -299,10 +303,16 @@ export default class AnnouncementCommand implements Command {
     const doubleElo = doubleEloOption === "yes";
     CurrentGameManager.getCurrentGame().isDoubleElo = doubleElo;
 
-    const embed = this.createGameAnnouncementEmbed(true, organiser, host);
+    const embed = this.createGameAnnouncementEmbed(
+      true,
+      organiser,
+      host,
+      rules
+    );
 
     GameInstance.getInstance().organiser = organiser;
     GameInstance.getInstance().host = host;
+    GameInstance.getInstance().rules = rules;
 
     this.announcementPreviewMessage = await interaction.editReply(embed);
   }
@@ -408,6 +418,11 @@ export default class AnnouncementCommand implements Command {
       .setLabel("🚫 Edit Banned Classes")
       .setStyle(ButtonStyle.Secondary);
 
+    const editRulesButton = new ButtonBuilder()
+      .setCustomId("announcement-edit-rules")
+      .setLabel("📜 Edit Rules")
+      .setStyle(ButtonStyle.Secondary);
+
     const firstRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       confirmButton,
       cancelButton
@@ -416,7 +431,8 @@ export default class AnnouncementCommand implements Command {
     const secondRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       editTimeButton,
       editMapButton,
-      editBannedClassesButton
+      editBannedClassesButton,
+      editRulesButton
     );
 
     return [firstRow, secondRow];
@@ -474,11 +490,17 @@ export default class AnnouncementCommand implements Command {
   private createGameAnnouncementEmbed(
     preview: boolean,
     organiser?: string | null,
-    host?: string | null
+    host?: string | null,
+    rules?: string | null
   ) {
     const game = CurrentGameManager.getCurrentGame();
     const registrationChannelId =
       ConfigManager.getConfig().channels.registration;
+
+    rules = rules ?? GameInstance.getInstance().rules;
+    const rulesChannel = ConfigManager.getConfig().channels.registration
+      ? `<#${ConfigManager.getConfig().channels.registration}>`
+      : "";
 
     const doubleEloMessage = game.isDoubleElo
       ? "\n\n**🌟 A special DOUBLE ELO game! 🌟**\n\n"
@@ -535,6 +557,10 @@ export default class AnnouncementCommand implements Command {
                   .join(", ")}**`
               : "**None**",
           inline: false,
+        },
+        {
+          name: "📜 Rules",
+          value: `${rules} ${rulesChannel}`,
         }
       );
 
@@ -579,6 +605,11 @@ export default class AnnouncementCommand implements Command {
       .setLabel("🚫 Edit Banned Classes")
       .setStyle(ButtonStyle.Secondary);
 
+    const editRulesButton = new ButtonBuilder()
+      .setCustomId("announcement-edit-rules")
+      .setLabel("📜 Edit Rules")
+      .setStyle(ButtonStyle.Secondary);
+
     const firstRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       confirmButton,
       cancelButton
@@ -587,7 +618,8 @@ export default class AnnouncementCommand implements Command {
     const secondRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       editTimeButton,
       editMapButton,
-      editBannedClassesButton
+      editBannedClassesButton,
+      editRulesButton
     );
 
     return preview
