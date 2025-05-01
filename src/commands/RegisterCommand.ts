@@ -102,7 +102,7 @@ export default class RegisterCommand implements Command {
       if (!player || !player.primaryMinecraftAccount) {
         await interaction.editReply({
           content:
-            "You have not registered before. Please specify your in-game name with `/register <ingamename>`.",
+            "You have not registered before. Please specify your in-game name with `/register <ingamename>`.\nhttps://i.imgur.com/UIVbtqp.mp4",
         });
         return;
       }

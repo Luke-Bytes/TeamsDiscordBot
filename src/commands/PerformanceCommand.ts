@@ -34,6 +34,7 @@ export default class PerformanceCommand implements Command {
 
     const dbLatency = await pingDatabase();
     const mojangPing = await pingMojangAPI();
+    const gappleStatus = await checkGappleAPI();
     const gitBranch = await getGitBranch();
 
     const usageStats = `
@@ -41,8 +42,9 @@ export default class PerformanceCommand implements Command {
 **WebSocket Ping:** ${websocketPing}
 **Database Latency:** ${dbLatency} ms
 **Mojang API Ping:** ${mojangPing}
-**Git Branch:** ${gitBranch}
+**Gapple API Status:** ${gappleStatus}
 
+**Git Branch:** ${gitBranch}
 
 **Memory Usage:**
 - RSS: ${(memoryUsage.rss / 1024 / 1024).toFixed(2)} MB
@@ -89,6 +91,29 @@ async function pingMojangAPI(): Promise<string> {
     }
   } catch (error) {
     console.error("Failed to connect to Mojang API:", error);
+    return "Failed to connect";
+  }
+}
+
+async function checkGappleAPI(): Promise<string> {
+  const start = performance.now();
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    const response = await fetch("https://api.gapple.pw/status/", {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    const end = performance.now();
+    if (response.ok) {
+      return `${(end - start).toFixed(2)} ms`;
+    } else {
+      return `Error: ${response.status}`;
+    }
+  } catch (error) {
+    console.error("Failed to connect to Gapple API:", error);
     return "Failed to connect";
   }
 }

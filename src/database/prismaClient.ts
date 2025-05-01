@@ -100,15 +100,13 @@ export const prismaClient = new PrismaClient({
           },
         });
 
-        if (!playerStats) {
-          playerStats = await prismaClient.playerStats.create({
-            data: {
-              playerId,
-              seasonId: season.id,
-              elo: 1000,
-            },
-          });
-        }
+        playerStats ??= await prismaClient.playerStats.create({
+          data: {
+            playerId,
+            seasonId: season.id,
+            elo: 1000,
+          },
+        });
         return playerStats;
       },
     },
