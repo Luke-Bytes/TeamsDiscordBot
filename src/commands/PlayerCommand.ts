@@ -1,7 +1,12 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
+import {
+  SlashCommandBuilder,
+  ChatInputCommandInteraction,
+  GuildMember,
+} from "discord.js";
 import { Command } from "./CommandInterface";
 import { Team } from "@prisma/client";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
+import { PermissionsUtil } from "../util/PermissionsUtil";
 
 type ExtendedTeam = Team | "UNDECIDED";
 
@@ -98,6 +103,16 @@ export default class PlayerCommand implements Command {
     );
 
   async execute(interaction: ChatInputCommandInteraction) {
+    const member = interaction.member as GuildMember;
+
+    if (!member || !PermissionsUtil.hasRole(member, "organiserRole")) {
+      await interaction.reply({
+        content: "You do not have permission to use this command.",
+        ephemeral: false,
+      });
+      return;
+    }
+
     const game = CurrentGameManager.getCurrentGame();
     const subcommand = interaction.options.getSubcommand();
 
