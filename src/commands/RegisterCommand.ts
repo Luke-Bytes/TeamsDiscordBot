@@ -102,7 +102,7 @@ export default class RegisterCommand implements Command {
       if (!player || !player.primaryMinecraftAccount) {
         await interaction.editReply({
           content:
-            "You have not registered before. Please specify your in-game name with `/register <ingamename>`.\nhttps://i.imgur.com/UIVbtqp.mp4",
+            "You have not registered before. Please specify your in-game name with `/register <ingamename>`. Note, you must use the discord command box prompt!\nhttps://i.imgur.com/UIVbtqp.mp4",
         });
         return;
       }
@@ -111,7 +111,7 @@ export default class RegisterCommand implements Command {
       uuid = player.primaryMinecraftAccount;
       resolvedUsername = await MojangAPI.uuidToUsername(uuid);
 
-      //  A3) If Mojang lookup fails, tell user to specify ingamename manually
+      //  If Mojang lookup fails, tell user to specify ingamename manually
       if (!resolvedUsername) {
         await interaction.editReply({
           content:
