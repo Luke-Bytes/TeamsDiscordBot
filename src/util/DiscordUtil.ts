@@ -4,7 +4,6 @@ import {
   Guild,
   GuildMember,
   InteractionEditReplyOptions,
-  InteractionReplyOptions,
   Message,
   MessagePayload,
   Snowflake,
