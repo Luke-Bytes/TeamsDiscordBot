@@ -3,7 +3,7 @@ import {
   CommandInteraction,
   Guild,
   GuildMember,
-  InteractionReplyOptions,
+  InteractionEditReplyOptions,
   Message,
   MessagePayload,
   Snowflake,
@@ -34,7 +34,7 @@ export class DiscordUtil {
 
   static async editReply(
     interaction: CommandInteraction,
-    content: string | MessagePayload | InteractionReplyOptions
+    content: string | MessagePayload | InteractionEditReplyOptions
   ): Promise<void> {
     await interaction.editReply(content);
   }

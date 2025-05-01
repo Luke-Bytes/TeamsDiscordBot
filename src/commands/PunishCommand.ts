@@ -105,7 +105,7 @@ export default class PunishCommand implements Command {
     } catch (error) {
       console.error(error);
       await interaction.editReply(
-        "An error occurred while processing the punishment."
+        `An error occurred while processing the punishment: ${error}`
       );
     }
   }

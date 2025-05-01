@@ -4,6 +4,7 @@ import { PermissionsUtil } from "../util/PermissionsUtil";
 import { Team } from "@prisma/client";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 import TeamCommand from "../commands/TeamCommand";
+import { PrismaUtils } from "../util/PrismaUtils";
 
 export default class CaptainCommand implements Command {
   public data: SlashCommandBuilder;
@@ -21,7 +22,7 @@ export default class CaptainCommand implements Command {
         subcommand
           .setName("set")
           .setDescription("Set a team captain")
-          .addUserOption((option) =>
+          .addStringOption((option) =>
             option
               .setName("user")
               .setDescription("The player to set as captain")
@@ -61,7 +62,17 @@ export default class CaptainCommand implements Command {
     const teamColor = interaction.options
       .getString("team", true)
       .toUpperCase() as Team;
-    const user = interaction.options.getUser("user", true);
+    const input = interaction.options.getString("user", true);
+    const resolvedPlayer = await PrismaUtils.findPlayer(input);
+
+    if (!resolvedPlayer) {
+      await interaction.reply({
+        content: "Error: Player not found. Have they registered?",
+        ephemeral: true,
+      });
+      return;
+    }
+
     const game = CurrentGameManager.getCurrentGame();
 
     if (!game.announced) {
@@ -82,7 +93,7 @@ export default class CaptainCommand implements Command {
 
     let player = game
       .getPlayers()
-      .find((player) => player.discordSnowflake === user.id);
+      .find((p) => p.discordSnowflake === resolvedPlayer.discordSnowflake);
 
     if (!player) {
       await interaction.reply({
@@ -118,7 +129,7 @@ export default class CaptainCommand implements Command {
     }
 
     const newCaptainMember = await interaction.guild.members.fetch(
-      captains.newCaptain
+      resolvedPlayer.discordSnowflake
     );
     await newCaptainMember.roles.add(PermissionsUtil.config.roles.captainRole);
 

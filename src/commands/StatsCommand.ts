@@ -96,25 +96,27 @@ export default class StatsCommand implements Command {
     const losses = stats.losses;
     const winLossRatio = losses === 0 ? wins : wins / losses;
 
-    let fetchedPlayer =
-      interaction.guild?.members.resolve(player.discordSnowflake) ||
-      (await interaction.guild?.members
-        .fetch(player.discordSnowflake)
-        .catch(() => null));
+    let fetchedPlayer = await interaction.guild?.members
+      .fetch(player.discordSnowflake)
+      .catch(() => null);
 
-    if (!fetchedPlayer) {
-      const notFoundMessage = await interaction.editReply({
-        content:
-          "Discord member not found. (Maybe they're not in this server?)",
-      });
-      setTimeout(async () => {
-        try {
-          await notFoundMessage.delete();
-        } catch (error) {
-          console.error("Failed to delete notFoundMessage:", error);
-        }
-      }, 15 * 1000);
-      return;
+    let userDisplayName = player.minecraftAccounts
+      .map((name) => name.replace(/_/g, "\\_"))
+      .join(", ");
+
+    let avatarUrl: string | undefined = undefined;
+
+    if (fetchedPlayer) {
+      userDisplayName = `${userDisplayName}`;
+      avatarUrl = fetchedPlayer.displayAvatarURL();
+    } else {
+      const fetchedUser = await interaction.client.users
+        .fetch(player.discordSnowflake)
+        .catch(() => null);
+      if (fetchedUser) {
+        userDisplayName = `${fetchedUser.tag} (${userDisplayName})`;
+        avatarUrl = fetchedUser.displayAvatarURL();
+      }
     }
 
     let winLossDisplay = winLossRatio.toFixed(2);
@@ -129,17 +131,15 @@ export default class StatsCommand implements Command {
       .setColor("#5865F2")
       .setTitle("📊 Friendly Wars Stats")
       .setDescription(`Current Season: ${seasonNumber}`)
-      .setThumbnail(fetchedPlayer.displayAvatarURL())
+      .setThumbnail(avatarUrl ?? null)
       .addFields(
         {
           name: "Player",
-          value: player.minecraftAccounts
-            .map((name) => name.replace(/_/g, "\\_"))
-            .join(", "),
+          value: userDisplayName,
           inline: true,
         },
         {
-          name: "ELO",
+          name: "Elo",
           value: `${Math.round(stats.elo)} ${EloUtil.getEloEmoji(stats.elo)}`,
           inline: true,
         },

@@ -7,6 +7,7 @@ import { Command } from "./CommandInterface";
 import { Team } from "@prisma/client";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { PermissionsUtil } from "../util/PermissionsUtil";
+import { PrismaUtils } from "../util/PrismaUtils";
 
 type ExtendedTeam = Team | "UNDECIDED";
 
@@ -117,14 +118,36 @@ export default class PlayerCommand implements Command {
     const subcommand = interaction.options.getSubcommand();
 
     try {
-      const playerName = interaction.options.getString("player", true);
+      const inputPlayer = interaction.options.getString("player", false);
+      const inputOldPlayer = interaction.options.getString("old_player", false);
+      const inputNewPlayer = interaction.options.getString("new_player", false);
+
+      const player =
+        inputPlayer !== null ? await PrismaUtils.findPlayer(inputPlayer) : null;
+
+      const playerName = player?.latestIGN ?? inputPlayer ?? "";
+
       const newTeam =
         subcommand === "move"
           ? interaction.options.getString("to")
           : interaction.options.getString("team");
 
-      const targetPlayer = interaction.options.getString("new_player") ?? "";
-      const oldPlayer = interaction.options.getString("old_player") ?? "";
+      let oldPlayerName = "";
+      let targetPlayerName = "";
+
+      if (subcommand === "replace") {
+        const oldPlayer =
+          inputOldPlayer !== null
+            ? await PrismaUtils.findPlayer(inputOldPlayer)
+            : null;
+        const targetPlayer =
+          inputNewPlayer !== null
+            ? await PrismaUtils.findPlayer(inputNewPlayer)
+            : null;
+
+        oldPlayerName = oldPlayer?.latestIGN ?? inputOldPlayer ?? "";
+        targetPlayerName = targetPlayer?.latestIGN ?? inputNewPlayer ?? "";
+      }
 
       switch (subcommand) {
         case "move": {
@@ -180,12 +203,12 @@ export default class PlayerCommand implements Command {
         case "replace": {
           await interaction.reply(
             (await game.replacePlayerByNameOrDiscord(
-              oldPlayer,
-              targetPlayer,
+              oldPlayerName,
+              targetPlayerName,
               interaction.guild
             ))
-              ? `Successfully replaced **${oldPlayer}** with **${targetPlayer}** in their current team.`
-              : `Failed to replace **${oldPlayer}**. Ensure both players are correctly registered and in the appropriate teams.`
+              ? `Successfully replaced **${oldPlayerName}** with **${targetPlayerName}** in their current team.`
+              : `Failed to replace **${oldPlayerName}**. Ensure both players are correctly registered and in the appropriate teams.`
           );
           break;
         }

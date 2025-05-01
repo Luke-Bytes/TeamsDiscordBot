@@ -103,8 +103,7 @@ export default class TeamCommand implements Command {
           const method = interaction.options.getString("method");
           if (
             method === "draft" &&
-            !game.getCaptainOfTeam("RED") &&
-            !game.getCaptainOfTeam("BLUE")
+            (!game.getCaptainOfTeam("RED") || !game.getCaptainOfTeam("BLUE"))
           ) {
             await DiscordUtil.reply(
               interaction,
@@ -297,7 +296,9 @@ export default class TeamCommand implements Command {
           }
       }
     } catch (error) {
-      console.error(error);
+      console.error(
+        `Error occurred while running ${interaction.commandName}: ${error}`
+      );
       if (!interaction.replied && !interaction.deferred) {
         await DiscordUtil.reply(
           interaction,
