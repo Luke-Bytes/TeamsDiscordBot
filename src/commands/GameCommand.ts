@@ -10,6 +10,7 @@ import { GameInstance } from "../database/GameInstance";
 import { cleanUpAfterGame } from "../logic/GameEndCleanUp";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { setTimeout as delay } from "timers/promises";
+import { checkMissingPlayersInVC, formatTeamIGNs } from "../util/Utils";
 
 export default class GameCommand implements Command {
   data = new SlashCommandBuilder()
@@ -48,6 +49,42 @@ export default class GameCommand implements Command {
 
           await interaction.editReply(
             "Game will begin soon! Roles assigned and players moved to VCs."
+          );
+
+          await DiscordUtil.sendMessage(
+            "redTeamChat",
+            `Welcome to the red team! This is the planning phase. Please be ready to join the event server ⚔️`
+          );
+
+          await DiscordUtil.sendMessage(
+            "blueTeamChat",
+            `Welcome to the blue team! This is the planning phase. Please be ready to join the event server ⚔️`
+          );
+
+          await checkMissingPlayersInVC(
+            interaction.guild!,
+            "RED",
+            async (msg) => {
+              await DiscordUtil.sendMessage("redTeamChat", `${msg}`);
+            }
+          );
+          await checkMissingPlayersInVC(
+            interaction.guild!,
+            "BLUE",
+            async (msg) => {
+              await DiscordUtil.sendMessage("blueTeamChat", `${msg}`);
+            }
+          );
+
+          const redNamesFormatted = await formatTeamIGNs(gameInstance, "RED");
+          const blueNamesFormatted = await formatTeamIGNs(gameInstance, "BLUE");
+          await DiscordUtil.sendMessage(
+            "redTeamChat",
+            `**Mid Blocks Plan**\n\`\`\`\n${redNamesFormatted}\n\`\`\`\n**Game Plan**\n\`\`\`\n${redNamesFormatted}\n\`\`\``
+          );
+          await DiscordUtil.sendMessage(
+            "blueTeamChat",
+            `**Mid Blocks Plan**\n\`\`\`\n${blueNamesFormatted}\n\`\`\`\n**Game Plan**\n\`\`\`\n${blueNamesFormatted}\n\`\`\``
           );
         } catch (error) {
           console.error("Error starting the game: ", error);
