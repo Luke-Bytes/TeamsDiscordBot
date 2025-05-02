@@ -1,4 +1,13 @@
-import { GuildMember, PermissionResolvable } from "discord.js";
+import {
+  ChannelType,
+  Guild,
+  GuildMember,
+  PermissionResolvable,
+  VoiceChannel,
+} from "discord.js";
+import { Team } from "@prisma/client";
+import { GameInstance } from "../database/GameInstance";
+import { ConfigManager } from "../ConfigManager";
 
 export function prettifyName(name: string) {
   return name
@@ -108,3 +117,50 @@ export const withTimeout = <T>(
       setTimeout(() => reject(new Error("Operation timed out")), timeoutMs)
     ),
   ]);
+
+export async function formatTeamIGNs(
+  game: GameInstance,
+  team: Team
+): Promise<string> {
+  return game
+    .getPlayersOfTeam(team)
+    .map((p) => `${String(p.latestIGN)} = `)
+    .join("\n");
+}
+
+export async function checkMissingPlayersInVC(
+  guild: Guild,
+  team: "RED" | "BLUE",
+  reply: (message: string) => Promise<void>
+) {
+  const config = ConfigManager.getConfig();
+  const vcId =
+    team === "RED" ? config.channels.redTeamVC : config.channels.blueTeamVC;
+
+  const vc = guild.channels.cache.get(vcId) as VoiceChannel;
+
+  if (!vc || vc.type !== ChannelType.GuildVoice) {
+    await reply(`No valid VC found for ${team} team.`);
+    return;
+  }
+
+  const membersInVC = Array.from(vc.members.values()).map((m) => m.id);
+
+  const gameInstance = GameInstance.getInstance();
+  const teamPlayers = gameInstance.getPlayersOfTeam(team);
+
+  const missingPlayers = teamPlayers.filter(
+    (player) => !membersInVC.includes(player.discordSnowflake)
+  );
+
+  if (missingPlayers.length === 0) {
+    await reply(`No expected players missing from ${team} team's VC.`);
+  } else {
+    const missingNames = missingPlayers
+      .map((player) => `<@${player.discordSnowflake}>`)
+      .join(", ");
+    await reply(
+      `The following ${team} players are missing from VC: \n${missingNames}`
+    );
+  }
+}
