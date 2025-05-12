@@ -28,6 +28,7 @@ import PlanCommand from "../commands/PlanCommand";
 import MassRegisterCommand from "../commands/MassRegisterCommand";
 import PunishCommand from "../commands/PunishCommand";
 import PunishedCommand from "../commands/PunishedCommand";
+import TimestampCommand from "../commands/TimeStampCommand";
 
 export class CommandHandler {
   commands: Command[] = [];
@@ -59,6 +60,7 @@ export class CommandHandler {
   massRegisterCommand = new MassRegisterCommand();
   punishCommand = new PunishCommand();
   punishedCommand = new PunishedCommand();
+  timestampCommand = new TimestampCommand();
 
   public loadCommands() {
     this.commands = [
@@ -88,6 +90,7 @@ export class CommandHandler {
       this.massRegisterCommand,
       this.punishCommand,
       this.punishedCommand,
+      this.timestampCommand,
     ];
   }
 
