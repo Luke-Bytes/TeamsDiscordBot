@@ -121,6 +121,16 @@ export class DiscordUtil {
     }
   }
 
+  static getChannelKeyById(
+    id: string
+  ): Exclude<keyof typeof Channels, "initChannels"> | undefined {
+    return Object.keys(Channels).find((key) => {
+      if (key === "initChannels") return false;
+      const chan = Channels[key as keyof typeof Channels];
+      return typeof chan === "object" && "id" in chan && chan.id === id;
+    }) as Exclude<keyof typeof Channels, "initChannels"> | undefined;
+  }
+
   static async removeRoleFromMembers(
     guild: Guild,
     roleId: string

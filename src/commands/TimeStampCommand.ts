@@ -2,6 +2,7 @@ import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import * as chrono from "chrono-node";
 import { DateTime } from "luxon";
+import { DiscordUtil } from "../util/DiscordUtil";
 
 export default class TimestampCommand implements Command {
   name = "timestamp";
@@ -62,14 +63,16 @@ export default class TimestampCommand implements Command {
     const discordTimestamp = `<t:${unix}:${format}>`;
 
     await interaction.reply({
-      embeds: [
-        {
-          title: "🕒 Converted Timestamp",
-          description: `${discordTimestamp}\n\`\`\`<t:${unix}:${format}>\`\`\``,
-          color: 0x2b2d31,
-        },
-      ],
+      content: `**🕒 Converted Timestamp:**\n${discordTimestamp}`,
       ephemeral: false,
     });
+
+    const channelKey = DiscordUtil.getChannelKeyById(interaction.channelId);
+    if (channelKey) {
+      await DiscordUtil.sendMessage(
+        channelKey,
+        `\`\`\`${discordTimestamp}\`\`\``
+      );
+    }
   }
 }
