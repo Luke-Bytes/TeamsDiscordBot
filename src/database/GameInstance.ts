@@ -1,5 +1,5 @@
 import { $Enums, AnniMap, Team } from "@prisma/client";
-import { CacheType, CacheTypeReducer, Guild, Snowflake } from "discord.js";
+import { CacheType, CacheTypeReducer, Guild, shouldUseGlobalFetchAndWebSocket, Snowflake } from "discord.js";
 import { PlayerInstance } from "./PlayerInstance";
 import { MapVoteManager } from "../logic/MapVoteManager";
 import { MojangAPI } from "../api/MojangAPI";
@@ -32,6 +32,8 @@ export class GameInstance {
   teams: Record<Team | "UNDECIDED", PlayerInstance[]> = {
     RED: [],
     BLUE: [],
+    YELLOW: [],
+    GREEN: [],
     UNDECIDED: [],
   };
   lateSignups: Set<string> = new Set();
@@ -41,7 +43,7 @@ export class GameInstance {
   blueExpectedScore?: number;
   redExpectedScore?: number;
 
-  gameWinner?: "RED" | "BLUE";
+  gameWinner?: "RED" | "BLUE" | "YELLOW" | "GREEN";
   teamsDecidedBy?: "DRAFT" | "RANDOMISED" | null;
 
   MVPPlayerBlue?: string;
@@ -57,9 +59,13 @@ export class GameInstance {
   private mvpVotes: {
     RED: Record<string, number>;
     BLUE: Record<string, number>;
+    YELLOW: Record<string, number>;
+    GREEN: Record<string, number>;
   } = {
     RED: {},
     BLUE: {},
+    YELLOW: {},
+    GREEN: {},
   };
 
   private constructor() {
@@ -86,12 +92,12 @@ export class GameInstance {
       bannedClasses: undefined,
       map: undefined,
     };
-    this.teams = { RED: [], BLUE: [], UNDECIDED: [] };
+    this.teams = { RED: [], BLUE: [], YELLOW: [], GREEN: [], UNDECIDED: [] };
     this.teamsDecidedBy = null;
     this.mapVoteManager = undefined;
     this.minerushVoteManager = undefined;
     this.mvpVoters.clear();
-    this.mvpVotes = { RED: {}, BLUE: {} };
+    this.mvpVotes = { RED: {}, BLUE: {}, YELLOW: {}, GREEN: {} };
     this.MVPPlayerBlue = "";
     this.MVPPlayerRed = "";
   }
@@ -311,10 +317,14 @@ export class GameInstance {
       ...this.teams["UNDECIDED"],
       ...this.teams["RED"],
       ...this.teams["BLUE"],
+      ...this.teams["YELLOW"],
+      ...this.teams["GREEN"],
     ]);
     this.teams["UNDECIDED"] = Array.from(combined);
     this.teams["RED"] = [];
     this.teams["BLUE"] = [];
+    this.teams["YELLOW"] = [];
+    this.teams["GREEN"] = [];
   }
 
   public createTeams(createMethod: "random") {
@@ -331,11 +341,13 @@ export class GameInstance {
   public simulateShuffledTeams(): Record<Team, PlayerInstance[]> {
     const undecidedPlayers = Array.from(this.getPlayersOfTeam("UNDECIDED"));
     const shuffled = undecidedPlayers.sort(() => Math.random() - 0.5);
-    const half = Math.ceil(shuffled.length / 2);
+    const size = Math.ceil(shuffled.length / 4);
 
     return {
-      BLUE: shuffled.slice(0, half),
-      RED: shuffled.slice(half),
+      BLUE: shuffled.slice(0, size),
+      RED: shuffled.slice(size, size * 2),
+      YELLOW: shuffled.slice(size * 2, size * 3),
+      GREEN: shuffled.slice(size * 3, size * 4),
     };
   }
 

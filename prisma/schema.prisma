@@ -142,6 +142,8 @@ model PlayerPunishment {
 enum Team {
   RED
   BLUE
+  YELLOW
+  GREEN
 }
 
 enum gameType {
