@@ -12,6 +12,7 @@ import { Channels } from "../Channels";
 import { addRegisteredPlayersFeed } from "../logic/gameFeed/RegisteredGameFeed";
 import { addTeamsGameFeed } from "../logic/gameFeed/TeamsGameFeed";
 import { Elo } from "../logic/Elo";
+import { TeamsVoteManager } from "logic/TeamsVoteManager";
 
 // wrapper class for Game
 export class GameInstance {
@@ -27,6 +28,8 @@ export class GameInstance {
     minerushing?: boolean;
     bannedClasses?: $Enums.AnniClass[];
     map?: $Enums.AnniMap;
+    teams?: 2 | 4;
+
   } = {};
 
   teams: Record<Team | "UNDECIDED", PlayerInstance[]> = {
@@ -54,6 +57,7 @@ export class GameInstance {
 
   mapVoteManager?: MapVoteManager;
   minerushVoteManager?: MinerushVoteManager;
+  teamsVoteManager?: TeamsVoteManager;
   private readonly mvpVoters = new Set<string>();
 
   private mvpVotes: {
@@ -91,11 +95,13 @@ export class GameInstance {
       minerushing: undefined,
       bannedClasses: undefined,
       map: undefined,
+      teams: undefined
     };
     this.teams = { RED: [], BLUE: [], YELLOW: [], GREEN: [], UNDECIDED: [] };
     this.teamsDecidedBy = null;
     this.mapVoteManager = undefined;
     this.minerushVoteManager = undefined;
+    this.teamsVoteManager = undefined;
     this.mvpVoters.clear();
     this.mvpVotes = { RED: {}, BLUE: {}, YELLOW: {}, GREEN: {} };
     this.MVPPlayerBlue = "";
@@ -166,6 +172,11 @@ export class GameInstance {
     this.settings.minerushing = minerush;
     console.log("Minerushing is: " + minerush);
   }
+  
+  public setTeams(teams: 2 | 4) {
+    this.settings.teams = teams;
+    console.log("Number of teams:", teams);
+  }
 
   public async announce() {
     this.announced = true;
@@ -233,6 +244,17 @@ export class GameInstance {
 
       this.teams["UNDECIDED"].push(player);
 
+      if (this.teams["UNDECIDED"].length === 40) {
+        console.log(`40 players registered, creating poll for 4-team game.`);
+        if (!this.teamsVoteManager) {
+          this.teamsVoteManager = new TeamsVoteManager();
+          this.teamsVoteManager.on("pollEnd", async (teamsNumber) => {
+            this.setTeams(teamsNumber ? 4 : 2);
+          });
+        }
+        await this.teamsVoteManager.startTeamsVote();
+      }
+
       return {
         error: false,
         playerInstance: player,
@@ -280,9 +302,22 @@ export class GameInstance {
 
     this.teams["UNDECIDED"].push(player);
 
+    if (this.teams["UNDECIDED"].length === 40) {
+      console.log(`40 players registered, creating poll for 4-team game.`);
+      if (!this.teamsVoteManager) {
+        this.teamsVoteManager = new TeamsVoteManager();
+        this.teamsVoteManager.on("pollEnd", async (teamsNumber) => {
+          this.setTeams(teamsNumber ? 4 : 2);
+        });
+      }
+      await this.teamsVoteManager.startTeamsVote();
+    }
+
+
     return {
       error: false,
       playerInstance: player,
+      fallback: true,
     } as const;
   }
 
@@ -404,7 +439,7 @@ export class GameInstance {
 
     if (fillOption !== "none") {
       console.info(`[GAME] Filling teams with test players...`);
-      await this.fillTeamsWithTestPlayers(3, fillOption);
+      await this.fillTeamsWithTestPlayers(39, fillOption);
       console.info(`[GAME] Teams filled. Current teams:`, this.teams);
 
       this.teams.RED.forEach((player) => {
