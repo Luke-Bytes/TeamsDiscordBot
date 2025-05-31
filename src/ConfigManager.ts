@@ -9,6 +9,8 @@ export type Config = {
   roles: {
     blueTeamRole: string;
     redTeamRole: string;
+    yellowTeamRole: string;
+    greenTeamRole: string;
     captainRole: string;
     organiserRole: string;
   };
@@ -21,8 +23,12 @@ export type Config = {
     teamPickingChat: string;
     redTeamVC: string;
     blueTeamVC: string;
+    yellowTeamVC: string;
+    greenTeamVC: string;
     redTeamChat: string;
     blueTeamChat: string;
+    yellowTeamChat: string;
+    greenTeamChat: string;
   };
   dev: {
     enabled: boolean;
