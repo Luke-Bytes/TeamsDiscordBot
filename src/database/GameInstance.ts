@@ -1,5 +1,5 @@
 import { $Enums, AnniMap, Team } from "@prisma/client";
-import { CacheType, CacheTypeReducer, Guild, shouldUseGlobalFetchAndWebSocket, Snowflake } from "discord.js";
+import { CacheType, CacheTypeReducer, Guild, GuildMember, shouldUseGlobalFetchAndWebSocket, Snowflake } from "discord.js";
 import { PlayerInstance } from "./PlayerInstance";
 import { MapVoteManager } from "../logic/MapVoteManager";
 import { MojangAPI } from "../api/MojangAPI";
@@ -51,6 +51,8 @@ export class GameInstance {
 
   MVPPlayerBlue?: string;
   MVPPlayerRed?: string;
+  MVPPlayerYellow?: string;
+  MVPPlayerGreen?: string;
 
   organiser?: string | null;
   host?: string | null;
@@ -254,7 +256,7 @@ export class GameInstance {
         }
         await this.teamsVoteManager.startTeamsVote();
       }
-
+        
       return {
         error: false,
         playerInstance: player,
@@ -313,7 +315,6 @@ export class GameInstance {
       await this.teamsVoteManager.startTeamsVote();
     }
 
-
     return {
       error: false,
       playerInstance: player,
@@ -368,6 +369,8 @@ export class GameInstance {
         const simulatedTeams = this.simulateShuffledTeams();
         this.teams.BLUE = simulatedTeams.BLUE;
         this.teams.RED = simulatedTeams.RED;
+        this.teams.YELLOW = simulatedTeams.YELLOW;
+        this.teams.GREEN = simulatedTeams.GREEN;
         break;
       }
     }
@@ -530,20 +533,19 @@ export class GameInstance {
     }
 
     const config = ConfigManager.getConfig();
-    const blueTeamRoleId = config.roles.blueTeamRole;
-    const redTeamRoleId = config.roles.redTeamRole;
+    const teamRoleIds: Record<string, string> = {
+      BLUE: config.roles.blueTeamRole,
+      RED: config.roles.redTeamRole,
+      YELLOW: config.roles.yellowTeamRole,
+      GREEN: config.roles.greenTeamRole,
+    };
 
-    if (team === "BLUE") {
-      if (member.roles.cache.has(redTeamRoleId)) {
-        await DiscordUtil.removeRole(member, redTeamRoleId);
+    for (const [teamKey, roleId] of Object.entries(teamRoleIds)) {
+      if (teamKey !== team) {
+      this.manageMemberRoles(member, roleId, "remove");
       }
-      await DiscordUtil.assignRole(member, blueTeamRoleId);
-    } else if (team === "RED") {
-      if (member.roles.cache.has(blueTeamRoleId)) {
-        await DiscordUtil.removeRole(member, blueTeamRoleId);
-      }
-      await DiscordUtil.assignRole(member, redTeamRoleId);
     }
+    await DiscordUtil.assignRole(member, teamRoleIds[team]);
 
     this.teams[team].push(player);
     return true;
@@ -572,14 +574,12 @@ export class GameInstance {
     }
 
     const config = ConfigManager.getConfig();
-    const blueTeamRoleId = config.roles.blueTeamRole;
-    const redTeamRoleId = config.roles.redTeamRole;
+    const teamRoleIds = [
+      config.roles.blueTeamRole, config.roles.redTeamRole, config.roles.yellowTeamRole, config.roles.greenTeamRole
+    ];
 
-    if (member.roles.cache.has(blueTeamRoleId)) {
-      await DiscordUtil.removeRole(member, blueTeamRoleId);
-    }
-    if (member.roles.cache.has(redTeamRoleId)) {
-      await DiscordUtil.removeRole(member, redTeamRoleId);
+    for (const roleId of teamRoleIds) {
+      this.manageMemberRoles(member, roleId, "remove");
     }
     return true;
   }
@@ -657,27 +657,20 @@ export class GameInstance {
     }
 
     const config = ConfigManager.getConfig();
-    const blueTeamRoleId = config.roles.blueTeamRole;
-    const redTeamRoleId = config.roles.redTeamRole;
+    const teamRoleIds: Record<string, string> = {
+      BLUE: config.roles.blueTeamRole,
+      RED: config.roles.redTeamRole,
+      YELLOW: config.roles.yellowTeamRole,
+      GREEN: config.roles.greenTeamRole,
+    };
 
-    if (oldMember.roles.cache.has(blueTeamRoleId)) {
-      await DiscordUtil.removeRole(oldMember, blueTeamRoleId);
-    }
-    if (oldMember.roles.cache.has(redTeamRoleId)) {
-      await DiscordUtil.removeRole(oldMember, redTeamRoleId);
-    }
-
-    if (newMember.roles.cache.has(blueTeamRoleId)) {
-      await DiscordUtil.removeRole(newMember, blueTeamRoleId);
-    }
-    if (newMember.roles.cache.has(redTeamRoleId)) {
-      await DiscordUtil.removeRole(newMember, redTeamRoleId);
+    for (const roleId of Object.values(teamRoleIds)) {
+      this.manageMemberRoles(oldMember, roleId, "remove");
+      this.manageMemberRoles(newMember, roleId, "remove");
     }
 
-    if (oldPlayerTeam === "BLUE") {
-      await DiscordUtil.assignRole(newMember, blueTeamRoleId);
-    } else if (oldPlayerTeam === "RED") {
-      await DiscordUtil.assignRole(newMember, redTeamRoleId);
+    if (["BLUE", "RED", "YELLOW", "GREEN"].includes(oldPlayerTeam)) {
+      await DiscordUtil.assignRole(newMember, teamRoleIds.oldPlayerTeam);
     }
 
     this.removePlayerFromAllTeams(oldPlayer);
@@ -702,8 +695,8 @@ export class GameInstance {
     guild: CacheTypeReducer<CacheType, Guild, null>
   ): Promise<boolean> {
     if (
-      !["RED", "BLUE", "UNDECIDED"].includes(fromTeam) ||
-      !["RED", "BLUE", "UNDECIDED"].includes(toTeam)
+      !["RED", "BLUE", "YELLOW", "GREEN", "UNDECIDED"].includes(fromTeam) ||
+      !["RED", "BLUE", "YELLOW", "GREEN", "UNDECIDED"].includes(toTeam)
     ) {
       console.error("Invalid teams specified:", { fromTeam, toTeam });
       return false;
@@ -736,31 +729,22 @@ export class GameInstance {
     }
 
     const config = ConfigManager.getConfig();
-    const blueTeamRoleId = config.roles.blueTeamRole;
-    const redTeamRoleId = config.roles.redTeamRole;
+    const teamRoleIds: Record<string, string> = {
+      BLUE: config.roles.blueTeamRole,
+      RED: config.roles.redTeamRole,
+      YELLOW: config.roles.yellowTeamRole,
+      GREEN: config.roles.greenTeamRole,
+    };
 
-    if (fromTeam === "BLUE") {
-      if (member.roles.cache.has(blueTeamRoleId)) {
-        await DiscordUtil.removeRole(member, blueTeamRoleId);
-      }
-    } else if (fromTeam === "RED") {
-      if (member.roles.cache.has(redTeamRoleId)) {
-        await DiscordUtil.removeRole(member, redTeamRoleId);
-      }
+    if (["BLUE", "RED", "YELLOW", "GREEN"].includes(fromTeam)) {
+      this.manageMemberRoles(member, teamRoleIds[fromTeam], "remove");
     }
 
-    if (toTeam === "BLUE") {
-      if (member.roles.cache.has(redTeamRoleId)) {
-        await DiscordUtil.removeRole(member, redTeamRoleId);
-      }
-      await DiscordUtil.assignRole(member, blueTeamRoleId);
-    } else if (toTeam === "RED") {
-      if (member.roles.cache.has(blueTeamRoleId)) {
-        await DiscordUtil.removeRole(member, blueTeamRoleId);
-      }
-      await DiscordUtil.assignRole(member, redTeamRoleId);
+    if (["BLUE", "RED", "YELLOW", "GREEN"].includes(toTeam)) {
+      this.manageMemberRoles(member, teamRoleIds[fromTeam], "remove");
+      await DiscordUtil.assignRole(member, teamRoleIds.toTeam);
     }
-
+    
     this.removePlayerFromAllTeams(player);
     this.teams[toTeam].push(player);
     console.info(
@@ -825,16 +809,29 @@ export class GameInstance {
 
   public async countMVPVotes() {
     console.log("Starting to count MVP votes now...");
-    this.MVPPlayerRed = await this.determineTeamMVP("RED");
-    console.log("Determined red team MVP.");
     this.MVPPlayerBlue = await this.determineTeamMVP("BLUE");
     console.log("Determined blue team MVP.");
-    const redMVP = this.MVPPlayerRed ?? "no body";
+    this.MVPPlayerRed = await this.determineTeamMVP("RED");
+    console.log("Determined red team MVP.");
+    this.MVPPlayerYellow = await this.determineTeamMVP("YELLOW");
+    console.log("Determined blue team MVP.");
+    this.MVPPlayerGreen = await this.determineTeamMVP("GREEN");
+    console.log("Determined blue team MVP.");
+
+    
     const blueMVP = this.MVPPlayerBlue ?? "no body";
+    const redMVP = this.MVPPlayerRed ?? "no body";
+    const yellowMVP = this.MVPPlayerYellow ?? "no body";
+    const greenMVP = this.MVPPlayerGreen ?? "no body";
     console.log("Sending MVPees announcement");
     await DiscordUtil.sendMessage("gameFeed", "\u200b");
-
-    const messageText = `🏆 **Game MVPs** 🏆\n🔴 **RED Team:** ${redMVP}\n🔵 **BLUE Team:** ${blueMVP}`;
+    
+    let messageText = "";
+    if (this.settings.teams === 2) {
+      messageText = `🏆 **Game MVPs** 🏆\n🔵 **BLUE Team:** ${blueMVP}\n🔴 **RED Team:** ${redMVP}`;
+    } else if (this.settings.teams === 4) {
+      messageText = `🏆 **Game MVPs** 🏆\n🔵 **BLUE Team:** ${blueMVP}\n🔴 **RED Team:** ${redMVP}\n🟡 **YELLOW Team:** ${yellowMVP}\n🟢 **GREEN Team:** ${greenMVP}`;
+    }
     await DiscordUtil.sendMessage("gameFeed", messageText);
     await DiscordUtil.sendMessage("gameFeed", "\u200b");
   }
@@ -878,6 +875,13 @@ export class GameInstance {
 
   public changeHowTeamsDecided(type: "DRAFT" | "RANDOMISED" | null) {
     this.teamsDecidedBy = typeof type === "string" ? type : null;
+  }
+
+  public async manageMemberRoles(member: GuildMember, roleId: any, action: any) {
+    if (member.roles.cache.has(roleId)) {
+        if (action === "assign") await DiscordUtil.assignRole(member, roleId);
+        if (action === "remove") await DiscordUtil.removeRole(member, roleId);
+      }
   }
 
   public calculateMeanEloAndExpectedScore() {
