@@ -262,6 +262,8 @@ export async function movePlayersToTeamPickingAfterGameEnd(guild: Guild) {
 
     await moveMembers(config.channels.blueTeamVC);
     await moveMembers(config.channels.redTeamVC);
+    await moveMembers(config.channels.yellowTeamVC);
+    await moveMembers(config.channels.greenTeamVC);
 
     console.log("Completed cleaning up members.");
   } catch (error) {
