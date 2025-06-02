@@ -26,10 +26,9 @@
     "blueTeamChat": "",
     "yellowTeamChat": "",
     "greenTeamChat": ""
-
   },
   "dev": {
-    "enabled": true,
+    "enabled": false,
     "guildId": ""
   }
 }

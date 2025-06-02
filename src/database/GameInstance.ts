@@ -1,5 +1,12 @@
 import { $Enums, AnniMap, Team } from "@prisma/client";
-import { CacheType, CacheTypeReducer, Guild, GuildMember, shouldUseGlobalFetchAndWebSocket, Snowflake } from "discord.js";
+import {
+  CacheType,
+  CacheTypeReducer,
+  Guild,
+  GuildMember,
+  shouldUseGlobalFetchAndWebSocket,
+  Snowflake,
+} from "discord.js";
 import { PlayerInstance } from "./PlayerInstance";
 import { MapVoteManager } from "../logic/MapVoteManager";
 import { MojangAPI } from "../api/MojangAPI";
@@ -12,7 +19,7 @@ import { Channels } from "../Channels";
 import { addRegisteredPlayersFeed } from "../logic/gameFeed/RegisteredGameFeed";
 import { addTeamsGameFeed } from "../logic/gameFeed/TeamsGameFeed";
 import { Elo } from "../logic/Elo";
-import { TeamsVoteManager } from "logic/TeamsVoteManager";
+import { TeamsVoteManager } from "../logic/TeamsVoteManager";
 
 // wrapper class for Game
 export class GameInstance {
@@ -29,7 +36,6 @@ export class GameInstance {
     bannedClasses?: $Enums.AnniClass[];
     map?: $Enums.AnniMap;
     teams?: 2 | 4;
-
   } = {};
 
   teams: Record<Team | "UNDECIDED", PlayerInstance[]> = {
@@ -97,7 +103,7 @@ export class GameInstance {
       minerushing: undefined,
       bannedClasses: undefined,
       map: undefined,
-      teams: undefined
+      teams: undefined,
     };
     this.teams = { RED: [], BLUE: [], YELLOW: [], GREEN: [], UNDECIDED: [] };
     this.teamsDecidedBy = null;
@@ -174,7 +180,7 @@ export class GameInstance {
     this.settings.minerushing = minerush;
     console.log("Minerushing is: " + minerush);
   }
-  
+
   public setTeams(teams: 2 | 4) {
     this.settings.teams = teams;
     console.log("Number of teams:", teams);
@@ -256,7 +262,7 @@ export class GameInstance {
         }
         await this.teamsVoteManager.startTeamsVote();
       }
-        
+
       return {
         error: false,
         playerInstance: player,
@@ -542,7 +548,7 @@ export class GameInstance {
 
     for (const [teamKey, roleId] of Object.entries(teamRoleIds)) {
       if (teamKey !== team) {
-      this.manageMemberRoles(member, roleId, "remove");
+        this.manageMemberRoles(member, roleId, "remove");
       }
     }
     await DiscordUtil.assignRole(member, teamRoleIds[team]);
@@ -575,7 +581,10 @@ export class GameInstance {
 
     const config = ConfigManager.getConfig();
     const teamRoleIds = [
-      config.roles.blueTeamRole, config.roles.redTeamRole, config.roles.yellowTeamRole, config.roles.greenTeamRole
+      config.roles.blueTeamRole,
+      config.roles.redTeamRole,
+      config.roles.yellowTeamRole,
+      config.roles.greenTeamRole,
     ];
 
     for (const roleId of teamRoleIds) {
@@ -744,7 +753,7 @@ export class GameInstance {
       this.manageMemberRoles(member, teamRoleIds[fromTeam], "remove");
       await DiscordUtil.assignRole(member, teamRoleIds.toTeam);
     }
-    
+
     this.removePlayerFromAllTeams(player);
     this.teams[toTeam].push(player);
     console.info(
@@ -818,14 +827,13 @@ export class GameInstance {
     this.MVPPlayerGreen = await this.determineTeamMVP("GREEN");
     console.log("Determined blue team MVP.");
 
-    
     const blueMVP = this.MVPPlayerBlue ?? "no body";
     const redMVP = this.MVPPlayerRed ?? "no body";
     const yellowMVP = this.MVPPlayerYellow ?? "no body";
     const greenMVP = this.MVPPlayerGreen ?? "no body";
     console.log("Sending MVPees announcement");
     await DiscordUtil.sendMessage("gameFeed", "\u200b");
-    
+
     let messageText = "";
     if (this.settings.teams === 2) {
       messageText = `🏆 **Game MVPs** 🏆\n🔵 **BLUE Team:** ${blueMVP}\n🔴 **RED Team:** ${redMVP}`;
@@ -877,11 +885,15 @@ export class GameInstance {
     this.teamsDecidedBy = typeof type === "string" ? type : null;
   }
 
-  public async manageMemberRoles(member: GuildMember, roleId: any, action: any) {
+  public async manageMemberRoles(
+    member: GuildMember,
+    roleId: any,
+    action: any
+  ) {
     if (member.roles.cache.has(roleId)) {
-        if (action === "assign") await DiscordUtil.assignRole(member, roleId);
-        if (action === "remove") await DiscordUtil.removeRole(member, roleId);
-      }
+      if (action === "assign") await DiscordUtil.assignRole(member, roleId);
+      if (action === "remove") await DiscordUtil.removeRole(member, roleId);
+    }
   }
 
   public calculateMeanEloAndExpectedScore() {

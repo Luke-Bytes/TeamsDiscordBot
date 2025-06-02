@@ -35,7 +35,9 @@ export default class CaptainCommand implements Command {
               .setRequired(true)
               .addChoices(
                 { name: "blue", value: "blue" },
-                { name: "red", value: "red" }
+                { name: "red", value: "red" },
+                { name: "yellow", value: "yellow" },
+                { name: "green", value: "green" }
               )
           )
       ) as SlashCommandBuilder;
@@ -108,10 +110,12 @@ export default class CaptainCommand implements Command {
     if (
       currentTeam !== "UNDECIDED" &&
       currentTeam !== "RED" &&
-      currentTeam !== "BLUE"
+      currentTeam !== "BLUE" &&
+      currentTeam !== "YELLOW" &&
+      currentTeam !== "GREEN"
     ) {
       await interaction.reply({
-        content: `Error: The player must already be in RED, BLUE, or UNDECIDED team to be assigned as captain.`,
+        content: `Error: The player must already be in RED, BLUE, YELLOW, GREEN or UNDECIDED team to be assigned as captain.`,
         ephemeral: true,
       });
       return;
@@ -133,24 +137,22 @@ export default class CaptainCommand implements Command {
     );
     await newCaptainMember.roles.add(PermissionsUtil.config.roles.captainRole);
 
-    if (teamColor === "RED") {
-      await newCaptainMember.roles.add(
-        PermissionsUtil.config.roles.redTeamRole
-      );
+    const team = teamColor.toLowerCase();
+    const teamRoleKey = `${team}TeamRole`;
+
+    await newCaptainMember.roles.add(PermissionsUtil.config.roles[teamRoleKey]);
+
+    const allTeams = ["red", "blue", "green", "yellow"].filter(
+      (t) => t !== team
+    );
+    for (const t of allTeams) {
       await newCaptainMember.roles.remove(
-        PermissionsUtil.config.roles.blueTeamRole
-      );
-    } else if (teamColor === "BLUE") {
-      await newCaptainMember.roles.add(
-        PermissionsUtil.config.roles.blueTeamRole
-      );
-      await newCaptainMember.roles.remove(
-        PermissionsUtil.config.roles.redTeamRole
+        PermissionsUtil.config.roles[`${t}TeamRole`]
       );
     }
 
     await interaction.reply({
-      content: `Successfully set captain of team **${teamColor.toLowerCase()}** to **${player.ignUsed}**.`,
+      content: `Successfully set captain for team **${teamColor.toLowerCase()}** to **${player.ignUsed}**.`,
     });
   }
 }

@@ -23,6 +23,8 @@ export class RandomTeamPickingSession extends TeamPickingSession {
   proposedTeams: Record<Team | "UNDECIDED", PlayerInstance[]> = {
     RED: [],
     BLUE: [],
+    YELLOW: [],
+    GREEN: [],
     UNDECIDED: [],
   };
   redCaptain?: PlayerInstance;
