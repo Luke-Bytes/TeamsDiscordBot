@@ -52,9 +52,51 @@ export default class VerifyCommand implements Command {
 
     for (const name of names) {
       const escapedName = name.replace(/_/g, "\\_");
+
       const uuid = await MojangAPI.usernameToUUID(name);
       if (!uuid) {
-        results.push(`❌ **${escapedName}** – Invalid username`);
+        const possible = await prismaClient.player.findMany({
+          where: { minecraftAccounts: { has: name } },
+        });
+        const matches = possible.filter((p) =>
+          p.minecraftAccounts.some(
+            (acc) => acc.toLowerCase() === name.toLowerCase()
+          )
+        );
+
+        if (matches.length > 0) {
+          for (const match of matches) {
+            const currentName =
+              (await MojangAPI.uuidToUsername(
+                match.primaryMinecraftAccount!
+              )) ??
+              match.latestIGN ??
+              "Unknown IGN";
+
+            let authorTag: string;
+            if (ping) {
+              authorTag = `<@${match.discordSnowflake}>`;
+              mentionableUserIds.push(match.discordSnowflake);
+            } else {
+              try {
+                const fetched = await interaction.guild?.members.fetch(
+                  match.discordSnowflake
+                );
+                authorTag = fetched
+                  ? `@${fetched.user.tag}`
+                  : `@${match.discordSnowflake}`;
+              } catch {
+                authorTag = `@${match.discordSnowflake}`;
+              }
+            }
+
+            results.push(
+              `❓ **${escapedName}** – Invalid username; Did you mean ${authorTag} - latest IGN: **${currentName}** ?`
+            );
+          }
+        } else {
+          results.push(`❌ **${escapedName}** – Invalid username`);
+        }
         continue;
       }
 
@@ -87,8 +129,8 @@ export default class VerifyCommand implements Command {
       }
 
       const latest = player.latestIGN;
+      const escapedLatest = latest?.replace(/_/g, "\\_") ?? latest;
       if (latest && name.toLowerCase() !== latest.toLowerCase()) {
-        const escapedLatest = latest.replace(/_/g, "\\_");
         results.push(
           `✅ **${escapedName}** – ${authorTag} - Name changed since they last registered from "${escapedLatest}"`
         );
@@ -98,7 +140,6 @@ export default class VerifyCommand implements Command {
     }
 
     const content = `**Verification Results**:\n\n${results.join("\n")}`;
-
     await interaction.reply({
       content,
       ephemeral: false,
