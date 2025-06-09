@@ -88,6 +88,7 @@ export default class VerifyCommand implements Command {
               } catch {
                 authorTag = `@${match.discordSnowflake}`;
               }
+              authorTag = authorTag.replace(/_/g, "\\_");
             }
 
             results.push(
@@ -126,6 +127,7 @@ export default class VerifyCommand implements Command {
         } catch {
           authorTag = `@${player.discordSnowflake}`;
         }
+        authorTag = authorTag.replace(/_/g, "\\_");
       }
 
       const latest = player.latestIGN;
