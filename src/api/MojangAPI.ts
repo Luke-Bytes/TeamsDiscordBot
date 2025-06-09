@@ -12,7 +12,7 @@ export class MojangAPI {
 
       if (response.status === 200) {
         const data = await response.json();
-        return data?.id || null;
+        return data?.id ?? null;
       } else if (response.status === 404) {
         console.warn(`Username ${username} not found in Mojang API.`);
         return null;
@@ -41,7 +41,7 @@ export class MojangAPI {
           `Successfully validated username ${username} with fallback API`
         );
         const data = await response.json();
-        return data?.id || null;
+        return data?.id ?? null;
       } else if (response.status === 404) {
         console.warn(`Username ${username} not found in fallback API.`);
         return null;

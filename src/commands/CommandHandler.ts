@@ -7,7 +7,6 @@ import CaptainCommand from "./CaptainCommand";
 import IgnsCommand from "./IgnsCommand";
 import LeaderboardsCommand from "./LeaderboardsCommand";
 import RegisterCommand from "./RegisterCommand";
-import RoleCommand from "./RoleCommand";
 import StatsCommand from "./StatsCommand";
 import TeamCommand from "./TeamCommand";
 import TestCommand from "./TestCommand";
@@ -29,6 +28,7 @@ import MassRegisterCommand from "../commands/MassRegisterCommand";
 import PunishCommand from "../commands/PunishCommand";
 import PunishedCommand from "../commands/PunishedCommand";
 import TimestampCommand from "../commands/TimeStampCommand";
+import VerifyCommand from "../commands/VerifyCommand";
 
 export class CommandHandler {
   commands: Command[] = [];
@@ -38,7 +38,6 @@ export class CommandHandler {
   ignsCommand = new IgnsCommand();
   leaderboardsCommand = new LeaderboardsCommand();
   registerCommand = new RegisterCommand();
-  roleCommand = new RoleCommand();
   statsCommand = new StatsCommand();
   teamCommand = new TeamCommand();
   captainCommand = new CaptainCommand(this.teamCommand);
@@ -61,6 +60,7 @@ export class CommandHandler {
   punishCommand = new PunishCommand();
   punishedCommand = new PunishedCommand();
   timestampCommand = new TimestampCommand();
+  verifyCommand = new VerifyCommand();
 
   public loadCommands() {
     this.commands = [
@@ -68,7 +68,6 @@ export class CommandHandler {
       this.ignsCommand,
       this.leaderboardsCommand,
       this.registerCommand,
-      this.roleCommand,
       this.statsCommand,
       this.teamCommand,
       this.captainCommand,
@@ -91,6 +90,7 @@ export class CommandHandler {
       this.punishCommand,
       this.punishedCommand,
       this.timestampCommand,
+      this.verifyCommand,
     ];
   }
 

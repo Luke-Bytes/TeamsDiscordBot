@@ -31,8 +31,15 @@ export default class TimestampCommand implements Command {
         .addChoices(
           { name: "Date & Time", value: "F" },
           { name: "Countdown", value: "R" },
-          { name: "Time Only", value: "t" }
+          { name: "Time Only", value: "t" },
+          { name: "Date Only", value: "D" }
         )
+        .setRequired(false)
+    )
+    .addBooleanOption((option) =>
+      option
+        .setName("echo")
+        .setDescription("Echo the timestamp in a plain message")
         .setRequired(false)
     );
 
@@ -40,6 +47,7 @@ export default class TimestampCommand implements Command {
     const input = interaction.options.getString("time", true);
     const tz = interaction.options.getString("timezone") ?? "UTC";
     const format = interaction.options.getString("format") ?? "F";
+    const echo = interaction.options.getBoolean("echo") ?? true;
 
     const parsed = chrono.parseDate(input, new Date(), { forwardDate: true });
     if (!parsed) {
@@ -50,7 +58,18 @@ export default class TimestampCommand implements Command {
       return;
     }
 
-    const dt = DateTime.fromJSDate(parsed, { zone: tz });
+    const dt = DateTime.fromObject(
+      {
+        year: parsed.getFullYear(),
+        month: parsed.getMonth() + 1,
+        day: parsed.getDate(),
+        hour: parsed.getHours(),
+        minute: parsed.getMinutes(),
+        second: parsed.getSeconds(),
+      },
+      { zone: tz }
+    );
+
     if (!dt.isValid) {
       await interaction.reply({
         content: `❌ Invalid timezone: ${tz}`,
@@ -67,12 +86,18 @@ export default class TimestampCommand implements Command {
       ephemeral: false,
     });
 
-    const channelKey = DiscordUtil.getChannelKeyById(interaction.channelId);
-    if (channelKey) {
-      await DiscordUtil.sendMessage(
-        channelKey,
-        `\`\`\`${discordTimestamp}\`\`\``
-      );
+    if (echo) {
+      if (interaction.guild) {
+        const channelKey = DiscordUtil.getChannelKeyById(interaction.channelId);
+        if (channelKey) {
+          await DiscordUtil.sendMessage(
+            channelKey,
+            `\`\`\`${discordTimestamp}\`\`\``
+          );
+        }
+      } else {
+        await interaction.user.send(`\`\`\`${discordTimestamp}\`\`\``);
+      }
     }
   }
 }
