@@ -51,9 +51,10 @@ export default class VerifyCommand implements Command {
     const mentionableUserIds: string[] = [];
 
     for (const name of names) {
+      const escapedName = name.replace(/_/g, "\\_");
       const uuid = await MojangAPI.usernameToUUID(name);
       if (!uuid) {
-        results.push(`❌ **${name}** – Invalid username`);
+        results.push(`❌ **${escapedName}** – Invalid username`);
         continue;
       }
 
@@ -63,7 +64,7 @@ export default class VerifyCommand implements Command {
 
       if (!player) {
         results.push(
-          `⛔ **${name}** – Valid username but not registered in database`
+          `⛔ **${escapedName}** – Valid username but not registered in database`
         );
         continue;
       }
@@ -87,11 +88,12 @@ export default class VerifyCommand implements Command {
 
       const latest = player.latestIGN;
       if (latest && name.toLowerCase() !== latest.toLowerCase()) {
+        const escapedLatest = latest.replace(/_/g, "\\_");
         results.push(
-          `✅ **${name}** – ${authorTag} - Name changed since they last registered from "${latest}"`
+          `✅ **${escapedName}** – ${authorTag} - Name changed since they last registered from "${escapedLatest}"`
         );
       } else {
-        results.push(`✅ **${name}** – ${authorTag}`);
+        results.push(`✅ **${escapedName}** – ${authorTag}`);
       }
     }
 
