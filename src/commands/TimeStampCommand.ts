@@ -4,6 +4,14 @@ import * as chrono from "chrono-node";
 import { DateTime } from "luxon";
 import { DiscordUtil } from "../util/DiscordUtil";
 
+const TZ_MAP: Record<string, string> = {
+  BST: "Europe/London",
+  GMT: "Etc/GMT",
+  PST: "America/Los_Angeles",
+  CET: "Europe/Paris",
+  JST: "Asia/Tokyo",
+};
+
 export default class TimestampCommand implements Command {
   name = "timestamp";
   description = "Convert a date/time to a Discord timestamp";
@@ -45,11 +53,13 @@ export default class TimestampCommand implements Command {
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const input = interaction.options.getString("time", true);
-    const tz = interaction.options.getString("timezone") ?? "UTC";
+    const tzInput = interaction.options.getString("timezone");
     const format = interaction.options.getString("format") ?? "F";
     const echo = interaction.options.getBoolean("echo") ?? true;
 
+    const tz = tzInput ? (TZ_MAP[tzInput.toUpperCase()] ?? tzInput) : undefined;
     const parsed = chrono.parseDate(input, new Date(), { forwardDate: true });
+
     if (!parsed) {
       await interaction.reply({
         content: "❌ Could not parse the date/time input.",
@@ -58,17 +68,8 @@ export default class TimestampCommand implements Command {
       return;
     }
 
-    const dt = DateTime.fromObject(
-      {
-        year: parsed.getFullYear(),
-        month: parsed.getMonth() + 1,
-        day: parsed.getDate(),
-        hour: parsed.getHours(),
-        minute: parsed.getMinutes(),
-        second: parsed.getSeconds(),
-      },
-      { zone: tz }
-    );
+    const base = DateTime.fromJSDate(parsed);
+    const dt = tz ? base.setZone(tz, { keepLocalTime: true }) : base;
 
     if (!dt.isValid) {
       await interaction.reply({
