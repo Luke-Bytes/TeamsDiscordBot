@@ -69,7 +69,7 @@ export default class TimestampCommand implements Command {
     }
 
     const base = DateTime.fromJSDate(parsed);
-    const dt = tz ? base.setZone(tz, { keepLocalTime: true }) : base;
+    const dt = tz ? base.setZone(tz) : base;
 
     if (!dt.isValid) {
       await interaction.reply({
