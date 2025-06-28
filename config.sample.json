@@ -6,6 +6,8 @@
   "roles": {
     "blueTeamRole": "",
     "redTeamRole": "",
+    "yellowTeamRole": "",
+    "greenTeamRole": "",
     "captainRole": "",
     "organiserRole": ""
   },
@@ -18,8 +20,12 @@
     "teamPickingChat": "",
     "redTeamVC": "",
     "blueTeamVC": "",
+    "yellowTeamVC": "",
+    "greenTeamVC": "",
     "redTeamChat": "",
-    "blueTeamChat": ""
+    "blueTeamChat": "",
+    "yellowTeamChat": "",
+    "greenTeamChat": ""
   },
   "dev": {
     "enabled": false,
