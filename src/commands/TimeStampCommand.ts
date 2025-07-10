@@ -83,7 +83,7 @@ export default class TimestampCommand implements Command {
     const discordTimestamp = `<t:${unix}:${format}>`;
 
     await interaction.reply({
-      content: `**🕒 Converted Timestamp:**\n${discordTimestamp}`,
+      content: `${discordTimestamp}`,
       ephemeral: false,
     });
 
