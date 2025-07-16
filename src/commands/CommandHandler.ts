@@ -29,6 +29,7 @@ import PunishCommand from "../commands/PunishCommand";
 import PunishedCommand from "../commands/PunishedCommand";
 import TimestampCommand from "../commands/TimeStampCommand";
 import VerifyCommand from "../commands/VerifyCommand";
+import ClassbanCommand from "../commands/ClassbanCommand";
 
 export class CommandHandler {
   commands: Command[] = [];
@@ -61,6 +62,7 @@ export class CommandHandler {
   punishedCommand = new PunishedCommand();
   timestampCommand = new TimestampCommand();
   verifyCommand = new VerifyCommand();
+  classbanCommand = new ClassbanCommand();
 
   public loadCommands() {
     this.commands = [
@@ -91,6 +93,7 @@ export class CommandHandler {
       this.punishedCommand,
       this.timestampCommand,
       this.verifyCommand,
+      this.classbanCommand,
     ];
   }
 

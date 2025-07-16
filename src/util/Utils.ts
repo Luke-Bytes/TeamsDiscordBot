@@ -164,3 +164,7 @@ export async function checkMissingPlayersInVC(
     );
   }
 }
+
+export function escapeText(text: string): string {
+  return text.replace(/([\\_*|~`>])/g, "\\$1");
+}

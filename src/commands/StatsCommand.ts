@@ -2,27 +2,26 @@ import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
   EmbedBuilder,
+  SlashCommandOptionsOnlyBuilder,
 } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { EloUtil } from "../util/EloUtil.js";
-import { PrismaUtils } from "../util/PrismaUtils";
+import { PrismaUtils } from "../util/PrismaUtils.js";
 import { Channels } from "../Channels";
 import { prismaClient } from "../database/prismaClient.js";
 import { ConfigManager } from "../ConfigManager";
+import { Team } from "@prisma/client";
 
 export default class StatsCommand implements Command {
   public name = "stats";
   public description = "Get the stats of yourself or another player";
-  public data: SlashCommandBuilder;
+  public data: SlashCommandOptionsOnlyBuilder;
   public buttonIds: string[] = [];
 
   constructor() {
-    this.name = "stats";
-    this.description = "Get the stats of yourself or another player.";
-
     this.data = new SlashCommandBuilder()
-      .setName(this.name)
-      .setDescription(this.description)
+      .setName("stats")
+      .setDescription("Get the stats of yourself or another player.")
       .addStringOption((option) =>
         option
           .setName("player")
@@ -30,85 +29,66 @@ export default class StatsCommand implements Command {
             "the player to fetch stats for, or blank for yourself"
           )
           .setRequired(false)
-      ) as SlashCommandBuilder;
+      )
+      .addIntegerOption((option) =>
+        option
+          .setName("season")
+          .setDescription(
+            "the season number to fetch stats for (default: current season)"
+          )
+          .setRequired(false)
+      );
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    await interaction.deferReply({});
+    await interaction.deferReply();
     const botCommandsChannelId = Channels.botCommands.id;
-
-    let input =
-      interaction.options.getString("player", false) ?? interaction.user.id;
-
-    input = input.replace(/<@([^>]+)>/g, "$1");
-
+    let input = (
+      interaction.options.getString("player", false) ?? interaction.user.id
+    ).replace(/<@([^>]+)>/g, "$1");
     const player = await PrismaUtils.findPlayer(input);
     if (!player) {
-      const notFoundMessage = await interaction.editReply({
-        content: "Player not found.",
-      });
-      setTimeout(async () => {
-        try {
-          await notFoundMessage.delete();
-        } catch (error) {
-          console.error("Failed to delete notFoundMessage:", error);
-        }
-      }, 15 * 1000);
+      const msg = await interaction.editReply({ content: "Player not found." });
+      setTimeout(() => msg.delete().catch(() => {}), 15_000);
       return;
     }
-
-    const config = ConfigManager.getConfig();
-    const seasonNumber = config.season;
+    const seasonNumber =
+      interaction.options.getInteger("season") ??
+      ConfigManager.getConfig().season;
     const season = await prismaClient.season.findUnique({
       where: { number: seasonNumber },
     });
     if (!season) {
       await interaction.editReply(
-        `No season with number=${seasonNumber} found. Please create it first.`
+        `Season #${seasonNumber} not found. Are you a time traveller?`
       );
       return;
     }
-
     const stats = await prismaClient.playerStats.findUnique({
       where: {
-        playerId_seasonId: {
-          playerId: player.id,
-          seasonId: season.id,
-        },
+        playerId_seasonId: { playerId: player.id, seasonId: season.id },
       },
     });
-
     if (!stats) {
-      const noStatsMsg = await interaction.editReply({
+      const msg = await interaction.editReply({
         content: "No stats found for this player in the current season.",
       });
-      setTimeout(async () => {
-        try {
-          await noStatsMsg.delete();
-        } catch (error) {
-          console.error("Failed to delete noStatsMsg:", error);
-        }
-      }, 15 * 1000);
+      setTimeout(() => msg.delete().catch(() => {}), 15_000);
       return;
     }
 
-    const wins = stats.wins;
-    const losses = stats.losses;
+    const wins = stats.wins,
+      losses = stats.losses;
     const winLossRatio = losses === 0 ? wins : wins / losses;
-
-    let fetchedPlayer = await interaction.guild?.members
+    let fetchedMember = await interaction.guild?.members
       .fetch(player.discordSnowflake)
       .catch(() => null);
-
     let userDisplayName = player.minecraftAccounts
-      .map((name) => name.replace(/_/g, "\\_"))
+      .map((n) => n.replace(/_/g, "\\_"))
       .join(", ");
-
-    let avatarUrl: string | undefined = undefined;
-
-    if (fetchedPlayer) {
-      userDisplayName = `${userDisplayName}`;
-      avatarUrl = fetchedPlayer.displayAvatarURL();
+    let avatarUrl: string | undefined;
+    if (fetchedMember) {
+      avatarUrl = fetchedMember.displayAvatarURL();
     } else {
       const fetchedUser = await interaction.client.users
         .fetch(player.discordSnowflake)
@@ -120,71 +100,113 @@ export default class StatsCommand implements Command {
     }
 
     let winLossDisplay = winLossRatio.toFixed(2);
-    if (stats.wins > 0 && stats.losses === 0) {
-      winLossDisplay += " 💯";
-    }
-
+    if (wins > 0 && losses === 0) winLossDisplay += " 💯";
     let winStreakDisplay =
-      stats.winStreak >= 3 ? `${stats.winStreak} 🔥` : stats.winStreak;
+      stats.winStreak >= 3 ? `${stats.winStreak} 🔥` : `${stats.winStreak}`;
+
+    const totalGames = wins + losses;
+    const avgEloChange =
+      totalGames > 0 ? ((stats.elo - 1000) / totalGames).toFixed(2) : "0.00";
+    const [
+      mvpCount,
+      captainCount,
+      captainWinCount,
+      higherRankCount,
+      totalPlayers,
+      lastGP,
+    ] = await Promise.all([
+      prismaClient.gameParticipation.count({
+        where: { playerId: player.id, seasonId: season.id, mvp: true },
+      }),
+      prismaClient.gameParticipation.count({
+        where: { playerId: player.id, seasonId: season.id, captain: true },
+      }),
+      prismaClient.gameParticipation.count({
+        where: {
+          playerId: player.id,
+          seasonId: season.id,
+          captain: true,
+          OR: [
+            { team: Team.RED, game: { winner: Team.RED } },
+            { team: Team.BLUE, game: { winner: Team.BLUE } },
+          ],
+        },
+      }),
+      prismaClient.playerStats.count({
+        where: { seasonId: season.id, elo: { gt: stats.elo } },
+      }),
+      prismaClient.playerStats.count({ where: { seasonId: season.id } }),
+      prismaClient.gameParticipation.findFirst({
+        where: { playerId: player.id, seasonId: season.id },
+        orderBy: { game: { endTime: "desc" } },
+        include: { game: true },
+      }),
+    ]);
+
+    const currentLosingStreak = stats.loseStreak;
+    const biggestWinStreak = stats.biggestWinStreak;
+    const biggestLoseStreak = stats.biggestLosingStreak;
+    const captainWinRate =
+      captainCount > 0
+        ? ((captainWinCount / captainCount) * 100).toFixed(1) + "%"
+        : "N/A";
+    const seasonRank = higherRankCount + 1;
+    const percentile =
+      totalPlayers > 0
+        ? (((totalPlayers - seasonRank) / totalPlayers) * 100).toFixed(1) + "%"
+        : "0.0%";
+    const lastGameDate = lastGP?.game.endTime.toDateString() ?? "N/A";
 
     const embed = new EmbedBuilder()
       .setColor("#5865F2")
       .setTitle("📊 Friendly Wars Stats")
-      .setDescription(`Current Season: ${seasonNumber}`)
       .setThumbnail(avatarUrl ?? null)
       .addFields(
-        {
-          name: "Player",
-          value: userDisplayName,
-          inline: true,
-        },
+        { name: "Player", value: userDisplayName, inline: true },
         {
           name: "Elo",
           value: `${Math.round(stats.elo)} ${EloUtil.getEloEmoji(stats.elo)}`,
           inline: true,
         },
         {
-          name: "Current Win Streak",
-          value: `${winStreakDisplay}`,
+          name: "Season Rank",
+          value: `#${seasonRank}/${totalPlayers} (${percentile})`,
+          inline: true,
+        },
+        { name: "Win/Loss Ratio", value: winLossDisplay, inline: true },
+        { name: "Wins", value: `${wins}`, inline: true },
+        { name: "Losses", value: `${losses}`, inline: true },
+        { name: "Current Win Streak", value: winStreakDisplay, inline: true },
+        {
+          name: "Current Losing Streak",
+          value: `${currentLosingStreak}`,
           inline: true,
         },
         {
-          name: "Wins",
-          value: `${wins}`,
+          name: "Biggest Win Streak",
+          value: `${biggestWinStreak}`,
           inline: true,
         },
         {
-          name: "Losses",
-          value: `${losses}`,
+          name: "Biggest Lose Streak",
+          value: `${biggestLoseStreak}`,
           inline: true,
         },
-        {
-          name: "Win/Loss Ratio",
-          value: `${winLossDisplay}`,
-          inline: true,
-        }
+        { name: "MVP Count", value: `${mvpCount}`, inline: true },
+        { name: "Captain Count", value: `${captainCount}`, inline: true },
+        { name: "Captain Win Rate", value: captainWinRate, inline: true },
+        { name: "Average Elo Change", value: avgEloChange, inline: true },
+        { name: "Last Game Date", value: lastGameDate, inline: true }
       )
       .setFooter({
-        text: `Requested by ${interaction.user.tag}`,
+        text: `Requested by ${interaction.user.tag} | Season ${seasonNumber}`,
         iconURL: interaction.user.displayAvatarURL(),
       })
       .setTimestamp();
 
-    const msg = await interaction.editReply({
-      embeds: [embed],
-    });
-
+    const msg = await interaction.editReply({ embeds: [embed] });
     if (interaction.channelId !== botCommandsChannelId) {
-      setTimeout(
-        async () => {
-          try {
-            await msg.delete();
-          } catch (error) {
-            console.error("Failed to delete stats message:", error);
-          }
-        },
-        2 * 60 * 1000
-      );
+      setTimeout(() => msg.delete().catch(() => {}), 120_000);
     }
   }
 }
