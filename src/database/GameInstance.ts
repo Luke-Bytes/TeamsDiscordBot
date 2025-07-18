@@ -25,9 +25,11 @@ export class GameInstance {
   endTime?: Date;
   settings: {
     minerushing?: boolean;
-    bannedClasses?: $Enums.AnniClass[];
+    bannedClasses: $Enums.AnniClass[];
     map?: $Enums.AnniMap;
-  } = {};
+  } = {
+    bannedClasses: [],
+  };
 
   teams: Record<Team | "UNDECIDED", PlayerInstance[]> = {
     RED: [],
@@ -62,6 +64,8 @@ export class GameInstance {
     BLUE: {},
   };
 
+  private readonly captainsWhoUsedClassBan: Set<string> = new Set();
+
   private constructor() {
     this.reset();
   }
@@ -83,7 +87,7 @@ export class GameInstance {
     this.endTime = undefined;
     this.settings = {
       minerushing: undefined,
-      bannedClasses: undefined,
+      bannedClasses: [],
       map: undefined,
     };
     this.teams = { RED: [], BLUE: [], UNDECIDED: [] };
@@ -841,5 +845,17 @@ export class GameInstance {
     this.redMeanElo = redMeanElo;
     this.blueExpectedScore = blueExpectedScore;
     this.redExpectedScore = redExpectedScore;
+  }
+
+  public hasCaptainBannedYet(userId: string): boolean {
+    return this.captainsWhoUsedClassBan.has(userId);
+  }
+
+  public markCaptainHasBanned(userId: string): void {
+    this.captainsWhoUsedClassBan.add(userId);
+  }
+
+  public countCaptainsBanned(): number {
+    return this.captainsWhoUsedClassBan.size;
   }
 }

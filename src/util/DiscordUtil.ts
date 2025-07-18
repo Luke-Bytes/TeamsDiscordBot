@@ -1,4 +1,5 @@
 import {
+  BaseMessageOptions,
   ChatInputCommandInteraction,
   CommandInteraction,
   Guild,
@@ -107,7 +108,7 @@ export class DiscordUtil {
 
   static async sendMessage(
     channel: Exclude<keyof typeof Channels, "initChannels">,
-    content: string
+    content: string | MessagePayload | BaseMessageOptions
   ): Promise<void> {
     try {
       const textChannel = Channels[channel] as TextChannel;

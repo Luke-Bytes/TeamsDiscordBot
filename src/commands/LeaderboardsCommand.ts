@@ -6,28 +6,35 @@ import {
   ButtonStyle,
   ActionRowBuilder,
   ButtonInteraction,
+  SlashCommandOptionsOnlyBuilder,
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { EloUtil } from "../util/EloUtil";
 import { prismaClient } from "../database/prismaClient";
 import { Channels } from "../Channels";
-import { ConfigManager } from "../ConfigManager";
+import { escapeText } from "../util/Utils";
 
 export default class LeaderboardsCommand implements Command {
-  public data: SlashCommandBuilder;
+  public data: SlashCommandOptionsOnlyBuilder;
   public name = "leaderboards";
   public description = "Get leaderboards for the top-rated players";
   public buttonIds: string[] = ["leaderboard_prev", "leaderboard_next"];
   private readonly pageSize = 10;
   private readonly userStates = new Map<
     string,
-    { currentPage: number; messageId?: string }
+    { currentPage: number; messageId?: string; seasonNumber?: number }
   >();
 
   constructor() {
     this.data = new SlashCommandBuilder()
       .setName(this.name)
-      .setDescription(this.description);
+      .setDescription(this.description)
+      .addIntegerOption((opt) =>
+        opt
+          .setName("season")
+          .setDescription("Season number to display")
+          .setRequired(false)
+      );
   }
 
   private getUserState(userId: string, channelId: string) {
@@ -48,6 +55,7 @@ export default class LeaderboardsCommand implements Command {
     winStreak: number,
     loseStreak: number
   ): string {
+    ign = escapeText(ign);
     const rankEmojis = [
       "🥇",
       "🥈",
@@ -72,14 +80,24 @@ export default class LeaderboardsCommand implements Command {
     return `${rankDisplay} **${ign}** ${eloEmoji} ─ ${Math.round(elo)} | W/L: ${winLossDisplay}${extraEmojis}`;
   }
 
-  private async generateLeaderboardEmbed(page: number, userId: string) {
-    const config = ConfigManager.getConfig();
-    const seasonNumber = config.season;
+  private async generateLeaderboardEmbed(
+    page: number,
+    userId: string,
+    seasonNumberArg?: number
+  ) {
+    const latest = await prismaClient.season.findFirst({
+      orderBy: { number: "desc" },
+    });
+    if (!latest) throw new Error("No seasons found!");
+    const seasonNumber = seasonNumberArg ?? latest.number;
 
     const season = await prismaClient.season.findUnique({
       where: { number: seasonNumber },
     });
-    if (!season) throw new Error(`Season #${seasonNumber} not found!`);
+    if (!season)
+      throw new Error(
+        `Season #${seasonNumber} not found. Is this an alternate timeline?`
+      );
 
     const allStats = await prismaClient.playerStats.findMany({
       where: { seasonId: season.id },
@@ -169,9 +187,15 @@ export default class LeaderboardsCommand implements Command {
       const userState = this.getUserState(userId, channelId);
       userState.currentPage = 0;
 
+      const seasonNumber =
+        interaction.options.getInteger("season") ?? undefined;
+      userState.currentPage = 0;
+      userState.seasonNumber = seasonNumber;
+
       const { embed, totalPages } = await this.generateLeaderboardEmbed(
         userState.currentPage,
-        userId
+        userId,
+        seasonNumber
       );
       const buttons = this.generateButtons(userState.currentPage, totalPages);
 
@@ -206,11 +230,11 @@ export default class LeaderboardsCommand implements Command {
     } catch (error) {
       console.error("Error fetching leaderboards:", error);
       if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({
-          content:
-            "❌ An error occurred while fetching the leaderboards. Please try again later.",
-          ephemeral: false,
-        });
+        const msg =
+          error instanceof Error && error.message
+            ? `❌ ${error.message}`
+            : "❌ An error occurred while fetching the leaderboards. Please try again later.";
+        await interaction.reply({ content: msg, ephemeral: false });
       }
     }
   }
@@ -240,20 +264,21 @@ export default class LeaderboardsCommand implements Command {
     try {
       const { embed, totalPages } = await this.generateLeaderboardEmbed(
         userState.currentPage,
-        userId
+        userId,
+        userState.seasonNumber
       );
-      const buttons = this.generateButtons(userState.currentPage, totalPages);
 
       await interaction.update({
         embeds: [embed],
-        components: [buttons],
+        components: [this.generateButtons(userState.currentPage, totalPages)],
       });
     } catch (error) {
       console.error("❌ Error updating leaderboard:", error);
-      await interaction.reply({
-        content: "❌ Failed to update leaderboard.",
-        ephemeral: false,
-      });
+      const msg =
+        error instanceof Error && error.message
+          ? `❌ ${error.message}`
+          : "❌ Failed to update leaderboard.";
+      await interaction.reply({ content: msg, ephemeral: false });
     }
   }
 }

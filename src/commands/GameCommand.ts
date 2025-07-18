@@ -86,6 +86,16 @@ export default class GameCommand implements Command {
             "blueTeamChat",
             `**Mid Blocks Plan**\n\`\`\`\n${blueNamesFormatted}\n\`\`\`\n**Game Plan**\n\`\`\`\n${blueNamesFormatted}\n\`\`\``
           );
+
+          await DiscordUtil.sendMessage(
+            "redTeamChat",
+            `Team captain submit your class ban when ready with \`class ban [class]\``
+          );
+
+          await DiscordUtil.sendMessage(
+            "blueTeamChat",
+            `Team captain submit your class ban when ready with \`class ban [class]\``
+          );
         } catch (error) {
           console.error("Error starting the game: ", error);
           await interaction.editReply({
