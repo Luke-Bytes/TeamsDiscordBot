@@ -6,10 +6,10 @@
       "modifiers": [
         { "name": "No Bans", "weight": 1 },
         { "name": "1 Random Ban", "weight": 1 },
-        { "name": "2 Random Bans", "weight": 10 },
+        { "name": "2 Random Bans", "weight": 1 },
         { "name": "All Movement Classes Banned", "weight": 1 },
         { "name": "All Combat Classes Banned", "weight": 1 },
-        { "name": "2 Captain Bans", "weight": 1 },
+        { "name": "2 Captain Bans", "weight": 4 },
         { "name": "4 Captain Bans", "weight": 1 }
       ]
     },
