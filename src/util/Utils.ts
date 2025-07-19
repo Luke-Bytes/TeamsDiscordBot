@@ -5,7 +5,7 @@ import {
   PermissionResolvable,
   VoiceChannel,
 } from "discord.js";
-import { Team } from "@prisma/client";
+import { AnniClass, Team } from "@prisma/client";
 import { GameInstance } from "../database/GameInstance";
 import { ConfigManager } from "../ConfigManager";
 
@@ -167,4 +167,15 @@ export async function checkMissingPlayersInVC(
 
 export function escapeText(text: string): string {
   return text.replace(/([\\_*|~`>])/g, "\\$1");
+}
+
+export function stripVariationSelector(emoji: string): string {
+  return emoji.replace(/\uFE0F/g, "");
+}
+
+const allAnniClasses = Object.values(AnniClass) as AnniClass[];
+
+export function getRandomAnniClass(): AnniClass {
+  const idx = Math.floor(Math.random() * allAnniClasses.length);
+  return allAnniClasses[idx];
 }

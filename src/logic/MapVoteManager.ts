@@ -2,27 +2,31 @@ import { AnniMap } from "@prisma/client";
 import { Channels } from "../Channels";
 import { Message } from "discord.js";
 import EventEmitter from "events";
-import { prettifyName } from "../util/Utils";
+import { prettifyName, stripVariationSelector } from "../util/Utils";
 import { Scheduler } from "../util/SchedulerUtil";
 import { GameInstance } from "../database/GameInstance";
 
 //todo: store these three maps somewhere else?
 const mapToEmojis: Record<AnniMap, string> = {
-  AFTERMATH1V1: "🌸 ",
-  ANDORRA1V1: "🏟️ ",
-  ARID1V1: "🏗️ ",
-  CANYON1V1: "🏜️ ",
-  CHASM1V1: "🏝️ ",
-  CHEROKEE1V1: "🪐 ",
-  DREDGE1V1: "🧙 ",
-  DUELSTAL: "™️ ",
-  CLASHSTAL: "🪵 ",
-  NATURE1V1: "🌲 ",
-  SIEGE1V1: "♟️ ",
-  HAANSKAAR1V1: "🌋 ",
-  VILLAGES1V1: "🕍 ",
-  ANCHORAGE1V1: "⚓ ",
-  GRASSLANDS1V1: "🍀 ",
+  AFTERMATH1V1: "🌸",
+  ANDORRA1V1: "🏟️",
+  ARID1V1: "🏗️",
+  CANYON1V1: "🏜️",
+  CHASM1V1: "🏝️",
+  CHEROKEE1V1: "🪐",
+  DREDGE1V1: "🧙",
+  DUELSTAL: "™",
+  CLASHSTAL: "🪵",
+  NATURE1V1: "🌲",
+  SIEGE1V1: "♟️",
+  HAANSKAAR1V1: "🌋",
+  VILLAGES1V1: "🕍",
+  ANCHORAGE1V1: "⚓",
+  GRASSLANDS1V1: "🍀",
+  OUTPOST1V1: "🏕️",
+  SKYPIRATES1V1: "🏴‍☠️",
+  FOXBERRY1V1: "🫐",
+  CASTAWAY1V1: "🌴",
 };
 
 interface MapVoteManagerEvents {
@@ -76,8 +80,12 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
     const winningText = (winningEntry[1].text ?? "")
       .toUpperCase()
       .replace(/\s+/g, "");
+
     const winningMap = Object.entries(mapToEmojis).find(
-      ([mapName]) => mapName === winningText
+      ([mapName, emoji]) =>
+        mapName === winningText &&
+        stripVariationSelector(emoji) ===
+          stripVariationSelector(winningEntry[1].emoji?.name ?? "")
     )?.[0];
 
     console.log(
@@ -112,7 +120,7 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
         question: { text: "Map vote" },
         answers: this.maps.map((v) => ({
           text: prettifyName(v),
-          emoji: mapToEmojis[v],
+          emoji: stripVariationSelector(mapToEmojis[v]),
         })),
         duration: 48,
         allowMultiselect: false,

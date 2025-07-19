@@ -118,10 +118,16 @@ model EloHistory {
   season   Season @relation(fields: [seasonId], references: [id])
 }
 
+type ModifierTypes {
+  category String
+  name     String
+}
+
 type GameSettings {
   minerushing   Boolean
   bannedClasses AnniClass[]
   map           AnniMap
+  modifiers     ModifierTypes[]
 }
 
 model PlayerPunishment {
@@ -208,4 +214,8 @@ enum AnniMap {
   VILLAGES1V1
   ANCHORAGE1V1
   GRASSLANDS1V1
+  OUTPOST1V1
+  SKYPIRATES1V1
+  FOXBERRY1V1
+  CASTAWAY1V1
 }
