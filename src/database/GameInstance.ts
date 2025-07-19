@@ -27,8 +27,10 @@ export class GameInstance {
     minerushing?: boolean;
     bannedClasses: $Enums.AnniClass[];
     map?: $Enums.AnniMap;
+    modifiers: { category: string; name: string }[];
   } = {
     bannedClasses: [],
+    modifiers: [],
   };
 
   teams: Record<Team | "UNDECIDED", PlayerInstance[]> = {
@@ -64,7 +66,9 @@ export class GameInstance {
     BLUE: {},
   };
 
-  private readonly captainsWhoUsedClassBan: Set<string> = new Set();
+  public classBanLimit: number = 0;
+
+  private readonly captainBanCounts: Map<string, number> = new Map();
 
   private constructor() {
     this.reset();
@@ -89,6 +93,7 @@ export class GameInstance {
       minerushing: undefined,
       bannedClasses: [],
       map: undefined,
+      modifiers: [],
     };
     this.teams = { RED: [], BLUE: [], UNDECIDED: [] };
     this.teamsDecidedBy = null;
@@ -98,6 +103,8 @@ export class GameInstance {
     this.mvpVotes = { RED: {}, BLUE: {} };
     this.MVPPlayerBlue = "";
     this.MVPPlayerRed = "";
+    this.classBanLimit = 0;
+    this.captainBanCounts.clear();
   }
 
   public static async resetGameInstance() {
@@ -110,13 +117,13 @@ export class GameInstance {
   }
 
   public startMinerushVote() {
-    if (this.minerushVoteManager) {
-      this.minerushVoteManager.cancelVote();
-    }
-    this.minerushVoteManager = new MinerushVoteManager();
-    this.minerushVoteManager.on("pollEnd", (minerushWinner) => {
-      this.setMinerushing(minerushWinner);
-    });
+    // if (this.minerushVoteManager) {
+    //   this.minerushVoteManager.cancelVote();
+    // }
+    // this.minerushVoteManager = new MinerushVoteManager();
+    // this.minerushVoteManager.on("pollEnd", (minerushWinner) => {
+    //   this.setMinerushing(minerushWinner);
+    // });
   }
 
   public startMapVote(maps: AnniMap[]) {
@@ -135,10 +142,10 @@ export class GameInstance {
       console.log("Map vote has been closed.");
     }
 
-    if (this.minerushVoteManager) {
-      this.minerushVoteManager.cancelVote();
-      console.log("Minerush vote has been closed.");
-    }
+    // if (this.minerushVoteManager) {
+    //   this.minerushVoteManager.cancelVote();
+    //   console.log("Minerush vote has been closed.");
+    // }
   }
 
   public stopVoting() {
@@ -147,12 +154,12 @@ export class GameInstance {
       console.log("Map vote has been stopped without deleting the message.");
     }
 
-    if (this.minerushVoteManager) {
-      this.minerushVoteManager.stopVote();
-      console.log(
-        "Minerush vote has been stopped without deleting the message."
-      );
-    }
+    // if (this.minerushVoteManager) {
+    //   this.minerushVoteManager.stopVote();
+    //   console.log(
+    //     "Minerush vote has been stopped without deleting the message."
+    //   );
+    // }
   }
 
   public setMap(map: AnniMap) {
@@ -171,9 +178,9 @@ export class GameInstance {
     if (this.mapVoteManager) {
       await this.mapVoteManager.startMapVote();
     }
-    if (this.minerushVoteManager) {
-      await this.minerushVoteManager.startMinerushVote();
-    }
+    // if (this.minerushVoteManager) {
+    //   await this.minerushVoteManager.startMinerushVote();
+    // }
   }
 
   private getTeamWithLeastPlayers() {
@@ -385,11 +392,14 @@ export class GameInstance {
       minerushing: true,
       bannedClasses: ["SNIPER"],
       map: "DUELSTAL",
+      modifiers: [],
     };
     this.MVPPlayerBlue = "Ungenes";
     this.teams.RED = [];
     this.teams.BLUE = [];
     this.teams.UNDECIDED = [];
+    this.classBanLimit = 4;
+    this.captainBanCounts.clear();
 
     await activateFeed(Channels.gameFeed, addRegisteredPlayersFeed);
     await activateFeed(Channels.gameFeed, addTeamsGameFeed);
@@ -419,20 +429,20 @@ export class GameInstance {
       "DUELSTAL",
     ] as AnniMap[]);
 
-    this.minerushVoteManager = new MinerushVoteManager();
+    // this.minerushVoteManager = new MinerushVoteManager();
 
     if (this.mapVoteManager) {
       await this.mapVoteManager.startMapVote();
     }
-    if (this.minerushVoteManager) {
-      await this.minerushVoteManager.startMinerushVote();
-    }
+    // if (this.minerushVoteManager) {
+    //   await this.minerushVoteManager.startMinerushVote();
+    // }
 
     const pollVotes = false;
     if (pollVotes) {
-      console.info(`[GAME] Starting map and minerush votes.`);
+      console.info(`[GAME] Starting map votes.`);
       await this.mapVoteManager.startMapVote();
-      await this.minerushVoteManager.startMinerushVote();
+      // await this.minerushVoteManager.startMinerushVote();
     }
   }
 
@@ -847,15 +857,34 @@ export class GameInstance {
     this.redExpectedScore = redExpectedScore;
   }
 
-  public hasCaptainBannedYet(userId: string): boolean {
-    return this.captainsWhoUsedClassBan.has(userId);
+  public setClassBanLimit(limit: number): void {
+    this.classBanLimit = limit;
+  }
+
+  public getClassBanLimit(): number {
+    return this.classBanLimit;
+  }
+
+  public getCaptainBanCount(userId: string): number {
+    return this.captainBanCounts.get(userId) ?? 0;
+  }
+
+  public getTotalCaptainBans(): number {
+    let total = 0;
+    for (const c of this.captainBanCounts.values()) total += c;
+    return total;
+  }
+
+  public getPerCaptainBanLimit(): number {
+    return this.classBanLimit / 2;
+  }
+
+  public hasCaptainReachedBanLimit(userId: string): boolean {
+    return this.getCaptainBanCount(userId) >= this.getPerCaptainBanLimit();
   }
 
   public markCaptainHasBanned(userId: string): void {
-    this.captainsWhoUsedClassBan.add(userId);
-  }
-
-  public countCaptainsBanned(): number {
-    return this.captainsWhoUsedClassBan.size;
+    const prev = this.getCaptainBanCount(userId);
+    this.captainBanCounts.set(userId, prev + 1);
   }
 }

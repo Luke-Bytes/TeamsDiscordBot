@@ -37,6 +37,14 @@ export default class ClassbanCommand implements Command {
   public async execute(
     interaction: ChatInputCommandInteraction
   ): Promise<void> {
+    if (!CurrentGameManager.getCurrentGame().announced) {
+      await interaction.reply({
+        content: "No game is currently in progress",
+        ephemeral: false,
+      });
+      return;
+    }
+
     const sub = interaction.options.getSubcommand();
     if (sub === "ban") {
       await this.handleBan(interaction);
@@ -44,8 +52,22 @@ export default class ClassbanCommand implements Command {
       await this.handleView(interaction);
     }
   }
+
   private async handleBan(interaction: ChatInputCommandInteraction) {
     await interaction.deferReply({ ephemeral: false });
+    const game = CurrentGameManager.getCurrentGame();
+
+    if (game.getTotalCaptainBans() >= game.getClassBanLimit()) {
+      return interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor("Grey")
+            .setTitle("🚫 Class Bans Locked")
+            .setDescription("All captain class bans have been used.")
+            .setTimestamp(),
+        ],
+      });
+    }
 
     const member = DiscordUtil.getGuildMember(interaction);
     if (!PermissionsUtil.hasRole(member, "captainRole")) {
@@ -60,14 +82,13 @@ export default class ClassbanCommand implements Command {
       });
     }
 
-    const game = CurrentGameManager.getCurrentGame();
-    if (game.hasCaptainBannedYet(interaction.user.id)) {
+    if (game.hasCaptainReachedBanLimit(interaction.user.id)) {
       return interaction.editReply({
         embeds: [
           new EmbedBuilder()
             .setColor("Yellow")
             .setTitle("⚠️ Already Used")
-            .setDescription("You have already used your class ban!")
+            .setDescription("You have used all your class ban(s).")
             .setTimestamp(),
         ],
       });
@@ -86,7 +107,7 @@ export default class ClassbanCommand implements Command {
             .setColor("Orange")
             .setTitle("❓ Unknown Class")
             .setDescription(
-              `Class not recognised, spell it out fully, e.g 'scout' instead of 'sco'.`
+              `Class not recognised, spell it out fully, e.g. 'scout' instead of 'sco'.`
             )
             .setTimestamp(),
         ],
@@ -96,10 +117,10 @@ export default class ClassbanCommand implements Command {
     }
     const cls = raw as AnniClass;
 
-    if (!game.settings.bannedClasses.includes(cls)) {
+    const isNewBan = !game.settings.bannedClasses.includes(cls);
+    if (isNewBan) {
       game.settings.bannedClasses.push(cls);
     }
-
     game.markCaptainHasBanned(interaction.user.id);
 
     const banEmbed = new EmbedBuilder()
@@ -108,19 +129,17 @@ export default class ClassbanCommand implements Command {
       .setDescription(`The ban has been recorded!`)
       .setFooter({ text: `Captain: ${interaction.user.tag}` })
       .setTimestamp();
-
     const channel = interaction.channel as TextChannel;
     await channel.send({ embeds: [banEmbed] });
     await interaction.deleteReply();
 
-    if (game.countCaptainsBanned() === 2) {
+    if (game.getTotalCaptainBans() === game.getClassBanLimit()) {
       const list = game.settings.bannedClasses.map(prettifyName).join("\n");
       const lockedEmbed = new EmbedBuilder()
         .setColor("DarkRed")
         .setTitle("🚫 Class Bans Locked In")
         .setDescription(list)
         .setTimestamp();
-
       await DiscordUtil.sendMessage("gameFeed", { embeds: [lockedEmbed] });
       await DiscordUtil.sendMessage("redTeamChat", { embeds: [lockedEmbed] });
       await DiscordUtil.sendMessage("blueTeamChat", { embeds: [lockedEmbed] });
@@ -130,7 +149,7 @@ export default class ClassbanCommand implements Command {
   private async handleView(interaction: ChatInputCommandInteraction) {
     const game = CurrentGameManager.getCurrentGame();
 
-    if (game.countCaptainsBanned() < 2) {
+    if (game.getTotalCaptainBans() < game.getClassBanLimit()) {
       return interaction.reply({
         embeds: [
           new EmbedBuilder()

@@ -1,0 +1,63 @@
+{
+  "categories": [
+    {
+      "name": "Class Bans",
+      "maxPerRun": 1,
+      "modifiers": [
+        { "name": "No Bans", "weight": 1 },
+        { "name": "1 Random Ban", "weight": 1 },
+        { "name": "2 Random Bans", "weight": 10 },
+        { "name": "All Movement Classes Banned", "weight": 1 },
+        { "name": "All Combat Classes Banned", "weight": 1 },
+        { "name": "2 Captain Bans", "weight": 1 },
+        { "name": "4 Captain Bans", "weight": 1 }
+      ]
+    },
+    {
+      "name": "Nexus Damage",
+      "maxPerRun": 1,
+      "modifiers": [
+        { "name": "Default", "weight": 15 },
+        { "name": "Double Damage", "weight": 1 },
+        { "name": "Nexus Bleed", "weight": 4 }
+      ]
+    },
+    {
+      "name": "Nexus HP",
+      "maxPerRun": 1,
+      "modifiers": [
+        { "name": "75", "weight": 8 },
+        { "name": "100", "weight": 1 },
+        { "name": "125", "weight": 1 },
+        { "name": "150", "weight": 1 }
+      ]
+    },
+    {
+      "name": "Pick Other Team's Support Roles",
+      "maxPerRun": 1,
+      "modifiers": [
+        { "name": "No", "weight": 9 },
+        { "name": "Yes", "weight": 1 }
+      ]
+    },
+    {
+      "name": "Minerushing",
+      "maxPerRun": 1,
+      "modifiers": [
+        { "name": "Always", "weight": 8 },
+        { "name": "Not before p2", "weight": 1 },
+        { "name": "Not before p3", "weight": 1 }
+      ]
+    },
+    {
+      "name": "Rushing",
+      "maxPerRun": 1,
+      "modifiers": [
+        { "name": "Always", "weight": 8 },
+        { "name": "Not before p2", "weight": 1 },
+        { "name": "Not before p3", "weight": 1 },
+        { "name": "Not before p4", "weight": 1 }
+      ]
+    }
+  ]
+}

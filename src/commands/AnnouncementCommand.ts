@@ -23,6 +23,7 @@ import { addTeamsGameFeed } from "../logic/gameFeed/TeamsGameFeed";
 import { GameInstance } from "../database/GameInstance";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { PermissionsUtil } from "../util/PermissionsUtil";
+import { ModifierSelector } from "../logic/ModifierSelector";
 
 export default class AnnouncementCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;
@@ -44,56 +45,71 @@ export default class AnnouncementCommand implements Command {
       .setName(this.name)
       .setDescription(this.description)
       .addSubcommand((subcommand) => {
-        return subcommand
-          .setName("start")
-          .setDescription("Start an announcement")
-          .addStringOption((option) =>
-            option.setName("when").setDescription("Date").setRequired(true)
-          )
-          .addStringOption((option) =>
-            option
-              .setName("minerushing")
-              .setDescription("Minerushing? (poll/yes/no)")
-              .setRequired(true)
-              .addChoices(
-                { name: "Yes", value: "yes" },
-                { name: "No", value: "no" },
-                { name: "Poll", value: "poll" }
-              )
-          )
-          .addStringOption((option) =>
-            option
-              .setName("banned_classes")
-              .setDescription(
-                "Banned classes separated by a comma, or 'none' for none."
-              )
-              .setRequired(true)
-          )
-          .addStringOption((option) =>
-            option
-              .setName("map")
-              .setDescription("Map? (poll <maps>/random/<map>)")
-              .setRequired(true)
-          )
-          .addStringOption((option) =>
-            option
-              .setName("organiser")
-              .setDescription("Organiser Name")
-              .setRequired(true)
-          )
-          .addStringOption((option) =>
-            option.setName("host").setDescription("Host Name").setRequired(true)
-          )
-          .addStringOption((option) =>
-            option
-              .setName("doubleelo")
-              .setDescription("Enable double elo for this game? (yes/no)")
-              .setRequired(false)
-              .addChoices(
-                { name: "Yes", value: "yes" },
-                { name: "No", value: "no" }
-              )
-          );
+        return (
+          subcommand
+            .setName("start")
+            .setDescription("Start an announcement")
+            .addStringOption((option) =>
+              option.setName("when").setDescription("Date").setRequired(true)
+            )
+            .addStringOption((o) =>
+              o
+                .setName("modifiers")
+                .setDescription("Include game modifiers? (yes/no)")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Yes", value: "yes" },
+                  { name: "No", value: "no" }
+                )
+            )
+            // .addStringOption((option) =>
+            //   option
+            //     .setName("minerushing")
+            //     .setDescription("Minerushing? (poll/yes/no)")
+            //     .setRequired(true)
+            //     .addChoices(
+            //       { name: "Yes", value: "yes" },
+            //       { name: "No", value: "no" },
+            //       { name: "Poll", value: "poll" }
+            //     )
+            // )
+            .addStringOption((option) =>
+              option
+                .setName("banned_classes")
+                .setDescription(
+                  "Banned classes separated by a comma, or 'none' for none."
+                )
+                .setRequired(true)
+            )
+            .addStringOption((option) =>
+              option
+                .setName("map")
+                .setDescription("Map? (poll <maps>/random/<map>)")
+                .setRequired(true)
+            )
+            .addStringOption((option) =>
+              option
+                .setName("organiser")
+                .setDescription("Organiser Name")
+                .setRequired(true)
+            )
+            .addStringOption((option) =>
+              option
+                .setName("host")
+                .setDescription("Host Name")
+                .setRequired(true)
+            )
+            .addStringOption((option) =>
+              option
+                .setName("doubleelo")
+                .setDescription("Enable double elo for this game? (yes/no)")
+                .setRequired(false)
+                .addChoices(
+                  { name: "Yes", value: "yes" },
+                  { name: "No", value: "no" }
+                )
+            )
+        );
       })
       .addSubcommand((subcommand) => {
         return subcommand
@@ -289,8 +305,17 @@ export default class AnnouncementCommand implements Command {
       return;
     }
 
-    if (!this.setMinerushing(interaction)) {
-      return;
+    // if (!this.setMinerushing(interaction)) {
+    //   return;
+    // }
+
+    const modifiersOption = interaction.options
+      .getString("modifiers", true)
+      .toLowerCase();
+    if (modifiersOption === "yes") {
+      ModifierSelector.runSelection();
+    } else {
+      GameInstance.getInstance().settings.modifiers = [];
     }
 
     const doubleEloOption = interaction.options
@@ -513,18 +538,19 @@ export default class AnnouncementCommand implements Command {
               : "TBD",
           inline: true,
         },
-        {
-          name: "⛏️ **MINERUSHING**",
-          value:
-            game.settings.minerushing === true
-              ? "**Yes**"
-              : game.settings.minerushing === false
-                ? "**No**"
-                : game.minerushVoteManager
-                  ? "Voting..."
-                  : "TBD",
-          inline: true,
-        },
+
+        // {
+        //   name: "⛏️ **MINERUSHING**",
+        //   value:
+        //     game.settings.minerushing === true
+        //       ? "**Yes**"
+        //       : game.settings.minerushing === false
+        //         ? "**No**"
+        //         : game.minerushVoteManager
+        //           ? "Voting..."
+        //           : "TBD",
+        //   inline: true,
+        // },
         {
           name: "🚫 **BANNED CLASSES**",
           value:
@@ -533,6 +559,16 @@ export default class AnnouncementCommand implements Command {
               ? `**${game.settings.bannedClasses
                   .map((v) => prettifyName(v))
                   .join(", ")}**`
+              : "**None**",
+          inline: false,
+        },
+        {
+          name: "⚙️ **MODIFIERS**",
+          value:
+            game.settings.modifiers.length > 0
+              ? `**${game.settings.modifiers
+                  .map((m) => `${m.category}: ${m.name}`)
+                  .join("\n")}**`
               : "**None**",
           inline: false,
         }
