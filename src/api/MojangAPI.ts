@@ -72,7 +72,7 @@ export class MojangAPI {
 
       if (response.ok) {
         const data = await response.json();
-        return data?.name || null;
+        return data?.name ?? null;
       } else {
         console.error(
           `Unexpected Mojang API error for UUID ${uuid}: ${response.status} ${response.statusText}`
@@ -95,7 +95,7 @@ export class MojangAPI {
 
       if (response.ok) {
         const data = await response.json();
-        return data?.name || null;
+        return data?.name ?? null;
       } else {
         console.error(
           `Unexpected Gapple API error for UUID ${uuid}: ${response.status} ${response.statusText}`

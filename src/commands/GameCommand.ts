@@ -89,12 +89,12 @@ export default class GameCommand implements Command {
 
           await DiscordUtil.sendMessage(
             "redTeamChat",
-            `Team captain submit your class ban when ready with \`class ban [class]\``
+            `Team captain submit your class ban when ready with \`/class ban [class]\``
           );
 
           await DiscordUtil.sendMessage(
             "blueTeamChat",
-            `Team captain submit your class ban when ready with \`class ban [class]\``
+            `Team captain submit your class ban when ready with \`/class ban [class]\``
           );
         } catch (error) {
           console.error("Error starting the game: ", error);

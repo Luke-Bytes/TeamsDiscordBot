@@ -98,7 +98,7 @@ export class ModifierSelector {
         [
           AnniClass.ACROBAT,
           AnniClass.DASHER,
-          AnniClass.ICEMAN,
+          AnniClass.NEPTUNE,
           AnniClass.SCOUT,
           AnniClass.ROBINHOOD,
           AnniClass.TRANSPORTER,
