@@ -394,7 +394,7 @@ export class GameInstance {
       map: "DUELSTAL",
       modifiers: [],
     };
-    this.MVPPlayerBlue = "Ungenes";
+    this.MVPPlayerBlue = "Immortal";
     this.teams.RED = [];
     this.teams.BLUE = [];
     this.teams.UNDECIDED = [];

@@ -20,6 +20,6 @@
       "*": ["./src/*"]
     }
   },
-  "include": ["src/**/*", "config.json"],
+  "include": ["src/**/*", "scripts/**/*", "config.json"],
   "exclude": ["node_modules", "dist"]
 }

@@ -9,8 +9,8 @@
         { "name": "2 Random Bans", "weight": 1 },
         { "name": "All Movement Classes Banned", "weight": 1 },
         { "name": "All Combat Classes Banned", "weight": 1 },
-        { "name": "2 Captain Bans", "weight": 4 },
-        { "name": "4 Captain Bans", "weight": 1 }
+        { "name": "1 Captain Ban Each", "weight": 4 },
+        { "name": "2 Captain Bans Each", "weight": 1 }
       ]
     },
     {
