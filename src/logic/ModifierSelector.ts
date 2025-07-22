@@ -121,11 +121,11 @@ export class ModifierSelector {
         });
         break;
 
-      case "2 Captain Bans":
+      case "1 Captain Ban Each":
         game.setClassBanLimit(2);
         break;
 
-      case "4 Captain Bans":
+      case "2 Captain Bans Each":
         game.setClassBanLimit(4);
         break;
     }

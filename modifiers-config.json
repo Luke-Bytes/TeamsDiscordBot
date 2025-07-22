@@ -17,7 +17,7 @@
       "name": "Nexus Damage",
       "maxPerRun": 1,
       "modifiers": [
-        { "name": "Default", "weight": 15 },
+        { "name": "No Double Damage or Nexus Bleed", "weight": 15 },
         { "name": "Double Damage", "weight": 1 },
         { "name": "Nexus Bleed", "weight": 4 }
       ]
@@ -33,7 +33,7 @@
       ]
     },
     {
-      "name": "Pick Other Team's Support Roles",
+      "name": "Captain's Pick Other Team's Support Roles",
       "maxPerRun": 1,
       "modifiers": [
         { "name": "No", "weight": 9 },
@@ -45,8 +45,8 @@
       "maxPerRun": 1,
       "modifiers": [
         { "name": "Always", "weight": 8 },
-        { "name": "Not before p2", "weight": 1 },
-        { "name": "Not before p3", "weight": 1 }
+        { "name": "Not before phase 2 (two)", "weight": 1 },
+        { "name": "Not before phase 3 (three)", "weight": 1 }
       ]
     },
     {
@@ -54,9 +54,9 @@
       "maxPerRun": 1,
       "modifiers": [
         { "name": "Always", "weight": 8 },
-        { "name": "Not before p2", "weight": 1 },
-        { "name": "Not before p3", "weight": 1 },
-        { "name": "Not before p4", "weight": 1 }
+        { "name": "Not before phase 2 (two)", "weight": 1 },
+        { "name": "Not before phase 3 (three)", "weight": 1 },
+        { "name": "Not before phase 4 (four)", "weight": 1 }
       ]
     }
   ]

@@ -58,7 +58,7 @@ export class GameInstance {
   minerushVoteManager?: MinerushVoteManager;
   private readonly mvpVoters = new Set<string>();
 
-  private mvpVotes: {
+  mvpVotes: {
     RED: Record<string, number>;
     BLUE: Record<string, number>;
   } = {
@@ -103,7 +103,7 @@ export class GameInstance {
     this.mvpVotes = { RED: {}, BLUE: {} };
     this.MVPPlayerBlue = "";
     this.MVPPlayerRed = "";
-    this.classBanLimit = 0;
+    this.classBanLimit = 2;
     this.captainBanCounts.clear();
   }
 

@@ -316,6 +316,7 @@ export default class AnnouncementCommand implements Command {
       ModifierSelector.runSelection();
     } else {
       GameInstance.getInstance().settings.modifiers = [];
+      GameInstance.getInstance().setClassBanLimit(2);
     }
 
     const doubleEloOption = interaction.options
