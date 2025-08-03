@@ -35,10 +35,12 @@ export default class AnnouncementCommand implements Command {
     "announcement-edit-time",
     "announcement-edit-map",
     "announcement-edit-banned-classes",
+    "announcement-edit-modifiers",
   ];
 
   private announcementPreviewMessage?: Message;
   private announcementMessage?: Message;
+  private initialBannedClasses: AnniClass[] = [];
 
   constructor() {
     this.data = new SlashCommandBuilder()
@@ -270,7 +272,7 @@ export default class AnnouncementCommand implements Command {
         );
       } else {
         console.warn(
-          `Attempted to reply with an unrecognized minerushing option '${minerushingOption}' but the interaction was already replied to or deferred.`
+          `Attempted to reply with an unrecognised minerushing option '${minerushingOption}' but the interaction was already replied to or deferred.`
         );
       }
       return false;
@@ -304,6 +306,10 @@ export default class AnnouncementCommand implements Command {
     if (!(await this.setBannedClasses(interaction))) {
       return;
     }
+
+    this.initialBannedClasses = [
+      ...CurrentGameManager.getCurrentGame().settings.bannedClasses,
+    ];
 
     // if (!this.setMinerushing(interaction)) {
     //   return;
@@ -434,6 +440,11 @@ export default class AnnouncementCommand implements Command {
       .setLabel("🚫 Edit Banned Classes")
       .setStyle(ButtonStyle.Secondary);
 
+    const editModifiersButton = new ButtonBuilder()
+      .setCustomId("announcement-edit-modifiers")
+      .setLabel("⚙️ Re-Roll Modifiers")
+      .setStyle(ButtonStyle.Secondary);
+
     const firstRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       confirmButton,
       cancelButton
@@ -442,7 +453,8 @@ export default class AnnouncementCommand implements Command {
     const secondRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       editTimeButton,
       editMapButton,
-      editBannedClassesButton
+      editBannedClassesButton,
+      editModifiersButton
     );
 
     return [firstRow, secondRow];
@@ -482,6 +494,15 @@ export default class AnnouncementCommand implements Command {
 
       case "announcement-edit-banned-classes":
         await this.handleEditBannedClasses(interaction);
+        break;
+
+      case "announcement-edit-modifiers":
+        CurrentGameManager.getCurrentGame().settings.bannedClasses = [
+          ...this.initialBannedClasses,
+        ];
+        ModifierSelector.runSelection();
+        await this.updateAnnouncementMessages();
+        await interaction.editReply("🔄 Modifiers have been rerolled.");
         break;
 
       default:
@@ -616,6 +637,11 @@ export default class AnnouncementCommand implements Command {
       .setLabel("🚫 Edit Banned Classes")
       .setStyle(ButtonStyle.Secondary);
 
+    const editModifiersButton = new ButtonBuilder()
+      .setCustomId("announcement-edit-modifiers")
+      .setLabel("⚙️ Re-roll Modifiers")
+      .setStyle(ButtonStyle.Secondary);
+
     const firstRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       confirmButton,
       cancelButton
@@ -624,7 +650,8 @@ export default class AnnouncementCommand implements Command {
     const secondRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       editTimeButton,
       editMapButton,
-      editBannedClassesButton
+      editBannedClassesButton,
+      editModifiersButton
     );
 
     return preview

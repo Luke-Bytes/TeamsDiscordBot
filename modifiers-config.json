@@ -9,12 +9,14 @@
         { "name": "2 Random Bans", "weight": 1 },
         { "name": "All Movement Classes Banned", "weight": 1 },
         { "name": "All Combat Classes Banned", "weight": 1 },
-        { "name": "1 Captain Ban Each", "weight": 4 },
-        { "name": "2 Captain Bans Each", "weight": 1 }
+        { "name": "1 Captain Ban Each (Shared)", "weight": 4 },
+        { "name": "2 Captain Bans Each (Shared)", "weight": 1 },
+        { "name": "1 Captain Ban Each (Opponent Only, No Core)", "weight": 4 },
+        { "name": "2 Captain Bans Each (Opponent Only, No Core)", "weight": 1 }
       ]
     },
     {
-      "name": "Nexus Damage",
+      "name": "Nexus Damage Catalyst",
       "maxPerRun": 1,
       "modifiers": [
         { "name": "No Double Damage or Nexus Bleed", "weight": 15 },
@@ -36,7 +38,7 @@
       "name": "Captain's Pick Other Team's Support Roles",
       "maxPerRun": 1,
       "modifiers": [
-        { "name": "No", "weight": 9 },
+        { "name": "No", "weight": 0 },
         { "name": "Yes", "weight": 1 }
       ]
     },
@@ -44,19 +46,37 @@
       "name": "Minerushing",
       "maxPerRun": 1,
       "modifiers": [
-        { "name": "Always", "weight": 8 },
-        { "name": "Not before phase 2 (two)", "weight": 1 },
-        { "name": "Not before phase 3 (three)", "weight": 1 }
+        { "name": "Always", "weight": 16 },
+        { "name": "Not before phase 2 (Two)", "weight": 1 },
+        { "name": "Not before phase 3 (Three)", "weight": 1 }
       ]
     },
     {
-      "name": "Rushing",
+      "name": "Nexus Damage",
       "maxPerRun": 1,
       "modifiers": [
         { "name": "Always", "weight": 8 },
-        { "name": "Not before phase 2 (two)", "weight": 1 },
-        { "name": "Not before phase 3 (three)", "weight": 1 },
-        { "name": "Not before phase 4 (four)", "weight": 1 }
+        { "name": "No Nexus Damage before phase 2 (Two)", "weight": 1 },
+        { "name": "No Nexus Damage before phase 3 (Three)", "weight": 1 },
+        { "name": "No Nexus Damage before phase 4 (Four)", "weight": 1 }
+      ]
+    },
+    {
+      "name": "Swapper",
+      "maxPerRun": 1,
+      "modifiers": [
+        { "name": "Disabled", "weight": 19 },
+        { "name": "Enabled", "weight": 1 }
+      ]
+    },
+    {
+      "name": "Skip Phase",
+      "maxPerRun": 1,
+      "modifiers": [
+        { "name": "No Phase Skip", "weight": 18 },
+        { "name": "Phase 1 (One)", "weight": 1 },
+        { "name": "Phase 2 (Two)", "weight": 1 },
+        { "name": "Phase 1 (One) AND 2 (Two)", "weight": 1 }
       ]
     }
   ]

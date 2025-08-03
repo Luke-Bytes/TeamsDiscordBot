@@ -5,7 +5,7 @@ import {
   EmbedBuilder,
 } from "discord.js";
 import { Command } from "./CommandInterface.js";
-import { AnniClass } from "@prisma/client";
+import { AnniClass, Team } from "@prisma/client";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { prettifyName } from "../util/Utils.js";
@@ -38,24 +38,29 @@ export default class ClassbanCommand implements Command {
     interaction: ChatInputCommandInteraction
   ): Promise<void> {
     if (!CurrentGameManager.getCurrentGame().announced) {
-      await interaction.reply({
-        content: "No game is currently in progress",
-        ephemeral: false,
-      });
+      await interaction.reply({ content: "No game is currently in progress" });
       return;
     }
-
     const sub = interaction.options.getSubcommand();
-    if (sub === "ban") {
-      await this.handleBan(interaction);
-    } else if (sub === "bans") {
-      await this.handleView(interaction);
-    }
+    if (sub === "ban") await this.handleBan(interaction);
+    else if (sub === "bans") await this.handleView(interaction);
   }
 
   private async handleBan(interaction: ChatInputCommandInteraction) {
-    await interaction.deferReply({ ephemeral: false });
+    await interaction.deferReply();
     const game = CurrentGameManager.getCurrentGame();
+
+    if (game.getClassBanLimit() === 0) {
+      return interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor("Grey")
+            .setTitle("🚫 Class Bans Disabled")
+            .setDescription("No class bans are allowed for this game.")
+            .setTimestamp(),
+        ],
+      });
+    }
 
     if (game.getTotalCaptainBans() >= game.getClassBanLimit()) {
       return interaction.editReply({
@@ -68,7 +73,6 @@ export default class ClassbanCommand implements Command {
         ],
       });
     }
-
     const member = DiscordUtil.getGuildMember(interaction);
     if (!PermissionsUtil.hasRole(member, "captainRole")) {
       return interaction.editReply({
@@ -81,7 +85,6 @@ export default class ClassbanCommand implements Command {
         ],
       });
     }
-
     if (game.hasCaptainReachedBanLimit(interaction.user.id)) {
       return interaction.editReply({
         embeds: [
@@ -116,30 +119,96 @@ export default class ClassbanCommand implements Command {
       return;
     }
     const cls = raw as AnniClass;
+    const forbidden: AnniClass[] = [
+      AnniClass.ENCHANTER,
+      AnniClass.FARMER,
+      AnniClass.MINER,
+      AnniClass.RIFTWALKER,
+      AnniClass.TRANSPORTER,
+    ];
+    if (forbidden.includes(cls)) {
+      return interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor("Orange")
+            .setTitle("🚫 Cannot Ban Core Class")
+            .setDescription(`${prettifyName(cls)} may not be banned.`)
+            .setTimestamp(),
+        ],
+      });
+    }
 
-    const isNewBan = !game.settings.bannedClasses.includes(cls);
-    if (isNewBan) {
+    const mode = game.classBanMode;
+    const team = PermissionsUtil.hasRole(member, "blueTeamRole")
+      ? Team.BLUE
+      : Team.RED;
+    const opp = team === Team.BLUE ? Team.RED : Team.BLUE;
+
+    if (!game.settings.bannedClasses.includes(cls)) {
       game.settings.bannedClasses.push(cls);
+    }
+
+    if (mode === "shared") {
+      for (const t of [Team.RED, Team.BLUE]) {
+        if (!game.settings.bannedClassesByTeam[t].includes(cls)) {
+          game.settings.bannedClassesByTeam[t].push(cls);
+        }
+      }
+    } else if (mode === "opponentOnly") {
+      if (!game.settings.bannedClassesByTeam[opp].includes(cls)) {
+        game.settings.bannedClassesByTeam[opp].push(cls);
+      }
+    } else if (!game.settings.bannedClassesByTeam[team].includes(cls)) {
+      game.settings.bannedClassesByTeam[team].push(cls);
     }
     game.markCaptainHasBanned(interaction.user.id);
 
+    const captainLabel = team === Team.BLUE ? "Blue Captain" : "Red Captain";
     const banEmbed = new EmbedBuilder()
       .setColor("Green")
       .setTitle("✅ Class Banned")
-      .setDescription(`The ban has been recorded!`)
-      .setFooter({ text: `Captain: ${interaction.user.tag}` })
+      .setDescription("The ban has been recorded!")
+      .setFooter({ text: `${captainLabel}: ${interaction.user.tag}` })
       .setTimestamp();
     const channel = interaction.channel as TextChannel;
     await channel.send({ embeds: [banEmbed] });
     await interaction.deleteReply();
 
     if (game.getTotalCaptainBans() === game.getClassBanLimit()) {
-      const list = game.settings.bannedClasses.map(prettifyName).join("\n");
+      const banned = game.settings.bannedClasses;
+      const byTeam = game.settings.bannedClassesByTeam;
+      const both = banned.filter(
+        (c) => !byTeam[Team.RED].includes(c) && !byTeam[Team.BLUE].includes(c)
+      );
+      const redOnly = byTeam[Team.RED].filter((c) => !both.includes(c));
+      const blueOnly = byTeam[Team.BLUE].filter((c) => !both.includes(c));
+
       const lockedEmbed = new EmbedBuilder()
         .setColor("DarkRed")
         .setTitle("🚫 Class Bans Locked In")
-        .setDescription(list)
+        .addFields(
+          {
+            name: "⚫ Shared Bans",
+            value: both.length ? both.map(prettifyName).join("\n") : "None",
+            inline: true,
+          },
+          {
+            name: "🔴 Red Can't Use",
+            value: redOnly.length
+              ? redOnly.map(prettifyName).join("\n")
+              : "None",
+            inline: true,
+          },
+          {
+            name: "🔵 Blue Can't Use",
+            value: blueOnly.length
+              ? blueOnly.map(prettifyName).join("\n")
+              : "None",
+            inline: true,
+          }
+        )
         .setTimestamp();
+
       await DiscordUtil.sendMessage("gameFeed", { embeds: [lockedEmbed] });
       await DiscordUtil.sendMessage("redTeamChat", { embeds: [lockedEmbed] });
       await DiscordUtil.sendMessage("blueTeamChat", { embeds: [lockedEmbed] });
@@ -148,6 +217,17 @@ export default class ClassbanCommand implements Command {
 
   private async handleView(interaction: ChatInputCommandInteraction) {
     const game = CurrentGameManager.getCurrentGame();
+
+    if (game.getClassBanLimit() === 0) {
+      return interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor("Grey")
+            .setDescription("Class bans are disabled for this game.")
+            .setTimestamp(),
+        ],
+      });
+    }
 
     if (game.getTotalCaptainBans() < game.getClassBanLimit()) {
       return interaction.reply({
@@ -159,10 +239,8 @@ export default class ClassbanCommand implements Command {
             )
             .setTimestamp(),
         ],
-        ephemeral: false,
       });
     }
-
     const banned = game.settings.bannedClasses;
     return interaction.reply({
       embeds: [
@@ -172,7 +250,6 @@ export default class ClassbanCommand implements Command {
           .setDescription(banned.map(prettifyName).join("\n"))
           .setTimestamp(),
       ],
-      ephemeral: false,
     });
   }
 }

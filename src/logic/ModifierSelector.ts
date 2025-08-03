@@ -18,7 +18,7 @@ interface Config {
 }
 
 export class ModifierSelector {
-  private categories: Category[];
+  private readonly categories: Category[];
 
   constructor(
     configPath = path.resolve(process.cwd(), "modifiers-config.json")
@@ -54,16 +54,32 @@ export class ModifierSelector {
     const mods = selector.select();
 
     GameInstance.getInstance().settings.modifiers = mods;
+    const classBanMod = mods.find((m) => m.category === "Class Bans");
+    const swapperMod = mods.find((m) => m.category === "Swapper");
+    const pickOtherTeamsRolesMod = mods.find(
+      (m) => m.category === "Captain's Pick Other Team's Support Roles"
+    );
 
-    for (const { category, name } of mods) {
-      if (category === "Class Bans") {
-        this.handleClassBans(name);
-      }
+    if (classBanMod) {
+      this.handleClassBans(classBanMod.name);
+    } else {
+      this.handleClassBans("No Bans");
     }
+
+    if (swapperMod) {
+      const game = GameInstance.getInstance();
+      game.settings.bannedClasses = game.settings.bannedClasses.filter(
+        (c) => c !== AnniClass.SWAPPER
+      );
+    }
+
+    GameInstance.getInstance().pickOtherTeamsSupportRoles =
+      !!pickOtherTeamsRolesMod;
   }
 
   private static handleClassBans(name: string) {
     const game = GameInstance.getInstance();
+    game.classBanMode = null;
     const banned = game.settings.bannedClasses;
 
     switch (name) {
@@ -121,12 +137,28 @@ export class ModifierSelector {
         });
         break;
 
-      case "1 Captain Ban Each":
+      case "1 Captain Ban Each (Shared)":
+        game.classBanMode = "shared";
         game.setClassBanLimit(2);
         break;
 
-      case "2 Captain Bans Each":
+      case "2 Captain Bans Each (Shared)":
+        game.classBanMode = "shared";
         game.setClassBanLimit(4);
+        break;
+
+      case "1 Captain Ban Each (Opponent Only, No Core)":
+        game.classBanMode = "opponentOnly";
+        game.setClassBanLimit(2);
+        break;
+
+      case "2 Captain Bans Each (Opponent Only, No Core)":
+        game.classBanMode = "opponentOnly";
+        game.setClassBanLimit(4);
+        break;
+
+      default:
+        game.setClassBanLimit(0);
         break;
     }
   }

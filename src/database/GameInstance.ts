@@ -26,12 +26,16 @@ export class GameInstance {
   settings: {
     minerushing?: boolean;
     bannedClasses: $Enums.AnniClass[];
+    bannedClassesByTeam: Record<Team, $Enums.AnniClass[]>;
     map?: $Enums.AnniMap;
     modifiers: { category: string; name: string }[];
   } = {
     bannedClasses: [],
+    bannedClassesByTeam: { [Team.RED]: [], [Team.BLUE]: [] },
     modifiers: [],
   };
+
+  public classBanMode: "shared" | "opponentOnly" | null = null;
 
   teams: Record<Team | "UNDECIDED", PlayerInstance[]> = {
     RED: [],
@@ -66,8 +70,9 @@ export class GameInstance {
     BLUE: {},
   };
 
-  public classBanLimit: number = 0;
+  public pickOtherTeamsSupportRoles: boolean = false;
 
+  public classBanLimit: number = 0;
   private readonly captainBanCounts: Map<string, number> = new Map();
 
   private constructor() {
@@ -92,9 +97,11 @@ export class GameInstance {
     this.settings = {
       minerushing: undefined,
       bannedClasses: [],
+      bannedClassesByTeam: { [Team.RED]: [], [Team.BLUE]: [] },
       map: undefined,
       modifiers: [],
     };
+    this.classBanMode = null;
     this.teams = { RED: [], BLUE: [], UNDECIDED: [] };
     this.teamsDecidedBy = null;
     this.mapVoteManager = undefined;
@@ -103,6 +110,7 @@ export class GameInstance {
     this.mvpVotes = { RED: {}, BLUE: {} };
     this.MVPPlayerBlue = "";
     this.MVPPlayerRed = "";
+    this.pickOtherTeamsSupportRoles = false;
     this.classBanLimit = 2;
     this.captainBanCounts.clear();
   }
@@ -391,6 +399,7 @@ export class GameInstance {
     this.settings = {
       minerushing: true,
       bannedClasses: ["SNIPER"],
+      bannedClassesByTeam: { RED: ["SCOUT"], BLUE: ["NEPTUNE"] },
       map: "DUELSTAL",
       modifiers: [],
     };

@@ -123,11 +123,17 @@ type ModifierTypes {
   name     String
 }
 
+type BanList {
+  RED  AnniClass[]
+  BLUE AnniClass[]
+}
+
 type GameSettings {
-  minerushing   Boolean
-  bannedClasses AnniClass[]
-  map           AnniMap
-  modifiers     ModifierTypes[]
+  minerushing         Boolean
+  bannedClasses       AnniClass[]
+  bannedClassesByTeam BanList
+  map                 AnniMap
+  modifiers           ModifierTypes[]
 }
 
 model PlayerPunishment {

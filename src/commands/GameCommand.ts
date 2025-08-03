@@ -98,6 +98,18 @@ export default class GameCommand implements Command {
               `Team captain submit your class ban when ready with \`/class ban [class]\``
             );
           }
+
+          if (gameInstance.pickOtherTeamsSupportRoles) {
+            await DiscordUtil.sendMessage(
+              "redTeamChat",
+              "Team captain — please list out the support roles for the other team:\n```\nBunker:\nFarmer:\nGold Miner:\n```"
+            );
+
+            await DiscordUtil.sendMessage(
+              "blueTeamChat",
+              "Team captain — please list out the support roles for the other team:\n```\nBunker:\nFarmer:\nGold Miner:\n```"
+            );
+          }
         } catch (error) {
           console.error("Error starting the game: ", error);
           await interaction.editReply({
