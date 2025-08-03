@@ -149,8 +149,24 @@ export class CommandHandler {
           await command.handleButtonPress(interaction);
         }
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error handling interaction:", error);
+
+      if (typeof error === "object" && error !== null) {
+        const err = error as any;
+
+        if ("rawError" in err) {
+          console.error("Raw Error:", err.rawError);
+        }
+
+        if ("requestBody" in err) {
+          console.error(
+            "Request Body:",
+            JSON.stringify(err.requestBody, null, 2)
+          );
+        }
+      }
+
       if (
         interaction.isRepliable() &&
         !interaction.replied &&

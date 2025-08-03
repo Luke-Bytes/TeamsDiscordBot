@@ -118,10 +118,22 @@ model EloHistory {
   season   Season @relation(fields: [seasonId], references: [id])
 }
 
+type ModifierTypes {
+  category String
+  name     String
+}
+
+type BanList {
+  RED  AnniClass[]
+  BLUE AnniClass[]
+}
+
 type GameSettings {
-  minerushing   Boolean
-  bannedClasses AnniClass[]
-  map           AnniMap
+  minerushing         Boolean
+  bannedClasses       AnniClass[]
+  bannedClassesByTeam BanList
+  map                 AnniMap
+  modifiers           ModifierTypes[]
 }
 
 model PlayerPunishment {
@@ -167,7 +179,7 @@ enum AnniClass {
   HANDYMAN
   HEALER
   HUNTER
-  ICEMAN
+  NEPTUNE
   IMMOBILIZER
   LUMBERJACK
   MERCENARY
@@ -208,4 +220,8 @@ enum AnniMap {
   VILLAGES1V1
   ANCHORAGE1V1
   GRASSLANDS1V1
+  OUTPOST1V1
+  SKYPIRATES1V1
+  FOXBERRY1V1
+  CASTAWAY1V1
 }

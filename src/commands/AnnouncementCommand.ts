@@ -23,6 +23,7 @@ import { addTeamsGameFeed } from "../logic/gameFeed/TeamsGameFeed";
 import { GameInstance } from "../database/GameInstance";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { PermissionsUtil } from "../util/PermissionsUtil";
+import { ModifierSelector } from "../logic/ModifierSelector";
 
 export default class AnnouncementCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;
@@ -34,66 +35,83 @@ export default class AnnouncementCommand implements Command {
     "announcement-edit-time",
     "announcement-edit-map",
     "announcement-edit-banned-classes",
+    "announcement-edit-modifiers",
   ];
 
   private announcementPreviewMessage?: Message;
   private announcementMessage?: Message;
+  private initialBannedClasses: AnniClass[] = [];
 
   constructor() {
     this.data = new SlashCommandBuilder()
       .setName(this.name)
       .setDescription(this.description)
       .addSubcommand((subcommand) => {
-        return subcommand
-          .setName("start")
-          .setDescription("Start an announcement")
-          .addStringOption((option) =>
-            option.setName("when").setDescription("Date").setRequired(true)
-          )
-          .addStringOption((option) =>
-            option
-              .setName("minerushing")
-              .setDescription("Minerushing? (poll/yes/no)")
-              .setRequired(true)
-              .addChoices(
-                { name: "Yes", value: "yes" },
-                { name: "No", value: "no" },
-                { name: "Poll", value: "poll" }
-              )
-          )
-          .addStringOption((option) =>
-            option
-              .setName("banned_classes")
-              .setDescription(
-                "Banned classes separated by a comma, or 'none' for none."
-              )
-              .setRequired(true)
-          )
-          .addStringOption((option) =>
-            option
-              .setName("map")
-              .setDescription("Map? (poll <maps>/random/<map>)")
-              .setRequired(true)
-          )
-          .addStringOption((option) =>
-            option
-              .setName("organiser")
-              .setDescription("Organiser Name")
-              .setRequired(true)
-          )
-          .addStringOption((option) =>
-            option.setName("host").setDescription("Host Name").setRequired(true)
-          )
-          .addStringOption((option) =>
-            option
-              .setName("doubleelo")
-              .setDescription("Enable double elo for this game? (yes/no)")
-              .setRequired(false)
-              .addChoices(
-                { name: "Yes", value: "yes" },
-                { name: "No", value: "no" }
-              )
-          );
+        return (
+          subcommand
+            .setName("start")
+            .setDescription("Start an announcement")
+            .addStringOption((option) =>
+              option.setName("when").setDescription("Date").setRequired(true)
+            )
+            .addStringOption((o) =>
+              o
+                .setName("modifiers")
+                .setDescription("Include game modifiers? (yes/no)")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Yes", value: "yes" },
+                  { name: "No", value: "no" }
+                )
+            )
+            // .addStringOption((option) =>
+            //   option
+            //     .setName("minerushing")
+            //     .setDescription("Minerushing? (poll/yes/no)")
+            //     .setRequired(true)
+            //     .addChoices(
+            //       { name: "Yes", value: "yes" },
+            //       { name: "No", value: "no" },
+            //       { name: "Poll", value: "poll" }
+            //     )
+            // )
+            .addStringOption((option) =>
+              option
+                .setName("banned_classes")
+                .setDescription(
+                  "Banned classes separated by a comma, or 'none' for none."
+                )
+                .setRequired(true)
+            )
+            .addStringOption((option) =>
+              option
+                .setName("map")
+                .setDescription("Map? (poll <maps>/random/<map>)")
+                .setRequired(true)
+            )
+            .addStringOption((option) =>
+              option
+                .setName("organiser")
+                .setDescription("Organiser Name")
+                .setRequired(true)
+            )
+            .addStringOption((option) =>
+              option
+                .setName("host")
+                .setDescription("Host Name")
+                .setRequired(true)
+            )
+            .addStringOption((option) =>
+              option
+                .setName("doubleelo")
+                .setDescription("Enable double elo for this game? (yes/no)")
+                .setRequired(false)
+                .addChoices(
+                  { name: "Yes", value: "yes" },
+                  { name: "No", value: "no" }
+                )
+            )
+        );
       })
       .addSubcommand((subcommand) => {
         return subcommand
@@ -254,7 +272,7 @@ export default class AnnouncementCommand implements Command {
         );
       } else {
         console.warn(
-          `Attempted to reply with an unrecognized minerushing option '${minerushingOption}' but the interaction was already replied to or deferred.`
+          `Attempted to reply with an unrecognised minerushing option '${minerushingOption}' but the interaction was already replied to or deferred.`
         );
       }
       return false;
@@ -289,8 +307,22 @@ export default class AnnouncementCommand implements Command {
       return;
     }
 
-    if (!this.setMinerushing(interaction)) {
-      return;
+    this.initialBannedClasses = [
+      ...CurrentGameManager.getCurrentGame().settings.bannedClasses,
+    ];
+
+    // if (!this.setMinerushing(interaction)) {
+    //   return;
+    // }
+
+    const modifiersOption = interaction.options
+      .getString("modifiers", true)
+      .toLowerCase();
+    if (modifiersOption === "yes") {
+      ModifierSelector.runSelection();
+    } else {
+      GameInstance.getInstance().settings.modifiers = [];
+      GameInstance.getInstance().setClassBanLimit(2);
     }
 
     const doubleEloOption = interaction.options
@@ -408,6 +440,11 @@ export default class AnnouncementCommand implements Command {
       .setLabel("🚫 Edit Banned Classes")
       .setStyle(ButtonStyle.Secondary);
 
+    const editModifiersButton = new ButtonBuilder()
+      .setCustomId("announcement-edit-modifiers")
+      .setLabel("⚙️ Re-Roll Modifiers")
+      .setStyle(ButtonStyle.Secondary);
+
     const firstRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       confirmButton,
       cancelButton
@@ -416,7 +453,8 @@ export default class AnnouncementCommand implements Command {
     const secondRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       editTimeButton,
       editMapButton,
-      editBannedClassesButton
+      editBannedClassesButton,
+      editModifiersButton
     );
 
     return [firstRow, secondRow];
@@ -456,6 +494,15 @@ export default class AnnouncementCommand implements Command {
 
       case "announcement-edit-banned-classes":
         await this.handleEditBannedClasses(interaction);
+        break;
+
+      case "announcement-edit-modifiers":
+        CurrentGameManager.getCurrentGame().settings.bannedClasses = [
+          ...this.initialBannedClasses,
+        ];
+        ModifierSelector.runSelection();
+        await this.updateAnnouncementMessages();
+        await interaction.editReply("🔄 Modifiers have been rerolled.");
         break;
 
       default:
@@ -513,18 +560,19 @@ export default class AnnouncementCommand implements Command {
               : "TBD",
           inline: true,
         },
-        {
-          name: "⛏️ **MINERUSHING**",
-          value:
-            game.settings.minerushing === true
-              ? "**Yes**"
-              : game.settings.minerushing === false
-                ? "**No**"
-                : game.minerushVoteManager
-                  ? "Voting..."
-                  : "TBD",
-          inline: true,
-        },
+
+        // {
+        //   name: "⛏️ **MINERUSHING**",
+        //   value:
+        //     game.settings.minerushing === true
+        //       ? "**Yes**"
+        //       : game.settings.minerushing === false
+        //         ? "**No**"
+        //         : game.minerushVoteManager
+        //           ? "Voting..."
+        //           : "TBD",
+        //   inline: true,
+        // },
         {
           name: "🚫 **BANNED CLASSES**",
           value:
@@ -533,6 +581,16 @@ export default class AnnouncementCommand implements Command {
               ? `**${game.settings.bannedClasses
                   .map((v) => prettifyName(v))
                   .join(", ")}**`
+              : "**None**",
+          inline: false,
+        },
+        {
+          name: "⚙️ **MODIFIERS**",
+          value:
+            game.settings.modifiers.length > 0
+              ? `**${game.settings.modifiers
+                  .map((m) => `${m.category}: ${m.name}`)
+                  .join("\n")}**`
               : "**None**",
           inline: false,
         }
@@ -579,6 +637,11 @@ export default class AnnouncementCommand implements Command {
       .setLabel("🚫 Edit Banned Classes")
       .setStyle(ButtonStyle.Secondary);
 
+    const editModifiersButton = new ButtonBuilder()
+      .setCustomId("announcement-edit-modifiers")
+      .setLabel("⚙️ Re-roll Modifiers")
+      .setStyle(ButtonStyle.Secondary);
+
     const firstRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       confirmButton,
       cancelButton
@@ -587,7 +650,8 @@ export default class AnnouncementCommand implements Command {
     const secondRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       editTimeButton,
       editMapButton,
-      editBannedClassesButton
+      editBannedClassesButton,
+      editModifiersButton
     );
 
     return preview

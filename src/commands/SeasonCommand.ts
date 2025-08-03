@@ -41,7 +41,7 @@ export default class SeasonCommand implements Command {
 
     if (!season) {
       await interaction.editReply(
-        `Season ${seasonNumber} not found. Are you referring to a parallel universe?`
+        `Season ${seasonNumber} not found. Are you from a parallel universe perhaps?`
       );
       return;
     }

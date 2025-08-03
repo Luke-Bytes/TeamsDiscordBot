@@ -140,7 +140,9 @@ export const prismaClient = new PrismaClient({
         const gameSettings = {
           minerushing: settings.minerushing ?? false,
           bannedClasses: settings.bannedClasses ?? [],
+          bannedClassesByTeam: settings.bannedClassesByTeam ?? [],
           map: settings.map ?? "DUELSTAL",
+          modifiers: settings.modifiers ?? [],
         };
 
         const allParticipants = await Promise.all(

@@ -87,15 +87,29 @@ export default class GameCommand implements Command {
             `**Mid Blocks Plan**\n\`\`\`\n${blueNamesFormatted}\n\`\`\`\n**Game Plan**\n\`\`\`\n${blueNamesFormatted}\n\`\`\``
           );
 
-          await DiscordUtil.sendMessage(
-            "redTeamChat",
-            `Team captain submit your class ban when ready with \`class ban [class]\``
-          );
+          if (gameInstance.getClassBanLimit() !== 0) {
+            await DiscordUtil.sendMessage(
+              "redTeamChat",
+              `Team captain submit your class ban when ready with \`/class ban [class]\``
+            );
 
-          await DiscordUtil.sendMessage(
-            "blueTeamChat",
-            `Team captain submit your class ban when ready with \`class ban [class]\``
-          );
+            await DiscordUtil.sendMessage(
+              "blueTeamChat",
+              `Team captain submit your class ban when ready with \`/class ban [class]\``
+            );
+          }
+
+          if (gameInstance.pickOtherTeamsSupportRoles) {
+            await DiscordUtil.sendMessage(
+              "redTeamChat",
+              "Team captain — please list out the support roles for the other team:\n```\nBunker:\nFarmer:\nGold Miner:\n```"
+            );
+
+            await DiscordUtil.sendMessage(
+              "blueTeamChat",
+              "Team captain — please list out the support roles for the other team:\n```\nBunker:\nFarmer:\nGold Miner:\n```"
+            );
+          }
         } catch (error) {
           console.error("Error starting the game: ", error);
           await interaction.editReply({
@@ -115,15 +129,19 @@ export default class GameCommand implements Command {
         const blueTeamRoleId = config.roles.blueTeamRole;
         const redTeamRoleId = config.roles.redTeamRole;
 
-        await DiscordUtil.sendMessage(
-          "redTeamChat",
-          `The game has now ended, voting for the team MVP is now open! Type \`/MVP Vote [MCID]\` to pick for <@&${redTeamRoleId}>!`
-        );
+        if (Object.keys(gameInstance.mvpVotes.RED).length === 0) {
+          await DiscordUtil.sendMessage(
+            "redTeamChat",
+            `The game has now ended, voting for the team MVP is now open! Type \`/MVP Vote [MCID]\` to pick for <@&${redTeamRoleId}>!`
+          );
+        }
 
-        await DiscordUtil.sendMessage(
-          "blueTeamChat",
-          `The game has now ended, voting for the team MVP is now open! Type \`/MVP Vote [MCID]\` to pick for <@&${blueTeamRoleId}>!`
-        );
+        if (Object.keys(gameInstance.mvpVotes.BLUE).length === 0) {
+          await DiscordUtil.sendMessage(
+            "blueTeamChat",
+            `The game has now ended, voting for the team MVP is now open! Type \`/MVP Vote [MCID]\` to pick for <@&${blueTeamRoleId}>!`
+          );
+        }
 
         gameInstance.calculateMeanEloAndExpectedScore();
 

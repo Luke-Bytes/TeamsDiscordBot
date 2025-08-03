@@ -60,9 +60,12 @@ export class TeamsBot {
       } else {
         console.log("No punishments expired today.");
       }
-      this.client.user?.setActivity("Season 2!", {
-        type: ActivityType.Competing,
-      });
+      this.client.user?.setActivity(
+        `Season ${PermissionsUtil.config.season}!`,
+        {
+          type: ActivityType.Competing,
+        }
+      );
     });
 
     // Command + Context Menu Listener

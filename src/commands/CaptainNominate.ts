@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { DiscordUtil } from "../util/DiscordUtil.js";
-import { GameInstance } from "../database/GameInstance"; // Adjust path based on your structure
+import { GameInstance } from "../database/GameInstance";
 
 export default class CaptainNominateCommand implements Command {
   data = new SlashCommandBuilder()
@@ -15,15 +15,15 @@ export default class CaptainNominateCommand implements Command {
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     if (!GameInstance.getInstance().announced) {
       await interaction.reply({
-        content: "No game has been announced!",
-        ephemeral: true,
+        content: "No game has been announced yet!",
+        ephemeral: false,
       });
       return;
     }
     const user = interaction.user;
     await DiscordUtil.sendMessage(
       "gameFeed",
-      `@${user.tag} has nominated themselves to be a captain!`
+      `<@${user.id}> has nominated themselves to be a captain!`
     );
     await interaction.reply({
       content: "You have nominated yourself to be a captain!",
