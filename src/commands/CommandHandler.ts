@@ -31,6 +31,7 @@ import TimestampCommand from "../commands/TimeStampCommand";
 import VerifyCommand from "../commands/VerifyCommand";
 import ClassbanCommand from "../commands/ClassbanCommand";
 import SeasonCommand from "../commands/SeasonCommand";
+import UsernameCommand from "commands/UsernameCommand";
 
 export class CommandHandler {
   commands: Command[] = [];
@@ -39,7 +40,6 @@ export class CommandHandler {
   announcementCommand = new AnnouncementCommand();
   ignsCommand = new IgnsCommand();
   leaderboardsCommand = new LeaderboardsCommand();
-  registerCommand = new RegisterCommand();
   statsCommand = new StatsCommand();
   teamCommand = new TeamCommand();
   captainCommand = new CaptainCommand(this.teamCommand);
@@ -47,7 +47,8 @@ export class CommandHandler {
   cleanupCommand = new CleanupCommand();
   scenarioCommand = new ScenarioCommand();
   registeredCommand = new RegisteredCommand();
-  unregisterCommand = new UnregisterCommand();
+  registerCommand = new RegisterCommand(this.teamCommand);
+  unregisterCommand = new UnregisterCommand(this.teamCommand);
   restartCommand = new RestartCommand();
   playerCommand = new PlayerCommand();
   winnerCommand = new WinnerCommand();
@@ -65,6 +66,7 @@ export class CommandHandler {
   verifyCommand = new VerifyCommand();
   classbanCommand = new ClassbanCommand();
   seasonCommand = new SeasonCommand();
+  usernameCommand = new UsernameCommand();
 
   public loadCommands() {
     this.commands = [
@@ -97,6 +99,7 @@ export class CommandHandler {
       this.verifyCommand,
       this.classbanCommand,
       this.seasonCommand,
+      this.usernameCommand,
     ];
   }
 

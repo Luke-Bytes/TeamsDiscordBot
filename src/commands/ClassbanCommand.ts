@@ -119,30 +119,10 @@ export default class ClassbanCommand implements Command {
       return;
     }
     const cls = raw as AnniClass;
-    const forbidden: AnniClass[] = [
-      AnniClass.ENCHANTER,
-      AnniClass.FARMER,
-      AnniClass.MINER,
-      AnniClass.RIFTWALKER,
-      AnniClass.TRANSPORTER,
-    ];
-    if (forbidden.includes(cls)) {
-      return interaction.editReply({
-        embeds: [
-          new EmbedBuilder()
-            .setColor("Orange")
-            .setTitle("🚫 Cannot Ban Core Class")
-            .setDescription(`${prettifyName(cls)} may not be banned.`)
-            .setTimestamp(),
-        ],
-      });
-    }
-
     const mode = game.classBanMode;
     const team = PermissionsUtil.hasRole(member, "blueTeamRole")
       ? Team.BLUE
       : Team.RED;
-    const opp = team === Team.BLUE ? Team.RED : Team.BLUE;
 
     if (!game.settings.bannedClasses.includes(cls)) {
       game.settings.bannedClasses.push(cls);
@@ -155,8 +135,28 @@ export default class ClassbanCommand implements Command {
         }
       }
     } else if (mode === "opponentOnly") {
-      if (!game.settings.bannedClassesByTeam[opp].includes(cls)) {
-        game.settings.bannedClassesByTeam[opp].push(cls);
+      const forbidden: AnniClass[] = [
+        AnniClass.ENCHANTER,
+        AnniClass.DASHER,
+        AnniClass.FARMER,
+        AnniClass.MINER,
+        AnniClass.RIFTWALKER,
+        AnniClass.TRANSPORTER,
+      ];
+      if (forbidden.includes(cls)) {
+        return interaction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor("Orange")
+              .setTitle("🚫 Cannot Ban Core Class")
+              .setDescription(
+                `${prettifyName(cls)} may not be banned.\n\n**Core Classes:**\n${forbidden
+                  .map(prettifyName)
+                  .join("\n")}`
+              )
+              .setTimestamp(),
+          ],
+        });
       }
     } else if (!game.settings.bannedClassesByTeam[team].includes(cls)) {
       game.settings.bannedClassesByTeam[team].push(cls);
