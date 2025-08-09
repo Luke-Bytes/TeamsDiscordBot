@@ -132,6 +132,7 @@ export class ModifierSelector {
           AnniClass.LUMBERJACK,
           AnniClass.MERCENARY,
           AnniClass.WARRIOR,
+          AnniClass.SUCCUBUS,
         ].forEach((c) => {
           if (!banned.includes(c)) banned.push(c);
         });
