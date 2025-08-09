@@ -3,6 +3,7 @@ import { Command } from "./CommandInterface.js";
 import { PermissionsUtil } from "../util/PermissionsUtil.js";
 import { CurrentGameManager } from "../logic/CurrentGameManager.js";
 import { Team } from "@prisma/client";
+import TeamCommand from "../commands/TeamCommand";
 
 export default class UnregisterCommand implements Command {
   public data: SlashCommandBuilder;
@@ -10,7 +11,10 @@ export default class UnregisterCommand implements Command {
   public description = "Unregister from the announced game!";
   public buttonIds: string[] = [];
 
-  constructor() {
+  private readonly teamCommand: TeamCommand;
+
+  constructor(teamCommand: TeamCommand) {
+    this.teamCommand = teamCommand;
     this.data = new SlashCommandBuilder()
       .setName(this.name)
       .setDescription(this.description)
@@ -53,7 +57,7 @@ export default class UnregisterCommand implements Command {
     ) {
       await interaction.reply({
         content: "You do not have permission to unregister other users.",
-        ephemeral: true,
+        ephemeral: false,
       });
       return;
     }
@@ -94,6 +98,14 @@ export default class UnregisterCommand implements Command {
         (player) => player.discordSnowflake === discordUserId
       )
     );
+
+    if (this.teamCommand.isTeamPickingSessionActive()) {
+      await interaction.reply({
+        content: `${discordUserName} has been unregistered but will be punished for unregistering while teams were being drafted.`,
+        ephemeral: false,
+      });
+      //   TODO remove player from draft embed
+    }
 
     if (userTeam && userTeam !== "UNDECIDED" && game.teamsDecidedBy) {
       await interaction.reply({

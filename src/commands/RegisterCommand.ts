@@ -4,14 +4,17 @@ import { PermissionsUtil } from "../util/PermissionsUtil.js";
 import { CurrentGameManager } from "../logic/CurrentGameManager.js";
 import { prismaClient } from "../database/prismaClient";
 import { MojangAPI } from "../api/MojangAPI";
+import TeamCommand from "../commands/TeamCommand";
 
 export default class RegisterCommand implements Command {
   public data: SlashCommandBuilder;
   public name = "register";
   public description = "Register for friendly war!";
   public buttonIds: string[] = [];
+  private readonly teamCommand: TeamCommand;
 
-  constructor() {
+  constructor(teamCommand: TeamCommand) {
+    this.teamCommand = teamCommand;
     this.data = new SlashCommandBuilder()
       .setName(this.name)
       .setDescription(this.description)
@@ -184,14 +187,28 @@ export default class RegisterCommand implements Command {
     }
 
     // late signups
-    if (CurrentGameManager.getCurrentGame().teamsDecidedBy !== null) {
+
+    if (this.teamCommand.isTeamPickingSessionActive()) {
       if (PermissionsUtil.isSameUser(interaction, targetUser.id)) {
         await interaction.editReply({
-          content: `You have successfully registered as \`${resolvedUsername}\` but please note this is a late sign-up. You may be unable to play.`,
+          content: `You have successfully registered as \`${resolvedUsername}\` but please note this is a late sign-up as team picking is currently ongoing. You may be unable to play.`,
         });
       } else {
         await interaction.editReply({
-          content: `${discordUserName} has been successfully registered as \`${resolvedUsername}\`, but it's a late sign-up.`,
+          content: `${discordUserName} has been successfully registered as \`${resolvedUsername}\`, but it's a late sign-up during team picking.`,
+        });
+      }
+      return;
+    }
+
+    if (CurrentGameManager.getCurrentGame().teamsDecidedBy !== null) {
+      if (PermissionsUtil.isSameUser(interaction, targetUser.id)) {
+        await interaction.editReply({
+          content: `You have successfully registered as \`${resolvedUsername}\` but please note this is a late sign-up as team picking has been completed. You may be unable to play.`,
+        });
+      } else {
+        await interaction.editReply({
+          content: `${discordUserName} has been successfully registered as \`${resolvedUsername}\`, but it's a late sign-up post team picking.`,
         });
       }
       return;

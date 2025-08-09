@@ -131,7 +131,7 @@ type BanList {
 type GameSettings {
   minerushing         Boolean
   bannedClasses       AnniClass[]
-  bannedClassesByTeam BanList
+  bannedClassesByTeam BanList?
   map                 AnniMap
   modifiers           ModifierTypes[]
 }

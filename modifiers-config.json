@@ -30,15 +30,14 @@
       "modifiers": [
         { "name": "75", "weight": 8 },
         { "name": "100", "weight": 1 },
-        { "name": "125", "weight": 1 },
-        { "name": "150", "weight": 1 }
+        { "name": "125", "weight": 1 }
       ]
     },
     {
       "name": "Captain's Pick Other Team's Support Roles",
       "maxPerRun": 1,
       "modifiers": [
-        { "name": "No", "weight": 0 },
+        { "name": "No", "weight": 9 },
         { "name": "Yes", "weight": 1 }
       ]
     },
@@ -46,7 +45,7 @@
       "name": "Minerushing",
       "maxPerRun": 1,
       "modifiers": [
-        { "name": "Always", "weight": 16 },
+        { "name": "Always", "weight": 18 },
         { "name": "Not before phase 2 (Two)", "weight": 1 },
         { "name": "Not before phase 3 (Three)", "weight": 1 }
       ]
@@ -55,7 +54,7 @@
       "name": "Nexus Damage",
       "maxPerRun": 1,
       "modifiers": [
-        { "name": "Always", "weight": 8 },
+        { "name": "Always", "weight": 17 },
         { "name": "No Nexus Damage before phase 2 (Two)", "weight": 1 },
         { "name": "No Nexus Damage before phase 3 (Three)", "weight": 1 },
         { "name": "No Nexus Damage before phase 4 (Four)", "weight": 1 }
@@ -73,7 +72,7 @@
       "name": "Skip Phase",
       "maxPerRun": 1,
       "modifiers": [
-        { "name": "No Phase Skip", "weight": 18 },
+        { "name": "No Phase Skip", "weight": 17 },
         { "name": "Phase 1 (One)", "weight": 1 },
         { "name": "Phase 2 (Two)", "weight": 1 },
         { "name": "Phase 1 (One) AND 2 (Two)", "weight": 1 }
