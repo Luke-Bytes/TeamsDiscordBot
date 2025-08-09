@@ -31,7 +31,7 @@ import TimestampCommand from "../commands/TimeStampCommand";
 import VerifyCommand from "../commands/VerifyCommand";
 import ClassbanCommand from "../commands/ClassbanCommand";
 import SeasonCommand from "../commands/SeasonCommand";
-import UsernameCommand from "commands/UsernameCommand";
+import UsernameCommand from "../commands/UsernameCommand";
 
 export class CommandHandler {
   commands: Command[] = [];

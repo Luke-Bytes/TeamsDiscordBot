@@ -4,7 +4,7 @@ import { PermissionsUtil } from "../util/PermissionsUtil.js";
 import { CurrentGameManager } from "../logic/CurrentGameManager.js";
 import { prismaClient } from "../database/prismaClient";
 import { MojangAPI } from "../api/MojangAPI";
-import TeamCommand from "commands/TeamCommand";
+import TeamCommand from "../commands/TeamCommand";
 
 export default class RegisterCommand implements Command {
   public data: SlashCommandBuilder;

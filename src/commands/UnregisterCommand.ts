@@ -3,7 +3,7 @@ import { Command } from "./CommandInterface.js";
 import { PermissionsUtil } from "../util/PermissionsUtil.js";
 import { CurrentGameManager } from "../logic/CurrentGameManager.js";
 import { Team } from "@prisma/client";
-import TeamCommand from "commands/TeamCommand";
+import TeamCommand from "../commands/TeamCommand";
 
 export default class UnregisterCommand implements Command {
   public data: SlashCommandBuilder;
