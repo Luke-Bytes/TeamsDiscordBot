@@ -1,5 +1,5 @@
 import { Snowflake } from "discord.js";
-import { prismaClient } from "./prismaClient.js";
+import { prismaClient } from "./prismaClient";
 import { Player, PlayerStats } from "@prisma/client";
 import { ConfigManager } from "../ConfigManager";
 
