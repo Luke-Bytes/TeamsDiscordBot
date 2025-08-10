@@ -10,6 +10,7 @@
     "build": "npx prisma generate --no-hints && esbuild src/main.ts --bundle --minify --platform=node --target=node18 --sourcemap --keep-names --outfile=dist/main.js",
     "start:bot:prod": "node dist/main.js",
     "dev": "tsx watch src/main.ts",
+    "dev:respawn": "node scripts/dev-runner.js",
     "prod": "npm run build && npm run start:bot:prod",
     "dev:pm2": "pm2 start src/main.ts --name 'TeamsBot' --watch --interpreter tsx",
     "prod:pm2": "pm2 start dist/main.js --name 'TeamsBot' --max-restarts 10",

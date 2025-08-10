@@ -1,4 +1,4 @@
-import { GameInstance } from "../database/GameInstance.js";
+import { GameInstance } from "../database/GameInstance";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { ConfigManager } from "../ConfigManager";
 import { Guild } from "discord.js";
