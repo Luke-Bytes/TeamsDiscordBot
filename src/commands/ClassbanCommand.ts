@@ -73,6 +73,7 @@ export default class ClassbanCommand implements Command {
         ],
       });
     }
+
     const member = DiscordUtil.getGuildMember(interaction);
     if (!PermissionsUtil.hasRole(member, "captainRole")) {
       return interaction.editReply({
@@ -85,6 +86,7 @@ export default class ClassbanCommand implements Command {
         ],
       });
     }
+
     if (game.hasCaptainReachedBanLimit(interaction.user.id)) {
       return interaction.editReply({
         embeds: [
@@ -118,22 +120,19 @@ export default class ClassbanCommand implements Command {
       await interaction.deleteReply();
       return;
     }
+
     const cls = raw as AnniClass;
     const mode = game.classBanMode;
     const team = PermissionsUtil.hasRole(member, "blueTeamRole")
       ? Team.BLUE
       : Team.RED;
+    const opponent = team === Team.BLUE ? Team.RED : Team.BLUE;
 
-    if (!game.settings.bannedClasses.includes(cls)) {
-      game.settings.bannedClasses.push(cls);
-    }
+    const banned = game.settings.bannedClasses;
+    const byTeam = game.settings.bannedClassesByTeam;
 
     if (mode === "shared") {
-      for (const t of [Team.RED, Team.BLUE]) {
-        if (!game.settings.bannedClassesByTeam[t].includes(cls)) {
-          game.settings.bannedClassesByTeam[t].push(cls);
-        }
-      }
+      if (!banned.includes(cls)) banned.push(cls);
     } else if (mode === "opponentOnly") {
       const forbidden: AnniClass[] = [
         AnniClass.ENCHANTER,
@@ -158,9 +157,11 @@ export default class ClassbanCommand implements Command {
           ],
         });
       }
-    } else if (!game.settings.bannedClassesByTeam[team].includes(cls)) {
-      game.settings.bannedClassesByTeam[team].push(cls);
+      if (!byTeam[opponent].includes(cls)) byTeam[opponent].push(cls);
+    } else {
+      if (!byTeam[team].includes(cls)) byTeam[team].push(cls);
     }
+
     game.markCaptainHasBanned(interaction.user.id);
 
     const captainLabel = team === Team.BLUE ? "Blue Captain" : "Red Captain";
@@ -175,8 +176,8 @@ export default class ClassbanCommand implements Command {
     await interaction.deleteReply();
 
     if (game.getTotalCaptainBans() === game.getClassBanLimit()) {
-      const banned = game.settings.bannedClasses;
       const byTeam = game.settings.bannedClassesByTeam;
+      const banned = game.settings.bannedClasses;
       const both = banned.filter(
         (c) => !byTeam[Team.RED].includes(c) && !byTeam[Team.BLUE].includes(c)
       );
@@ -241,6 +242,7 @@ export default class ClassbanCommand implements Command {
         ],
       });
     }
+
     const banned = game.settings.bannedClasses;
     return interaction.reply({
       embeds: [
