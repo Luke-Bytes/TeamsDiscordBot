@@ -124,6 +124,7 @@ export const prismaClient = new PrismaClient({
           teamsDecidedBy,
           organiser,
           host,
+          isDoubleElo,
         } = gameInstance;
 
         const config = ConfigManager.getConfig();
@@ -241,6 +242,7 @@ export const prismaClient = new PrismaClient({
             type: teamsDecidedBy as gameType | null,
             organiser,
             host,
+            doubleElo: isDoubleElo,
             participantsIGNs: validParticipants.map(
               (p) => p.ignUsed || "UnknownIGN"
             ),
@@ -262,6 +264,7 @@ export const prismaClient = new PrismaClient({
             type: teamsDecidedBy as gameType | null,
             organiser,
             host,
+            doubleElo: isDoubleElo,
             participantsIGNs: validParticipants.map(
               (p) => p.ignUsed ?? "UnknownIGN"
             ),

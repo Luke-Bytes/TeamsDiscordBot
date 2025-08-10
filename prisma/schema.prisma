@@ -70,6 +70,7 @@ model Game {
   settings  GameSettings
   winner    Team?
   type      gameType?
+  doubleElo Boolean?
 
   organiser String?
   host      String?
