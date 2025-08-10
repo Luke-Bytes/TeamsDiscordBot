@@ -12,6 +12,7 @@ import { Channels } from "../Channels";
 import { addRegisteredPlayersFeed } from "../logic/gameFeed/RegisteredGameFeed";
 import { addTeamsGameFeed } from "../logic/gameFeed/TeamsGameFeed";
 import { Elo } from "../logic/Elo";
+import { ModifierSelector } from "../logic/ModifierSelector";
 
 // wrapper class for Game
 export class GameInstance {
@@ -404,10 +405,11 @@ export class GameInstance {
       modifiers: [],
     };
     this.MVPPlayerBlue = "Immortal";
+    this.MVPPlayerRed = "5trawHato";
     this.teams.RED = [];
     this.teams.BLUE = [];
     this.teams.UNDECIDED = [];
-    this.classBanLimit = 4;
+    ModifierSelector.runSelection();
     this.captainBanCounts.clear();
 
     await activateFeed(Channels.gameFeed, addRegisteredPlayersFeed);
@@ -415,7 +417,7 @@ export class GameInstance {
 
     if (fillOption !== "none") {
       console.info(`[GAME] Filling teams with test players...`);
-      await this.fillTeamsWithTestPlayers(3, fillOption);
+      await this.fillTeamsWithTestPlayers(9, fillOption);
       console.info(`[GAME] Teams filled. Current teams:`, this.teams);
 
       this.teams.RED.forEach((player) => {

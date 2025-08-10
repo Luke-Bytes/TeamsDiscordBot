@@ -9,20 +9,17 @@ import {
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { PermissionsUtil } from "../util/PermissionsUtil";
-import { exec } from "child_process";
 
 export default class RestartCommand implements Command {
   data = new SlashCommandBuilder()
     .setName("restart")
     .setDescription("Restarts the bot");
-
   name = "restart";
   description = "Restarts the bot";
   buttonIds = ["confirm_restart"];
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const member = interaction.member as GuildMember;
-
     if (!member || !PermissionsUtil.hasRole(member, "organiserRole")) {
       await interaction.reply({
         content: "You do not have permission to restart the bot.",
@@ -30,16 +27,13 @@ export default class RestartCommand implements Command {
       });
       return;
     }
-
     const confirmButton = new ButtonBuilder()
       .setCustomId("confirm_restart")
       .setLabel("Confirm Restart")
       .setStyle(ButtonStyle.Danger);
-
     const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       confirmButton
     );
-
     await interaction.reply({
       content: "⚠️ **Warning:** Are you sure you want to restart the bot?",
       components: [actionRow],
@@ -59,16 +53,7 @@ export default class RestartCommand implements Command {
 
   public restartBot(): void {
     console.log("Bot is being restarted.. byebye!");
-    exec("pm2 restart TeamsBot", (error, stdout, stderr) => {
-      if (error) {
-        console.error(`Error restarting bot: ${error.message}`);
-        return;
-      }
-      if (stderr) {
-        console.error(`PM2 stderr: ${stderr}`);
-        return;
-      }
-      console.log(`PM2 stdout: ${stdout}`);
-    });
+    const isPM2 = !!(process.env.pm_id || process.env.PM2_HOME);
+    process.exit(isPM2 ? 0 : 51); // 51 => ask parent to relaunch
   }
 }
