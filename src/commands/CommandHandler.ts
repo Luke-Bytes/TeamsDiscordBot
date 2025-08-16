@@ -32,8 +32,8 @@ import VerifyCommand from "../commands/VerifyCommand";
 import ClassbanCommand from "../commands/ClassbanCommand";
 import SeasonCommand from "../commands/SeasonCommand";
 import UsernameCommand from "../commands/UsernameCommand";
-import ForfeitCommand from "commands/ForfeitCommand";
-import MapsCommand from "commands/MapsCommand";
+import ForfeitCommand from "../commands/ForfeitCommand";
+import MapsCommand from "../commands/MapsCommand";
 
 export class CommandHandler {
   commands: Command[] = [];

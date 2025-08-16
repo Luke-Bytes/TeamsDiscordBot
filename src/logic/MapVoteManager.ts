@@ -1,6 +1,12 @@
 import { AnniMap } from "@prisma/client";
 import { Channels } from "../Channels";
-import { EmbedBuilder, Message, Snowflake, User, Collection as DjsCollection } from "discord.js";
+import {
+  EmbedBuilder,
+  Message,
+  Snowflake,
+  User,
+  Collection as DjsCollection,
+} from "discord.js";
 import EventEmitter from "events";
 import { prettifyName, stripVariationSelector } from "../util/Utils";
 import { Scheduler } from "../util/SchedulerUtil";
@@ -45,11 +51,13 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
     answer: any,
     registeredIds: Set<string>
   ): Promise<{ total: number; valid: number }> {
-    let total = 0, valid = 0;
+    let total = 0,
+      valid = 0;
     let after: Snowflake | undefined = undefined;
     for (;;) {
-      const page: DjsCollection<Snowflake, User> | null =
-        await answer.fetchVoters({ limit: 100, after } as any).catch(() => null);
+      const page: DjsCollection<Snowflake, User> | null = await answer
+        .fetchVoters({ limit: 100, after } as any)
+        .catch(() => null);
       if (!page) break;
       for (const [id] of page) {
         total++;
@@ -59,8 +67,9 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
       after = page.lastKey();
     }
     if (total === 0) {
-      const once: DjsCollection<Snowflake, User> | null =
-        await answer.fetchVoters().catch(() => null);
+      const once: DjsCollection<Snowflake, User> | null = await answer
+        .fetchVoters()
+        .catch(() => null);
       if (once) {
         for (const [id] of once) {
           total++;
@@ -75,7 +84,8 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
     return Object.entries(mapToEmojis).find(
       ([mapName, emoji]) =>
         mapName === text.toUpperCase().replace(/\s+/g, "") &&
-        stripVariationSelector(emoji) === stripVariationSelector(emojiName ?? "")
+        stripVariationSelector(emoji) ===
+          stripVariationSelector(emojiName ?? "")
     )?.[0];
   }
 
@@ -94,9 +104,9 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
 
     const gi = GameInstance.getInstance();
     const registeredIds = new Set<string>([
-      ...gi.teams.RED.map(p => p.discordSnowflake),
-      ...gi.teams.BLUE.map(p => p.discordSnowflake),
-      ...gi.teams.UNDECIDED.map(p => p.discordSnowflake),
+      ...gi.teams.RED.map((p) => p.discordSnowflake),
+      ...gi.teams.BLUE.map((p) => p.discordSnowflake),
+      ...gi.teams.UNDECIDED.map((p) => p.discordSnowflake),
     ]);
 
     const answersArray = Array.from(poll.answers.entries());
@@ -104,12 +114,15 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
       answersArray.map(async ([key, answer]) => {
         const text = answer?.text ?? "N/A";
         const emojiName = answer?.emoji?.name ?? "";
-        let total = 0, valid = 0;
+        let total = 0,
+          valid = 0;
         try {
           const res = await this.countAnswerVoters(answer, registeredIds);
           total = res.total;
           valid = res.valid;
-        } catch {}
+        } catch (e) {
+          console.warn("[MapVoteManager] Unable to count answers " + e);
+        }
         return {
           key,
           text,
@@ -121,10 +134,12 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
       })
     );
 
-    const allZero = counted.every(c => c.raw === 0 && c.count === 0);
+    const allZero = counted.every((c) => c.raw === 0 && c.count === 0);
     if (allZero) {
       await freshMsg.poll?.end().catch(() => {});
-      const refetched: Message = await freshMsg.fetch(true).catch(() => freshMsg);
+      const refetched: Message = await freshMsg
+        .fetch(true)
+        .catch(() => freshMsg);
       const poll2 = refetched.poll;
       if (poll2?.answers?.size) {
         const arr2 = Array.from(poll2.answers.entries());
@@ -132,12 +147,15 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
           arr2.map(async ([key, answer]) => {
             const text = answer?.text ?? "N/A";
             const emojiName = answer?.emoji?.name ?? "";
-            let total = 0, valid = 0;
+            let total = 0,
+              valid = 0;
             try {
               const res = await this.countAnswerVoters(answer, registeredIds);
               total = res.total;
               valid = res.valid;
-            } catch {}
+            } catch (e) {
+              console.warn("[MapVoteManager] Unable to retrieve answers " + e);
+            }
             return {
               key,
               text,
@@ -152,33 +170,53 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
       }
     }
 
-    console.log(JSON.stringify(counted.map(c => ({
-      Key: c.key, Text: c.text, CountedVotes: c.count, RawVoteCount: c.raw
-    })), null, 2));
+    console.log(
+      JSON.stringify(
+        counted.map((c) => ({
+          Key: c.key,
+          Text: c.text,
+          CountedVotes: c.count,
+          RawVoteCount: c.raw,
+        })),
+        null,
+        2
+      )
+    );
 
-    const officialMax = Math.max(...counted.map(c => c.count));
-    const officialTop = counted.filter(c => c.count === officialMax);
-    const discordMax = Math.max(...counted.map(c => c.raw));
-    const discordTop = counted.filter(c => c.raw === discordMax);
+    const officialMax = Math.max(...counted.map((c) => c.count));
+    const officialTop = counted.filter((c) => c.count === officialMax);
+    const discordMax = Math.max(...counted.map((c) => c.raw));
+    const discordTop = counted.filter((c) => c.raw === discordMax);
 
     const diffOrDraw =
       officialTop.length !== 1 ||
       discordTop.length !== 1 ||
-      (officialTop[0] && discordTop[0] && officialTop[0].key !== discordTop[0].key);
+      (officialTop[0] &&
+        discordTop[0] &&
+        officialTop[0].key !== discordTop[0].key);
 
     if (diffOrDraw) {
       const lines = counted
         .slice()
         .sort((a, b) => b.count - a.count || b.raw - a.raw)
-        .map(c => `• ${c.text}: **${c.count}** registered / ${c.raw} total (${Math.max(0, c.raw - c.count)} discounted)`);
-      const officialStr = officialTop.map(c => c.text).join(", ") || "—";
+        .map(
+          (c) =>
+            `• ${c.text}: **${c.count}** registered / ${c.raw} total (${Math.max(0, c.raw - c.count)} discounted)`
+        );
+      const officialStr = officialTop.map((c) => c.text).join(", ") || "—";
 
       const embed = new EmbedBuilder()
         .setTitle("Map Vote Result")
-        .setDescription("The result was affected disproportionally by unregistered votes, only votes from **registered players** are counted.")
+        .setDescription(
+          "The result was affected disproportionally by unregistered votes, only votes from **registered players** are counted."
+        )
         .addFields(
-          { name: `Official winner${officialTop.length > 1 ? "s" : ""}`, value: officialStr, inline: false },
-          { name: "Breakdown", value: lines.join("\n"), inline: false },
+          {
+            name: `Official winner${officialTop.length > 1 ? "s" : ""}`,
+            value: officialStr,
+            inline: false,
+          },
+          { name: "Breakdown", value: lines.join("\n"), inline: false }
         );
 
       await this.pollMessage!.reply({ embeds: [embed] }).catch(() => {});
@@ -189,7 +227,9 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
     if (officialTop.length === 1 && officialTop[0].mapEnum) {
       this.emit("pollEnd", officialTop[0].mapEnum as AnniMap);
     } else {
-      console.error("No single official winner could be determined. Manual tiebreaker required.");
+      console.error(
+        "No single official winner could be determined. Manual tiebreaker required."
+      );
     }
   }
 
@@ -203,7 +243,7 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
     this.pollMessage = await channel.send({
       poll: {
         question: { text: "Map vote" },
-        answers: this.maps.map(v => ({
+        answers: this.maps.map((v) => ({
           text: prettifyName(v),
           emoji: stripVariationSelector(mapToEmojis[v]),
         })),
@@ -218,12 +258,16 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
       return;
     }
 
-    const fiveMinutesBeforeStart = new Date(gameStartTime.getTime() - 5 * 60 * 1000);
+    const fiveMinutesBeforeStart = new Date(
+      gameStartTime.getTime() - 5 * 60 * 1000
+    );
     const now = new Date();
 
     if (fiveMinutesBeforeStart > now) {
       const delay = fiveMinutesBeforeStart.getTime() - now.getTime();
-      console.info(`Scheduling map poll closure in ${delay / 1000}s at ${fiveMinutesBeforeStart.toISOString()}`);
+      console.info(
+        `Scheduling map poll closure in ${delay / 1000}s at ${fiveMinutesBeforeStart.toISOString()}`
+      );
       Scheduler.schedule(
         "mapVote",
         async () => {

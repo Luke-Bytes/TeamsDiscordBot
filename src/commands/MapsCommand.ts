@@ -9,7 +9,9 @@ import { Command } from "./CommandInterface.js";
 import { AnniMap } from "@prisma/client";
 
 export default class MapsCommand implements Command {
-  data = new SlashCommandBuilder().setName("maps").setDescription("List all maps");
+  data = new SlashCommandBuilder()
+    .setName("maps")
+    .setDescription("List all maps");
   name = "maps";
   description = "List all maps";
   buttonIds: string[] = [];
