@@ -25,7 +25,7 @@
     "backup": "node scripts/db-backups.js",
     "rebuild": "git pull && npm run stop:pm2 && npm run build && npm run prod:pm2"
   },
-  "author": "Luke and Eric",
+  "author": "Luke",
   "license": "GNU",
   "dependencies": {
     "@eslint/js": "^9.12.0",

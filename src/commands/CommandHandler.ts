@@ -32,6 +32,8 @@ import VerifyCommand from "../commands/VerifyCommand";
 import ClassbanCommand from "../commands/ClassbanCommand";
 import SeasonCommand from "../commands/SeasonCommand";
 import UsernameCommand from "../commands/UsernameCommand";
+import ForfeitCommand from "commands/ForfeitCommand";
+import MapsCommand from "commands/MapsCommand";
 
 export class CommandHandler {
   commands: Command[] = [];
@@ -67,6 +69,8 @@ export class CommandHandler {
   classbanCommand = new ClassbanCommand();
   seasonCommand = new SeasonCommand();
   usernameCommand = new UsernameCommand();
+  forfeitCommand = new ForfeitCommand();
+  mapsCommand = new MapsCommand();
 
   public loadCommands() {
     this.commands = [
@@ -100,6 +104,8 @@ export class CommandHandler {
       this.classbanCommand,
       this.seasonCommand,
       this.usernameCommand,
+      this.forfeitCommand,
+      this.mapsCommand,
     ];
   }
 
