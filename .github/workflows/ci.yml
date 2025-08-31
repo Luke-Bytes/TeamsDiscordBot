@@ -135,10 +135,41 @@ jobs:
       - name: Ensure config.json exists for tests
         shell: pwsh
         run: |
-          if (Test-Path config.sample.json) {
-            Copy-Item -Path config.sample.json -Destination config.json -Force
+          $root = $env:GITHUB_WORKSPACE
+          $sample = Join-Path $root 'config.sample.json'
+          $dest = Join-Path $root 'config.json'
+          if (Test-Path -LiteralPath $sample) {
+            Copy-Item -LiteralPath $sample -Destination $dest -Force
           } else {
-            "{`n  \"season\": 1,`n  \"mvpBonus\": 3,`n  \"captainBonus\": 5,`n  \"underdogMultiplier\": 1.0,`n  \"roles\": {`n    \"blueTeamRole\": \"blue\",`n    \"redTeamRole\": \"red\",`n    \"captainRole\": \"captain\",`n    \"organiserRole\": \"organiser\"`n  },`n  \"channels\": {`n    \"registration\": \"registration\",`n    \"announcements\": \"announcements\",`n    \"gameFeed\": \"gameFeed\",`n    \"botCommands\": \"botCommands\",`n    \"teamPickingVC\": \"teamPickingVC\",`n    \"teamPickingChat\": \"teamPickingChat\",`n    \"redTeamVC\": \"redTeamVC\",`n    \"blueTeamVC\": \"blueTeamVC\",`n    \"redTeamChat\": \"redTeamChat\",`n    \"blueTeamChat\": \"blueTeamChat\"`n  },`n  \"dev\": {`n    \"enabled\": true,`n    \"guildId\": \"test-guild\"`n  }`n}" | Out-File -FilePath config.json -Encoding utf8
+            $cfg = @{
+              season = 1
+              mvpBonus = 5
+              captainBonus = 5
+              underdogMultiplier = 1.5
+              roles = @{
+                blueTeamRole = ""
+                redTeamRole = ""
+                captainRole = ""
+                organiserRole = ""
+              }
+              channels = @{
+                registration = ""
+                announcements = ""
+                gameFeed = ""
+                botCommands = ""
+                teamPickingVC = ""
+                teamPickingChat = ""
+                redTeamVC = ""
+                blueTeamVC = ""
+                redTeamChat = ""
+                blueTeamChat = ""
+              }
+              dev = @{
+                enabled = $false
+                guildId = ""
+              }
+            }
+            $cfg | ConvertTo-Json -Depth 5 | Set-Content -Path $dest -Encoding utf8
           }
 
       - name: Run tests

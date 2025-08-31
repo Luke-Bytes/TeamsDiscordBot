@@ -15,7 +15,6 @@ test("AnnouncementCommand handleButtonPress default path responds", async () => 
   const guild = new FakeGuild() as any;
   // simulate an unrelated button to hit default
   const interaction = createChatInputInteraction("u1", { guild });
-  // @ts-expect-error access handler directly
   await cmd.handleButtonPress!({
     customId: "unknown-button",
     deferReply: async () => ({}) as any,

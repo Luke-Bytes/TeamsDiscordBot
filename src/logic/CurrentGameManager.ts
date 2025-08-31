@@ -87,7 +87,7 @@ export class CurrentGameManager {
           ) {
             await DiscordUtil.sendMessage(
               "redTeamChat",
-              "Last-minute reminder: Captain has not banned a class yet. Use `/class ban <class>` before the game starts."
+              "**Last-minute reminder:** Red Captain has not banned a class yet. Use `/class ban <class>` before the game starts."
             );
           }
           if (
@@ -96,7 +96,7 @@ export class CurrentGameManager {
           ) {
             await DiscordUtil.sendMessage(
               "blueTeamChat",
-              "Last-minute reminder: Captain has not banned a class yet. Use `/class ban <class>` before the game starts."
+              "**Last-minute reminder:** Blue Captain has not banned a class yet. Use `/class ban <class>` before the game starts."
             );
           }
         } catch (e) {
@@ -139,7 +139,7 @@ export class CurrentGameManager {
       game.lockCaptainBan(redCaptain.discordSnowflake);
       await DiscordUtil.sendMessage(
         "redTeamChat",
-        "The class ban window has closed. You can no longer ban a class."
+        "The class ban window has **closed**. You can no longer ban a class."
       );
     }
     if (
@@ -149,7 +149,7 @@ export class CurrentGameManager {
       game.lockCaptainBan(blueCaptain.discordSnowflake);
       await DiscordUtil.sendMessage(
         "blueTeamChat",
-        "The class ban window has closed. You can no longer ban a class."
+        "The class ban window has **closed**. You can no longer ban a class."
       );
     }
 
@@ -247,8 +247,7 @@ export class CurrentGameManager {
             const m = await guild.members
               .fetch(p.discordSnowflake)
               .catch(() => undefined as any);
-            const status =
-              ((m as any)?.presence?.status as string) || "offline";
+            const status = (m?.presence?.status as string) || "offline";
             if (!presenceOk.has(status)) continue;
             eligible.push({ p, elo: p.elo ?? 1000 });
           }
