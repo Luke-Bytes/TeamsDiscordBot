@@ -405,6 +405,9 @@ export default class AnnouncementCommand implements Command {
 
     await CurrentGameManager.getCurrentGame().announce();
 
+    CurrentGameManager.scheduleClassBanTimers();
+    CurrentGameManager.scheduleCaptainTimers(guild);
+
     if (this.announcementPreviewMessage) {
       await this.announcementPreviewMessage.edit({
         embeds: [embed],
@@ -713,6 +716,9 @@ export default class AnnouncementCommand implements Command {
       }
 
       await this.updateAnnouncementMessages();
+
+      CurrentGameManager.scheduleClassBanTimers();
+      CurrentGameManager.scheduleCaptainTimers(interaction.guild!);
       await interaction.followUp(
         `The announcement time has been updated to ${formatTimestamp(date)}.`
       );

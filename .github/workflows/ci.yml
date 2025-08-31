@@ -110,3 +110,36 @@ jobs:
 
       - name: Run build
         run: npm run build
+
+  # Job 5: Run Tests
+  run-tests:
+    runs-on: windows-latest
+    needs: install-dependencies
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18.x"
+
+      - name: Restore node_modules cache
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Ensure config.json exists for tests
+        shell: pwsh
+        run: |
+          if (Test-Path config.sample.json) {
+            Copy-Item -Path config.sample.json -Destination config.json -Force
+          } else {
+            "{`n  \"season\": 1,`n  \"mvpBonus\": 3,`n  \"captainBonus\": 5,`n  \"underdogMultiplier\": 1.0,`n  \"roles\": {`n    \"blueTeamRole\": \"blue\",`n    \"redTeamRole\": \"red\",`n    \"captainRole\": \"captain\",`n    \"organiserRole\": \"organiser\"`n  },`n  \"channels\": {`n    \"registration\": \"registration\",`n    \"announcements\": \"announcements\",`n    \"gameFeed\": \"gameFeed\",`n    \"botCommands\": \"botCommands\",`n    \"teamPickingVC\": \"teamPickingVC\",`n    \"teamPickingChat\": \"teamPickingChat\",`n    \"redTeamVC\": \"redTeamVC\",`n    \"blueTeamVC\": \"blueTeamVC\",`n    \"redTeamChat\": \"redTeamChat\",`n    \"blueTeamChat\": \"blueTeamChat\"`n  },`n  \"dev\": {`n    \"enabled\": true,`n    \"guildId\": \"test-guild\"`n  }`n}" | Out-File -FilePath config.json -Encoding utf8
+          }
+
+      - name: Run tests
+        run: npm run tests

@@ -69,4 +69,15 @@ export default [
       },
     },
   },
+  // Disable noisy warnings in tests
+  {
+    files: ["tests/**/*.ts"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unused-vars": "off",
+      "import/no-unresolved": "off",
+      "import/extensions": "off",
+      "prettier/prettier": "off",
+    },
+  },
 ];

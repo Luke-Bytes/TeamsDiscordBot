@@ -227,7 +227,7 @@ export class RandomTeamPickingSession extends TeamPickingSession {
     return { embeds: [embed], components: [row] };
   }
 
-  public async handleMessage(message: Message<boolean>) {}
+  public async handleMessage(_message: Message<boolean>) {}
 
   public getState() {
     return this.state;

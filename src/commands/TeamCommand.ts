@@ -19,6 +19,7 @@ import { DiscordUtil } from "../util/DiscordUtil";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 
 export default class TeamCommand implements Command {
+  static instance?: TeamCommand;
   public data: SlashCommandSubcommandsOnlyBuilder;
   public name = "team";
   public description = "Manage teams";
@@ -33,6 +34,7 @@ export default class TeamCommand implements Command {
   teamPickingSession?: TeamPickingSession;
 
   constructor() {
+    TeamCommand.instance = this;
     this.data = new SlashCommandBuilder()
       .setName(this.name)
       .setDescription(this.description)
@@ -110,6 +112,17 @@ export default class TeamCommand implements Command {
               "You can't draft teams without setting captains for both teams first!"
             );
             return;
+          }
+
+          if (method === "draft") {
+            const undecidedCount = game.getPlayersOfTeam("UNDECIDED").length;
+            if (undecidedCount % 2 !== 0) {
+              await DiscordUtil.reply(
+                interaction,
+                "You need an even number of registered players to start draft team picking."
+              );
+              return;
+            }
           }
 
           const teamPickingChannelIds = [config.channels.teamPickingChat];
