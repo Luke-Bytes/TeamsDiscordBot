@@ -69,7 +69,6 @@ export default [
       },
     },
   },
-  // Disable noisy warnings in tests
   {
     files: ["tests/**/*.ts"],
     rules: {

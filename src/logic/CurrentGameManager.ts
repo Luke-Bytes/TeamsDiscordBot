@@ -262,7 +262,7 @@ export class CurrentGameManager {
 
           // Pick first captain randomly
           const first = eligible[Math.floor(Math.random() * eligible.length)];
-          // Pick second: nearest higher elo; if none, nearest by absolute difference
+          // Pick second: nearest higher elo
           const rest = eligible.filter((e) => e.p !== first.p);
           let higher = rest
             .filter((e) => e.elo >= first.elo)
@@ -274,7 +274,6 @@ export class CurrentGameManager {
                 Math.abs(a.elo - first.elo) - Math.abs(b.elo - first.elo)
             )[0];
 
-          // Assign captains: BLUE -> first, RED -> second
           const assignCaptain = async (team: "RED" | "BLUE", player: any) => {
             const res = game.setTeamCaptain(team, player);
             if (res.oldCaptain) {

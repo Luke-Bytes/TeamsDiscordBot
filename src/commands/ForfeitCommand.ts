@@ -128,7 +128,6 @@ export default class ForfeitCommand implements Command {
       return;
     }
 
-    // Recompute current roles at click time
     const member = await interaction
       .guild!.members.fetch(interaction.user.id)
       .catch(() => null);

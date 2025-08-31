@@ -194,12 +194,12 @@ test("Class-ban 1m reminders and deadline summary", async () => {
     const redLock = sent.find(
       (s) =>
         s.channelKey === "redTeamChat" &&
-        /window has closed/i.test(String(s.content))
+        /window has\s+(?:\*\*|__)?closed(?:\*\*|__)?/i.test(String(s.content))
     );
     const blueLock = sent.find(
       (s) =>
         s.channelKey === "blueTeamChat" &&
-        /window has closed/i.test(String(s.content))
+        /window has\s+(?:\*\*|__)?closed(?:\*\*|__)?/i.test(String(s.content))
     );
     assert(
       !!redLock || !!blueLock || !!feedSummary,
