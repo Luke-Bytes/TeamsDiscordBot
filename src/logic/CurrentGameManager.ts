@@ -242,14 +242,19 @@ export class CurrentGameManager {
           const players = game.getPlayers();
           const presenceOk = new Set(["online", "idle", "dnd"]);
           const eligible: { p: any; elo: number }[] = [];
+
           for (const p of players) {
-            if ((p.elo ?? 0) <= 1000) continue;
+            const elo = Number(p.elo ?? 0);
+            if (elo <= 1000) continue;
+
             const m = await guild.members
               .fetch(p.discordSnowflake)
               .catch(() => undefined as any);
-            const status = (m?.presence?.status as string) || "offline";
-            if (!presenceOk.has(status)) continue;
-            eligible.push({ p, elo: p.elo ?? 1000 });
+            const status = m?.presence?.status as string | undefined;
+
+            if (status && !presenceOk.has(status)) continue;
+
+            eligible.push({ p, elo });
           }
 
           if (eligible.length < 2) {
