@@ -23,9 +23,34 @@ export class CurrentGameManager {
   }
 
   public static resetCurrentGame() {
-    this.currentGame?.reset();
+    // Cancel any ongoing votes/polls
+    this.currentGame?.mapVoteManager?.cancelVote();
+    this.currentGame?.minerushVoteManager?.cancelVote();
+
+    // Clear any scheduled timers
     this.clearClassBanTimers();
     this.clearCaptainTimers();
+    if (this.pollCloseTimeout) {
+      clearTimeout(this.pollCloseTimeout);
+      this.pollCloseTimeout = undefined;
+    }
+
+    // Stop game feed updaters
+    try {
+      gameFeed.removeAllFeedMessages();
+    } catch (e) {
+      void e; // intentionally ignore cleanup errors
+    }
+
+    // Reset any active team picking session
+    try {
+      TeamCommand.instance?.resetTeamPickingSession();
+    } catch (e) {
+      void e;
+    }
+
+    // Finally, reset the in-memory game state
+    this.currentGame?.reset();
   }
 
   public static async cancelCurrentGame(guild: Guild) {
@@ -156,11 +181,24 @@ export class CurrentGameManager {
     if (game.getClassBanLimit() > 0 && !game.areClassBansAnnounced()) {
       const byTeam = game.settings.bannedClassesByTeam;
       const banned = game.settings.bannedClasses;
-      const both = banned.filter(
-        (c) => !byTeam.RED.includes(c) && !byTeam.BLUE.includes(c)
-      );
-      const redOnly = byTeam.RED.filter((c) => !both.includes(c));
-      const blueOnly = byTeam.BLUE.filter((c) => !both.includes(c));
+      let both: string[];
+      let redOnly: string[];
+      let blueOnly: string[];
+
+      if (game.classBanMode === "shared") {
+        // In shared mode, ALL bans are shared (organiser + any captain bans)
+        const sharedSet = new Set([...banned, ...byTeam.RED, ...byTeam.BLUE]);
+        both = Array.from(sharedSet);
+        redOnly = [];
+        blueOnly = [];
+      } else {
+        // Default behavior: organiser shared bans + team-only bans
+        both = banned.filter(
+          (c) => !byTeam.RED.includes(c) && !byTeam.BLUE.includes(c)
+        );
+        redOnly = byTeam.RED.filter((c) => !both.includes(c));
+        blueOnly = byTeam.BLUE.filter((c) => !both.includes(c));
+      }
       const lockedEmbed = new EmbedBuilder()
         .setColor("DarkRed")
         .setTitle("❌ Class Bans Locked In")
@@ -241,15 +279,19 @@ export class CurrentGameManager {
           // Eligible players: registered, elo > 1000, presence in online/idle/dnd
           const players = game.getPlayers();
           const presenceOk = new Set(["online", "idle", "dnd"]);
-          const eligible: { p: any; elo: number }[] = [];
+          const eligible: {
+            p: { ignUsed?: string; discordSnowflake: string };
+            elo: number;
+          }[] = [];
 
           for (const p of players) {
             const elo = Number(p.elo ?? 0);
             if (elo <= 1000) continue;
 
-            const m = await guild.members
-              .fetch(p.discordSnowflake)
-              .catch(() => undefined as any);
+            const m: { presence?: { status?: string } } | undefined =
+              await guild.members
+                .fetch(p.discordSnowflake)
+                .catch(() => undefined);
             const status = m?.presence?.status as string | undefined;
 
             if (status && !presenceOk.has(status)) continue;
@@ -279,7 +321,10 @@ export class CurrentGameManager {
                 Math.abs(a.elo - first.elo) - Math.abs(b.elo - first.elo)
             )[0];
 
-          const assignCaptain = async (team: "RED" | "BLUE", player: any) => {
+          const assignCaptain = async (
+            team: "RED" | "BLUE",
+            player: { discordSnowflake: string; ignUsed?: string }
+          ) => {
             const res = game.setTeamCaptain(team, player);
             if (res.oldCaptain) {
               await guild.members
@@ -318,10 +363,10 @@ export class CurrentGameManager {
 
           // Auto-start draft team picking
           try {
-            const fakeInteraction: any = {
-              editReply: async (_: any) => {},
+            const fakeInteraction = {
+              editReply: async (_: unknown) => {},
               guild,
-            };
+            } as unknown as import("discord.js").ChatInputCommandInteraction;
             const session = new DraftTeamPickingSession();
             await session.initialize(fakeInteraction);
             if (TeamCommand.instance) {

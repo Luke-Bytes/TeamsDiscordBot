@@ -321,8 +321,11 @@ export default class AnnouncementCommand implements Command {
     if (modifiersOption === "yes") {
       ModifierSelector.runSelection();
     } else {
-      GameInstance.getInstance().settings.modifiers = [];
-      GameInstance.getInstance().setClassBanLimit(2);
+      // Default: no modifiers -> enable shared captain bans
+      const gi = GameInstance.getInstance();
+      gi.settings.modifiers = [];
+      gi.classBanMode = "shared";
+      gi.setClassBanLimit(2);
     }
 
     const doubleEloOption = interaction.options

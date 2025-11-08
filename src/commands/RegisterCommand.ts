@@ -5,6 +5,7 @@ import { CurrentGameManager } from "../logic/CurrentGameManager.js";
 import { prismaClient } from "../database/prismaClient";
 import { MojangAPI } from "../api/MojangAPI";
 import TeamCommand from "../commands/TeamCommand";
+import { DraftTeamPickingSession } from "../logic/teams/DraftTeamPickingSession";
 
 export default class RegisterCommand implements Command {
   public data: SlashCommandBuilder;
@@ -189,6 +190,13 @@ export default class RegisterCommand implements Command {
     // late signups
 
     if (this.teamCommand.isTeamPickingSessionActive()) {
+      const session = this.teamCommand.teamPickingSession;
+      if (session && session instanceof DraftTeamPickingSession) {
+        // Only add to late pool if late picking hasn't started
+        if (!(session as DraftTeamPickingSession).latePickingStarted) {
+          await session.registerLateSignup(result.playerInstance);
+        }
+      }
       if (PermissionsUtil.isSameUser(interaction, targetUser.id)) {
         await interaction.editReply({
           content: `You have successfully registered as \`${resolvedUsername}\` but please note this is a late sign-up as team picking is currently ongoing. You may be unable to play.`,

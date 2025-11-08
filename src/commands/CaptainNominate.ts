@@ -12,6 +12,7 @@ import { GameInstance } from "../database/GameInstance";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { Team } from "@prisma/client";
+import { escapeText } from "../util/Utils";
 
 export default class CaptainNominateCommand implements Command {
   data = new SlashCommandBuilder()
@@ -187,7 +188,9 @@ export default class CaptainNominateCommand implements Command {
     }
 
     await interaction.reply({
-      content: `Set captain of team **${teamToSet.toLowerCase()}** to **${player.ignUsed}**.`,
+      content: `Set captain of team **${teamToSet.toLowerCase()}** to **${escapeText(
+        player.ignUsed ?? "Unknown Player"
+      )}**.`,
       ephemeral: false,
     });
   }

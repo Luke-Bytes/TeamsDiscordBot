@@ -124,7 +124,7 @@ export async function formatTeamIGNs(
 ): Promise<string> {
   return game
     .getPlayersOfTeam(team)
-    .map((p) => `${String(p.latestIGN ?? p.ignUsed)} = `)
+    .map((p) => `${escapeText(String(p.latestIGN ?? p.ignUsed))} = `)
     .join("\n");
 }
 

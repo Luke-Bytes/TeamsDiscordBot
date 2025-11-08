@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
+import { escapeText } from "../util/Utils";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 
 export default class MVPCommand implements Command {
@@ -117,7 +118,9 @@ export default class MVPCommand implements Command {
         });
       } else {
         await interaction.reply({
-          content: `Your MVP vote for ${targetPlayer.ignUsed} has been recorded!`,
+          content: `Your MVP vote for ${escapeText(
+            targetPlayer.ignUsed ?? "Unknown Player"
+          )} has been recorded!`,
           ephemeral: false,
         });
       }
@@ -125,8 +128,8 @@ export default class MVPCommand implements Command {
   }
 
   private getPlayerTeam(
-    game: any,
-    player: any
+    game: { teams: Record<"RED" | "BLUE" | "UNDECIDED", unknown[]> },
+    player: unknown
   ): "RED" | "BLUE" | "UNDECIDED" | null {
     for (const team of ["RED", "BLUE", "UNDECIDED"] as const) {
       if (game.teams[team].includes(player)) {

@@ -126,9 +126,8 @@ export class GameInstance {
     const currentInstance = this.getInstance();
     if (currentInstance) {
       await prismaClient.game.saveGameFromInstance(currentInstance);
+      currentInstance.reset();
     }
-    this.instance = new GameInstance();
-    this.instance.reset();
   }
 
   public startMinerushVote() {

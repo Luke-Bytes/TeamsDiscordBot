@@ -5,6 +5,7 @@ import { Team } from "@prisma/client";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 import TeamCommand from "../commands/TeamCommand";
 import { PrismaUtils } from "../util/PrismaUtils";
+import { escapeText } from "../util/Utils";
 
 export default class CaptainCommand implements Command {
   public data: SlashCommandBuilder;
@@ -150,7 +151,9 @@ export default class CaptainCommand implements Command {
     }
 
     await interaction.reply({
-      content: `Successfully set captain of team **${teamColor.toLowerCase()}** to **${player.ignUsed}**.`,
+      content: `Successfully set captain of team **${teamColor.toLowerCase()}** to **${escapeText(
+        player.ignUsed ?? "Unknown Player"
+      )}**.`,
     });
   }
 }

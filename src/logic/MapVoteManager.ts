@@ -48,7 +48,13 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
   }
 
   private async countAnswerVoters(
-    answer: any,
+    answer: {
+      fetchVoters: (
+        opts?: unknown
+      ) => Promise<DjsCollection<Snowflake, User> | null>;
+      emoji?: { name?: string } | null;
+      text?: string | null;
+    },
     registeredIds: Set<string>
   ): Promise<{ total: number; valid: number }> {
     let total = 0,
@@ -56,7 +62,7 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
     let after: Snowflake | undefined = undefined;
     for (;;) {
       const page: DjsCollection<Snowflake, User> | null = await answer
-        .fetchVoters({ limit: 100, after } as any)
+        .fetchVoters({ limit: 100, after } as unknown)
         .catch(() => null);
       if (!page) break;
       for (const [id] of page) {
@@ -183,6 +189,7 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
       )
     );
 
+    /* LEGACY BLOCK START (unreachable after tidy results return) */
     const officialMax = Math.max(...counted.map((c) => c.count));
     const officialTop = counted.filter((c) => c.count === officialMax);
     const discordMax = Math.max(...counted.map((c) => c.raw));
@@ -223,6 +230,7 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
     } else {
       await this.pollMessage.poll?.end().catch(() => {});
     }
+    /* LEGACY BLOCK END */
 
     if (officialTop.length === 1 && officialTop[0].mapEnum) {
       this.emit("pollEnd", officialTop[0].mapEnum as AnniMap);

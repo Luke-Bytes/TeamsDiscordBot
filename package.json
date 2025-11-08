@@ -18,7 +18,7 @@
     "stop:pm2": "pm2 stop TeamsBot",
     "stop:pm2:dev": "pm2 stop TeamsBotDev",
     "clean": "rimraf dist",
-    "lint": "eslint .",
+    "lint": "npm run format && eslint .",
     "format": "prettier --write .",
     "lint:fix": "eslint . --fix",
     "check-format": "prettier --check .",
@@ -27,7 +27,8 @@
     "backup": "node scripts/db-backups.js",
     "rebuild": "git pull && npm run stop:pm2 && npm run build && npm run prod:pm2",
     "rebuild:dev": "git pull && npm run stop:pm2:dev && npm run build && npm run prod:pm2:dev",
-    "tests": "node tests/run-tests.js"
+    "tests": "node tests/run-tests.js",
+    "update-db-igns": "tsx scripts/fetch-latest-igns.ts"
   },
   "author": "Luke",
   "license": "GNU",
@@ -59,7 +60,6 @@
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-import": "^2.31.0",
     "eslint-plugin-prettier": "^5.2.1",
-    "husky": "^9.1.7",
     "prettier": "^3.3.3",
     "rimraf": "^6.0.1",
     "terser": "^5.37.0",

@@ -34,6 +34,7 @@ import SeasonCommand from "../commands/SeasonCommand";
 import UsernameCommand from "../commands/UsernameCommand";
 import ForfeitCommand from "../commands/ForfeitCommand";
 import MapsCommand from "../commands/MapsCommand";
+import CoinflipCommand from "../commands/CoinflipCommand";
 
 export class CommandHandler {
   commands: Command[] = [];
@@ -71,6 +72,7 @@ export class CommandHandler {
   usernameCommand = new UsernameCommand();
   forfeitCommand = new ForfeitCommand();
   mapsCommand = new MapsCommand();
+  coinflipCommand = new CoinflipCommand();
 
   public loadCommands() {
     this.commands = [
@@ -106,6 +108,7 @@ export class CommandHandler {
       this.usernameCommand,
       this.forfeitCommand,
       this.mapsCommand,
+      this.coinflipCommand,
     ];
   }
 
@@ -162,16 +165,16 @@ export class CommandHandler {
       console.error("Error handling interaction:", error);
 
       if (typeof error === "object" && error !== null) {
-        const err = error as any;
+        const err = error as Record<string, unknown>;
 
         if ("rawError" in err) {
-          console.error("Raw Error:", err.rawError);
+          console.error("Raw Error:", err["rawError"]);
         }
 
         if ("requestBody" in err) {
           console.error(
             "Request Body:",
-            JSON.stringify(err.requestBody, null, 2)
+            JSON.stringify(err["requestBody"], null, 2)
           );
         }
       }

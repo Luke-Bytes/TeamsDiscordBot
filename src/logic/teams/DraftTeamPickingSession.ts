@@ -17,6 +17,7 @@ import { PlayerInstance } from "../../database/PlayerInstance";
 import { Team } from "@prisma/client";
 import { ConfigManager } from "../../ConfigManager";
 import { EloUtil } from "../../util/EloUtil";
+import { escapeText } from "../../util/Utils";
 
 export class DraftTeamPickingSession extends TeamPickingSession {
   state: TeamPickingSessionState = "inProgress";
@@ -35,6 +36,8 @@ export class DraftTeamPickingSession extends TeamPickingSession {
 
   embedMessage?: Message<boolean>;
   finalizeMessage?: Message<boolean>;
+  lateSignups: PlayerInstance[] = [];
+  latePickingStarted = false;
 
   public getState(): TeamPickingSessionState {
     return this.state;
@@ -110,10 +113,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       const otherThanCaptain = players.filter((p) => !p.captain);
 
       const formatPlayer = (player: PlayerInstance) => {
-        const safeIgnUsed = (player.ignUsed ?? "Unknown Player").replace(
-          /_/g,
-          "\\_"
-        );
+        const safeIgnUsed = escapeText(player.ignUsed ?? "Unknown Player");
         const baseInfo = `${EloUtil.getEloEmoji(player.elo)} ${safeIgnUsed}`;
         return includeElo
           ? `${baseInfo} ${EloUtil.getEloFormatted(player)}`
@@ -162,6 +162,24 @@ export class DraftTeamPickingSession extends TeamPickingSession {
         value: getString(undecidedPlayers, true),
         inline: true,
       });
+    }
+
+    // Add Late Signups section (even count only) during drafting
+    if (!finalized) {
+      const lateEven = this.lateSignups.slice(
+        0,
+        this.lateSignups.length - (this.lateSignups.length % 2)
+      );
+      if (lateEven.length >= 2) {
+        embed.addFields({
+          name: ` 🕒 Late Signups  [${lateEven.length}]`,
+          value:
+            lateEven
+              .map((p) => escapeText(p.ignUsed ?? "Unknown Player"))
+              .join("\n") || "No players",
+          inline: false,
+        });
+      }
     }
 
     if (finalized && finalizeFooter) {
@@ -298,14 +316,28 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     if (this.getTurnCaptain()?.discordSnowflake !== user.id) return;
 
     const content = message.content;
+    // Determine draft pool
+    const undecidedCount = this.proposedTeams.UNDECIDED.length;
+    let pickingFrom: "UNDECIDED" | "LATE" | null = null;
+    if (undecidedCount > 0) {
+      pickingFrom = "UNDECIDED";
+    } else if (this.lateSignups.length >= 2) {
+      pickingFrom = "LATE";
+      this.latePickingStarted = true;
+    }
     const firstMention = message.mentions.users.values().next().value;
 
     let player;
 
     if (firstMention) {
-      player = this.proposedTeams.UNDECIDED.filter(
-        (p) => p.discordSnowflake === firstMention.id
-      )[0];
+      const pool =
+        pickingFrom === "LATE"
+          ? this.lateSignups.slice(
+              0,
+              this.lateSignups.length - (this.lateSignups.length % 2)
+            )
+          : this.proposedTeams.UNDECIDED;
+      player = pool.filter((p) => p.discordSnowflake === firstMention.id)[0];
       if (!player) {
         await message.channel.send(
           `Invalid player ping: <@${firstMention.id}> - Did that player register?`
@@ -314,13 +346,21 @@ export class DraftTeamPickingSession extends TeamPickingSession {
         return;
       }
     } else {
-      player = this.proposedTeams.UNDECIDED.find(
+      const pool =
+        pickingFrom === "LATE"
+          ? this.lateSignups.slice(
+              0,
+              this.lateSignups.length - (this.lateSignups.length % 2)
+            )
+          : this.proposedTeams.UNDECIDED;
+      player = pool.find(
         (p) => p.ignUsed?.toLowerCase() === content.toLowerCase()
       );
 
       if (!player) {
+        const safeContent = escapeText(message.content);
         await message.channel.send(
-          `Invalid player pick: **${message.content}** - Did that player register?`
+          `Invalid player pick: **${safeContent}** - Did that player register?`
         );
         await message.delete();
         return;
@@ -335,7 +375,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
 
     if (existingTeam && existingTeam !== "UNDECIDED") {
       await message.channel.send(
-        `Player ${player.ignUsed} is already picked on the other team!`
+        `Player ${escapeText(player.ignUsed ?? "Unknown Player")} is already picked on the other team!`
       );
       return;
     }
@@ -358,9 +398,13 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     }
 
     this.proposedTeams[this.turn!].push(player);
-    this.proposedTeams.UNDECIDED = this.proposedTeams.UNDECIDED.filter(
-      (p) => p !== player
-    );
+    if (pickingFrom === "LATE") {
+      this.lateSignups = this.lateSignups.filter((p) => p !== player);
+    } else {
+      this.proposedTeams.UNDECIDED = this.proposedTeams.UNDECIDED.filter(
+        (p) => p !== player
+      );
+    }
     await this.embedMessage?.edit(this.createDraftEmbed(false));
 
     await message.delete();
@@ -375,7 +419,10 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       `Player ${(player.ignUsed ?? "Unknown Player").replace(/_/g, "\\_")} registered for **${this.turn}** team.`
     );
 
-    if (this.proposedTeams.UNDECIDED.length === 1) {
+    if (
+      pickingFrom === "UNDECIDED" &&
+      this.proposedTeams.UNDECIDED.length === 1
+    ) {
       const lastPlayer = this.proposedTeams.UNDECIDED[0];
       this.proposedTeams[this.turn === "RED" ? "BLUE" : "RED"].push(lastPlayer);
       this.proposedTeams.UNDECIDED = [];
@@ -386,9 +433,25 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       );
     }
 
+    if (pickingFrom === "LATE" && this.lateSignups.length === 1) {
+      const lastPlayer = this.lateSignups[0];
+      this.proposedTeams[this.turn === "RED" ? "BLUE" : "RED"].push(lastPlayer);
+      this.lateSignups = [];
+      await this.embedMessage?.edit(this.createDraftEmbed(false));
+
+      await message.channel.send(
+        `Player ${(lastPlayer.ignUsed ?? "Unknown Player").replace(/_/g, "\\_")} was automatically assigned to **${
+          this.turn === "RED" ? "BLUE" : "RED"
+        }** team.`
+      );
+    }
+
     this.turn = this.turn === "RED" ? "BLUE" : "RED";
 
-    if (this.proposedTeams.UNDECIDED.length === 0) {
+    if (
+      this.proposedTeams.UNDECIDED.length === 0 &&
+      this.lateSignups.length === 0
+    ) {
       const embed = this.createDraftEmbed(true);
       this.finalizeMessage = await message.channel.send({
         content: "All players have been drafted! Here is the final draft.",
@@ -397,6 +460,14 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       this.finishedPicking = true;
     } else {
       await this.sendTurnMessage();
+    }
+  }
+
+  public async registerLateSignup(player: PlayerInstance) {
+    if (this.latePickingStarted) return;
+    this.lateSignups.push(player);
+    if (this.embedMessage) {
+      await this.embedMessage.edit(this.createDraftEmbed(false));
     }
   }
 }

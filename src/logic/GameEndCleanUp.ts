@@ -7,6 +7,7 @@ import { DiscordUtil } from "../util/DiscordUtil";
 import { LeaderBoardFeed } from "../logic/gameFeed/LeaderBoardFeed";
 import { Channels } from "../Channels";
 import RestartCommand from "../commands/RestartCommand";
+import TeamCommand from "../commands/TeamCommand";
 
 export async function cleanUpAfterGame(guild: Guild) {
   const config = ConfigManager.getConfig();
@@ -63,6 +64,18 @@ export async function cleanUpAfterGame(guild: Guild) {
   //FIXME why isnt it resetting announcements
   await GameInstance.resetGameInstance();
   console.log("Game instance reset to default values.");
+
+  // Ensure any lingering sessions/timers/feeds are cleared
+  try {
+    TeamCommand.instance?.resetTeamPickingSession();
+  } catch (e) {
+    void e;
+  }
+  try {
+    CurrentGameManager.resetCurrentGame();
+  } catch (e) {
+    void e;
+  }
 
   await DiscordUtil.sendMessage("gameFeed", "\u200b");
   const leaderboardFeed = new LeaderBoardFeed();

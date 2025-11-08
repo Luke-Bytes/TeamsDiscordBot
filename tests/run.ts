@@ -7,6 +7,12 @@ import "./critical/mvpCritical.test";
 import "./critical/classbanCritical.test";
 import "./critical/captainNominateCritical.test";
 import "./critical/registerCritical.test";
+import "./critical/resetFlowCritical.test";
+import "./critical/lateSignupDraft.test";
+import "./critical/sharedBansDefault.test";
+import "./critical/classBanModes.test";
+import "./cases/ignsCommand.test";
+import "./cases/timestampChoices.test";
 import { runAll } from "./framework/test";
 
 runAll();

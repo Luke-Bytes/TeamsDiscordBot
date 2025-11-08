@@ -17,6 +17,7 @@ import { RandomTeamPickingSession } from "../logic/teams/RandomTeamPickingSessio
 import { TeamPickingSession } from "../logic/teams/TeamPickingSession";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { PermissionsUtil } from "../util/PermissionsUtil";
+import { escapeText } from "../util/Utils";
 
 export default class TeamCommand implements Command {
   static instance?: TeamCommand;
@@ -332,17 +333,17 @@ export default class TeamCommand implements Command {
       players: PlayerInstance[],
       captain: PlayerInstance | undefined
     ): string => {
-      const escapeMarkdown = (text: string | undefined): string =>
-        text ? text.replace(/_/g, "\\_") : "Unknown Player";
+      const formatName = (text: string | undefined): string =>
+        text ? escapeText(text) : "Unknown Player";
       if (players.length === 0) return "No players";
       const sortedPlayers = captain
         ? [captain, ...players.filter((player) => player !== captain)]
         : players;
       return (
-        `**${escapeMarkdown(sortedPlayers[0].ignUsed)}**\n` +
+        `**${formatName(sortedPlayers[0].ignUsed)}**\n` +
         sortedPlayers
           .slice(1)
-          .map((player) => escapeMarkdown(player.ignUsed))
+          .map((player) => formatName(player.ignUsed))
           .join("\n")
       );
     };
@@ -418,7 +419,7 @@ export default class TeamCommand implements Command {
     }
   }
 
-  private resetTeamPickingSession(): void {
+  public resetTeamPickingSession(): void {
     this.teamPickingSession = undefined;
   }
 
