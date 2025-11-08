@@ -72,7 +72,8 @@ export class DiscordUtil {
     guild: Guild,
     vcId: string,
     roleId: string,
-    discordSnowflake: Snowflake
+    discordSnowflake: Snowflake,
+    cachedMember?: GuildMember
   ): Promise<void> {
     const voiceChannel = guild.channels.cache.get(vcId);
     const role = guild.roles.cache.get(roleId);
@@ -83,7 +84,14 @@ export class DiscordUtil {
     }
 
     try {
-      const member = await guild.members.fetch(discordSnowflake);
+      const member =
+        cachedMember ??
+        (await guild.members.fetch(discordSnowflake).catch(() => null));
+      if (!member) {
+        console.error(`Unable to find member ${discordSnowflake} to move.`);
+        return;
+      }
+
       if (
         !member.roles.cache.has(roleId) ||
         member.voice.channel?.id === vcId

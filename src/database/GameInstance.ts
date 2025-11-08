@@ -431,7 +431,7 @@ export class GameInstance {
 
     if (fillOption !== "none") {
       console.info(`[GAME] Filling teams with test players...`);
-      await this.fillTeamsWithTestPlayers(9, fillOption);
+      await this.fillTeamsWithTestPlayers(8, fillOption);
       console.info(`[GAME] Teams filled. Current teams:`, this.teams);
 
       this.teams.RED.forEach((player) => {

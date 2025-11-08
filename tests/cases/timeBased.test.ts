@@ -5,9 +5,47 @@ import { DiscordUtil } from "../../src/util/DiscordUtil";
 import { FakeGuild, FakeGuildMember } from "../framework/mocks";
 import { Channels } from "../../src/Channels";
 import { withImmediateTimers } from "../framework/timers";
+import { DraftTeamPickingSession } from "../../src/logic/teams/DraftTeamPickingSession";
+import { PlayerInstance } from "../../src/database/PlayerInstance";
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function stubTeamPickingChannel(
+  sent: string[],
+  dms: string[]
+): (typeof Channels)["teamPicking"] {
+  return {
+    id: "teamPickingChannel",
+    isSendable: () => true,
+    send: async (payload: any) => {
+      const text =
+        typeof payload === "string"
+          ? payload
+          : (payload?.content ?? "[non-text message]");
+      sent.push(String(text ?? ""));
+      return {
+        delete: async () => {},
+        edit: async () => {},
+      } as any;
+    },
+    messages: {
+      fetch: async () => ({
+        find: () => undefined,
+        filter: () => [],
+      }),
+    },
+    client: {
+      users: {
+        fetch: async () => ({
+          send: async (msg: string) => {
+            dms.push(msg);
+          },
+        }),
+      },
+    },
+  } as any;
 }
 
 test("Captain 20m reminder posts to game-feed", async () => {
@@ -208,5 +246,128 @@ test("Class-ban 1m reminders and deadline summary", async () => {
   } finally {
     (DiscordUtil as any).sendMessage = origSend;
     (Date as any).now = origNow;
+  }
+});
+
+test("Draft auto-pick fires after timeout using the eligible pool", async () => {
+  const session = new DraftTeamPickingSession();
+  (session as any).embedMessage = { edit: async () => {} };
+  session.redCaptain = {
+    discordSnowflake: "capR",
+    captain: true,
+  } as any;
+  session.blueCaptain = {
+    discordSnowflake: "capB",
+    captain: true,
+  } as any;
+  session.proposedTeams.RED = [];
+  session.proposedTeams.BLUE = [];
+  session.proposedTeams.UNDECIDED = [
+    { discordSnowflake: "p1", ignUsed: "Alpha" } as any,
+    { discordSnowflake: "p2", ignUsed: "Bravo" } as any,
+    { discordSnowflake: "p3", ignUsed: "Charlie" } as any,
+  ];
+  session.turn = "RED";
+
+  const sentMessages: string[] = [];
+  const dmMessages: string[] = [];
+  const originalChannel = Channels.teamPicking;
+  Channels.teamPicking = stubTeamPickingChannel(sentMessages, dmMessages);
+
+  const originalSendTurnMessage = (session as any).sendTurnMessage;
+  (session as any).sendTurnMessage = async () => {};
+
+  const originalRandom = Math.random;
+  Math.random = () => 0; // deterministically pick p1
+
+  try {
+    await withImmediateTimers(async () => {
+      (session as any).startTurnTimer();
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+    assert(
+      session.proposedTeams.RED.some(
+        (p: PlayerInstance) => p.discordSnowflake === "p1"
+      ),
+      "Auto pick should move the randomly selected player to the current team"
+    );
+    assert(
+      !session.proposedTeams.UNDECIDED.some(
+        (p: PlayerInstance) => p.discordSnowflake === "p1"
+      ),
+      "Auto-picked player must be removed from the undecided pool"
+    );
+    assert(
+      sentMessages.some((msg) => /auto-picked/i.test(msg)),
+      "Channel should announce the auto-pick"
+    );
+    assert(
+      dmMessages.length === 1,
+      "Opening pick should DM the captain with the one-minute reminder"
+    );
+  } finally {
+    Math.random = originalRandom;
+    Channels.teamPicking = originalChannel;
+    if (originalSendTurnMessage) {
+      (session as any).sendTurnMessage = originalSendTurnMessage;
+    } else {
+      delete (session as any).sendTurnMessage;
+    }
+  }
+});
+
+test("Draft timers skip DM after the opening pick but still warn the channel", async () => {
+  const session = new DraftTeamPickingSession();
+  (session as any).embedMessage = { edit: async () => {} };
+  session.redCaptain = {
+    discordSnowflake: "capR",
+    captain: true,
+  } as any;
+  session.blueCaptain = {
+    discordSnowflake: "capB",
+    captain: true,
+  } as any;
+  session.proposedTeams.RED = [];
+  session.proposedTeams.BLUE = [];
+  session.proposedTeams.UNDECIDED = [
+    { discordSnowflake: "p1", ignUsed: "Alpha" } as any,
+    { discordSnowflake: "p2", ignUsed: "Bravo" } as any,
+    { discordSnowflake: "p3", ignUsed: "Charlie" } as any,
+  ];
+  session.turn = "RED";
+  (session as any).pickCounts.RED = 1; // already made opening pick
+
+  const sentMessages: string[] = [];
+  const dmMessages: string[] = [];
+  const originalChannel = Channels.teamPicking;
+  Channels.teamPicking = stubTeamPickingChannel(sentMessages, dmMessages);
+
+  const originalSendTurnMessage = (session as any).sendTurnMessage;
+  (session as any).sendTurnMessage = async () => {};
+
+  const originalRandom = Math.random;
+  Math.random = () => 0;
+
+  try {
+    await withImmediateTimers(async () => {
+      (session as any).startTurnTimer();
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+    assert(
+      dmMessages.length === 0,
+      "Subsequent picks should not DM the captain"
+    );
+    assert(
+      sentMessages.some((msg) => /15 seconds/i.test(msg)),
+      "The turn warning should mention the 15 second threshold"
+    );
+  } finally {
+    Math.random = originalRandom;
+    Channels.teamPicking = originalChannel;
+    if (originalSendTurnMessage) {
+      (session as any).sendTurnMessage = originalSendTurnMessage;
+    } else {
+      delete (session as any).sendTurnMessage;
+    }
   }
 });
