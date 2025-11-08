@@ -1,12 +1,13 @@
 import { GameInstance } from "../database/GameInstance";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { ConfigManager } from "../ConfigManager";
-import { Guild, EmbedBuilder } from "discord.js";
+import { Guild, EmbedBuilder, GuildMember } from "discord.js";
 import { gameFeed } from "../logic/gameFeed/GameFeed";
 import { prettifyName } from "../util/Utils";
 import TeamCommand from "../commands/TeamCommand";
 import { DraftTeamPickingSession } from "./teams/DraftTeamPickingSession";
 import { PermissionsUtil } from "../util/PermissionsUtil";
+import type { PlayerInstance } from "../database/PlayerInstance";
 
 export class CurrentGameManager {
   private static currentGame?: GameInstance;
@@ -279,20 +280,16 @@ export class CurrentGameManager {
           // Eligible players: registered, elo > 1000, presence in online/idle/dnd
           const players = game.getPlayers();
           const presenceOk = new Set(["online", "idle", "dnd"]);
-          const eligible: {
-            p: { ignUsed?: string; discordSnowflake: string };
-            elo: number;
-          }[] = [];
+          const eligible: { p: PlayerInstance; elo: number }[] = [];
 
           for (const p of players) {
             const elo = Number(p.elo ?? 0);
             if (elo <= 1000) continue;
 
-            const m: { presence?: { status?: string } } | undefined =
-              await guild.members
-                .fetch(p.discordSnowflake)
-                .catch(() => undefined);
-            const status = m?.presence?.status as string | undefined;
+            const member: GuildMember | null = await guild.members
+              .fetch(p.discordSnowflake)
+              .catch(() => null);
+            const status = member?.presence?.status ?? undefined;
 
             if (status && !presenceOk.has(status)) continue;
 
@@ -323,7 +320,7 @@ export class CurrentGameManager {
 
           const assignCaptain = async (
             team: "RED" | "BLUE",
-            player: { discordSnowflake: string; ignUsed?: string }
+            player: PlayerInstance
           ) => {
             const res = game.setTeamCaptain(team, player);
             if (res.oldCaptain) {

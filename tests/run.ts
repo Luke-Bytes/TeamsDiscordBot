@@ -2,6 +2,7 @@
 import "./cases/captainNominate.test";
 import "./cases/basicCommands.test";
 import "./cases/e2eHappyPath.test";
+import "./cases/captainPlanDM.test";
 import "./cases/timeBased.test";
 import "./critical/mvpCritical.test";
 import "./critical/classbanCritical.test";

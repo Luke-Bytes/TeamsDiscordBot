@@ -6,6 +6,7 @@ import {
   Snowflake,
   User,
   Collection as DjsCollection,
+  PollAnswer,
 } from "discord.js";
 import EventEmitter from "events";
 import { prettifyName, stripVariationSelector } from "../util/Utils";
@@ -48,13 +49,7 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
   }
 
   private async countAnswerVoters(
-    answer: {
-      fetchVoters: (
-        opts?: unknown
-      ) => Promise<DjsCollection<Snowflake, User> | null>;
-      emoji?: { name?: string } | null;
-      text?: string | null;
-    },
+    answer: PollAnswer,
     registeredIds: Set<string>
   ): Promise<{ total: number; valid: number }> {
     let total = 0,
@@ -62,7 +57,7 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
     let after: Snowflake | undefined = undefined;
     for (;;) {
       const page: DjsCollection<Snowflake, User> | null = await answer
-        .fetchVoters({ limit: 100, after } as unknown)
+        .fetchVoters({ limit: 100, after })
         .catch(() => null);
       if (!page) break;
       for (const [id] of page) {

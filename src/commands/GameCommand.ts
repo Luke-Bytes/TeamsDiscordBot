@@ -2,6 +2,8 @@ import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
   Guild,
+  Message,
+  ButtonInteraction,
 } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { ConfigManager } from "../ConfigManager";
@@ -11,6 +13,7 @@ import { cleanUpAfterGame } from "../logic/GameEndCleanUp";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { setTimeout as delay } from "timers/promises";
 import { checkMissingPlayersInVC, formatTeamIGNs } from "../util/Utils";
+import CaptainPlanDMManager from "../logic/CaptainPlanDMManager";
 
 export default class GameCommand implements Command {
   data = new SlashCommandBuilder()
@@ -32,7 +35,15 @@ export default class GameCommand implements Command {
 
   name = "game";
   description = "Manage game session";
-  buttonIds: string[] = [];
+  private captainPlanDMManager = new CaptainPlanDMManager();
+
+  get buttonIds(): string[] {
+    return this.captainPlanDMManager.buttonIds;
+  }
+
+  public isAwaitingCaptainPlan(userId: string): boolean {
+    return this.captainPlanDMManager.hasPendingSession(userId);
+  }
 
   async execute(interaction: ChatInputCommandInteraction) {
     const subCommand = interaction.options.getSubcommand();
@@ -90,12 +101,12 @@ export default class GameCommand implements Command {
           if (gameInstance.getClassBanLimit() !== 0) {
             await DiscordUtil.sendMessage(
               "redTeamChat",
-              `Team captain submit your class ban when ready with \`/class ban [class]\``
+              `⚠️ **Team captain** submit your class ban when ready with \`/class ban [class]\``
             );
 
             await DiscordUtil.sendMessage(
               "blueTeamChat",
-              `Team captain submit your class ban when ready with \`/class ban [class]\``
+              `⚠️ **Team captain** submit your class ban when ready with \`/class ban [class]\``
             );
           }
 
@@ -109,6 +120,32 @@ export default class GameCommand implements Command {
               "blueTeamChat",
               "Team captain — please list out the support roles for the other team:\n```\nBunker:\nFarmer:\nGold Miner:\n```"
             );
+          }
+
+          // After team picking is finished and just before start, DM captains plan template
+          const redCaptain = gameInstance.getCaptainOfTeam("RED");
+          const blueCaptain = gameInstance.getCaptainOfTeam("BLUE");
+          if (redCaptain) {
+            await this.captainPlanDMManager.startForCaptain({
+              client: interaction.client,
+              captainId: redCaptain.discordSnowflake,
+              team: "RED",
+              teamList: await formatTeamIGNs(gameInstance, "RED"),
+              members: gameInstance
+                .getPlayersOfTeam("RED")
+                .map((p) => p.discordSnowflake),
+            });
+          }
+          if (blueCaptain) {
+            await this.captainPlanDMManager.startForCaptain({
+              client: interaction.client,
+              captainId: blueCaptain.discordSnowflake,
+              team: "BLUE",
+              teamList: await formatTeamIGNs(gameInstance, "BLUE"),
+              members: gameInstance
+                .getPlayersOfTeam("BLUE")
+                .map((p) => p.discordSnowflake),
+            });
           }
         } catch (error) {
           console.error("Error starting the game: ", error);
@@ -181,6 +218,14 @@ export default class GameCommand implements Command {
       default:
         await interaction.reply("Invalid subcommand.");
     }
+  }
+
+  async handleDM(message: Message): Promise<boolean> {
+    return this.captainPlanDMManager.handleDM(message);
+  }
+
+  async handleButtonPress(interaction: ButtonInteraction) {
+    await this.captainPlanDMManager.handleButtonPress(interaction);
   }
 }
 
