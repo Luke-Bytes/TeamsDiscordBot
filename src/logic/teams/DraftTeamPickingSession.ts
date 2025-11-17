@@ -39,6 +39,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
   finalizeMessage?: Message<boolean>;
   lateSignups: PlayerInstance[] = [];
   latePickingStarted = false;
+  private lateDraftableWindow = 0;
   private pickCounts: Record<Team, number> = { RED: 0, BLUE: 0 };
   private pickWarningTimeout?: NodeJS.Timeout;
   private pickAutoTimeout?: NodeJS.Timeout;
@@ -81,6 +82,15 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       return;
     }
 
+    if (this.proposedTeams.UNDECIDED.length % 2 !== 0) {
+      await interaction.editReply({
+        content:
+          "Draft picking requires an even number of undecided players. Please add or remove a player before starting.",
+      });
+      this.state = "cancelled";
+      return;
+    }
+
     await interaction.editReply({
       content: `Started a draft team picking session in <#${teamPickingChannel.id}>`,
     });
@@ -115,6 +125,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     const redPlayers = this.proposedTeams.RED;
     const bluePlayers = this.proposedTeams.BLUE;
     const undecidedPlayers = this.proposedTeams.UNDECIDED;
+    const lateDraftablePlayers = this.getLateDraftablePlayers();
 
     const getString = (players: PlayerInstance[], includeElo = false) => {
       const captain = players.filter((p) => p.captain)[0];
@@ -173,21 +184,15 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     }
 
     // Add Late Signups section (even count only) during drafting
-    if (!finalized) {
-      const lateEven = this.lateSignups.slice(
-        0,
-        this.lateSignups.length - (this.lateSignups.length % 2)
-      );
-      if (lateEven.length >= 2) {
-        embed.addFields({
-          name: ` 🕒 Late Signups  [${lateEven.length}]`,
-          value:
-            lateEven
-              .map((p) => escapeText(p.ignUsed ?? "Unknown Player"))
-              .join("\n") || "No players",
-          inline: false,
-        });
-      }
+    if (!finalized && lateDraftablePlayers.length > 0) {
+      embed.addFields({
+        name: ` 🕒 Late Signups  [${lateDraftablePlayers.length}]`,
+        value:
+          lateDraftablePlayers
+            .map((p) => escapeText(p.ignUsed ?? "Unknown Player"))
+            .join("\n") || "No players",
+        inline: false,
+      });
     }
 
     if (finalized && finalizeFooter) {
@@ -314,12 +319,11 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     if (this.proposedTeams.UNDECIDED.length > 0) {
       return { type: "UNDECIDED", pool: this.proposedTeams.UNDECIDED };
     }
-    const evenLateCount =
-      this.lateSignups.length - (this.lateSignups.length % 2);
-    if (evenLateCount >= 2) {
+    const lateDraftable = this.getLateDraftablePlayers();
+    if (lateDraftable.length > 0) {
       return {
         type: "LATE",
-        pool: this.lateSignups.slice(0, evenLateCount),
+        pool: lateDraftable,
       };
     }
     return null;
@@ -336,6 +340,9 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     if (pickingFrom === "LATE") {
       this.latePickingStarted = true;
       this.lateSignups = this.lateSignups.filter((p) => p !== player);
+      if (this.lateDraftableWindow > 0) {
+        this.lateDraftableWindow = Math.max(this.lateDraftableWindow - 1, 0);
+      }
     } else {
       this.proposedTeams.UNDECIDED = this.proposedTeams.UNDECIDED.filter(
         (p) => p !== player
@@ -371,24 +378,11 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       }
     }
 
-    if (pickingFrom === "LATE" && this.lateSignups.length === 1) {
-      const lastPlayer = this.lateSignups[0];
-      const otherTeam = pickingTeam === "RED" ? "BLUE" : "RED";
-      this.proposedTeams[otherTeam].push(lastPlayer);
-      this.lateSignups = [];
-      await this.embedMessage?.edit(this.createDraftEmbed(false));
-      if (teamPickingChannel.isSendable()) {
-        const safeLast = escapeText(lastPlayer.ignUsed ?? "Unknown Player");
-        await teamPickingChannel.send(
-          `Player ${safeLast} was automatically assigned to **${otherTeam}** team.`
-        );
-      }
-    }
-
     if (
       this.proposedTeams.UNDECIDED.length === 0 &&
-      this.lateSignups.length === 0
+      this.getLateDraftablePlayers().length === 0
     ) {
+      await this.handleRemainingLateSignups(teamPickingChannel);
       await this.sendFinalizationMessage(teamPickingChannel);
       this.finishedPicking = true;
       this.clearTurnTimers();
@@ -593,8 +587,48 @@ export class DraftTeamPickingSession extends TeamPickingSession {
   public async registerLateSignup(player: PlayerInstance) {
     if (this.latePickingStarted) return;
     this.lateSignups.push(player);
+    this.syncLateDraftableWindow();
     if (this.embedMessage) {
       await this.embedMessage.edit(this.createDraftEmbed(false));
+    }
+  }
+
+  private syncLateDraftableWindow() {
+    if (this.latePickingStarted) {
+      this.lateDraftableWindow = Math.min(
+        this.lateDraftableWindow,
+        this.lateSignups.length
+      );
+      return;
+    }
+    const evenLateCount =
+      this.lateSignups.length - (this.lateSignups.length % 2);
+    this.lateDraftableWindow = evenLateCount;
+  }
+
+  private getLateDraftablePlayers(): PlayerInstance[] {
+    if (this.lateDraftableWindow <= 0) {
+      return [];
+    }
+    return this.lateSignups.slice(0, this.lateDraftableWindow);
+  }
+
+  private async handleRemainingLateSignups(channel: TextChannel) {
+    if (this.lateSignups.length === 0) {
+      return;
+    }
+    const leftovers = [...this.lateSignups];
+    this.proposedTeams.UNDECIDED.push(...leftovers);
+    this.lateSignups = [];
+    this.lateDraftableWindow = 0;
+    await this.embedMessage?.edit(this.createDraftEmbed(false));
+    if (channel.isSendable()) {
+      const names = leftovers
+        .map((p) => escapeText(p.ignUsed ?? "Unknown Player"))
+        .join(", ");
+      await channel.send(
+        `Late signup${leftovers.length > 1 ? "s" : ""} ${names} remain undecided and may not participate.`
+      );
     }
   }
 }

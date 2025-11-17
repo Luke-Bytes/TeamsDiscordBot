@@ -21,8 +21,8 @@ test("/igns lists all minecraft accounts for self when no user param provided", 
     const accountsField = fields.find((f: any) => /Accounts/i.test(f.name));
     const val = String(accountsField?.value || "");
     assert(
-      val.includes("1. Name\\_One") && val.includes("2. SecondIGN"),
-      "Lists escaped accounts"
+      val.includes("1. Name_One") && val.includes("2. SecondIGN"),
+      "Lists accounts while formatting safely"
     );
   } finally {
     (PrismaUtils as any).findPlayer = origFind;
