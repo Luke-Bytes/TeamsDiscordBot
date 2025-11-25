@@ -2,6 +2,9 @@ import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
   Guild,
+  GuildMember,
+  Message,
+  ButtonInteraction,
 } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { ConfigManager } from "../ConfigManager";
@@ -9,8 +12,8 @@ import { PermissionsUtil } from "../util/PermissionsUtil";
 import { GameInstance } from "../database/GameInstance";
 import { cleanUpAfterGame } from "../logic/GameEndCleanUp";
 import { DiscordUtil } from "../util/DiscordUtil";
-import { setTimeout as delay } from "timers/promises";
 import { checkMissingPlayersInVC, formatTeamIGNs } from "../util/Utils";
+import CaptainPlanDMManager from "../logic/CaptainPlanDMManager";
 
 export default class GameCommand implements Command {
   data = new SlashCommandBuilder()
@@ -32,7 +35,15 @@ export default class GameCommand implements Command {
 
   name = "game";
   description = "Manage game session";
-  buttonIds: string[] = [];
+  private captainPlanDMManager = new CaptainPlanDMManager();
+
+  get buttonIds(): string[] {
+    return this.captainPlanDMManager.buttonIds;
+  }
+
+  public isAwaitingCaptainPlan(userId: string): boolean {
+    return this.captainPlanDMManager.hasPendingSession(userId);
+  }
 
   async execute(interaction: ChatInputCommandInteraction) {
     const subCommand = interaction.options.getSubcommand();
@@ -44,8 +55,16 @@ export default class GameCommand implements Command {
       case "start":
         await interaction.deferReply({ ephemeral: false });
         try {
-          await assignTeamRolesAfterPicking(guild);
-          await assignTeamVCAfterPicking(guild);
+          const memberCache = await buildMemberCache(
+            guild,
+            [
+              ...gameInstance.getPlayersOfTeam("RED"),
+              ...gameInstance.getPlayersOfTeam("BLUE"),
+            ].map((player) => player.discordSnowflake)
+          );
+
+          await assignTeamVCAfterPicking(guild, memberCache);
+          await assignTeamRolesAfterPicking(guild, memberCache);
 
           await interaction.editReply(
             "Game will begin soon! Roles assigned and players moved to VCs."
@@ -90,12 +109,12 @@ export default class GameCommand implements Command {
           if (gameInstance.getClassBanLimit() !== 0) {
             await DiscordUtil.sendMessage(
               "redTeamChat",
-              `Team captain submit your class ban when ready with \`/class ban [class]\``
+              `⚠️ **Team captain** submit your class ban when ready with \`/class ban [class]\``
             );
 
             await DiscordUtil.sendMessage(
               "blueTeamChat",
-              `Team captain submit your class ban when ready with \`/class ban [class]\``
+              `⚠️ **Team captain** submit your class ban when ready with \`/class ban [class]\``
             );
           }
 
@@ -109,6 +128,32 @@ export default class GameCommand implements Command {
               "blueTeamChat",
               "Team captain — please list out the support roles for the other team:\n```\nBunker:\nFarmer:\nGold Miner:\n```"
             );
+          }
+
+          // After team picking is finished and just before start, DM captains plan template
+          const redCaptain = gameInstance.getCaptainOfTeam("RED");
+          const blueCaptain = gameInstance.getCaptainOfTeam("BLUE");
+          if (redCaptain) {
+            await this.captainPlanDMManager.startForCaptain({
+              client: interaction.client,
+              captainId: redCaptain.discordSnowflake,
+              team: "RED",
+              teamList: await formatTeamIGNs(gameInstance, "RED"),
+              members: gameInstance
+                .getPlayersOfTeam("RED")
+                .map((p) => p.discordSnowflake),
+            });
+          }
+          if (blueCaptain) {
+            await this.captainPlanDMManager.startForCaptain({
+              client: interaction.client,
+              captainId: blueCaptain.discordSnowflake,
+              team: "BLUE",
+              teamList: await formatTeamIGNs(gameInstance, "BLUE"),
+              members: gameInstance
+                .getPlayersOfTeam("BLUE")
+                .map((p) => p.discordSnowflake),
+            });
           }
         } catch (error) {
           console.error("Error starting the game: ", error);
@@ -182,50 +227,72 @@ export default class GameCommand implements Command {
         await interaction.reply("Invalid subcommand.");
     }
   }
+
+  async handleDM(message: Message): Promise<boolean> {
+    return this.captainPlanDMManager.handleDM(message);
+  }
+
+  async handleButtonPress(interaction: ButtonInteraction) {
+    await this.captainPlanDMManager.handleButtonPress(interaction);
+  }
 }
 
-export async function assignTeamVCAfterPicking(guild: Guild) {
+export async function assignTeamVCAfterPicking(
+  guild: Guild,
+  memberCache?: Map<string, GuildMember>
+) {
   const config = ConfigManager.getConfig();
   const blueTeamRoleId = config.roles.blueTeamRole;
   const redTeamRoleId = config.roles.redTeamRole;
 
   const gameInstance = GameInstance.getInstance();
+  const cache = memberCache ?? new Map<string, GuildMember>();
+
+  const moveTeam = async (
+    team: "RED" | "BLUE",
+    vcId: string,
+    roleId: string
+  ) => {
+    const players = gameInstance.getPlayersOfTeam(team);
+    for (const player of players) {
+      const member = await getCachedMember(
+        guild,
+        cache,
+        player.discordSnowflake
+      );
+      if (!member) continue;
+      await DiscordUtil.moveToVC(
+        guild,
+        vcId,
+        roleId,
+        player.discordSnowflake,
+        member
+      );
+    }
+  };
 
   try {
-    const redPlayers = gameInstance.getPlayersOfTeam("RED");
-    for (const player of redPlayers) {
-      await DiscordUtil.moveToVC(
-        guild,
-        config.channels.redTeamVC,
-        redTeamRoleId,
-        player.discordSnowflake
-      );
-    }
-
-    const bluePlayers = gameInstance.getPlayersOfTeam("BLUE");
-    for (const player of bluePlayers) {
-      await DiscordUtil.moveToVC(
-        guild,
-        config.channels.blueTeamVC,
-        blueTeamRoleId,
-        player.discordSnowflake
-      );
-    }
-
+    await Promise.all([
+      moveTeam("RED", config.channels.redTeamVC, redTeamRoleId),
+      moveTeam("BLUE", config.channels.blueTeamVC, blueTeamRoleId),
+    ]);
     console.log("Finished assigning players to team voice channels.");
   } catch (error) {
     console.error("Unexpected error during team VC assignment:", error);
   }
 }
 
-export async function assignTeamRolesAfterPicking(guild: Guild) {
+export async function assignTeamRolesAfterPicking(
+  guild: Guild,
+  memberCache?: Map<string, GuildMember>
+) {
   const config = ConfigManager.getConfig();
   const blueTeamRoleId = config.roles.blueTeamRole;
   const redTeamRoleId = config.roles.redTeamRole;
   const gameInstance = GameInstance.getInstance();
 
   const BATCH_SIZE = 5;
-  const DELAY_MS = 200;
+  const cache = memberCache ?? new Map<string, GuildMember>();
 
   async function assignRolesForTeam(team: "RED" | "BLUE", roleId: string) {
     const players = gameInstance.getPlayersOfTeam(team);
@@ -235,29 +302,23 @@ export async function assignTeamRolesAfterPicking(guild: Guild) {
 
       await Promise.allSettled(
         batch.map(async (player) => {
-          try {
-            const member = await guild.members.fetch(player.discordSnowflake);
-            if (member) {
-              await DiscordUtil.assignRole(member, roleId);
-            }
-          } catch (error) {
-            console.error(
-              `Failed to assign role to ${player.discordSnowflake}:`,
-              error
-            );
-          }
+          const member = await getCachedMember(
+            guild,
+            cache,
+            player.discordSnowflake
+          );
+          if (!member) return;
+          await DiscordUtil.assignRole(member, roleId);
         })
       );
-
-      if (i + BATCH_SIZE < players.length) {
-        await delay(DELAY_MS);
-      }
     }
   }
 
   try {
-    await assignRolesForTeam("RED", redTeamRoleId);
-    await assignRolesForTeam("BLUE", blueTeamRoleId);
+    await Promise.all([
+      assignRolesForTeam("RED", redTeamRoleId),
+      assignRolesForTeam("BLUE", blueTeamRoleId),
+    ]);
     console.log("Roles assigned successfully for both teams.");
   } catch (error) {
     console.error("Error assigning roles after team picking:", error);
@@ -294,5 +355,89 @@ export async function movePlayersToTeamPickingAfterGameEnd(guild: Guild) {
     console.log("Completed cleaning up members.");
   } catch (error) {
     console.error("Failed to move members to vc:", error);
+  }
+}
+
+async function buildMemberCache(
+  guild: Guild,
+  memberIds: string[]
+): Promise<Map<string, GuildMember>> {
+  const cache = new Map<string, GuildMember>();
+  const uniqueIds = Array.from(new Set(memberIds));
+  if (uniqueIds.length === 0) {
+    return cache;
+  }
+
+  const missing: string[] = [];
+  for (const id of uniqueIds) {
+    const cached = guild.members.cache.get(id);
+    if (cached) {
+      cache.set(id, cached);
+    } else {
+      missing.push(id);
+    }
+  }
+
+  const BATCH_SIZE = 10;
+  for (let i = 0; i < missing.length; i += BATCH_SIZE) {
+    const chunk = missing.slice(i, i + BATCH_SIZE);
+    await Promise.allSettled(
+      chunk.map(async (id) => {
+        const member = await fetchMemberWithTimeout(guild, id);
+        if (member) {
+          cache.set(id, member);
+        }
+      })
+    );
+  }
+
+  return cache;
+}
+
+async function getCachedMember(
+  guild: Guild,
+  cache: Map<string, GuildMember>,
+  id: string
+): Promise<GuildMember | null> {
+  const cached = cache.get(id) ?? guild.members.cache.get(id);
+  if (cached) {
+    cache.set(id, cached);
+    return cached;
+  }
+
+  const member = await fetchMemberWithTimeout(guild, id);
+  if (member) {
+    cache.set(id, member);
+    return member;
+  } else {
+    return null;
+  }
+}
+
+async function fetchMemberWithTimeout(
+  guild: Guild,
+  id: string,
+  timeoutMs = 3000
+): Promise<GuildMember | null> {
+  let timer: NodeJS.Timeout | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`fetch timeout for ${id}`));
+    }, timeoutMs);
+  });
+
+  try {
+    const member = (await Promise.race([
+      guild.members.fetch(id),
+      timeoutPromise,
+    ])) as GuildMember;
+    return member;
+  } catch (error) {
+    console.warn(`Failed to fetch member ${id} within ${timeoutMs}ms`, error);
+    return null;
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
   }
 }

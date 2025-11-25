@@ -321,8 +321,11 @@ export default class AnnouncementCommand implements Command {
     if (modifiersOption === "yes") {
       ModifierSelector.runSelection();
     } else {
-      GameInstance.getInstance().settings.modifiers = [];
-      GameInstance.getInstance().setClassBanLimit(2);
+      // Default: no modifiers -> enable shared captain bans
+      const gi = GameInstance.getInstance();
+      gi.settings.modifiers = [];
+      gi.classBanMode = "shared";
+      gi.setClassBanLimit(2);
     }
 
     const doubleEloOption = interaction.options
@@ -404,6 +407,9 @@ export default class AnnouncementCommand implements Command {
     await activateFeed(Channels.gameFeed, addTeamsGameFeed);
 
     await CurrentGameManager.getCurrentGame().announce();
+
+    CurrentGameManager.scheduleClassBanTimers();
+    CurrentGameManager.scheduleCaptainTimers(guild);
 
     if (this.announcementPreviewMessage) {
       await this.announcementPreviewMessage.edit({
@@ -713,6 +719,9 @@ export default class AnnouncementCommand implements Command {
       }
 
       await this.updateAnnouncementMessages();
+
+      CurrentGameManager.scheduleClassBanTimers();
+      CurrentGameManager.scheduleCaptainTimers(interaction.guild!);
       await interaction.followUp(
         `The announcement time has been updated to ${formatTimestamp(date)}.`
       );

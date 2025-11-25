@@ -124,7 +124,7 @@ export async function formatTeamIGNs(
 ): Promise<string> {
   return game
     .getPlayersOfTeam(team)
-    .map((p) => `${String(p.latestIGN ?? p.ignUsed)} = `)
+    .map((p) => `${escapeText(String(p.latestIGN ?? p.ignUsed))} = `)
     .join("\n");
 }
 
@@ -166,7 +166,18 @@ export async function checkMissingPlayersInVC(
 }
 
 export function escapeText(text: string): string {
-  return text.replace(/([\\_*|~`>])/g, "\\$1");
+  let escaped = text;
+  const doubleDelimiters = ["**", "__", "~~"];
+  const singleDelimiters = ["*", "_", "`", "|"];
+
+  for (const delimiter of doubleDelimiters) {
+    escaped = escapeDelimitedSections(escaped, delimiter);
+  }
+  for (const delimiter of singleDelimiters) {
+    escaped = escapeDelimitedSections(escaped, delimiter);
+  }
+
+  return escaped.replace(/(^|\n)>/g, "$1\\>");
 }
 
 export function stripVariationSelector(emoji: string): string {
@@ -178,4 +189,24 @@ const allAnniClasses = Object.values(AnniClass) as AnniClass[];
 export function getRandomAnniClass(): AnniClass {
   const idx = Math.floor(Math.random() * allAnniClasses.length);
   return allAnniClasses[idx];
+}
+
+function escapeDelimitedSections(text: string, delimiter: string) {
+  const escapedDelimiter = escapeForRegex(delimiter);
+  const pairPattern = new RegExp(
+    `(?<!\\\\)${escapedDelimiter}([\\s\\S]+?)(?<!\\\\)${escapedDelimiter}`,
+    "g"
+  );
+  const replacement = delimiter
+    .split("")
+    .map((char) => `\\${char}`)
+    .join("");
+
+  return text.replace(pairPattern, (match) =>
+    match.replace(new RegExp(escapedDelimiter, "g"), replacement)
+  );
+}
+
+function escapeForRegex(value: string) {
+  return value.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
 }

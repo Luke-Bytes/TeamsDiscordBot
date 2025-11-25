@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { Client, GatewayIntentBits, ActivityType } from "discord.js";
+import { Client, GatewayIntentBits, ActivityType, Partials } from "discord.js";
 import { CommandHandler } from "./commands/CommandHandler";
 import { MessageHandler } from "./interactions/MessageHandler";
 import { ReactionHandler } from "./interactions/ReactionHandler";
@@ -27,7 +27,9 @@ export class TeamsBot {
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.DirectMessages,
       ],
+      partials: [Partials.Channel],
     });
 
     this.client.on("rateLimit", (warn) => {
@@ -42,12 +44,12 @@ export class TeamsBot {
 
   public async start() {
     this.client.once("ready", async () => {
-      console.log = (...args: any[]) => logger.info(args.join(" "));
-      console.table = (...args: any[]) => logger.info(args.join(" "));
-      console.info = (...args: any[]) => logger.info(args.join(" "));
-      console.warn = (...args: any[]) => logger.error(args.join(" "));
-      console.error = (...args: any[]) => logger.info(args.join(" "));
-      console.debug = (...args: any[]) => logger.error(args.join(" "));
+      console.log = (...args: unknown[]) => logger.info(args.join(" "));
+      console.table = (...args: unknown[]) => logger.info(args.join(" "));
+      console.info = (...args: unknown[]) => logger.info(args.join(" "));
+      console.warn = (...args: unknown[]) => logger.error(args.join(" "));
+      console.error = (...args: unknown[]) => logger.info(args.join(" "));
+      console.debug = (...args: unknown[]) => logger.error(args.join(" "));
       console.log(`Logged in as ${this.client.user?.tag}!`);
 
       this.commandHandler.loadCommands();
@@ -74,6 +76,22 @@ export class TeamsBot {
     });
 
     this.client.on("messageCreate", async (msg) => {
+      if (!msg.guild) {
+        const awaitingCaptainPlan =
+          this.commandHandler.gameCommand.isAwaitingCaptainPlan(msg.author.id);
+        if (awaitingCaptainPlan) {
+          try {
+            const handled = await this.commandHandler.gameCommand.handleDM(msg);
+            if (handled) {
+              return;
+            }
+          } catch (e) {
+            void e;
+          }
+        }
+        return;
+      }
+
       if (msg.content.length > 1900) {
         return;
       }

@@ -44,6 +44,8 @@ export class GameInstance {
     UNDECIDED: [],
   };
   lateSignups: Set<string> = new Set();
+  captainNominations: Set<string> = new Set();
+  private readonly captainBanLocked: Set<string> = new Set();
 
   blueMeanElo?: number;
   redMeanElo?: number;
@@ -75,6 +77,7 @@ export class GameInstance {
 
   public classBanLimit: number = 0;
   private readonly captainBanCounts: Map<string, number> = new Map();
+  private classBansAnnounced: boolean = false;
 
   private constructor() {
     this.reset();
@@ -114,15 +117,17 @@ export class GameInstance {
     this.pickOtherTeamsSupportRoles = false;
     this.classBanLimit = 2;
     this.captainBanCounts.clear();
+    this.captainNominations.clear();
+    this.captainBanLocked.clear();
+    this.classBansAnnounced = false;
   }
 
   public static async resetGameInstance() {
     const currentInstance = this.getInstance();
     if (currentInstance) {
       await prismaClient.game.saveGameFromInstance(currentInstance);
+      currentInstance.reset();
     }
-    this.instance = new GameInstance();
-    this.instance.reset();
   }
 
   public startMinerushVote() {
@@ -362,15 +367,24 @@ export class GameInstance {
   public setTeamCaptain(team: Team, player: PlayerInstance) {
     const oldTeamCaptain = this.getCaptainOfTeam(team);
 
-    if (oldTeamCaptain) {
+    if (oldTeamCaptain && oldTeamCaptain !== player) {
       oldTeamCaptain.captain = false;
+
+      if (!this.teamsDecidedBy) {
+        (Object.keys(this.teams) as Array<Team | "UNDECIDED">).forEach(
+          (k) =>
+            (this.teams[k] = this.teams[k].filter((p) => p !== oldTeamCaptain))
+        );
+        if (!this.teams["UNDECIDED"].includes(oldTeamCaptain)) {
+          this.teams["UNDECIDED"].push(oldTeamCaptain);
+        }
+      }
     }
 
     player.captain = true;
 
-    Object.keys(this.teams).forEach((teamKey) => {
-      const index = this.teams[teamKey as Team].indexOf(player);
-      if (index !== -1) this.teams[teamKey as Team].splice(index, 1);
+    (Object.keys(this.teams) as Array<Team | "UNDECIDED">).forEach((k) => {
+      this.teams[k] = this.teams[k].filter((p) => p !== player);
     });
 
     if (!this.teams[team].includes(player)) {
@@ -417,7 +431,7 @@ export class GameInstance {
 
     if (fillOption !== "none") {
       console.info(`[GAME] Filling teams with test players...`);
-      await this.fillTeamsWithTestPlayers(9, fillOption);
+      await this.fillTeamsWithTestPlayers(8, fillOption);
       console.info(`[GAME] Teams filled. Current teams:`, this.teams);
 
       this.teams.RED.forEach((player) => {
@@ -897,5 +911,21 @@ export class GameInstance {
   public markCaptainHasBanned(userId: string): void {
     const prev = this.getCaptainBanCount(userId);
     this.captainBanCounts.set(userId, prev + 1);
+  }
+
+  public isCaptainBanLocked(userId: string): boolean {
+    return this.captainBanLocked.has(userId);
+  }
+
+  public lockCaptainBan(userId: string): void {
+    this.captainBanLocked.add(userId);
+  }
+
+  public markClassBansAnnounced(): void {
+    this.classBansAnnounced = true;
+  }
+
+  public areClassBansAnnounced(): boolean {
+    return this.classBansAnnounced;
   }
 }

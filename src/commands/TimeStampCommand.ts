@@ -5,10 +5,12 @@ import { DateTime } from "luxon";
 import { DiscordUtil } from "../util/DiscordUtil";
 
 const TZ_MAP: Record<string, string> = {
-  BST: "Europe/London",
   GMT: "Etc/GMT",
-  PST: "America/Los_Angeles",
+  BST: "Europe/London",
   CET: "Europe/Paris",
+  EST: "America/New_York",
+  CST: "America/Chicago",
+  PST: "America/Los_Angeles",
   JST: "Asia/Tokyo",
 };
 
@@ -29,7 +31,16 @@ export default class TimestampCommand implements Command {
     .addStringOption((option) =>
       option
         .setName("timezone")
-        .setDescription("Timezone (e.g 'GMT', 'JST')")
+        .setDescription("Timezone")
+        .addChoices(
+          { name: "GMT", value: "GMT" },
+          { name: "BST", value: "BST" },
+          { name: "CET", value: "CET" },
+          { name: "EST", value: "EST" },
+          { name: "CST", value: "CST" },
+          { name: "PST", value: "PST" },
+          { name: "JST", value: "JST" }
+        )
         .setRequired(false)
     )
     .addStringOption((option) =>
@@ -57,7 +68,7 @@ export default class TimestampCommand implements Command {
     const format = interaction.options.getString("format") ?? "F";
     const echo = interaction.options.getBoolean("echo") ?? true;
 
-    const tz = tzInput ? (TZ_MAP[tzInput.toUpperCase()] ?? tzInput) : undefined;
+    const tz = tzInput ? TZ_MAP[tzInput.toUpperCase()] : undefined;
     const parsed = chrono.parseDate(input, new Date(), { forwardDate: true });
 
     if (!parsed) {
@@ -69,7 +80,19 @@ export default class TimestampCommand implements Command {
     }
 
     const base = DateTime.fromJSDate(parsed);
-    const dt = tz ? base.setZone(tz) : base;
+    let dt = base;
+    if (tz) {
+      const wall = {
+        year: base.year,
+        month: base.month,
+        day: base.day,
+        hour: base.hour,
+        minute: base.minute,
+        second: base.second,
+        millisecond: 0,
+      };
+      dt = DateTime.fromObject(wall, { zone: tz });
+    }
 
     if (!dt.isValid) {
       await interaction.reply({

@@ -10,7 +10,7 @@
     "forceConsistentCasingInFileNames": true,
     "removeComments": true,
     "sourceMap": true,
-    "rootDir": "./src",
+    "rootDir": ".",
     "outDir": "./dist",
     "resolveJsonModule": true,
     "typeRoots": ["./node_modules/@types", "./node_modules/discord.js/typings"],
@@ -20,6 +20,6 @@
       "*": ["./src/*"]
     }
   },
-  "include": ["src/**/*", "scripts/**/*", "config.json"],
+  "include": ["src/**/*", "scripts/**/*", "tests/**/*", "config.json"],
   "exclude": ["node_modules", "dist"]
 }

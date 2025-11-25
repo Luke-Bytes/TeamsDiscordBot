@@ -75,6 +75,17 @@ export default class ClassbanCommand implements Command {
     }
 
     const member = DiscordUtil.getGuildMember(interaction);
+    if (game.isCaptainBanLocked(interaction.user.id)) {
+      return interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor("Grey")
+            .setTitle("⏰ Class Ban Window Closed")
+            .setDescription("Your team can no longer ban a class.")
+            .setTimestamp(),
+        ],
+      });
+    }
     if (!PermissionsUtil.hasRole(member, "captainRole")) {
       return interaction.editReply({
         embeds: [
@@ -158,9 +169,7 @@ export default class ClassbanCommand implements Command {
         });
       }
       if (!byTeam[opponent].includes(cls)) byTeam[opponent].push(cls);
-    } else {
-      if (!byTeam[team].includes(cls)) byTeam[team].push(cls);
-    }
+    } else if (!byTeam[team].includes(cls)) byTeam[team].push(cls);
 
     game.markCaptainHasBanned(interaction.user.id);
 
@@ -175,14 +184,33 @@ export default class ClassbanCommand implements Command {
     await channel.send({ embeds: [banEmbed] });
     await interaction.deleteReply();
 
-    if (game.getTotalCaptainBans() === game.getClassBanLimit()) {
+    if (
+      game.getTotalCaptainBans() === game.getClassBanLimit() &&
+      !game.areClassBansAnnounced()
+    ) {
       const byTeam = game.settings.bannedClassesByTeam;
       const banned = game.settings.bannedClasses;
-      const both = banned.filter(
-        (c) => !byTeam[Team.RED].includes(c) && !byTeam[Team.BLUE].includes(c)
-      );
-      const redOnly = byTeam[Team.RED].filter((c) => !both.includes(c));
-      const blueOnly = byTeam[Team.BLUE].filter((c) => !both.includes(c));
+      let both: string[];
+      let redOnly: string[];
+      let blueOnly: string[];
+
+      if (game.classBanMode === "shared") {
+        // In shared mode, ALL bans are presented as shared
+        const sharedSet = new Set([
+          ...banned,
+          ...byTeam[Team.RED],
+          ...byTeam[Team.BLUE],
+        ]);
+        both = Array.from(sharedSet);
+        redOnly = [];
+        blueOnly = [];
+      } else {
+        both = banned.filter(
+          (c) => !byTeam[Team.RED].includes(c) && !byTeam[Team.BLUE].includes(c)
+        );
+        redOnly = byTeam[Team.RED].filter((c) => !both.includes(c));
+        blueOnly = byTeam[Team.BLUE].filter((c) => !both.includes(c));
+      }
 
       const lockedEmbed = new EmbedBuilder()
         .setColor("DarkRed")
@@ -213,6 +241,7 @@ export default class ClassbanCommand implements Command {
       await DiscordUtil.sendMessage("gameFeed", { embeds: [lockedEmbed] });
       await DiscordUtil.sendMessage("redTeamChat", { embeds: [lockedEmbed] });
       await DiscordUtil.sendMessage("blueTeamChat", { embeds: [lockedEmbed] });
+      game.markClassBansAnnounced();
     }
   }
 

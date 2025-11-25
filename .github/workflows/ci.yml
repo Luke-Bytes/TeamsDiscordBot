@@ -110,3 +110,67 @@ jobs:
 
       - name: Run build
         run: npm run build
+
+  # Job 5: Run Tests
+  run-tests:
+    runs-on: windows-latest
+    needs: install-dependencies
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18.x"
+
+      - name: Restore node_modules cache
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Ensure config.json exists for tests
+        shell: pwsh
+        run: |
+          $root = $env:GITHUB_WORKSPACE
+          $sample = Join-Path $root 'config.sample.json'
+          $dest = Join-Path $root 'config.json'
+          if (Test-Path -LiteralPath $sample) {
+            Copy-Item -LiteralPath $sample -Destination $dest -Force
+          } else {
+            $cfg = @{
+              season = 1
+              mvpBonus = 5
+              captainBonus = 5
+              underdogMultiplier = 1.5
+              roles = @{
+                blueTeamRole = ""
+                redTeamRole = ""
+                captainRole = ""
+                organiserRole = ""
+              }
+              channels = @{
+                registration = ""
+                announcements = ""
+                gameFeed = ""
+                botCommands = ""
+                teamPickingVC = ""
+                teamPickingChat = ""
+                redTeamVC = ""
+                blueTeamVC = ""
+                redTeamChat = ""
+                blueTeamChat = ""
+              }
+              dev = @{
+                enabled = $false
+                guildId = ""
+              }
+            }
+            $cfg | ConvertTo-Json -Depth 5 | Set-Content -Path $dest -Encoding utf8
+          }
+
+      - name: Run tests
+        run: npm run tests

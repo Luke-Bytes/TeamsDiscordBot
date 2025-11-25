@@ -37,12 +37,18 @@ export default class StatsCommand implements Command {
             "the season number to fetch stats for (default: current season)"
           )
           .setRequired(false)
+      )
+      .addBooleanOption((option) =>
+        option
+          .setName("detailed")
+          .setDescription("show all stats")
+          .setRequired(false)
       );
   }
-
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     await interaction.deferReply();
     const botCommandsChannelId = Channels.botCommands.id;
+
     let input = (
       interaction.options.getString("player", false) ?? interaction.user.id
     ).replace(/<@([^>]+)>/g, "$1");
@@ -52,6 +58,7 @@ export default class StatsCommand implements Command {
       setTimeout(() => msg.delete().catch(() => {}), 15_000);
       return;
     }
+
     const seasonNumber =
       interaction.options.getInteger("season") ??
       ConfigManager.getConfig().season;
@@ -64,6 +71,7 @@ export default class StatsCommand implements Command {
       );
       return;
     }
+
     const stats = await prismaClient.playerStats.findUnique({
       where: {
         playerId_seasonId: { playerId: player.id, seasonId: season.id },
@@ -77,9 +85,12 @@ export default class StatsCommand implements Command {
       return;
     }
 
+    const detailed = interaction.options.getBoolean("detailed") ?? false;
+
     const wins = stats.wins,
       losses = stats.losses;
     const winLossRatio = losses === 0 ? wins : wins / losses;
+
     let fetchedMember = await interaction.guild?.members
       .fetch(player.discordSnowflake)
       .catch(() => null);
@@ -107,61 +118,58 @@ export default class StatsCommand implements Command {
     const totalGames = wins + losses;
     const avgEloChange =
       totalGames > 0 ? ((stats.elo - 1000) / totalGames).toFixed(2) : "0.00";
-    const [
-      mvpCount,
-      captainCount,
-      captainWinCount,
-      higherRankCount,
-      totalPlayers,
-      lastGP,
-    ] = await Promise.all([
-      prismaClient.gameParticipation.count({
-        where: { playerId: player.id, seasonId: season.id, mvp: true },
-      }),
-      prismaClient.gameParticipation.count({
-        where: { playerId: player.id, seasonId: season.id, captain: true },
-      }),
-      prismaClient.gameParticipation.count({
-        where: {
-          playerId: player.id,
-          seasonId: season.id,
-          captain: true,
-          OR: [
-            { team: Team.RED, game: { winner: Team.RED } },
-            { team: Team.BLUE, game: { winner: Team.BLUE } },
-          ],
-        },
-      }),
+
+    const [higherRankCount, totalPlayers] = await Promise.all([
       prismaClient.playerStats.count({
         where: { seasonId: season.id, elo: { gt: stats.elo } },
       }),
       prismaClient.playerStats.count({ where: { seasonId: season.id } }),
-      prismaClient.gameParticipation.findFirst({
-        where: { playerId: player.id, seasonId: season.id },
-        orderBy: { game: { endTime: "desc" } },
-        include: { game: true },
-      }),
     ]);
-
-    const currentLosingStreak = stats.loseStreak;
-    const biggestWinStreak = stats.biggestWinStreak;
-    const biggestLoseStreak = stats.biggestLosingStreak;
-    const captainWinRate =
-      captainCount > 0
-        ? ((captainWinCount / captainCount) * 100).toFixed(1) + "%"
-        : "N/A";
     const seasonRank = higherRankCount + 1;
     const percentile =
       totalPlayers > 0
         ? (((totalPlayers - seasonRank) / totalPlayers) * 100).toFixed(1) + "%"
         : "0.0%";
-    const lastGameDate = lastGP?.game.endTime.toDateString() ?? "N/A";
 
     const embed = new EmbedBuilder()
       .setColor("#5865F2")
       .setTitle("📊 Friendly Wars Stats")
-      .setThumbnail(avatarUrl ?? null)
-      .addFields(
+      .setThumbnail(avatarUrl ?? null);
+
+    if (detailed) {
+      const [mvpCount, captainCount, captainWinCount, lastGP] =
+        await Promise.all([
+          prismaClient.gameParticipation.count({
+            where: { playerId: player.id, seasonId: season.id, mvp: true },
+          }),
+          prismaClient.gameParticipation.count({
+            where: { playerId: player.id, seasonId: season.id, captain: true },
+          }),
+          prismaClient.gameParticipation.count({
+            where: {
+              playerId: player.id,
+              seasonId: season.id,
+              captain: true,
+              OR: [
+                { team: Team.RED, game: { winner: Team.RED } },
+                { team: Team.BLUE, game: { winner: Team.BLUE } },
+              ],
+            },
+          }),
+          prismaClient.gameParticipation.findFirst({
+            where: { playerId: player.id, seasonId: season.id },
+            orderBy: { game: { endTime: "desc" } },
+            include: { game: true },
+          }),
+        ]);
+
+      const captainWinRate =
+        captainCount > 0
+          ? ((captainWinCount / captainCount) * 100).toFixed(1) + "%"
+          : "N/A";
+      const lastGameDate = lastGP?.game.endTime.toDateString() ?? "N/A";
+
+      embed.addFields(
         { name: "Player", value: userDisplayName, inline: true },
         {
           name: "Elo",
@@ -179,17 +187,17 @@ export default class StatsCommand implements Command {
         { name: "Current Win Streak", value: winStreakDisplay, inline: true },
         {
           name: "Current Losing Streak",
-          value: `${currentLosingStreak}`,
+          value: `${stats.loseStreak}`,
           inline: true,
         },
         {
           name: "Biggest Win Streak",
-          value: `${biggestWinStreak}`,
+          value: `${stats.biggestWinStreak}`,
           inline: true,
         },
         {
           name: "Biggest Lose Streak",
-          value: `${biggestLoseStreak}`,
+          value: `${stats.biggestLosingStreak}`,
           inline: true,
         },
         { name: "MVP Count", value: `${mvpCount}`, inline: true },
@@ -197,7 +205,42 @@ export default class StatsCommand implements Command {
         { name: "Captain Win Rate", value: captainWinRate, inline: true },
         { name: "Average Elo Change", value: avgEloChange, inline: true },
         { name: "Last Game Date", value: lastGameDate, inline: true }
-      )
+      );
+    } else {
+      const winRate =
+        totalGames > 0 ? ((wins / totalGames) * 100).toFixed(1) + "%" : "0.0%";
+      const winsLabel = wins === 1 ? "Win" : "Wins";
+      const lossesLabel = losses === 1 ? "Loss" : "Losses";
+      const currentStreak =
+        stats.winStreak > 0
+          ? `${stats.winStreak} ${stats.winStreak === 1 ? "Win" : "Wins"}${stats.winStreak >= 3 ? " 🔥" : ""}`
+          : stats.loseStreak > 0
+            ? `${stats.loseStreak} ${stats.loseStreak === 1 ? "Loss" : "Losses"}`
+            : "—";
+
+      embed.addFields(
+        { name: "Player", value: userDisplayName, inline: true },
+        {
+          name: "Elo",
+          value: `${Math.round(stats.elo)} ${EloUtil.getEloEmoji(stats.elo)}`,
+          inline: true,
+        },
+        {
+          name: "Season Rank",
+          value: `#${seasonRank}/${totalPlayers} (${percentile})`,
+          inline: true,
+        },
+        {
+          name: "Win/Loss Record",
+          value: `${wins} ${winsLabel} - ${losses} ${lossesLabel}`,
+          inline: true,
+        },
+        { name: "Win Rate", value: winRate, inline: true },
+        { name: "Current Streak", value: currentStreak, inline: true }
+      );
+    }
+
+    embed
       .setFooter({
         text: `Requested by ${interaction.user.tag} | Season ${seasonNumber}`,
         iconURL: interaction.user.displayAvatarURL(),
