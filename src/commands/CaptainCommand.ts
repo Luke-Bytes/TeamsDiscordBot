@@ -1,3 +1,4 @@
+
 import { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
 import { Command } from "../commands/CommandInterface";
 import { PermissionsUtil } from "../util/PermissionsUtil";
@@ -6,6 +7,7 @@ import { CurrentGameManager } from "../logic/CurrentGameManager";
 import TeamCommand from "../commands/TeamCommand";
 import { PrismaUtils } from "../util/PrismaUtils";
 import { escapeText } from "../util/Utils";
+import { AutoCaptainSelector } from "../logic/AutoCaptainSelector";
 
 export default class CaptainCommand implements Command {
   public data: SlashCommandBuilder;
@@ -39,6 +41,13 @@ export default class CaptainCommand implements Command {
                 { name: "red", value: "red" }
               )
           )
+      )
+      .addSubcommand((sub) =>
+        sub
+          .setName("randomise")
+          .setDescription(
+            "Randomly select two captains based on eligibility (elo + presence)."
+          )
       ) as SlashCommandBuilder;
   }
 
@@ -60,19 +69,7 @@ export default class CaptainCommand implements Command {
       return;
     }
 
-    const teamColor = interaction.options
-      .getString("team", true)
-      .toUpperCase() as Team;
-    const input = interaction.options.getString("user", true);
-    const resolvedPlayer = await PrismaUtils.findPlayer(input);
-
-    if (!resolvedPlayer) {
-      await interaction.reply({
-        content: "Error: Player not found. Have they registered?",
-        ephemeral: true,
-      });
-      return;
-    }
+    const subCommand = interaction.options.getSubcommand(true);
 
     const game = CurrentGameManager.getCurrentGame();
 
@@ -87,6 +84,35 @@ export default class CaptainCommand implements Command {
     if (this.teamCommand.isTeamPickingSessionActive()) {
       await interaction.reply({
         content: "You can't change captains while team picking is in progress!",
+        ephemeral: true,
+      });
+      return;
+    }
+
+    if (subCommand === "randomise") {
+      const result = await AutoCaptainSelector.randomiseCaptains(
+        interaction.guild,
+        false
+      );
+      if ("error" in result) {
+        await interaction.reply({ content: result.error, ephemeral: true });
+        return;
+      }
+      await interaction.reply(
+        `Captains have been selected:\n🔵 Blue: **${escapeText(result.blue.ignUsed ?? "Unknown")}**\n🔴 Red: **${escapeText(result.red.ignUsed ?? "Unknown")}**`
+      );
+      return;
+    }
+
+    const teamColor = interaction.options
+      .getString("team", true)
+      .toUpperCase() as Team;
+    const input = interaction.options.getString("user", true);
+    const resolvedPlayer = await PrismaUtils.findPlayer(input);
+
+    if (!resolvedPlayer) {
+      await interaction.reply({
+        content: "Error: Player not found. Have they registered?",
         ephemeral: true,
       });
       return;

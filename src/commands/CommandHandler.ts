@@ -35,11 +35,13 @@ import UsernameCommand from "../commands/UsernameCommand";
 import ForfeitCommand from "../commands/ForfeitCommand";
 import MapsCommand from "../commands/MapsCommand";
 import CoinflipCommand from "../commands/CoinflipCommand";
+import CaptainPlanDMManager from "../logic/CaptainPlanDMManager";
 
 export class CommandHandler {
   commands: Command[] = [];
 
   //todo: just make these singletons.
+  captainPlanDMManager = new CaptainPlanDMManager();
   announcementCommand = new AnnouncementCommand();
   ignsCommand = new IgnsCommand();
   leaderboardsCommand = new LeaderboardsCommand();
@@ -53,11 +55,11 @@ export class CommandHandler {
   registerCommand = new RegisterCommand(this.teamCommand);
   unregisterCommand = new UnregisterCommand(this.teamCommand);
   restartCommand = new RestartCommand();
-  playerCommand = new PlayerCommand();
+  playerCommand = new PlayerCommand(this.captainPlanDMManager);
   winnerCommand = new WinnerCommand();
   performanceCommand = new PerformanceCommand();
   MVPCommand = new MVPCommand();
-  gameCommand = new GameCommand();
+  gameCommand = new GameCommand(this.captainPlanDMManager);
   missingCommand = new MissingCommand();
   captainNominateCommand = new CaptainNominateCommand();
   teamlessCommand = new TeamlessCommand();

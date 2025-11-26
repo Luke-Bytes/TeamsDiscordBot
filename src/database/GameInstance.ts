@@ -370,14 +370,12 @@ export class GameInstance {
     if (oldTeamCaptain && oldTeamCaptain !== player) {
       oldTeamCaptain.captain = false;
 
-      if (!this.teamsDecidedBy) {
-        (Object.keys(this.teams) as Array<Team | "UNDECIDED">).forEach(
-          (k) =>
-            (this.teams[k] = this.teams[k].filter((p) => p !== oldTeamCaptain))
-        );
-        if (!this.teams["UNDECIDED"].includes(oldTeamCaptain)) {
-          this.teams["UNDECIDED"].push(oldTeamCaptain);
-        }
+      (Object.keys(this.teams) as Array<Team | "UNDECIDED">).forEach(
+        (k) =>
+          (this.teams[k] = this.teams[k].filter((p) => p !== oldTeamCaptain))
+      );
+      if (!this.teams["UNDECIDED"].includes(oldTeamCaptain)) {
+        this.teams["UNDECIDED"].push(oldTeamCaptain);
       }
     }
 

@@ -8,6 +8,11 @@ import { Team } from "@prisma/client";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { PrismaUtils } from "../util/PrismaUtils";
+import CaptainPlanDMManager, {
+  PlanMember,
+} from "../logic/CaptainPlanDMManager";
+import { GameInstance } from "../database/GameInstance";
+import { PlayerInstance } from "../database/PlayerInstance";
 
 type ExtendedTeam = Team | "UNDECIDED";
 
@@ -15,6 +20,11 @@ export default class PlayerCommand implements Command {
   name = "player";
   description = "Manage players and teams";
   buttonIds: string[] = [];
+  private captainPlanDMManager?: CaptainPlanDMManager;
+
+  constructor(captainPlanDMManager?: CaptainPlanDMManager) {
+    this.captainPlanDMManager = captainPlanDMManager;
+  }
 
   data = new SlashCommandBuilder()
     .setName(this.name)
@@ -115,6 +125,7 @@ export default class PlayerCommand implements Command {
     }
 
     const game = CurrentGameManager.getCurrentGame();
+    const beforeRosters = this.captureTeamRosters(game);
     const subcommand = interaction.options.getSubcommand();
 
     try {
@@ -172,44 +183,59 @@ export default class PlayerCommand implements Command {
               ? `Successfully moved **${playerName}** from **${fromTeam.toUpperCase()}** to **${toTeam.toUpperCase()}**.`
               : `Failed to move **${playerName}**. Ensure they are currently in **${fromTeam.toUpperCase()}** and the move is valid.`
           );
+          if (success) {
+            await this.syncLateJoinerPrompts(game, beforeRosters, interaction);
+          }
           break;
         }
 
         case "add": {
+          const success = await game.addPlayerByNameOrDiscord(
+            playerName,
+            newTeam as ExtendedTeam,
+            interaction.guild
+          );
           await interaction.reply(
-            (await game.addPlayerByNameOrDiscord(
-              playerName,
-              newTeam as ExtendedTeam,
-              interaction.guild
-            ))
+            success
               ? `Successfully added **${playerName}** to **${newTeam?.toUpperCase()}**.`
               : `Failed to add **${playerName}**. Ensure the player is registered with \`/register\`.`
           );
+          if (success) {
+            await this.syncLateJoinerPrompts(game, beforeRosters, interaction);
+          }
           break;
         }
 
         case "remove": {
+          const success = await game.removePlayerByNameOrDiscord(
+            playerName,
+            interaction.guild
+          );
           await interaction.reply(
-            (await game.removePlayerByNameOrDiscord(
-              playerName,
-              interaction.guild
-            ))
+            success
               ? `Successfully removed **${playerName}** from the game.`
               : `Failed to remove **${playerName}**. The player could not be found in any team.`
           );
+          if (success) {
+            await this.syncLateJoinerPrompts(game, beforeRosters, interaction);
+          }
           break;
         }
 
         case "replace": {
+          const success = await game.replacePlayerByNameOrDiscord(
+            oldPlayerName,
+            targetPlayerName,
+            interaction.guild
+          );
           await interaction.reply(
-            (await game.replacePlayerByNameOrDiscord(
-              oldPlayerName,
-              targetPlayerName,
-              interaction.guild
-            ))
+            success
               ? `Successfully replaced **${oldPlayerName}** with **${targetPlayerName}** in their current team.`
               : `Failed to replace **${oldPlayerName}**. Ensure both players are correctly registered and in the appropriate teams.`
           );
+          if (success) {
+            await this.syncLateJoinerPrompts(game, beforeRosters, interaction);
+          }
           break;
         }
 
@@ -223,6 +249,68 @@ export default class PlayerCommand implements Command {
       await interaction.reply(
         "An unexpected error occurred while managing players."
       );
+    }
+  }
+
+  private captureTeamRosters(
+    game: GameInstance
+  ): Record<"RED" | "BLUE", PlanMember[]> {
+    return {
+      RED: game.getPlayersOfTeam("RED").map((p) => this.toPlanMember(p)),
+      BLUE: game.getPlayersOfTeam("BLUE").map((p) => this.toPlanMember(p)),
+    };
+  }
+
+  private toPlanMember(player: PlayerInstance): PlanMember {
+    return {
+      id: player.discordSnowflake,
+      ign: player.ignUsed ?? player.latestIGN ?? "Unknown",
+    };
+  }
+
+  private diffNewMembers(
+    before: Record<"RED" | "BLUE", PlanMember[]>,
+    after: Record<"RED" | "BLUE", PlanMember[]>
+  ): Record<"RED" | "BLUE", PlanMember[]> {
+    const added: Record<"RED" | "BLUE", PlanMember[]> = { RED: [], BLUE: [] };
+    (["RED", "BLUE"] as const).forEach((team) => {
+      const beforeIds = new Set(before[team].map((m) => m.id));
+      added[team] = after[team].filter((m) => !beforeIds.has(m.id));
+    });
+    return added;
+  }
+
+  private async syncLateJoinerPrompts(
+    game: GameInstance,
+    beforeRosters: Record<"RED" | "BLUE", PlanMember[]>,
+    interaction: ChatInputCommandInteraction
+  ) {
+    if (!this.captainPlanDMManager) return;
+    const client = interaction.client;
+    if (!client || !client.users) return;
+    const afterRosters = this.captureTeamRosters(game);
+    const added = this.diffNewMembers(beforeRosters, afterRosters);
+
+    const redCaptain = game.getCaptainOfTeam("RED");
+    if (redCaptain) {
+      await this.captainPlanDMManager.handleRosterUpdate({
+        captainId: redCaptain.discordSnowflake,
+        team: "RED",
+        members: afterRosters.RED,
+        newJoiners: added.RED,
+        client,
+      });
+    }
+
+    const blueCaptain = game.getCaptainOfTeam("BLUE");
+    if (blueCaptain) {
+      await this.captainPlanDMManager.handleRosterUpdate({
+        captainId: blueCaptain.discordSnowflake,
+        team: "BLUE",
+        members: afterRosters.BLUE,
+        newJoiners: added.BLUE,
+        client,
+      });
     }
   }
 }

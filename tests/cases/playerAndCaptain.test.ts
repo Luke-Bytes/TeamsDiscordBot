@@ -206,8 +206,10 @@ test("/captain set honors team-decided rules and team membership tracking", asyn
     "New red captain set when decided"
   );
   assert(
-    game.getPlayersOfTeam("RED").some((p) => p.discordSnowflake === "R-OLD"),
-    "Old captain remains on RED when decided"
+    game
+      .getPlayersOfTeam("UNDECIDED")
+      .some((p) => p.discordSnowflake === "R-OLD"),
+    "Old captain should move to UNDECIDED even when teams decided"
   );
 });
 
@@ -260,4 +262,67 @@ test("/team generate method:draft requires even number of UNDECIDED players", as
     !teamCmd.teamPickingSession,
     "Draft session should not start on odd count"
   );
+});
+
+test("CaptainCommand randomise picks captains and moves old to UNDECIDED", async () => {
+  const config = ConfigManager.getConfig();
+  const guild = new FakeGuild() as any;
+  const organiser = new FakeGuildMember("ORG3");
+  await organiser.roles.cache.add(config.roles.organiserRole);
+  guild.addMember(organiser);
+
+  const oldCaptain = {
+    discordSnowflake: "OLD",
+    ignUsed: "OldCap",
+    elo: 1200,
+    captain: true,
+  } as any;
+  const p1 = { discordSnowflake: "P1", ignUsed: "Alpha", elo: 1100 } as any;
+  const p2 = { discordSnowflake: "P2", ignUsed: "Beta", elo: 1300 } as any;
+
+  const game = CurrentGameManager.getCurrentGame();
+  game.reset();
+  (game as any).teams = {
+    RED: [oldCaptain],
+    BLUE: [],
+    UNDECIDED: [p1, p2],
+  };
+
+  const mOld = guild.addMember(new FakeGuildMember("OLD"));
+  const m1 = guild.addMember(new FakeGuildMember("P1"));
+  const m2 = guild.addMember(new FakeGuildMember("P2"));
+  (mOld as any).presence = { status: "offline" };
+  (m1 as any).presence = { status: "online" };
+  (m2 as any).presence = { status: "dnd" };
+
+  const teamCmd = new TeamCommand();
+  const capCmd = new CaptainCommand(teamCmd);
+
+  const origRand = Math.random;
+  Math.random = () => 0; // pick P1 first, then P2 as nearest higher
+
+  const interaction = createChatInputInteraction("ORG3", {
+    guild,
+    member: organiser,
+    subcommand: "randomise",
+  });
+
+  try {
+    await capCmd.execute(interaction as any);
+    const redCap = game.getCaptainOfTeam("RED");
+    const blueCap = game.getCaptainOfTeam("BLUE");
+    const capIds = [redCap?.discordSnowflake, blueCap?.discordSnowflake];
+    assert(
+      capIds.includes("P1") && capIds.includes("P2"),
+      "P1 and P2 should be set as captains"
+    );
+    assert(
+      game
+        .getPlayersOfTeam("UNDECIDED")
+        .some((p) => p.discordSnowflake === "OLD"),
+      "Old captain should move to UNDECIDED after reassignment"
+    );
+  } finally {
+    Math.random = origRand;
+  }
 });

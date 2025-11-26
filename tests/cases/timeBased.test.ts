@@ -316,6 +316,39 @@ test("Draft auto-pick fires after timeout using the eligible pool", async () => 
   }
 });
 
+test("Draft cancel clears any pending auto-pick timers", async () => {
+  const session = new DraftTeamPickingSession();
+  (session as any).embedMessage = { delete: async () => {} };
+  const sentMessages: string[] = [];
+  const dmMessages: string[] = [];
+  const originalChannel = Channels.teamPicking;
+  Channels.teamPicking = stubTeamPickingChannel(sentMessages, dmMessages);
+
+  let warningFired = false;
+  let autoFired = false;
+  let dmFired = false;
+
+  (session as any).pickWarningTimeout = setTimeout(() => {
+    warningFired = true;
+  }, 10);
+  (session as any).pickAutoTimeout = setTimeout(() => {
+    autoFired = true;
+  }, 15);
+  (session as any).pickDmTimeout = setTimeout(() => {
+    dmFired = true;
+  }, 5);
+
+  try {
+    await session.cancelSession();
+    await sleep(30);
+    assert(!warningFired, "Warning timer should be cleared on cancel");
+    assert(!autoFired, "Auto-pick timer should be cleared on cancel");
+    assert(!dmFired, "DM timer should be cleared on cancel");
+  } finally {
+    Channels.teamPicking = originalChannel;
+  }
+});
+
 test("Draft timers skip DM after the opening pick but still warn the channel", async () => {
   const session = new DraftTeamPickingSession();
   (session as any).embedMessage = { edit: async () => {} };

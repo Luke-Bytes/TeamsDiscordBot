@@ -1,11 +1,8 @@
-node_modules
-dist
+/node_modules
+/dist
 config.json
 .env
-.idea/git_toolbox_blame.xml
-.idea/git_toolbox_prj.xml
-.idea/material_theme_project_new.xml
-.idea/codeStyles
+.idea/
 /shelf/
 /workspace.xml
 /httpRequests/

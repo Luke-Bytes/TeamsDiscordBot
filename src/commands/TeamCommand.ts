@@ -420,6 +420,9 @@ export default class TeamCommand implements Command {
   }
 
   public resetTeamPickingSession(): void {
+    if (this.teamPickingSession?.cancelSession) {
+      void this.teamPickingSession.cancelSession();
+    }
     this.teamPickingSession = undefined;
   }
 

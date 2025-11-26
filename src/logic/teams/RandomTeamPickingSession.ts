@@ -232,4 +232,9 @@ export class RandomTeamPickingSession extends TeamPickingSession {
   public getState() {
     return this.state;
   }
+
+  public async cancelSession(): Promise<void> {
+    this.state = "cancelled";
+    await this.embedMessage?.delete().catch(() => {});
+  }
 }

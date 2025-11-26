@@ -419,6 +419,16 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     }
   }
 
+  public async cancelSession(): Promise<void> {
+    this.state = "cancelled";
+    this.clearTurnTimers();
+    await this.embedMessage?.delete().catch(() => {});
+    const channel = Channels.teamPicking;
+    if (channel.isSendable()) {
+      await channel.send("Draft picking cancelled.");
+    }
+  }
+
   private startTurnTimer() {
     this.clearTurnTimers();
     if (this.state !== "inProgress") return;

@@ -1,13 +1,13 @@
 import { GameInstance } from "../database/GameInstance";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { ConfigManager } from "../ConfigManager";
-import { Guild, EmbedBuilder, GuildMember } from "discord.js";
+import { Guild, EmbedBuilder } from "discord.js";
 import { gameFeed } from "../logic/gameFeed/GameFeed";
 import { prettifyName } from "../util/Utils";
 import TeamCommand from "../commands/TeamCommand";
 import { DraftTeamPickingSession } from "./teams/DraftTeamPickingSession";
 import { PermissionsUtil } from "../util/PermissionsUtil";
-import type { PlayerInstance } from "../database/PlayerInstance";
+import { AutoCaptainSelector } from "./AutoCaptainSelector";
 
 export class CurrentGameManager {
   private static currentGame?: GameInstance;
@@ -236,6 +236,7 @@ export class CurrentGameManager {
     const game = this.getCurrentGame();
     if (!game.startTime) return;
     this.clearCaptainTimers();
+    // The rest of the logic has been moved to AutoCaptainSelector; keep timer scheduling here.
 
     const now = Date.now();
     const reminderTime = new Date(game.startTime.getTime() - 20 * 60 * 1000);
@@ -262,116 +263,18 @@ export class CurrentGameManager {
           const haveBoth = !!redCap && !!blueCap;
           if (haveBoth) return;
 
-          // Clear any existing single captain as per rules
-          for (const t of ["RED", "BLUE"] as const) {
-            const c = game.getCaptainOfTeam(t);
-            if (c) {
-              c.captain = false;
-              // Remove captain role
-              await guild.members
-                .fetch(c.discordSnowflake)
-                .then((m) =>
-                  m.roles.remove(PermissionsUtil.config.roles.captainRole)
-                )
-                .catch(() => {});
-            }
-          }
-
-          // Eligible players: registered, elo > 1000, presence in online/idle/dnd
-          const players = game.getPlayers();
-          const presenceOk = new Set(["online", "idle", "dnd"]);
-          const eligible: { p: PlayerInstance; elo: number }[] = [];
-
-          for (const p of players) {
-            const elo = Number(p.elo ?? 0);
-            if (elo <= 1000) continue;
-
-            const member: GuildMember | null = await guild.members
-              .fetch(p.discordSnowflake)
-              .catch(() => null);
-            const status = member?.presence?.status ?? undefined;
-
-            if (status && !presenceOk.has(status)) continue;
-
-            eligible.push({ p, elo });
-          }
-
-          if (eligible.length < 2) {
-            await DiscordUtil.sendMessage(
-              "gameFeed",
-              "Could not find enough eligible players for captains. Organisers, please set captains manually."
-            );
+          const result = await AutoCaptainSelector.randomiseCaptains(
+            guild,
+            true
+          );
+          if ("error" in result) {
+            await DiscordUtil.sendMessage("gameFeed", result.error);
             return;
           }
-
-          // Pick first captain randomly
-          const first = eligible[Math.floor(Math.random() * eligible.length)];
-          // Pick second: nearest higher elo
-          const rest = eligible.filter((e) => e.p !== first.p);
-          let higher = rest
-            .filter((e) => e.elo >= first.elo)
-            .sort((a, b) => a.elo - b.elo);
-          let second =
-            higher[0] ||
-            rest.sort(
-              (a, b) =>
-                Math.abs(a.elo - first.elo) - Math.abs(b.elo - first.elo)
-            )[0];
-
-          const assignCaptain = async (
-            team: "RED" | "BLUE",
-            player: PlayerInstance
-          ) => {
-            const res = game.setTeamCaptain(team, player);
-            if (res.oldCaptain) {
-              await guild.members
-                .fetch(res.oldCaptain)
-                .then((oldM) =>
-                  oldM.roles.remove(PermissionsUtil.config.roles.captainRole)
-                )
-                .catch(() => undefined);
-            }
-            await guild.members
-              .fetch(player.discordSnowflake)
-              .then(async (m) => {
-                await m.roles.add(PermissionsUtil.config.roles.captainRole);
-                if (team === "RED") {
-                  await m.roles.add(PermissionsUtil.config.roles.redTeamRole);
-                  await m.roles.remove(
-                    PermissionsUtil.config.roles.blueTeamRole
-                  );
-                } else {
-                  await m.roles.add(PermissionsUtil.config.roles.blueTeamRole);
-                  await m.roles.remove(
-                    PermissionsUtil.config.roles.redTeamRole
-                  );
-                }
-              })
-              .catch(() => undefined);
-          };
-
-          await assignCaptain("BLUE", first.p);
-          await assignCaptain("RED", second.p);
-
           await DiscordUtil.sendMessage(
             "gameFeed",
-            `Captains have been auto-selected: BLUE - ${first.p.ignUsed}, RED - ${second.p.ignUsed}.`
+            `Captains have been auto-selected: BLUE - ${result.blue.ignUsed}, RED - ${result.red.ignUsed}.`
           );
-
-          // Auto-start draft team picking
-          try {
-            const fakeInteraction = {
-              editReply: async (_: unknown) => {},
-              guild,
-            } as unknown as import("discord.js").ChatInputCommandInteraction;
-            const session = new DraftTeamPickingSession();
-            await session.initialize(fakeInteraction);
-            if (TeamCommand.instance) {
-              TeamCommand.instance.teamPickingSession = session;
-            }
-          } catch (e) {
-            console.error("Failed to auto-start draft team picking:", e);
-          }
         } catch (e) {
           console.error("Error enforcing auto-captain selection:", e);
         }

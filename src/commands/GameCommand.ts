@@ -31,11 +31,15 @@ export default class GameCommand implements Command {
       sub
         .setName("shutdown")
         .setDescription("Complete the game and calculate elo")
-    );
+  );
 
   name = "game";
   description = "Manage game session";
-  private captainPlanDMManager = new CaptainPlanDMManager();
+  private captainPlanDMManager: CaptainPlanDMManager;
+
+  constructor(captainPlanDMManager = new CaptainPlanDMManager()) {
+    this.captainPlanDMManager = captainPlanDMManager;
+  }
 
   get buttonIds(): string[] {
     return this.captainPlanDMManager.buttonIds;
@@ -133,26 +137,35 @@ export default class GameCommand implements Command {
           // After team picking is finished and just before start, DM captains plan template
           const redCaptain = gameInstance.getCaptainOfTeam("RED");
           const blueCaptain = gameInstance.getCaptainOfTeam("BLUE");
+          const client = interaction.client;
+          if (!client || !client.users) {
+            console.warn(
+              "[CaptainPlanDM] Interaction client missing; skipping captain plan DMs."
+            );
+            break;
+          }
           if (redCaptain) {
             await this.captainPlanDMManager.startForCaptain({
-              client: interaction.client,
+              client,
               captainId: redCaptain.discordSnowflake,
               team: "RED",
               teamList: await formatTeamIGNs(gameInstance, "RED"),
-              members: gameInstance
-                .getPlayersOfTeam("RED")
-                .map((p) => p.discordSnowflake),
+              members: gameInstance.getPlayersOfTeam("RED").map((p) => ({
+                id: p.discordSnowflake,
+                ign: p.ignUsed ?? p.latestIGN ?? "Unknown",
+              })),
             });
           }
           if (blueCaptain) {
             await this.captainPlanDMManager.startForCaptain({
-              client: interaction.client,
+              client,
               captainId: blueCaptain.discordSnowflake,
               team: "BLUE",
               teamList: await formatTeamIGNs(gameInstance, "BLUE"),
-              members: gameInstance
-                .getPlayersOfTeam("BLUE")
-                .map((p) => p.discordSnowflake),
+              members: gameInstance.getPlayersOfTeam("BLUE").map((p) => ({
+                id: p.discordSnowflake,
+                ign: p.ignUsed ?? p.latestIGN ?? "Unknown",
+              })),
             });
           }
         } catch (error) {
