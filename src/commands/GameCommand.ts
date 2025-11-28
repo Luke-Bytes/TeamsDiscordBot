@@ -31,7 +31,7 @@ export default class GameCommand implements Command {
       sub
         .setName("shutdown")
         .setDescription("Complete the game and calculate elo")
-  );
+    );
 
   name = "game";
   description = "Manage game session";

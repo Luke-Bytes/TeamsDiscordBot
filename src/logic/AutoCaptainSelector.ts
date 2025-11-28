@@ -2,7 +2,6 @@ import { Guild, GuildMember } from "discord.js";
 import { CurrentGameManager } from "./CurrentGameManager";
 import { PlayerInstance } from "../database/PlayerInstance";
 import { PermissionsUtil } from "../util/PermissionsUtil";
-import { DiscordUtil } from "../util/DiscordUtil";
 import { DraftTeamPickingSession } from "./teams/DraftTeamPickingSession";
 import TeamCommand from "../commands/TeamCommand";
 
@@ -11,18 +10,17 @@ type SelectionResult =
   | { error: string };
 
 export class AutoCaptainSelector {
-  private static readonly allowedStatuses = new Set([
-    "online",
-    "idle",
-    "dnd",
-  ]);
+  private static readonly allowedStatuses = new Set(["online", "idle", "dnd"]);
 
   public static async randomiseCaptains(
     guild: Guild,
     autoStartDraft = false
   ): Promise<SelectionResult> {
     const game = CurrentGameManager.getCurrentGame();
-    const selection = await this.selectEligibleCaptains(guild, game.getPlayers());
+    const selection = await this.selectEligibleCaptains(
+      guild,
+      game.getPlayers()
+    );
 
     if ("error" in selection) {
       return selection;
@@ -60,8 +58,7 @@ export class AutoCaptainSelector {
     guild: Guild,
     players: PlayerInstance[]
   ): Promise<
-    | { first: PlayerInstance; second: PlayerInstance }
-    | { error: string }
+    { first: PlayerInstance; second: PlayerInstance } | { error: string }
   > {
     const eligible: { p: PlayerInstance; elo: number }[] = [];
 
@@ -94,8 +91,7 @@ export class AutoCaptainSelector {
     let second =
       higher[0] ||
       rest.sort(
-        (a, b) =>
-          Math.abs(a.elo - first.elo) - Math.abs(b.elo - first.elo)
+        (a, b) => Math.abs(a.elo - first.elo) - Math.abs(b.elo - first.elo)
       )[0];
 
     if (!second) {

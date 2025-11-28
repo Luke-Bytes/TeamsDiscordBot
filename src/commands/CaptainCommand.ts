@@ -1,4 +1,3 @@
-
 import { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
 import { Command } from "../commands/CommandInterface";
 import { PermissionsUtil } from "../util/PermissionsUtil";

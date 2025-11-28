@@ -45,9 +45,15 @@ export default class CaptainPlanDMManager {
   private sessions = new Map<string, PlanSession>();
 
   private buttonIdSet = new Set<string>();
-  private debugHooks = new Map<string, (memberId: string, content: string) => void>();
+  private debugHooks = new Map<
+    string,
+    (memberId: string, content: string) => void
+  >();
   private deliveryLog = new Map<string, number>();
-  private transport?: (memberId: string, content: string) => Promise<boolean> | boolean;
+  private transport?: (
+    memberId: string,
+    content: string
+  ) => Promise<boolean> | boolean;
 
   public get buttonIds(): string[] {
     return [...this.buttonIdSet];
@@ -58,7 +64,9 @@ export default class CaptainPlanDMManager {
   }
 
   // Test helper: sends to all current members using the configured transport.
-  public async __testSendAll(captainId: string): Promise<{ failed: string[]; sentCount: number }> {
+  public async __testSendAll(
+    captainId: string
+  ): Promise<{ failed: string[]; sentCount: number }> {
     const session = this.sessions.get(captainId);
     if (!session) throw new Error("No session");
     session.lastContent = session.lastContent ?? "";
@@ -73,7 +81,9 @@ export default class CaptainPlanDMManager {
   }
 
   // Test helper: sends to pending late members only.
-  public async __testSendLate(captainId: string): Promise<{ failed: string[]; sentCount: number }> {
+  public async __testSendLate(
+    captainId: string
+  ): Promise<{ failed: string[]; sentCount: number }> {
     const session = this.sessions.get(captainId);
     if (!session) throw new Error("No session");
     session.lastContent = session.lastContent ?? "";
@@ -169,7 +179,8 @@ export default class CaptainPlanDMManager {
     const session = this.sessions.get(userId);
     return Boolean(
       session &&
-        (session.stage === "awaitMessage" || session.stage === "awaitLateMessage")
+        (session.stage === "awaitMessage" ||
+          session.stage === "awaitLateMessage")
     );
   }
 
@@ -289,7 +300,10 @@ export default class CaptainPlanDMManager {
       return;
     }
 
-    if (id.startsWith("plan-confirm-all:") || id.startsWith("plan-confirm-new:")) {
+    if (
+      id.startsWith("plan-confirm-all:") ||
+      id.startsWith("plan-confirm-new:")
+    ) {
       const captainId = id.split(":")[1];
       const session = this.sessions.get(captainId);
       if (!session || session.stage !== "awaitLateConfirm") {
@@ -374,9 +388,7 @@ export default class CaptainPlanDMManager {
     const session = this.sessions.get(captainId);
     if (!session) return;
 
-    const previousMembers = new Map(
-      session.members.map((m) => [m.id, m.ign])
-    );
+    const previousMembers = new Map(session.members.map((m) => [m.id, m.ign]));
     session.members = this.mergeMembers([], members);
     for (const pendingId of Array.from(session.pendingLateMembers)) {
       if (!session.members.find((m) => m.id === pendingId)) {
@@ -512,7 +524,7 @@ export default class CaptainPlanDMManager {
         continue; // In test mode, trust hook and skip real DM.
       }
       try {
-        const user: User = await client.users
+        const user = await client.users
           .fetch(memberId)
           .catch(() => null as User | null);
         if (!user) {

@@ -5,8 +5,6 @@ import { Guild, EmbedBuilder } from "discord.js";
 import { gameFeed } from "../logic/gameFeed/GameFeed";
 import { prettifyName } from "../util/Utils";
 import TeamCommand from "../commands/TeamCommand";
-import { DraftTeamPickingSession } from "./teams/DraftTeamPickingSession";
-import { PermissionsUtil } from "../util/PermissionsUtil";
 import { AutoCaptainSelector } from "./AutoCaptainSelector";
 
 export class CurrentGameManager {

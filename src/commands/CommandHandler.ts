@@ -203,35 +203,39 @@ export class CommandHandler {
     const rest = new REST({ version: "10" }).setToken(
       process.env.BOT_TOKEN as string
     );
+    const appId = process.env.APP_ID as string;
 
     const commandsData = this.commands.map((cmd) => cmd.data.toJSON());
 
     try {
       if (config.dev.enabled) {
         console.log(
-          `Development mode enabled. Registering guild specific commands to ${config.dev.guildId}.`
+          "Dev mode: clearing global commands and registering guild commands."
         );
 
+        await rest.put(Routes.applicationCommands(appId), { body: [] });
+
         await rest.put(
-          Routes.applicationGuildCommands(
-            process.env.APP_ID as string,
-            config.dev.guildId
-          ),
+          Routes.applicationGuildCommands(appId, config.dev.guildId),
           { body: commandsData }
         );
 
         console.log(
-          `Successfully registered commands to guild: ${config.dev.guildId}`
+          `Successfully registered commands to dev guild: ${config.dev.guildId}`
         );
       } else {
-        console.log("Started refreshing global application (/) commands.");
+        console.log("Prod mode: registering global application (/) commands.");
 
-        await rest.put(
-          Routes.applicationCommands(process.env.APP_ID as string),
-          { body: commandsData }
-        );
+        await rest.put(Routes.applicationCommands(appId), {
+          body: commandsData,
+        });
 
         console.log("Successfully reloaded global application (/) commands.");
+
+        await rest.put(
+          Routes.applicationGuildCommands(appId, config.dev.guildId),
+          { body: [] }
+        );
       }
     } catch (error) {
       console.error("Failed to register commands: ", error);

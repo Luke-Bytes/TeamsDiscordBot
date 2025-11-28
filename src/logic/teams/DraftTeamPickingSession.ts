@@ -628,16 +628,24 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       return;
     }
     const leftovers = [...this.lateSignups];
-    this.proposedTeams.UNDECIDED.push(...leftovers);
+    const uniqueLeftovers = leftovers.filter(
+      (p, idx, arr) =>
+        arr.findIndex((o) => o.discordSnowflake === p.discordSnowflake) ===
+          idx &&
+        !this.proposedTeams.UNDECIDED.some(
+          (u) => u.discordSnowflake === p.discordSnowflake
+        )
+    );
+    this.proposedTeams.UNDECIDED.push(...uniqueLeftovers);
     this.lateSignups = [];
     this.lateDraftableWindow = 0;
     await this.embedMessage?.edit(this.createDraftEmbed(false));
     if (channel.isSendable()) {
-      const names = leftovers
+      const names = uniqueLeftovers
         .map((p) => escapeText(p.ignUsed ?? "Unknown Player"))
         .join(", ");
       await channel.send(
-        `Late signup${leftovers.length > 1 ? "s" : ""} ${names} remain undecided and may not participate.`
+        `Late signup${uniqueLeftovers.length > 1 ? "s" : ""} ${names} remain undecided and may not participate.`
       );
     }
   }

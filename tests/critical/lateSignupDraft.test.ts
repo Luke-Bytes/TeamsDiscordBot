@@ -613,3 +613,43 @@ test("Late signups registered after late picking begins are ignored", async () =
     "Additional late signup ignored once late picking started"
   );
 });
+
+test("Late signup left over is not duplicated in registered counts", async () => {
+  Channels.teamPicking = fakeChannel("TEAM_PICK");
+  const session = new DraftTeamPickingSession();
+  const redCaptain = mkPlayer("RC", "RedCap", true);
+  const blueCaptain = mkPlayer("BC", "BlueCap", true);
+  const undecidedOne = mkPlayer("U1", "UndecidedOne");
+  const lateOdd = mkPlayer("L3", "LateOdd");
+  session.redCaptain = redCaptain;
+  session.blueCaptain = blueCaptain;
+  session.turn = "RED";
+  session["proposedTeams"] = {
+    RED: [redCaptain],
+    BLUE: [blueCaptain],
+    UNDECIDED: [undecidedOne],
+  } as any;
+  session["embedMessage"] = { edit: async () => {} } as any;
+
+  await session.registerLateSignup!(lateOdd);
+
+  session["finishedPicking"] = true;
+  await (session as any).handleRemainingLateSignups(Channels.teamPicking);
+
+  const game = CurrentGameManager.getCurrentGame();
+  game.reset();
+  (game as any).teams = {
+    RED: session["proposedTeams"].RED,
+    BLUE: session["proposedTeams"].BLUE,
+    UNDECIDED: session["proposedTeams"].UNDECIDED,
+  };
+
+  const lateSet = new Set(
+    game.getPlayersOfTeam("UNDECIDED").map((p) => p.discordSnowflake)
+  );
+  assertEqual(
+    lateSet.size,
+    game.getPlayersOfTeam("UNDECIDED").length,
+    "UNDECIDED list should not contain duplicate late signup entries"
+  );
+});

@@ -86,7 +86,7 @@ export class TeamsBot {
               return;
             }
           } catch (e) {
-            void e;
+            console.log(`Failed to create message: ${e}`);
           }
         }
         return;
