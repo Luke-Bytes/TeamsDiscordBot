@@ -41,6 +41,7 @@ model PlayerStats {
   biggestLosingStreak Int @default(0)
 
   @@unique([playerId, seasonId])
+  @@index([seasonId, elo])
 }
 
 model Player {
@@ -59,6 +60,8 @@ model Player {
   games        GameParticipation[]
   punishments  PlayerPunishment[]
   PlayerStats  PlayerStats[]
+
+  @@index([latestIGN])
 }
 
 model Game {
@@ -102,6 +105,7 @@ model GameParticipation {
   season   Season @relation(fields: [seasonId], references: [id])
 
   @@unique([playerId, gameId])
+  @@index([gameId])
 }
 
 model EloHistory {
@@ -117,6 +121,8 @@ model EloHistory {
 
   seasonId String
   season   Season @relation(fields: [seasonId], references: [id])
+
+  @@index([playerId, seasonId, createdAt])
 }
 
 type ModifierTypes {
