@@ -6,6 +6,7 @@ import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { EloUtil } from "../src/util/EloUtil";
 
+// npx tsx scripts/fix-last-game-winner.ts
 type GameWithParts = Prisma.GameGetPayload<{
   include: { gameParticipations: { include: { player: true } }; season: true };
 }>;
