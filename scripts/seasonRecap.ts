@@ -7,17 +7,19 @@ const prisma = new PrismaClient();
 const MIN_DUO_GAMES = 3;
 const MIN_CAPTAIN_GAMES = 3;
 const MIN_MVP_GAMES = 3;
+const MIN_FAST_LONG_GAMES = 5;
 const CLOSE_GAME_ELO_GAP = 25;
 
 type LeaderboardRow = { label: string; value: string };
 
-async function getSeasonId() {
-  const { season } = ConfigManager.getConfig();
+async function getSeasonId(seasonNumberOverride?: number) {
+  const seasonNumber =
+    seasonNumberOverride ?? ConfigManager.getConfig().season;
   const seasonRecord = await prisma.season.findUnique({
-    where: { number: season },
+    where: { number: seasonNumber },
   });
   if (!seasonRecord) {
-    throw new Error(`Season ${season} not found. Create it first.`);
+    throw new Error(`Season ${seasonNumber} not found. Create it first.`);
   }
   return { seasonId: seasonRecord.id, seasonNumber: seasonRecord.number };
 }
@@ -79,7 +81,15 @@ function combinePlayers(a: string, b: string) {
 
 async function main() {
   try {
-    const { seasonId, seasonNumber } = await getSeasonId();
+    const seasonArg = process.argv[2];
+    const seasonNumberOverride =
+      seasonArg && Number.isInteger(Number(seasonArg))
+        ? Number(seasonArg)
+        : undefined;
+
+    const { seasonId, seasonNumber } = await getSeasonId(
+      seasonNumberOverride
+    );
     const [games, playerStats, histories] = await Promise.all([
       getSeasonGames(seasonId),
       getSeasonPlayerStats(seasonId),
@@ -143,34 +153,30 @@ async function main() {
       )
     );
 
-    const winStreakLeader = playerStats
+    const winStreakTop = playerStats
       .filter((ps) => ps.biggestWinStreak > 0)
-      .sort((a, b) => b.biggestWinStreak - a.biggestWinStreak)[0];
-    const loseStreakLeader = playerStats
+      .sort((a, b) => b.biggestWinStreak - a.biggestWinStreak)
+      .slice(0, 3)
+      .map((ps) => ({
+        label: playerLabel(
+          ps.player?.latestIGN,
+          ps.player?.discordSnowflake
+        ),
+        value: `${ps.biggestWinStreak}`,
+      }));
+    const loseStreakTop = playerStats
       .filter((ps) => ps.biggestLosingStreak > 0)
-      .sort((a, b) => b.biggestLosingStreak - a.biggestLosingStreak)[0];
-    sections.push(
-      formatSingleStat(
-        "Longest win streak",
-        winStreakLeader
-          ? `${playerLabel(
-              winStreakLeader.player?.latestIGN,
-              winStreakLeader.player?.discordSnowflake
-            )} (${winStreakLeader.biggestWinStreak})`
-          : null
-      )
-    );
-    sections.push(
-      formatSingleStat(
-        "Longest losing streak",
-        loseStreakLeader
-          ? `${playerLabel(
-              loseStreakLeader.player?.latestIGN,
-              loseStreakLeader.player?.discordSnowflake
-            )} (${loseStreakLeader.biggestLosingStreak})`
-          : null
-      )
-    );
+      .sort((a, b) => b.biggestLosingStreak - a.biggestLosingStreak)
+      .slice(0, 3)
+      .map((ps) => ({
+        label: playerLabel(
+          ps.player?.latestIGN,
+          ps.player?.discordSnowflake
+        ),
+        value: `${ps.biggestLosingStreak}`,
+      }));
+    sections.push(formatLeaderboard("Longest win streaks", winStreakTop));
+    sections.push(formatLeaderboard("Longest losing streaks", loseStreakTop));
 
     const mvpCounts = new Map<string, { mvps: number; games: number }>();
     const captainStats = new Map<
@@ -336,7 +342,7 @@ async function main() {
       .sort((a, b) => b.rate - a.rate)[0];
     sections.push(
       formatSingleStat(
-        "Highest MVP rate",
+        "Highest MVP rate (min 3 games)",
         mvpRate
           ? `${playerLabel(
               playersById.get(mvpRate.pid)?.latestIGN,
@@ -348,18 +354,15 @@ async function main() {
 
     const mostCaps = [...captainStats.entries()]
       .sort((a, b) => b[1].caps - a[1].caps)
-      .slice(0, 1)[0];
-    sections.push(
-      formatSingleStat(
-        "Most captain appearances",
-        mostCaps
-          ? `${playerLabel(
-              playersById.get(mostCaps[0])?.latestIGN,
-              playersById.get(mostCaps[0])?.discordSnowflake
-            )} (${mostCaps[1].caps})`
-          : null
-      )
-    );
+      .slice(0, 3)
+      .map(([pid, data]) => ({
+        label: playerLabel(
+          playersById.get(pid)?.latestIGN,
+          playersById.get(pid)?.discordSnowflake
+        ),
+        value: `${data.caps} caps`,
+      }));
+    sections.push(formatLeaderboard("Most captain appearances", mostCaps));
 
     const bestCapWinRate = [...captainStats.entries()]
       .filter(([, data]) => data.caps >= MIN_CAPTAIN_GAMES && data.capWins > 0)
@@ -368,32 +371,28 @@ async function main() {
         rate: data.capWins / data.caps,
         caps: data.caps,
       }))
-      .sort((a, b) => b.rate - a.rate)[0];
-    sections.push(
-      formatSingleStat(
-        "Best captain win rate",
-        bestCapWinRate
-          ? `${playerLabel(
-              playersById.get(bestCapWinRate.pid)?.latestIGN,
-              playersById.get(bestCapWinRate.pid)?.discordSnowflake
-            )} (${(bestCapWinRate.rate * 100).toFixed(1)}% over ${bestCapWinRate.caps} caps)`
-          : null
-      )
-    );
+      .sort((a, b) => b.rate - a.rate)
+      .slice(0, 3)
+      .map((entry) => ({
+        label: playerLabel(
+          playersById.get(entry.pid)?.latestIGN,
+          playersById.get(entry.pid)?.discordSnowflake
+        ),
+        value: `${(entry.rate * 100).toFixed(1)}% over ${entry.caps} caps`,
+      }));
+    sections.push(formatLeaderboard("Best captain win rate (min 3 caps)", bestCapWinRate));
 
     const longestCapStreak = [...captainStats.entries()]
-      .sort((a, b) => b[1].longestCapWinStreak - a[1].longestCapWinStreak)[0];
-    sections.push(
-      formatSingleStat(
-        "Longest captain win streak",
-        longestCapStreak
-          ? `${playerLabel(
-              playersById.get(longestCapStreak[0])?.latestIGN,
-              playersById.get(longestCapStreak[0])?.discordSnowflake
-            )} (${longestCapStreak[1].longestCapWinStreak})`
-          : null
-      )
-    );
+      .sort((a, b) => b[1].longestCapWinStreak - a[1].longestCapWinStreak)
+      .slice(0, 3)
+      .map(([pid, data]) => ({
+        label: playerLabel(
+          playersById.get(pid)?.latestIGN,
+          playersById.get(pid)?.discordSnowflake
+        ),
+        value: `${data.longestCapWinStreak}`,
+      }));
+    sections.push(formatLeaderboard("Longest captain win streaks", longestCapStreak));
 
     const topHosts = [...supportCounts.host.entries()]
       .sort((a, b) => b[1] - a[1])
@@ -503,7 +502,7 @@ async function main() {
     sections.push(formatLeaderboard("Clutch closers (<25 Elo gap)", clutch));
 
     const fastWinRates = [...fastLongStats.entries()]
-      .filter(([, data]) => data.fastGames >= 2)
+      .filter(([, data]) => data.fastGames >= MIN_FAST_LONG_GAMES)
       .map(([pid, data]) => ({
         pid,
         rate: data.fastWins / data.fastGames,
@@ -512,7 +511,7 @@ async function main() {
       .sort((a, b) => b.rate - a.rate)[0];
     sections.push(
       formatSingleStat(
-        "Fast game specialist",
+        `Fast game specialist (min ${MIN_FAST_LONG_GAMES} fast games)`,
         fastWinRates
           ? `${playerLabel(
               playersById.get(fastWinRates.pid)?.latestIGN,
@@ -525,7 +524,7 @@ async function main() {
     );
 
     const longWinRates = [...fastLongStats.entries()]
-      .filter(([, data]) => data.longGames >= 2)
+      .filter(([, data]) => data.longGames >= MIN_FAST_LONG_GAMES)
       .map(([pid, data]) => ({
         pid,
         rate: data.longWins / data.longGames,
@@ -534,7 +533,7 @@ async function main() {
       .sort((a, b) => b.rate - a.rate)[0];
     sections.push(
       formatSingleStat(
-        "Marathoner (long games)",
+        `Marathoner (min ${MIN_FAST_LONG_GAMES} long games)`,
         longWinRates
           ? `${playerLabel(
               playersById.get(longWinRates.pid)?.latestIGN,
