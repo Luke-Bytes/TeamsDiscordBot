@@ -10,6 +10,7 @@ const MIN_MVP_GAMES = 3;
 const MIN_FAST_LONG_GAMES = 5;
 const CLOSE_GAME_ELO_GAP = 25;
 const TOP_BANNED_CLASSES = 5;
+const EXCLUDED_BANNED_CLASSES = new Set(["SWAPPER"]);
 
 type LeaderboardRow = { label: string; value: string };
 
@@ -226,6 +227,7 @@ async function main() {
 
       const banned = game.settings?.bannedClasses ?? [];
       for (const cls of banned) {
+        if (EXCLUDED_BANNED_CLASSES.has(cls)) continue;
         bannedCounts.set(cls, (bannedCounts.get(cls) ?? 0) + 1);
       }
       const teamBans = game.settings?.bannedClassesByTeam as
@@ -233,11 +235,13 @@ async function main() {
         | undefined;
       if (teamBans?.RED) {
         for (const cls of teamBans.RED) {
+          if (EXCLUDED_BANNED_CLASSES.has(cls)) continue;
           bannedCounts.set(cls, (bannedCounts.get(cls) ?? 0) + 1);
         }
       }
       if (teamBans?.BLUE) {
         for (const cls of teamBans.BLUE) {
+          if (EXCLUDED_BANNED_CLASSES.has(cls)) continue;
           bannedCounts.set(cls, (bannedCounts.get(cls) ?? 0) + 1);
         }
       }
