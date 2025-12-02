@@ -9,6 +9,8 @@ const MIN_CAPTAIN_GAMES = 3;
 const MIN_MVP_GAMES = 3;
 const MIN_FAST_LONG_GAMES = 5;
 const CLOSE_GAME_ELO_GAP = 25;
+const UNDERDOG_ELO_GAP = 50;
+const MIN_UNDERDOG_GAMES = 3;
 const TOP_BANNED_CLASSES = 5;
 const EXCLUDED_BANNED_CLASSES = new Set(["SWAPPER"]);
 
@@ -201,6 +203,7 @@ async function main() {
       { a: string; b: string; meetings: number; winsA: number; winsB: number }
     >();
     const clutchWins = new Map<string, number>();
+    const underdogOutcomes = new Map<string, { games: number; wins: number }>();
     const fastLongStats = new Map<
       string,
       { fastGames: number; fastWins: number; longGames: number; longWins: number }
@@ -298,6 +301,12 @@ async function main() {
           0
         ) / Math.max(1, blue.length);
       const closeGame = Math.abs(redPreMean - bluePreMean) < CLOSE_GAME_ELO_GAP;
+      const underdogTeam =
+        redPreMean + UNDERDOG_ELO_GAP <= bluePreMean
+          ? Team.RED
+          : bluePreMean + UNDERDOG_ELO_GAP <= redPreMean
+          ? Team.BLUE
+          : null;
 
       for (const gp of game.gameParticipations) {
         const record = mvpCounts.get(gp.playerId) ?? { mvps: 0, games: 0 };
@@ -323,6 +332,13 @@ async function main() {
 
         if (closeGame && game.winner && game.winner === gp.team) {
           clutchWins.set(gp.playerId, (clutchWins.get(gp.playerId) ?? 0) + 1);
+        }
+
+        if (underdogTeam && gp.team === underdogTeam) {
+          const underdog = underdogOutcomes.get(gp.playerId) ?? { games: 0, wins: 0 };
+          underdog.games += 1;
+          if (game.winner && game.winner === gp.team) underdog.wins += 1;
+          underdogOutcomes.set(gp.playerId, underdog);
         }
 
         if (isFast || isLong) {
@@ -530,6 +546,30 @@ async function main() {
         value: `${wins} close-game wins`,
       }));
     sections.push(formatLeaderboard("Clutch closers (<25 Elo gap)", clutch));
+
+    const underdogLeaders = [...underdogOutcomes.entries()]
+      .filter(([, data]) => data.games >= MIN_UNDERDOG_GAMES && data.wins > 0)
+      .map(([pid, data]) => ({
+        pid,
+        rate: data.wins / data.games,
+        games: data.games,
+        wins: data.wins,
+      }))
+      .sort((a, b) => b.rate - a.rate)
+      .slice(0, 3)
+      .map((entry) => ({
+        label: playerLabel(
+          playersById.get(entry.pid)?.latestIGN,
+          playersById.get(entry.pid)?.discordSnowflake
+        ),
+        value: `${(entry.rate * 100).toFixed(1)}% (${entry.wins}/${entry.games} underdog games)`,
+      }));
+    sections.push(
+      formatLeaderboard(
+        `Top underdogs (>= ${UNDERDOG_ELO_GAP} Elo gap, min ${MIN_UNDERDOG_GAMES} games)`,
+        underdogLeaders
+      )
+    );
 
     const fastWinRates = [...fastLongStats.entries()]
       .filter(([, data]) => data.fastGames >= MIN_FAST_LONG_GAMES)
