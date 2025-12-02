@@ -11,7 +11,7 @@
         { "name": "All Combat Classes Banned", "weight": 1 },
         { "name": "1 Captain Ban Each (Shared)", "weight": 4 },
         { "name": "2 Captain Bans Each (Shared)", "weight": 1 },
-        { "name": "1 Captain Ban Each (Opponent Only, No Core)", "weight": 4 },
+        { "name": "1 Captain Ban Each (Opponent Only, No Core)", "weight": 1 },
         { "name": "2 Captain Bans Each (Opponent Only, No Core)", "weight": 1 }
       ]
     },
@@ -21,7 +21,7 @@
       "modifiers": [
         { "name": "No Double Damage or Nexus Bleed", "weight": 15 },
         { "name": "Double Damage", "weight": 1 },
-        { "name": "Nexus Bleed", "weight": 4 }
+        { "name": "Nexus Bleed", "weight": 1 }
       ]
     },
     {
@@ -45,7 +45,7 @@
       "name": "Minerushing",
       "maxPerRun": 1,
       "modifiers": [
-        { "name": "Always", "weight": 18 },
+        { "name": "Always", "weight": 28 },
         { "name": "Not before phase 2 (Two)", "weight": 1 },
         { "name": "Not before phase 3 (Three)", "weight": 1 }
       ]
@@ -54,7 +54,7 @@
       "name": "Nexus Damage",
       "maxPerRun": 1,
       "modifiers": [
-        { "name": "Always", "weight": 17 },
+        { "name": "Always", "weight": 27 },
         { "name": "No Nexus Damage before phase 2 (Two)", "weight": 1 },
         { "name": "No Nexus Damage before phase 3 (Three)", "weight": 1 },
         { "name": "No Nexus Damage before phase 4 (Four)", "weight": 1 }
@@ -69,7 +69,7 @@
       ]
     },
     {
-      "name": "Skip Phase",
+      "name": "Phase Skip",
       "maxPerRun": 1,
       "modifiers": [
         { "name": "No Phase Skip", "weight": 17 },
