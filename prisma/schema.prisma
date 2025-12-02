@@ -71,12 +71,12 @@ model Game {
   startTime DateTime
   endTime   DateTime
   settings  GameSettings
-  winner    Team?
+  winner    Team
   type      gameType?
   doubleElo Boolean?
 
-  organiser String?
-  host      String?
+  organiser String
+  host      String
 
   participantsIGNs String[]
 
@@ -136,11 +136,11 @@ type BanList {
 }
 
 type GameSettings {
-  minerushing         Boolean
-  bannedClasses       AnniClass[]
-  bannedClassesByTeam BanList?
-  map                 AnniMap
-  modifiers           ModifierTypes[]
+  organiserBannedClasses        AnniClass[]
+  sharedCaptainBannedClasses    AnniClass[]
+  nonSharedCaptainBannedClasses BanList?
+  map                           AnniMap
+  modifiers                     ModifierTypes[]
 }
 
 model PlayerPunishment {

@@ -178,25 +178,35 @@ export class CurrentGameManager {
     }
 
     if (game.getClassBanLimit() > 0 && !game.areClassBansAnnounced()) {
-      const byTeam = game.settings.bannedClassesByTeam;
-      const banned = game.settings.bannedClasses;
+      const byTeam =
+        game.settings.nonSharedCaptainBannedClasses ?? {
+          [Team.RED]: [],
+          [Team.BLUE]: [],
+        };
+      game.settings.nonSharedCaptainBannedClasses = byTeam;
+      const organiserBans = game.settings.organiserBannedClasses ?? [];
+      const sharedCaptainBans = game.settings.sharedCaptainBannedClasses ?? [];
       let both: string[];
       let redOnly: string[];
       let blueOnly: string[];
 
       if (game.classBanMode === "shared") {
         // In shared mode, ALL bans are shared (organiser + any captain bans)
-        const sharedSet = new Set([...banned, ...byTeam.RED, ...byTeam.BLUE]);
+        const sharedSet = new Set([
+          ...organiserBans,
+          ...sharedCaptainBans,
+          ...byTeam.RED,
+          ...byTeam.BLUE,
+        ]);
         both = Array.from(sharedSet);
         redOnly = [];
         blueOnly = [];
       } else {
-        // Default behavior: organiser shared bans + team-only bans
-        both = banned.filter(
-          (c) => !byTeam.RED.includes(c) && !byTeam.BLUE.includes(c)
-        );
-        redOnly = byTeam.RED.filter((c) => !both.includes(c));
-        blueOnly = byTeam.BLUE.filter((c) => !both.includes(c));
+        // Default behavior: organiser/shared captain bans + team-only bans
+        const sharedSet = new Set([...organiserBans, ...sharedCaptainBans]);
+        both = Array.from(sharedSet);
+        redOnly = byTeam.RED.filter((c) => !sharedSet.has(c));
+        blueOnly = byTeam.BLUE.filter((c) => !sharedSet.has(c));
       }
       const lockedEmbed = new EmbedBuilder()
         .setColor("DarkRed")

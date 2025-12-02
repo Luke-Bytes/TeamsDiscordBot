@@ -228,12 +228,15 @@ async function main() {
         mapCounts.set(game.settings.map, (mapCounts.get(game.settings.map) ?? 0) + 1);
       }
 
-      const banned = game.settings?.bannedClasses ?? [];
-      for (const cls of banned) {
+      const sharedBans = [
+        ...(game.settings?.organiserBannedClasses ?? []),
+        ...(game.settings?.sharedCaptainBannedClasses ?? []),
+      ];
+      for (const cls of sharedBans) {
         if (EXCLUDED_BANNED_CLASSES.has(cls)) continue;
         bannedCounts.set(cls, (bannedCounts.get(cls) ?? 0) + 1);
       }
-      const teamBans = game.settings?.bannedClassesByTeam as
+      const teamBans = game.settings?.nonSharedCaptainBannedClasses as
         | { RED?: string[]; BLUE?: string[] }
         | undefined;
       if (teamBans?.RED) {

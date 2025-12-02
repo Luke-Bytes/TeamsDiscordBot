@@ -80,7 +80,7 @@ test("Captain class ban forbids core classes in opponentOnly mode", async () => 
     strings: { class: "scout" },
   });
   await cmd.execute(i2);
-  const redBans = game.settings.bannedClassesByTeam.RED;
+  const redBans = game.settings.nonSharedCaptainBannedClasses.RED;
   assert(
     redBans.includes("SCOUT" as any),
     "Opponent-only ban applies to opponent team"

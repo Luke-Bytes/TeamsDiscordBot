@@ -11,7 +11,7 @@ import {
   Guild,
 } from "discord.js";
 import { Command } from "../commands/CommandInterface.js";
-import { AnniClass, AnniMap } from "@prisma/client";
+import { AnniClass, AnniMap, Team } from "@prisma/client";
 import { prettifyName, randomEnum, formatTimestamp } from "../util/Utils.js";
 import { parseDate } from "chrono-node";
 import { Channels } from "../Channels";
@@ -200,7 +200,7 @@ export default class AnnouncementCommand implements Command {
     const bannedClasses = this.getBannedClasses(bannedClassesOption);
 
     if (!bannedClasses.error) {
-      CurrentGameManager.getCurrentGame().settings.bannedClasses =
+      CurrentGameManager.getCurrentGame().settings.organiserBannedClasses =
         bannedClasses.bannedClasses;
     } else {
       await interaction.editReply(bannedClasses.error);
@@ -261,11 +261,11 @@ export default class AnnouncementCommand implements Command {
     if (minerushingOption === "poll") {
       game.startMinerushVote();
     } else if (minerushingOption.toLowerCase() === "yes") {
-      game.settings.minerushing = true;
+      game.setMinerushing(true);
     } else if (minerushingOption.toLowerCase() === "no") {
-      game.settings.minerushing = false;
+      game.setMinerushing(false);
     } else {
-      game.settings.minerushing = false;
+      game.setMinerushing(false);
       if (!interaction.deferred && !interaction.replied) {
         await interaction.reply(
           `Minerushing option '${minerushingOption}' unrecognized.`
@@ -308,7 +308,7 @@ export default class AnnouncementCommand implements Command {
     }
 
     this.initialBannedClasses = [
-      ...CurrentGameManager.getCurrentGame().settings.bannedClasses,
+      ...CurrentGameManager.getCurrentGame().settings.organiserBannedClasses,
     ];
 
     // if (!this.setMinerushing(interaction)) {
@@ -503,9 +503,12 @@ export default class AnnouncementCommand implements Command {
         break;
 
       case "announcement-edit-modifiers":
-        CurrentGameManager.getCurrentGame().settings.bannedClasses = [
-          ...this.initialBannedClasses,
-        ];
+        CurrentGameManager.getCurrentGame().settings.organiserBannedClasses =
+          [...this.initialBannedClasses];
+        CurrentGameManager.getCurrentGame().settings.sharedCaptainBannedClasses =
+          [];
+        CurrentGameManager.getCurrentGame().settings.nonSharedCaptainBannedClasses =
+          { RED: [], BLUE: [] };
         ModifierSelector.runSelection();
         await this.updateAnnouncementMessages();
         await interaction.editReply("🔄 Modifiers have been rerolled.");
@@ -536,6 +539,37 @@ export default class AnnouncementCommand implements Command {
     const doubleEloMessage = game.isDoubleElo
       ? "\n\n**🌟 A special DOUBLE ELO game! 🌟**\n\n"
       : "";
+
+    const nonSharedBans =
+      game.settings.nonSharedCaptainBannedClasses ??
+      ({} as Record<Team, AnniClass[]>);
+    const sharedBans = Array.from(
+      new Set([
+        ...(game.settings.organiserBannedClasses ?? []),
+        ...(game.settings.sharedCaptainBannedClasses ?? []),
+      ])
+    );
+    const redOnly = (nonSharedBans[Team.RED] ?? []).filter(
+      (c) => !sharedBans.includes(c)
+    );
+    const blueOnly = (nonSharedBans[Team.BLUE] ?? []).filter(
+      (c) => !sharedBans.includes(c)
+    );
+    const bannedClassesValue = [
+      `Shared: ${
+        sharedBans.length
+          ? sharedBans.map((v) => prettifyName(v)).join(", ")
+          : "None"
+      }`,
+      `Red-only: ${
+        redOnly.length ? redOnly.map((v) => prettifyName(v)).join(", ") : "None"
+      }`,
+      `Blue-only: ${
+        blueOnly.length
+          ? blueOnly.map((v) => prettifyName(v)).join(", ")
+          : "None"
+      }`,
+    ].join("\n");
 
     const embed = new EmbedBuilder()
       .setColor("#00FF7F")
@@ -581,13 +615,7 @@ export default class AnnouncementCommand implements Command {
         // },
         {
           name: "🚫 **BANNED CLASSES**",
-          value:
-            game.settings.bannedClasses &&
-            game.settings.bannedClasses.length > 0
-              ? `**${game.settings.bannedClasses
-                  .map((v) => prettifyName(v))
-                  .join(", ")}**`
-              : "**None**",
+          value: bannedClassesValue,
           inline: false,
         },
         {
@@ -815,8 +843,9 @@ export default class AnnouncementCommand implements Command {
         return;
       }
 
-      CurrentGameManager.getCurrentGame().settings.bannedClasses =
+      CurrentGameManager.getCurrentGame().settings.organiserBannedClasses =
         bannedClasses.bannedClasses;
+      this.initialBannedClasses = [...bannedClasses.bannedClasses];
 
       await this.updateAnnouncementMessages(); // Update both messages
       await interaction.followUp(

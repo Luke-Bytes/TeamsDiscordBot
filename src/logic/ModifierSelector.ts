@@ -68,9 +68,10 @@ export class ModifierSelector {
 
     if (swapperMod) {
       const game = GameInstance.getInstance();
-      game.settings.bannedClasses = game.settings.bannedClasses.filter(
-        (c) => c !== AnniClass.SWAPPER
-      );
+      game.settings.organiserBannedClasses =
+        game.settings.organiserBannedClasses.filter(
+          (c) => c !== AnniClass.SWAPPER
+        );
     }
 
     GameInstance.getInstance().pickOtherTeamsSupportRoles =
@@ -80,7 +81,7 @@ export class ModifierSelector {
   private static handleClassBans(name: string) {
     const game = GameInstance.getInstance();
     game.classBanMode = null;
-    const banned = game.settings.bannedClasses;
+    const organiserBans = game.settings.organiserBannedClasses;
 
     switch (name) {
       case "No Bans":
@@ -93,8 +94,8 @@ export class ModifierSelector {
           let cls: AnniClass;
           do {
             cls = getRandomAnniClass();
-          } while (banned.includes(cls));
-          banned.push(cls);
+          } while (organiserBans.includes(cls));
+          organiserBans.push(cls);
         }
         break;
 
@@ -104,8 +105,8 @@ export class ModifierSelector {
           let cls: AnniClass;
           do {
             cls = getRandomAnniClass();
-          } while (banned.includes(cls));
-          banned.push(cls);
+          } while (organiserBans.includes(cls));
+          organiserBans.push(cls);
         }
         break;
 
@@ -119,7 +120,7 @@ export class ModifierSelector {
           AnniClass.ROBINHOOD,
           AnniClass.TRANSPORTER,
         ].forEach((c) => {
-          if (!banned.includes(c)) banned.push(c);
+          if (!organiserBans.includes(c)) organiserBans.push(c);
         });
         break;
 
@@ -134,7 +135,7 @@ export class ModifierSelector {
           AnniClass.WARRIOR,
           AnniClass.SUCCUBUS,
         ].forEach((c) => {
-          if (!banned.includes(c)) banned.push(c);
+          if (!organiserBans.includes(c)) organiserBans.push(c);
         });
         break;
 

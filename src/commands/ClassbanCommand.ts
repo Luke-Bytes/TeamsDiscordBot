@@ -139,11 +139,17 @@ export default class ClassbanCommand implements Command {
       : Team.RED;
     const opponent = team === Team.BLUE ? Team.RED : Team.BLUE;
 
-    const banned = game.settings.bannedClasses;
-    const byTeam = game.settings.bannedClassesByTeam;
+    const organiserBans = game.settings.organiserBannedClasses;
+    const sharedCaptainBans = game.settings.sharedCaptainBannedClasses;
+    const byTeam =
+      game.settings.nonSharedCaptainBannedClasses ?? {
+        [Team.RED]: [],
+        [Team.BLUE]: [],
+      };
+    game.settings.nonSharedCaptainBannedClasses = byTeam;
 
     if (mode === "shared") {
-      if (!banned.includes(cls)) banned.push(cls);
+      if (!sharedCaptainBans.includes(cls)) sharedCaptainBans.push(cls);
     } else if (mode === "opponentOnly") {
       const forbidden: AnniClass[] = [
         AnniClass.ENCHANTER,
@@ -169,7 +175,9 @@ export default class ClassbanCommand implements Command {
         });
       }
       if (!byTeam[opponent].includes(cls)) byTeam[opponent].push(cls);
-    } else if (!byTeam[team].includes(cls)) byTeam[team].push(cls);
+    } else if (!byTeam[team].includes(cls)) {
+      byTeam[team].push(cls);
+    }
 
     game.markCaptainHasBanned(interaction.user.id);
 
@@ -188,8 +196,14 @@ export default class ClassbanCommand implements Command {
       game.getTotalCaptainBans() === game.getClassBanLimit() &&
       !game.areClassBansAnnounced()
     ) {
-      const byTeam = game.settings.bannedClassesByTeam;
-      const banned = game.settings.bannedClasses;
+      const byTeam =
+        game.settings.nonSharedCaptainBannedClasses ?? {
+          [Team.RED]: [],
+          [Team.BLUE]: [],
+        };
+      game.settings.nonSharedCaptainBannedClasses = byTeam;
+      const organiserBans = game.settings.organiserBannedClasses;
+      const sharedCaptainBans = game.settings.sharedCaptainBannedClasses;
       let both: string[];
       let redOnly: string[];
       let blueOnly: string[];
@@ -197,7 +211,8 @@ export default class ClassbanCommand implements Command {
       if (game.classBanMode === "shared") {
         // In shared mode, ALL bans are presented as shared
         const sharedSet = new Set([
-          ...banned,
+          ...organiserBans,
+          ...sharedCaptainBans,
           ...byTeam[Team.RED],
           ...byTeam[Team.BLUE],
         ]);
@@ -205,11 +220,10 @@ export default class ClassbanCommand implements Command {
         redOnly = [];
         blueOnly = [];
       } else {
-        both = banned.filter(
-          (c) => !byTeam[Team.RED].includes(c) && !byTeam[Team.BLUE].includes(c)
-        );
-        redOnly = byTeam[Team.RED].filter((c) => !both.includes(c));
-        blueOnly = byTeam[Team.BLUE].filter((c) => !both.includes(c));
+        const sharedSet = new Set([...organiserBans, ...sharedCaptainBans]);
+        both = Array.from(sharedSet);
+        redOnly = byTeam[Team.RED].filter((c) => !sharedSet.has(c));
+        blueOnly = byTeam[Team.BLUE].filter((c) => !sharedSet.has(c));
       }
 
       const lockedEmbed = new EmbedBuilder()
@@ -272,13 +286,61 @@ export default class ClassbanCommand implements Command {
       });
     }
 
-    const banned = game.settings.bannedClasses;
+    const byTeam =
+      game.settings.nonSharedCaptainBannedClasses ?? {
+        [Team.RED]: [],
+        [Team.BLUE]: [],
+      };
+    game.settings.nonSharedCaptainBannedClasses = byTeam;
+    const organiserBans = game.settings.organiserBannedClasses;
+    const sharedCaptainBans = game.settings.sharedCaptainBannedClasses;
+
+    const sharedSet =
+      game.classBanMode === "shared"
+        ? new Set([
+            ...organiserBans,
+            ...sharedCaptainBans,
+            ...byTeam[Team.RED],
+            ...byTeam[Team.BLUE],
+          ])
+        : new Set([...organiserBans, ...sharedCaptainBans]);
+
+    const both = Array.from(sharedSet);
+    const redOnly =
+      game.classBanMode === "shared"
+        ? []
+        : byTeam[Team.RED].filter((c) => !sharedSet.has(c));
+    const blueOnly =
+      game.classBanMode === "shared"
+        ? []
+        : byTeam[Team.BLUE].filter((c) => !sharedSet.has(c));
+
     return interaction.reply({
       embeds: [
         new EmbedBuilder()
           .setColor("Blue")
           .setTitle("📋 Banned Classes")
-          .setDescription(banned.map(prettifyName).join("\n"))
+          .addFields(
+            {
+              name: "⚫ Shared Bans",
+              value: both.length ? both.map(prettifyName).join("\n") : "None",
+              inline: true,
+            },
+            {
+              name: "🔴 Red Can't Use",
+              value: redOnly.length
+                ? redOnly.map(prettifyName).join("\n")
+                : "None",
+              inline: true,
+            },
+            {
+              name: "🔵 Blue Can't Use",
+              value: blueOnly.length
+                ? blueOnly.map(prettifyName).join("\n")
+                : "None",
+              inline: true,
+            }
+          )
           .setTimestamp(),
       ],
     });

@@ -25,14 +25,15 @@ export class GameInstance {
   startTime?: Date;
   endTime?: Date;
   settings: {
-    minerushing?: boolean;
-    bannedClasses: $Enums.AnniClass[];
-    bannedClassesByTeam: Record<Team, $Enums.AnniClass[]>;
+    organiserBannedClasses: $Enums.AnniClass[];
+    sharedCaptainBannedClasses: $Enums.AnniClass[];
+    nonSharedCaptainBannedClasses: Record<Team, $Enums.AnniClass[]>;
     map?: $Enums.AnniMap;
     modifiers: { category: string; name: string }[];
   } = {
-    bannedClasses: [],
-    bannedClassesByTeam: { [Team.RED]: [], [Team.BLUE]: [] },
+    organiserBannedClasses: [],
+    sharedCaptainBannedClasses: [],
+    nonSharedCaptainBannedClasses: { [Team.RED]: [], [Team.BLUE]: [] },
     modifiers: [],
   };
 
@@ -99,9 +100,9 @@ export class GameInstance {
     this.startTime = undefined;
     this.endTime = undefined;
     this.settings = {
-      minerushing: undefined,
-      bannedClasses: [],
-      bannedClassesByTeam: { [Team.RED]: [], [Team.BLUE]: [] },
+      organiserBannedClasses: [],
+      sharedCaptainBannedClasses: [],
+      nonSharedCaptainBannedClasses: { [Team.RED]: [], [Team.BLUE]: [] },
       map: undefined,
       modifiers: [],
     };
@@ -182,7 +183,14 @@ export class GameInstance {
   }
 
   public setMinerushing(minerush: boolean) {
-    this.settings.minerushing = minerush;
+    // Minerushing is now captured as a modifier; set or replace the entry.
+    this.settings.modifiers = [
+      ...this.settings.modifiers.filter((m) => m.category !== "Minerushing"),
+      {
+        category: "Minerushing",
+        name: minerush ? "Always" : "Not before phase 3 (Three)",
+      },
+    ];
     console.log("Minerushing is: " + minerush);
   }
 
@@ -410,11 +418,11 @@ export class GameInstance {
     this.startTime = new Date(Date.now() + 6 * 60 * 1000); // 6m from now for polls
     this.endTime = new Date("2025-01-01T02:00:00Z");
     this.settings = {
-      minerushing: true,
-      bannedClasses: ["SNIPER"],
-      bannedClassesByTeam: { RED: ["SCOUT"], BLUE: ["NEPTUNE"] },
+      organiserBannedClasses: ["SNIPER"],
+      sharedCaptainBannedClasses: [],
+      nonSharedCaptainBannedClasses: { RED: ["SCOUT"], BLUE: ["NEPTUNE"] },
       map: "DUELSTAL",
-      modifiers: [],
+      modifiers: [{ category: "Minerushing", name: "Always" }],
     };
     this.MVPPlayerBlue = "Immortal";
     this.MVPPlayerRed = "5trawHato";
