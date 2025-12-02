@@ -9,6 +9,7 @@ const MIN_CAPTAIN_GAMES = 3;
 const MIN_MVP_GAMES = 3;
 const MIN_FAST_LONG_GAMES = 5;
 const CLOSE_GAME_ELO_GAP = 25;
+const TOP_BANNED_CLASSES = 5;
 
 type LeaderboardRow = { label: string; value: string };
 
@@ -189,6 +190,7 @@ async function main() {
       organiser: new Map<string, number>(),
     };
     const mapCounts = new Map<string, number>();
+    const bannedCounts = new Map<string, number>();
     const duoSame = new Map<
       string,
       { a: string; b: string; games: number; wins: number }
@@ -220,6 +222,24 @@ async function main() {
 
       if (game.settings?.map) {
         mapCounts.set(game.settings.map, (mapCounts.get(game.settings.map) ?? 0) + 1);
+      }
+
+      const banned = game.settings?.bannedClasses ?? [];
+      for (const cls of banned) {
+        bannedCounts.set(cls, (bannedCounts.get(cls) ?? 0) + 1);
+      }
+      const teamBans = game.settings?.bannedClassesByTeam as
+        | { RED?: string[]; BLUE?: string[] }
+        | undefined;
+      if (teamBans?.RED) {
+        for (const cls of teamBans.RED) {
+          bannedCounts.set(cls, (bannedCounts.get(cls) ?? 0) + 1);
+        }
+      }
+      if (teamBans?.BLUE) {
+        for (const cls of teamBans.BLUE) {
+          bannedCounts.set(cls, (bannedCounts.get(cls) ?? 0) + 1);
+        }
       }
       if (game.host) {
         supportCounts.host.set(game.host, (supportCounts.host.get(game.host) ?? 0) + 1);
@@ -419,6 +439,12 @@ async function main() {
         leastMap ? `${leastMap[0]} (${leastMap[1]} plays)` : null
       )
     );
+
+    const topBans = [...bannedCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, TOP_BANNED_CLASSES)
+      .map(([cls, count]) => ({ label: cls, value: `${count} bans` }));
+    sections.push(formatLeaderboard(`Most banned classes (top ${TOP_BANNED_CLASSES})`, topBans));
 
     const duoDominance = [...duoSame.values()]
       .filter((d) => d.games >= MIN_DUO_GAMES)
