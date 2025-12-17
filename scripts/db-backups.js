@@ -15,7 +15,8 @@ let DATABASE_BACKUP_URL = process.env.DATABASE_BACKUP_URL;
 function trimMongoURI(uri) {
   try {
     const urlObj = new URL(uri);
-    urlObj.pathname = "";
+    // Keep trailing slash so query params remain valid (e.g., ?replicaSet=...).
+    urlObj.pathname = "/";
     return urlObj.toString();
   } catch (error) {
     console.error("[Database backup] Invalid MongoDB URI:", uri);
