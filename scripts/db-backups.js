@@ -15,6 +15,10 @@ let DATABASE_BACKUP_URL = process.env.DATABASE_BACKUP_URL;
 function trimMongoURI(uri) {
   try {
     const urlObj = new URL(uri);
+    const dbName = urlObj.pathname.replace(/^\/+/, "");
+    if (dbName && !urlObj.searchParams.has("authSource")) {
+      urlObj.searchParams.set("authSource", dbName);
+    }
     // Keep trailing slash so query params remain valid (e.g., ?replicaSet=...).
     urlObj.pathname = "/";
     return urlObj.toString();
