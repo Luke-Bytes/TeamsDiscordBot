@@ -90,29 +90,83 @@ export const EloUtil = {
     player: PlayerInstance,
     isWin: boolean
   ): number {
+    return this.getEloChangeBreakdown(game, player, isWin).finalChange;
+  },
+
+  getEloChangeBreakdown(
+    game: GameInstance,
+    player: PlayerInstance,
+    isWin: boolean
+  ): {
+    kFactor: number;
+    expectedScore: number;
+    actualScore: number;
+    baseChange: number;
+    afterWinStreakChange: number;
+    winStreakMultiplier: number;
+    meanEloDifference: number;
+    underdogWeightingApplied: boolean;
+    underdogWeightFactor?: number;
+    finalChange: number;
+  } {
     const kFactor = this.getKFactor(player.elo);
     const expectedScore = this.getPlayerExpectedScore(game, player);
-    if (!expectedScore) return 0;
+    if (expectedScore === undefined) {
+      return {
+        kFactor,
+        expectedScore: 0,
+        actualScore: isWin ? 1 : 0,
+        baseChange: 0,
+        afterWinStreakChange: 0,
+        winStreakMultiplier: 1,
+        meanEloDifference: 0,
+        underdogWeightingApplied: false,
+        finalChange: 0,
+      };
+    }
 
     const actualScore = isWin ? 1 : 0;
-    let eloChange = Math.abs(kFactor * (actualScore - expectedScore));
-    eloChange = this.applyWinStreakBonus(player, eloChange, isWin);
+    const baseChange = Math.abs(kFactor * (actualScore - expectedScore));
+
+    let winStreakMultiplier = 1;
+    const afterWinStreakChange = this.applyWinStreakBonus(
+      player,
+      baseChange,
+      isWin
+    );
+    if (baseChange > 0) {
+      winStreakMultiplier = afterWinStreakChange / baseChange;
+    }
 
     const meanEloDifference = Math.abs(
       (game.blueMeanElo ?? 0) - (game.redMeanElo ?? 0)
     );
-    if (meanEloDifference < 25) {
-      const underdogWeightingFactor =
-        ConfigManager.getConfig().underdogMultiplier;
-      eloChange = this.applyUnderdogWeighting(
-        eloChange,
+
+    const underdogWeightingApplied = meanEloDifference < 25;
+    let finalChange = afterWinStreakChange;
+    let underdogWeightFactor: number | undefined;
+    if (underdogWeightingApplied) {
+      underdogWeightFactor = ConfigManager.getConfig().underdogMultiplier;
+      finalChange = this.applyUnderdogWeighting(
+        finalChange,
         expectedScore,
-        underdogWeightingFactor,
+        underdogWeightFactor,
         isWin
       );
     }
 
-    return Number(eloChange.toFixed(1));
+    return {
+      kFactor,
+      expectedScore,
+      actualScore,
+      baseChange,
+      afterWinStreakChange,
+      winStreakMultiplier,
+      meanEloDifference,
+      underdogWeightingApplied,
+      underdogWeightFactor,
+      finalChange: Number(finalChange.toFixed(1)),
+    };
   },
 
   getPlayerExpectedScore(

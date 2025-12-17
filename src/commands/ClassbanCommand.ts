@@ -141,11 +141,10 @@ export default class ClassbanCommand implements Command {
 
     const organiserBans = game.settings.organiserBannedClasses;
     const sharedCaptainBans = game.settings.sharedCaptainBannedClasses;
-    const byTeam =
-      game.settings.nonSharedCaptainBannedClasses ?? {
-        [Team.RED]: [],
-        [Team.BLUE]: [],
-      };
+    const byTeam = game.settings.nonSharedCaptainBannedClasses ?? {
+      [Team.RED]: [],
+      [Team.BLUE]: [],
+    };
     game.settings.nonSharedCaptainBannedClasses = byTeam;
 
     if (mode === "shared") {
@@ -196,11 +195,10 @@ export default class ClassbanCommand implements Command {
       game.getTotalCaptainBans() === game.getClassBanLimit() &&
       !game.areClassBansAnnounced()
     ) {
-      const byTeam =
-        game.settings.nonSharedCaptainBannedClasses ?? {
-          [Team.RED]: [],
-          [Team.BLUE]: [],
-        };
+      const byTeam = game.settings.nonSharedCaptainBannedClasses ?? {
+        [Team.RED]: [],
+        [Team.BLUE]: [],
+      };
       game.settings.nonSharedCaptainBannedClasses = byTeam;
       const organiserBans = game.settings.organiserBannedClasses;
       const sharedCaptainBans = game.settings.sharedCaptainBannedClasses;
@@ -286,11 +284,10 @@ export default class ClassbanCommand implements Command {
       });
     }
 
-    const byTeam =
-      game.settings.nonSharedCaptainBannedClasses ?? {
-        [Team.RED]: [],
-        [Team.BLUE]: [],
-      };
+    const byTeam = game.settings.nonSharedCaptainBannedClasses ?? {
+      [Team.RED]: [],
+      [Team.BLUE]: [],
+    };
     game.settings.nonSharedCaptainBannedClasses = byTeam;
     const organiserBans = game.settings.organiserBannedClasses;
     const sharedCaptainBans = game.settings.sharedCaptainBannedClasses;

@@ -33,16 +33,14 @@ function getLatestBackupPath() {
     return null;
   }
 
-  const files = fs
-    .readdirSync(BACKUP_DIR)
-    .filter((file) => {
-      const fullPath = path.join(BACKUP_DIR, file);
-      return (
-        file.endsWith(".gz") &&
-        fs.existsSync(fullPath) &&
-        fs.statSync(fullPath).isFile()
-      );
-    });
+  const files = fs.readdirSync(BACKUP_DIR).filter((file) => {
+    const fullPath = path.join(BACKUP_DIR, file);
+    return (
+      file.endsWith(".gz") &&
+      fs.existsSync(fullPath) &&
+      fs.statSync(fullPath).isFile()
+    );
+  });
   if (!files.length) {
     return null;
   }

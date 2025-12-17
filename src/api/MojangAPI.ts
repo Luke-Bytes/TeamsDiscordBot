@@ -1,4 +1,4 @@
-import {UUID} from "mongodb";
+import { UUID } from "mongodb";
 
 export class MojangAPI {
   public static async usernameToUUID(username: string): Promise<string | null> {

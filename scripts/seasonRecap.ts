@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 import { PrismaClient, Team } from "@prisma/client";
 import { ConfigManager } from "../src/ConfigManager";
 
@@ -17,8 +16,7 @@ const EXCLUDED_BANNED_CLASSES = new Set(["SWAPPER"]);
 type LeaderboardRow = { label: string; value: string };
 
 async function getSeasonId(seasonNumberOverride?: number) {
-  const seasonNumber =
-    seasonNumberOverride ?? ConfigManager.getConfig().season;
+  const seasonNumber = seasonNumberOverride ?? ConfigManager.getConfig().season;
   const seasonRecord = await prisma.season.findUnique({
     where: { number: seasonNumber },
   });
@@ -52,7 +50,9 @@ async function getSeasonEloHistory(seasonId: string) {
 
 function formatLeaderboard(title: string, rows: LeaderboardRow[]) {
   if (!rows.length) return `**${title}:** No data.`;
-  const lines = rows.map((row, idx) => ` ${idx + 1}. ${row.label} — ${row.value}`);
+  const lines = rows.map(
+    (row, idx) => ` ${idx + 1}. ${row.label} — ${row.value}`
+  );
   return `**${title}:**\n${lines.join("\n")}`;
 }
 
@@ -75,7 +75,10 @@ function playerLabel(latestIGN?: string | null, discordSnowflake?: string) {
 function percentile(values: number[], pct: number) {
   if (!values.length) return 0;
   const sorted = [...values].sort((a, b) => a - b);
-  const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor(pct * sorted.length)));
+  const idx = Math.min(
+    sorted.length - 1,
+    Math.max(0, Math.floor(pct * sorted.length))
+  );
   return sorted[idx];
 }
 
@@ -91,16 +94,16 @@ async function main() {
         ? Number(seasonArg)
         : undefined;
 
-    const { seasonId, seasonNumber } = await getSeasonId(
-      seasonNumberOverride
-    );
+    const { seasonId, seasonNumber } = await getSeasonId(seasonNumberOverride);
     const [games, playerStats, histories] = await Promise.all([
       getSeasonGames(seasonId),
       getSeasonPlayerStats(seasonId),
       getSeasonEloHistory(seasonId),
     ]);
 
-    const playersById = new Map(playerStats.map((ps) => [ps.playerId, ps.player]));
+    const playersById = new Map(
+      playerStats.map((ps) => [ps.playerId, ps.player])
+    );
     const historyByGamePlayer = new Map(
       histories.map((h) => [`${h.gameId}:${h.playerId}`, h])
     );
@@ -134,7 +137,10 @@ async function main() {
       eloSpreadByPlayer.set(ps.playerId, { min: 1000, max: 1000 });
     }
     for (const h of histories) {
-      const spread = eloSpreadByPlayer.get(h.playerId) ?? { min: 1000, max: 1000 };
+      const spread = eloSpreadByPlayer.get(h.playerId) ?? {
+        min: 1000,
+        max: 1000,
+      };
       spread.min = Math.min(spread.min, h.elo);
       spread.max = Math.max(spread.max, h.elo);
       eloSpreadByPlayer.set(h.playerId, spread);
@@ -162,10 +168,7 @@ async function main() {
       .sort((a, b) => b.biggestWinStreak - a.biggestWinStreak)
       .slice(0, 3)
       .map((ps) => ({
-        label: playerLabel(
-          ps.player?.latestIGN,
-          ps.player?.discordSnowflake
-        ),
+        label: playerLabel(ps.player?.latestIGN, ps.player?.discordSnowflake),
         value: `${ps.biggestWinStreak}`,
       }));
     const loseStreakTop = playerStats
@@ -173,10 +176,7 @@ async function main() {
       .sort((a, b) => b.biggestLosingStreak - a.biggestLosingStreak)
       .slice(0, 3)
       .map((ps) => ({
-        label: playerLabel(
-          ps.player?.latestIGN,
-          ps.player?.discordSnowflake
-        ),
+        label: playerLabel(ps.player?.latestIGN, ps.player?.discordSnowflake),
         value: `${ps.biggestLosingStreak}`,
       }));
     sections.push(formatLeaderboard("Longest win streaks", winStreakTop));
@@ -206,26 +206,40 @@ async function main() {
     const underdogOutcomes = new Map<string, { games: number; wins: number }>();
     const fastLongStats = new Map<
       string,
-      { fastGames: number; fastWins: number; longGames: number; longWins: number }
+      {
+        fastGames: number;
+        fastWins: number;
+        longGames: number;
+        longWins: number;
+      }
     >();
 
     const gameDurations = games.map(
-      (g) => (new Date(g.endTime).getTime() - new Date(g.startTime).getTime()) / 60000
+      (g) =>
+        (new Date(g.endTime).getTime() - new Date(g.startTime).getTime()) /
+        60000
     );
     const fastCutoff = percentile(gameDurations, 0.25);
     const longCutoff = percentile(gameDurations, 0.75);
 
     for (const game of games) {
       const durationMinutes =
-        (new Date(game.endTime).getTime() - new Date(game.startTime).getTime()) / 60000;
+        (new Date(game.endTime).getTime() -
+          new Date(game.startTime).getTime()) /
+        60000;
       const isFast = durationMinutes <= fastCutoff;
       const isLong = durationMinutes >= longCutoff;
 
       const red = game.gameParticipations.filter((gp) => gp.team === Team.RED);
-      const blue = game.gameParticipations.filter((gp) => gp.team === Team.BLUE);
+      const blue = game.gameParticipations.filter(
+        (gp) => gp.team === Team.BLUE
+      );
 
       if (game.settings?.map) {
-        mapCounts.set(game.settings.map, (mapCounts.get(game.settings.map) ?? 0) + 1);
+        mapCounts.set(
+          game.settings.map,
+          (mapCounts.get(game.settings.map) ?? 0) + 1
+        );
       }
 
       const sharedBans = [
@@ -252,7 +266,10 @@ async function main() {
         }
       }
       if (game.host) {
-        supportCounts.host.set(game.host, (supportCounts.host.get(game.host) ?? 0) + 1);
+        supportCounts.host.set(
+          game.host,
+          (supportCounts.host.get(game.host) ?? 0) + 1
+        );
       }
       if (game.organiser) {
         supportCounts.organiser.set(
@@ -268,7 +285,12 @@ async function main() {
             const a = team[i];
             const b = team[j];
             const key = combinePlayers(a.playerId, b.playerId);
-            const record = duoSame.get(key) ?? { a: a.playerId, b: b.playerId, games: 0, wins: 0 };
+            const record = duoSame.get(key) ?? {
+              a: a.playerId,
+              b: b.playerId,
+              games: 0,
+              wins: 0,
+            };
             record.games += 1;
             if (game.winner && game.winner === a.team) record.wins += 1;
             duoSame.set(key, record);
@@ -295,12 +317,14 @@ async function main() {
 
       const redPreMean =
         red.reduce(
-          (sum, gp) => sum + (preEloByGamePlayer.get(`${game.id}:${gp.playerId}`) ?? 1000),
+          (sum, gp) =>
+            sum + (preEloByGamePlayer.get(`${game.id}:${gp.playerId}`) ?? 1000),
           0
         ) / Math.max(1, red.length);
       const bluePreMean =
         blue.reduce(
-          (sum, gp) => sum + (preEloByGamePlayer.get(`${game.id}:${gp.playerId}`) ?? 1000),
+          (sum, gp) =>
+            sum + (preEloByGamePlayer.get(`${game.id}:${gp.playerId}`) ?? 1000),
           0
         ) / Math.max(1, blue.length);
       const closeGame = Math.abs(redPreMean - bluePreMean) < CLOSE_GAME_ELO_GAP;
@@ -308,8 +332,8 @@ async function main() {
         redPreMean + UNDERDOG_ELO_GAP <= bluePreMean
           ? Team.RED
           : bluePreMean + UNDERDOG_ELO_GAP <= redPreMean
-          ? Team.BLUE
-          : null;
+            ? Team.BLUE
+            : null;
 
       for (const gp of game.gameParticipations) {
         const record = mvpCounts.get(gp.playerId) ?? { mvps: 0, games: 0 };
@@ -317,16 +341,21 @@ async function main() {
         if (gp.mvp) record.mvps += 1;
         mvpCounts.set(gp.playerId, record);
 
-        const capRecord =
-          captainStats.get(gp.playerId) ??
-          { caps: 0, capWins: 0, longestCapWinStreak: 0 };
+        const capRecord = captainStats.get(gp.playerId) ?? {
+          caps: 0,
+          capWins: 0,
+          longestCapWinStreak: 0,
+        };
         if (gp.captain) {
           capRecord.caps += 1;
           if (game.winner && game.winner === gp.team) {
             capRecord.capWins += 1;
             const streak = (capStreakTrack.get(gp.playerId) ?? 0) + 1;
             capStreakTrack.set(gp.playerId, streak);
-            capRecord.longestCapWinStreak = Math.max(capRecord.longestCapWinStreak, streak);
+            capRecord.longestCapWinStreak = Math.max(
+              capRecord.longestCapWinStreak,
+              streak
+            );
           } else {
             capStreakTrack.set(gp.playerId, 0);
           }
@@ -338,7 +367,10 @@ async function main() {
         }
 
         if (underdogTeam && gp.team === underdogTeam) {
-          const underdog = underdogOutcomes.get(gp.playerId) ?? { games: 0, wins: 0 };
+          const underdog = underdogOutcomes.get(gp.playerId) ?? {
+            games: 0,
+            wins: 0,
+          };
           underdog.games += 1;
           if (game.winner && game.winner === gp.team) underdog.wins += 1;
           underdogOutcomes.set(gp.playerId, underdog);
@@ -423,7 +455,9 @@ async function main() {
         ),
         value: `${(entry.rate * 100).toFixed(1)}% over ${entry.caps} caps`,
       }));
-    sections.push(formatLeaderboard("Best captain win rate (min 3 caps)", bestCapWinRate));
+    sections.push(
+      formatLeaderboard("Best captain win rate (min 3 caps)", bestCapWinRate)
+    );
 
     const longestCapStreak = [...captainStats.entries()]
       .sort((a, b) => b[1].longestCapWinStreak - a[1].longestCapWinStreak)
@@ -435,7 +469,9 @@ async function main() {
         ),
         value: `${data.longestCapWinStreak}`,
       }));
-    sections.push(formatLeaderboard("Longest captain win streaks", longestCapStreak));
+    sections.push(
+      formatLeaderboard("Longest captain win streaks", longestCapStreak)
+    );
 
     const topHosts = [...supportCounts.host.entries()]
       .sort((a, b) => b[1] - a[1])
@@ -467,7 +503,12 @@ async function main() {
       .sort((a, b) => b[1] - a[1])
       .slice(0, TOP_BANNED_CLASSES)
       .map(([cls, count]) => ({ label: cls, value: `${count} bans` }));
-    sections.push(formatLeaderboard(`Most banned classes (top ${TOP_BANNED_CLASSES})`, topBans));
+    sections.push(
+      formatLeaderboard(
+        `Most banned classes (top ${TOP_BANNED_CLASSES})`,
+        topBans
+      )
+    );
 
     const duoDominance = [...duoSame.values()]
       .filter((d) => d.games >= MIN_DUO_GAMES)
@@ -517,14 +558,14 @@ async function main() {
           pair.winsA === pair.winsB
             ? "tied"
             : pair.winsA > pair.winsB
-            ? playerLabel(
-                playersById.get(pair.a)?.latestIGN,
-                playersById.get(pair.a)?.discordSnowflake
-              )
-            : playerLabel(
-                playersById.get(pair.b)?.latestIGN,
-                playersById.get(pair.b)?.discordSnowflake
-              );
+              ? playerLabel(
+                  playersById.get(pair.a)?.latestIGN,
+                  playersById.get(pair.a)?.discordSnowflake
+                )
+              : playerLabel(
+                  playersById.get(pair.b)?.latestIGN,
+                  playersById.get(pair.b)?.discordSnowflake
+                );
         return {
           label: `${playerLabel(
             playersById.get(pair.a)?.latestIGN,
@@ -536,7 +577,9 @@ async function main() {
           value: `${pair.meetings} meetings — leader: ${leader}`,
         };
       });
-    sections.push(formatLeaderboard("Crossfire (most head-to-heads)", crossfire));
+    sections.push(
+      formatLeaderboard("Crossfire (most head-to-heads)", crossfire)
+    );
 
     const clutch = [...clutchWins.entries()]
       .sort((a, b) => b[1] - a[1])

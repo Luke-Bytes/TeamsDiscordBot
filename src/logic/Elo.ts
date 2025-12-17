@@ -19,6 +19,13 @@ export class Elo {
     );
 
     const playerTeam = game.getPlayersTeam(player);
+    const expectedScore =
+      playerTeam === "BLUE" ? game.blueExpectedScore : game.redExpectedScore;
+    if (expectedScore !== undefined && playerTeam !== "UNDECIDED") {
+      console.log(
+        `Team: ${playerTeam} | Expected Score: ${expectedScore.toFixed(2)} | Win Streak: ${player.winStreak}`
+      );
+    }
 
     if (!playerTeam || playerTeam === "UNDECIDED") {
       console.warn(`Player team is undecided for ${player.ignUsed}.`);

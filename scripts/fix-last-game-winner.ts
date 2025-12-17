@@ -15,9 +15,7 @@ const rl = createInterface({ input, output });
 
 const fmt = (dt?: Date) => (dt ? new Date(dt).toLocaleString() : "n/a");
 const ask = async (q: string) => (await rl.question(q)).trim();
-const minerushLabel = (
-  mods?: { category: string; name: string }[]
-): string => {
+const minerushLabel = (mods?: { category: string; name: string }[]): string => {
   const entry = mods?.find((m) => m.category === "Minerushing");
   return entry?.name ?? "n/a";
 };

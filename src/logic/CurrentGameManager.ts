@@ -1,6 +1,7 @@
 import { GameInstance } from "../database/GameInstance";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { ConfigManager } from "../ConfigManager";
+import { Team } from "@prisma/client";
 import { Guild, EmbedBuilder } from "discord.js";
 import { gameFeed } from "../logic/gameFeed/GameFeed";
 import { prettifyName } from "../util/Utils";
@@ -178,11 +179,10 @@ export class CurrentGameManager {
     }
 
     if (game.getClassBanLimit() > 0 && !game.areClassBansAnnounced()) {
-      const byTeam =
-        game.settings.nonSharedCaptainBannedClasses ?? {
-          [Team.RED]: [],
-          [Team.BLUE]: [],
-        };
+      const byTeam = game.settings.nonSharedCaptainBannedClasses ?? {
+        [Team.RED]: [],
+        [Team.BLUE]: [],
+      };
       game.settings.nonSharedCaptainBannedClasses = byTeam;
       const organiserBans = game.settings.organiserBannedClasses ?? [];
       const sharedCaptainBans = game.settings.sharedCaptainBannedClasses ?? [];

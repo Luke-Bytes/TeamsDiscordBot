@@ -166,14 +166,27 @@ export const prismaClient = new PrismaClient({
             const team = teams.RED.includes(playerInstance) ? "RED" : "BLUE";
             const currentGame = CurrentGameManager.getCurrentGame();
             const winningTeam = currentGame.gameWinner;
-            const losingTeam = winningTeam === "RED" ? "BLUE" : "RED";
+            const losingTeam: Team | null =
+              winningTeam === "RED"
+                ? "BLUE"
+                : winningTeam === "BLUE"
+                  ? "RED"
+                  : null;
 
             const pStats =
               await prismaClient.player.getPlayerStatsForCurrentSeason(
                 playerRecord.id
               );
 
-            if (team === winningTeam) {
+            if (winningTeam && team === winningTeam) {
+              playerInstance.wins += 1;
+              playerInstance.winStreak += 1;
+              playerInstance.loseStreak = 0;
+              playerInstance.biggestWinStreak = Math.max(
+                playerInstance.winStreak,
+                playerInstance.biggestWinStreak
+              );
+
               await prismaClient.playerStats.update({
                 where: {
                   playerId_seasonId: {
@@ -191,7 +204,15 @@ export const prismaClient = new PrismaClient({
                   ),
                 },
               });
-            } else if (team === losingTeam) {
+            } else if (losingTeam && team === losingTeam) {
+              playerInstance.losses += 1;
+              playerInstance.loseStreak += 1;
+              playerInstance.winStreak = 0;
+              playerInstance.biggestLosingStreak = Math.max(
+                playerInstance.loseStreak,
+                playerInstance.biggestLosingStreak
+              );
+
               await prismaClient.playerStats.update({
                 where: {
                   playerId_seasonId: {
@@ -244,8 +265,8 @@ export const prismaClient = new PrismaClient({
                 ? (gameWinner as Team)
                 : undefined,
             type: teamsDecidedBy as gameType | null,
-            organiser,
-            host,
+            organiser: organiser ?? undefined,
+            host: host ?? undefined,
             doubleElo: isDoubleElo,
             participantsIGNs: validParticipants.map(
               (p) => p.ignUsed || "UnknownIGN"
@@ -261,13 +282,17 @@ export const prismaClient = new PrismaClient({
             startTime: startTime ?? new Date(),
             endTime: endTime ?? new Date(),
             settings: gameSettings,
-            winner:
-              gameWinner === "RED" || gameWinner === "BLUE"
-                ? (gameWinner as Team)
-                : undefined,
+            winner: (() => {
+              if (gameWinner === "RED" || gameWinner === "BLUE") {
+                return gameWinner as Team;
+              }
+              throw new Error(
+                "Attempted to save a game without a winner (gameWinner was not RED/BLUE)."
+              );
+            })(),
             type: teamsDecidedBy as gameType | null,
-            organiser,
-            host,
+            organiser: organiser ?? "Unknown",
+            host: host ?? "Unknown",
             doubleElo: isDoubleElo,
             participantsIGNs: validParticipants.map(
               (p) => p.ignUsed ?? "UnknownIGN"

@@ -11,7 +11,7 @@ import {
   Guild,
 } from "discord.js";
 import { Command } from "../commands/CommandInterface.js";
-import { AnniClass, AnniMap, Team } from "@prisma/client";
+import { AnniClass, AnniMap } from "@prisma/client";
 import { prettifyName, randomEnum, formatTimestamp } from "../util/Utils.js";
 import { parseDate } from "chrono-node";
 import { Channels } from "../Channels";
@@ -503,8 +503,9 @@ export default class AnnouncementCommand implements Command {
         break;
 
       case "announcement-edit-modifiers":
-        CurrentGameManager.getCurrentGame().settings.organiserBannedClasses =
-          [...this.initialBannedClasses];
+        CurrentGameManager.getCurrentGame().settings.organiserBannedClasses = [
+          ...this.initialBannedClasses,
+        ];
         CurrentGameManager.getCurrentGame().settings.sharedCaptainBannedClasses =
           [];
         CurrentGameManager.getCurrentGame().settings.nonSharedCaptainBannedClasses =
