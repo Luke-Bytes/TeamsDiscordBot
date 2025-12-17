@@ -16,7 +16,6 @@ function trimMongoURI(uri) {
   try {
     const urlObj = new URL(uri);
     urlObj.pathname = "";
-    urlObj.search = "";
     return urlObj.toString();
   } catch (error) {
     console.error("[Database backup] Invalid MongoDB URI:", uri);
