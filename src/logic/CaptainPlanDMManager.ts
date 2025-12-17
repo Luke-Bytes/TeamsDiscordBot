@@ -10,6 +10,8 @@ import {
 } from "discord.js";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { MessageSafetyUtil } from "../util/MessageSafetyUtil";
+import { GameInstance } from "../database/GameInstance";
+import { prettifyName } from "../util/Utils";
 
 type TeamKey = "RED" | "BLUE";
 
@@ -151,6 +153,7 @@ export default class CaptainPlanDMManager {
     });
 
     const template = this.buildTemplate(teamList);
+    const context = this.getGameContextText();
     const intro = `Hi ${team} Captain! Reply to this DM with your team's plan filled in with the below format. I will then forward it to your team members.
 
 `;
@@ -163,7 +166,7 @@ export default class CaptainPlanDMManager {
 
     if (user) {
       await this.safeSend(user, {
-        content: `${intro}${template}\n\n${instructions}`,
+        content: `${intro}${context}\n\n${template}\n\n${instructions}`,
       });
       return;
     }
@@ -215,6 +218,9 @@ export default class CaptainPlanDMManager {
     session.stage = isLate ? "awaitLateConfirm" : "awaitConfirm";
     this.addButtonsFor(captainId, isLate ? "late" : "initial");
 
+    const previewContent = this.buildPlanDeliveryContent(
+      session.lastContent ?? ""
+    );
     const row = isLate
       ? new ActionRowBuilder<ButtonBuilder>().addComponents(
           new ButtonBuilder()
@@ -242,7 +248,7 @@ export default class CaptainPlanDMManager {
         );
 
     await this.safeSend(message.author, {
-      content: `Preview:\n\n${session.lastContent}\n\nSend to ${session.team} team members?`,
+      content: `Preview:\n\n${previewContent}\n\nSend to ${session.team} team members?`,
       components: [row],
     });
     return true;
@@ -416,8 +422,9 @@ export default class CaptainPlanDMManager {
 
     const teamList = this.buildTemplate(this.formatTeamList(session.members));
     const newIgns = trulyNew.map((m) => m.ign).join(", ");
+    const context = this.getGameContextText();
 
-    const promptContent = `New teammate(s) joined your ${team} team: ${newIgns}\n\nReply with your updated plan below.\n${teamList}\n\nWhen you reply, you can send it to everyone or only the new joiners.`;
+    const promptContent = `New teammate(s) joined your ${team} team: ${newIgns}\n\n${context}\n\nReply with your updated plan below.\n${teamList}\n\nWhen you reply, you can send it to everyone or only the new joiners.`;
 
     if (
       session.stage === "awaitLateMessage" ||
@@ -474,6 +481,113 @@ export default class CaptainPlanDMManager {
     return `**Mid Blocks Plan**\n\`\`\`\n${teamList}\n\`\`\`\n**Game Plan**\n\`\`\`\n${teamList}\n\`\`\``;
   }
 
+  private getGameContextText(): string {
+    return `${this.getMapContextText()}\n${this.getClassBansContextText()}`;
+  }
+
+  private getMapContextText(): string {
+    const game = GameInstance.getInstance();
+
+    const decidedMap = game.settings.map;
+    if (decidedMap) {
+      return `**Map:** ${prettifyName(decidedMap)}`;
+    }
+
+    const polledMaps = game.mapVoteManager?.maps ?? [];
+    if (polledMaps.length) {
+      return `**Map Poll Options:** ${polledMaps.map(prettifyName).join(", ")}`;
+    }
+
+    return "**Map:** Not decided yet";
+  }
+
+  private getClassBansContextText(): string {
+    const game = GameInstance.getInstance();
+
+    const limit = game.getClassBanLimit();
+    const used = game.getTotalCaptainBans();
+    const mode = game.classBanMode;
+    const modifierLabel =
+      game.settings.modifiers?.find((m) => m.category === "Class Bans")?.name ??
+      null;
+
+    const organiserBans = game.settings.organiserBannedClasses ?? [];
+    const sharedCaptainBans = game.settings.sharedCaptainBannedClasses ?? [];
+    game.settings.nonSharedCaptainBannedClasses ??= {
+      RED: [],
+      BLUE: [],
+    } as any;
+    const byTeam = game.settings.nonSharedCaptainBannedClasses as any as {
+      RED: unknown[];
+      BLUE: unknown[];
+    };
+
+    const sharedBaseSet = new Set([...organiserBans, ...sharedCaptainBans]);
+
+    let banType: string;
+    if (modifierLabel) {
+      banType = modifierLabel;
+    } else if (limit <= 0) {
+      banType = "No Bans";
+    } else if (mode === "shared") {
+      banType = "Captain Bans (Shared)";
+    } else if (mode === "opponentOnly") {
+      banType = "Captain Bans (Opponent Only)";
+    } else {
+      banType = "Captain Bans";
+    }
+
+    let sharedBans: unknown[] = [];
+    let redCantUse: unknown[] = [];
+    let blueCantUse: unknown[] = [];
+
+    if (mode === "shared") {
+      sharedBans = Array.from(
+        new Set([
+          ...sharedBaseSet,
+          ...(byTeam.RED ?? []),
+          ...(byTeam.BLUE ?? []),
+        ])
+      );
+    } else {
+      sharedBans = Array.from(sharedBaseSet);
+      redCantUse = (byTeam.RED ?? []).filter(
+        (c: unknown) => !sharedBaseSet.has(c as any)
+      );
+      blueCantUse = (byTeam.BLUE ?? []).filter(
+        (c: unknown) => !sharedBaseSet.has(c as any)
+      );
+    }
+
+    const header =
+      limit > 0
+        ? `**Class Bans:** ${banType} (${used}/${limit})`
+        : `**Class Bans:** ${banType}`;
+
+    const sharedLine = `Shared: ${
+      sharedBans.length
+        ? sharedBans.map((c) => prettifyName(String(c))).join(", ")
+        : "None"
+    }`;
+    const redLine = `Red can't use: ${
+      redCantUse.length
+        ? redCantUse.map((c) => prettifyName(String(c))).join(", ")
+        : "None"
+    }`;
+    const blueLine = `Blue can't use: ${
+      blueCantUse.length
+        ? blueCantUse.map((c) => prettifyName(String(c))).join(", ")
+        : "None"
+    }`;
+
+    return `${header}\n${sharedLine}\n${redLine}\n${blueLine}`;
+  }
+
+  private buildPlanDeliveryContent(planText: string): string {
+    const header = this.getGameContextText();
+    return `${header}\n\n${planText}`;
+  }
+
   private async safeSend(
     user: User,
     payload: string | MessageCreateOptions
@@ -499,11 +613,12 @@ export default class CaptainPlanDMManager {
     const failed: string[] = [];
     const hook = this.debugHooks.get(captainId);
     const uniqueTargets = Array.from(new Set(members));
+    const deliveryContent = this.buildPlanDeliveryContent(content);
 
     for (const memberId of uniqueTargets) {
       if (memberId === captainId) continue;
       if (this.transport) {
-        const result = await this.transport(memberId, content);
+        const result = await this.transport(memberId, deliveryContent);
         if (result) {
           this.deliveryLog.set(
             memberId,
@@ -516,7 +631,7 @@ export default class CaptainPlanDMManager {
       }
 
       if (hook) {
-        hook(memberId, content);
+        hook(memberId, deliveryContent);
         this.deliveryLog.set(
           memberId,
           (this.deliveryLog.get(memberId) ?? 0) + 1
@@ -531,7 +646,7 @@ export default class CaptainPlanDMManager {
           failed.push(memberId);
           continue;
         }
-        const sent = await this.safeSend(user, content);
+        const sent = await this.safeSend(user, deliveryContent);
         if (!sent) {
           failed.push(memberId);
           continue;
