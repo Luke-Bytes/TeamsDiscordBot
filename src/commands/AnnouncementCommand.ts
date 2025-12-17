@@ -540,36 +540,15 @@ export default class AnnouncementCommand implements Command {
       ? "\n\n**🌟 A special DOUBLE ELO game! 🌟**\n\n"
       : "";
 
-    const nonSharedBans =
-      game.settings.nonSharedCaptainBannedClasses ??
-      ({} as Record<Team, AnniClass[]>);
     const sharedBans = Array.from(
       new Set([
         ...(game.settings.organiserBannedClasses ?? []),
         ...(game.settings.sharedCaptainBannedClasses ?? []),
       ])
     );
-    const redOnly = (nonSharedBans[Team.RED] ?? []).filter(
-      (c) => !sharedBans.includes(c)
-    );
-    const blueOnly = (nonSharedBans[Team.BLUE] ?? []).filter(
-      (c) => !sharedBans.includes(c)
-    );
-    const bannedClassesValue = [
-      `Shared: ${
-        sharedBans.length
-          ? sharedBans.map((v) => prettifyName(v)).join(", ")
-          : "None"
-      }`,
-      `Red-only: ${
-        redOnly.length ? redOnly.map((v) => prettifyName(v)).join(", ") : "None"
-      }`,
-      `Blue-only: ${
-        blueOnly.length
-          ? blueOnly.map((v) => prettifyName(v)).join(", ")
-          : "None"
-      }`,
-    ].join("\n");
+    const bannedClassesValue = sharedBans.length
+      ? sharedBans.map((v) => prettifyName(v)).join(", ")
+      : "None";
 
     const embed = new EmbedBuilder()
       .setColor("#00FF7F")
