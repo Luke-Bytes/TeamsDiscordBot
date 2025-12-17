@@ -19,7 +19,7 @@
       "name": "Nexus Damage Catalyst",
       "maxPerRun": 1,
       "modifiers": [
-        { "name": "No Double Damage or Nexus Bleed", "weight": 15 },
+        { "name": "No Double Damage or Nexus Bleed", "weight": 25 },
         { "name": "Double Damage", "weight": 1 },
         { "name": "Nexus Bleed", "weight": 1 }
       ]
@@ -28,7 +28,7 @@
       "name": "Nexus HP",
       "maxPerRun": 1,
       "modifiers": [
-        { "name": "75", "weight": 8 },
+        { "name": "75", "weight": 18 },
         { "name": "100", "weight": 1 },
         { "name": "125", "weight": 1 }
       ]
@@ -66,6 +66,14 @@
       "modifiers": [
         { "name": "Disabled", "weight": 19 },
         { "name": "Enabled", "weight": 1 }
+      ]
+    },
+    {
+      "name": "Class Changing Portal Removed",
+      "maxPerRun": 1,
+      "modifiers": [
+        { "name": "No", "weight": 49 },
+        { "name": "Yes", "weight": 1 }
       ]
     },
     {
