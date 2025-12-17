@@ -7,6 +7,7 @@ export class Elo {
   public calculateNewElo(player: PlayerInstance): number {
     const config = ConfigManager.getConfig();
     const game = CurrentGameManager.getCurrentGame();
+    const mvpVoteBonus = 1;
 
     if (!game || !player) {
       console.error("Game or Player not found.");
@@ -64,6 +65,13 @@ export class Elo {
       currentElo += config.captainBonus;
       console.log(
         `Captain bonus applied to ${player.ignUsed}: +${config.captainBonus}`
+      );
+    }
+
+    if (game.hasVotedMvp(player.discordSnowflake)) {
+      currentElo += mvpVoteBonus;
+      console.log(
+        `MVP vote bonus applied to ${player.ignUsed}: +${mvpVoteBonus}`
       );
     }
 

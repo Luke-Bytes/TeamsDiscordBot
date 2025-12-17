@@ -95,6 +95,55 @@ test("Captain 20m reminder posts to game-feed", async () => {
   }
 });
 
+test("Captain 20m reminder does not post when both captains already set", async () => {
+  const game = CurrentGameManager.getCurrentGame();
+  game.reset();
+  const base = Date.now();
+  game.startTime = new Date(base + 20 * 60 * 1000 + 10);
+
+  const redCap = {
+    discordSnowflake: "R-CAP",
+    ignUsed: "RedCap",
+    elo: 1000,
+    captain: true,
+  } as any;
+  const blueCap = {
+    discordSnowflake: "B-CAP",
+    ignUsed: "BlueCap",
+    elo: 1000,
+    captain: true,
+  } as any;
+  (game as any).teams = { RED: [redCap], BLUE: [blueCap], UNDECIDED: [] };
+
+  const sent: any[] = [];
+  const origSend = DiscordUtil.sendMessage;
+  (DiscordUtil as any).sendMessage = async (
+    channelKey: string,
+    content: any
+  ) => {
+    sent.push({ channelKey, content });
+  };
+
+  const guild = new FakeGuild() as any;
+  const origNow = Date.now;
+  (Date as any).now = () => base;
+  try {
+    await withImmediateTimers(async () => {
+      CurrentGameManager.scheduleCaptainTimers(guild);
+      await new Promise((r) => setImmediate(r));
+    });
+    const reminder = sent.find(
+      (s) =>
+        s.channelKey === "gameFeed" &&
+        /Captains are still needed/i.test(String(s.content))
+    );
+    assert(!reminder, "Should not send 20m captains reminder when both set");
+  } finally {
+    (DiscordUtil as any).sendMessage = origSend;
+    (Date as any).now = origNow;
+  }
+});
+
 test("Captain 15m enforcement auto-selects two captains and announces", async () => {
   const base = Date.now();
   const game = CurrentGameManager.getCurrentGame();

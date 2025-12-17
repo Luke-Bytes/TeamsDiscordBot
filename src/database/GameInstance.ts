@@ -833,6 +833,10 @@ export class GameInstance {
     return {};
   }
 
+  public hasVotedMvp(voterId: string): boolean {
+    return this.mvpVoters.has(voterId);
+  }
+
   public async countMVPVotes() {
     console.log("Starting to count MVP votes now...");
     this.MVPPlayerRed = await this.determineTeamMVP("RED");

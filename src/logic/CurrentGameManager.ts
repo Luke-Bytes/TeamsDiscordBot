@@ -281,6 +281,10 @@ export class CurrentGameManager {
     if (reminderTime.getTime() > now) {
       this.captainReminderTimeout = setTimeout(async () => {
         try {
+          const redCap = game.getCaptainOfTeam("RED");
+          const blueCap = game.getCaptainOfTeam("BLUE");
+          const haveBoth = !!redCap && !!blueCap;
+          if (haveBoth) return;
           await DiscordUtil.sendMessage(
             "gameFeed",
             "**Reminder**: Captains are still needed. If not set in time then two will be chosen at random."
