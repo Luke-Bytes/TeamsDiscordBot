@@ -139,13 +139,27 @@ export default class ClassbanCommand implements Command {
       : Team.RED;
     const opponent = team === Team.BLUE ? Team.RED : Team.BLUE;
 
-    const organiserBans = game.settings.organiserBannedClasses;
+    const organiserBans = game.settings.organiserBannedClasses ?? [];
     const sharedCaptainBans = game.settings.sharedCaptainBannedClasses;
     const byTeam = game.settings.nonSharedCaptainBannedClasses ?? {
       [Team.RED]: [],
       [Team.BLUE]: [],
     };
     game.settings.nonSharedCaptainBannedClasses = byTeam;
+
+    if (organiserBans.includes(cls)) {
+      return interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor("Yellow")
+            .setTitle("⚠️ Already Banned")
+            .setDescription(
+              `${prettifyName(cls)} is already banned by the organiser. Please choose a different class so your ban isn't wasted.`
+            )
+            .setTimestamp(),
+        ],
+      });
+    }
 
     if (mode === "shared") {
       if (!sharedCaptainBans.includes(cls)) sharedCaptainBans.push(cls);

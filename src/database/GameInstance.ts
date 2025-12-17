@@ -127,6 +127,18 @@ export class GameInstance {
     const currentInstance = this.getInstance();
     if (currentInstance) {
       await prismaClient.game.saveGameFromInstance(currentInstance);
+      // Ensure any scheduled vote tasks and poll messages are cleaned up
+      // before we drop references in reset().
+      try {
+        await currentInstance.mapVoteManager?.cancelVote();
+      } catch {
+        // ignore vote cleanup failures
+      }
+      try {
+        await currentInstance.minerushVoteManager?.cancelVote();
+      } catch {
+        // ignore vote cleanup failures
+      }
       currentInstance.reset();
     }
   }

@@ -12,6 +12,7 @@ import { DiscordUtil } from "../util/DiscordUtil";
 import { MessageSafetyUtil } from "../util/MessageSafetyUtil";
 import { GameInstance } from "../database/GameInstance";
 import { prettifyName } from "../util/Utils";
+import { AnniClass, Team } from "@prisma/client";
 
 type TeamKey = "RED" | "BLUE";
 
@@ -44,6 +45,9 @@ type StartSessionParams = {
 };
 
 export default class CaptainPlanDMManager {
+  public static instance?: CaptainPlanDMManager;
+  private static readonly instances = new Set<CaptainPlanDMManager>();
+
   private sessions = new Map<string, PlanSession>();
 
   private buttonIdSet = new Set<string>();
@@ -57,8 +61,25 @@ export default class CaptainPlanDMManager {
     content: string
   ) => Promise<boolean> | boolean;
 
+  constructor() {
+    CaptainPlanDMManager.instance = this;
+    CaptainPlanDMManager.instances.add(this);
+  }
+
   public get buttonIds(): string[] {
     return [...this.buttonIdSet];
+  }
+
+  public resetAllSessions(): void {
+    this.sessions.clear();
+    this.buttonIdSet.clear();
+    this.deliveryLog.clear();
+  }
+
+  public static resetAllInstances(): void {
+    for (const manager of CaptainPlanDMManager.instances) {
+      manager.resetAllSessions();
+    }
   }
 
   public getDeliveryCount(memberId: string): number {
@@ -511,18 +532,20 @@ export default class CaptainPlanDMManager {
       game.settings.modifiers?.find((m) => m.category === "Class Bans")?.name ??
       null;
 
-    const organiserBans = game.settings.organiserBannedClasses ?? [];
-    const sharedCaptainBans = game.settings.sharedCaptainBannedClasses ?? [];
+    const organiserBans: AnniClass[] =
+      game.settings.organiserBannedClasses ?? [];
+    const sharedCaptainBans: AnniClass[] =
+      game.settings.sharedCaptainBannedClasses ?? [];
     game.settings.nonSharedCaptainBannedClasses ??= {
-      RED: [],
-      BLUE: [],
-    } as any;
-    const byTeam = game.settings.nonSharedCaptainBannedClasses as any as {
-      RED: unknown[];
-      BLUE: unknown[];
+      [Team.RED]: [],
+      [Team.BLUE]: [],
     };
+    const byTeam = game.settings.nonSharedCaptainBannedClasses;
 
-    const sharedBaseSet = new Set([...organiserBans, ...sharedCaptainBans]);
+    const sharedBaseSet = new Set<AnniClass>([
+      ...organiserBans,
+      ...sharedCaptainBans,
+    ]);
 
     let banType: string;
     if (modifierLabel) {
@@ -537,25 +560,25 @@ export default class CaptainPlanDMManager {
       banType = "Captain Bans";
     }
 
-    let sharedBans: unknown[] = [];
-    let redCantUse: unknown[] = [];
-    let blueCantUse: unknown[] = [];
+    let sharedBans: AnniClass[] = [];
+    let redCantUse: AnniClass[] = [];
+    let blueCantUse: AnniClass[] = [];
 
     if (mode === "shared") {
       sharedBans = Array.from(
-        new Set([
+        new Set<AnniClass>([
           ...sharedBaseSet,
-          ...(byTeam.RED ?? []),
-          ...(byTeam.BLUE ?? []),
+          ...(byTeam[Team.RED] ?? []),
+          ...(byTeam[Team.BLUE] ?? []),
         ])
       );
     } else {
       sharedBans = Array.from(sharedBaseSet);
-      redCantUse = (byTeam.RED ?? []).filter(
-        (c: unknown) => !sharedBaseSet.has(c as any)
+      redCantUse = (byTeam[Team.RED] ?? []).filter(
+        (c) => !sharedBaseSet.has(c)
       );
-      blueCantUse = (byTeam.BLUE ?? []).filter(
-        (c: unknown) => !sharedBaseSet.has(c as any)
+      blueCantUse = (byTeam[Team.BLUE] ?? []).filter(
+        (c) => !sharedBaseSet.has(c)
       );
     }
 
@@ -566,17 +589,17 @@ export default class CaptainPlanDMManager {
 
     const sharedLine = `Shared: ${
       sharedBans.length
-        ? sharedBans.map((c) => prettifyName(String(c))).join(", ")
+        ? sharedBans.map((c) => prettifyName(c)).join(", ")
         : "None"
     }`;
     const redLine = `Red can't use: ${
       redCantUse.length
-        ? redCantUse.map((c) => prettifyName(String(c))).join(", ")
+        ? redCantUse.map((c) => prettifyName(c)).join(", ")
         : "None"
     }`;
     const blueLine = `Blue can't use: ${
       blueCantUse.length
-        ? blueCantUse.map((c) => prettifyName(String(c))).join(", ")
+        ? blueCantUse.map((c) => prettifyName(c)).join(", ")
         : "None"
     }`;
 

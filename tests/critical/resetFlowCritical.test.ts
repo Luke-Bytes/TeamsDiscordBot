@@ -53,13 +53,13 @@ test("resetCurrentGame clears timers, sessions, votes, and state in-place", asyn
   );
 
   // Act: reset the game via manager
-  CurrentGameManager.resetCurrentGame();
+  await CurrentGameManager.resetCurrentGame();
 
   // Assertions: same instance object, but state reset
   const post = GameInstance.getInstance();
   if (post !== pre)
     throw new Error("GameInstance reference changed (should reset in-place)");
-  if (post.announced !== false) throw new Error("announced not reset to false");
+  if (post.announced) throw new Error("announced not reset to false");
   if (post.getPlayers().length !== 0) throw new Error("players not cleared");
   if (!mapCanceled) throw new Error("mapVoteManager.cancelVote was not called");
   if (!minerushCanceled)

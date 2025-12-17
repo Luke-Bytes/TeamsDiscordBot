@@ -88,6 +88,60 @@ test("Captain class ban forbids core classes in opponentOnly mode", async () => 
   (DiscordUtil as any).getGuildMember = origGet;
 });
 
+test("Captain cannot ban a class already banned by organiser", async () => {
+  const cmd = new ClassbanCommand();
+  const game = CurrentGameManager.getCurrentGame();
+  game.reset();
+  game.announced = true;
+  game.setClassBanLimit(2);
+  (game as any).classBanMode = "shared";
+  game.settings.organiserBannedClasses = ["SCOUT" as any];
+
+  const guild = new FakeGuild() as any;
+  const cfg = ConfigManager.getConfig();
+
+  const capt = new FakeGuildMember("CAP2");
+  await capt.roles.add(cfg.roles.captainRole);
+  await capt.roles.add(cfg.roles.redTeamRole);
+  guild.addMember(capt);
+  const redCaptain = {
+    discordSnowflake: "CAP2",
+    ignUsed: "RedC",
+    captain: true,
+  } as any;
+  (game as any).teams = { RED: [redCaptain], BLUE: [], UNDECIDED: [] };
+
+  const origGet = (DiscordUtil as any).getGuildMember;
+  (DiscordUtil as any).getGuildMember = () => capt as any;
+  try {
+    const i = createChatInputInteraction("CAP2", {
+      guild,
+      member: capt as any,
+      subcommand: "ban",
+      channelId: cfg.channels.redTeamChat,
+      channel: {
+        id: cfg.channels.redTeamChat,
+        send: async (_: any) => {},
+      } as any,
+      strings: { class: "scout" },
+    });
+    await cmd.execute(i);
+
+    const reply = i.replies.find((r) => r.type === "editReply");
+    assert(!!reply && reply.payload?.embeds, "Rejects already-banned class");
+    assert(
+      game.getTotalCaptainBans() === 0,
+      "Should not consume a captain ban when organiser already banned it"
+    );
+    assert(
+      (game.settings.sharedCaptainBannedClasses ?? []).length === 0,
+      "Should not add the duplicate ban to shared captain bans"
+    );
+  } finally {
+    (DiscordUtil as any).getGuildMember = origGet;
+  }
+});
+
 test("Consolidated summary posted when both captains ban", async () => {
   const cmd = new ClassbanCommand();
   const game = CurrentGameManager.getCurrentGame();

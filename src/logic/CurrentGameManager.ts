@@ -7,6 +7,8 @@ import { gameFeed } from "../logic/gameFeed/GameFeed";
 import { prettifyName } from "../util/Utils";
 import TeamCommand from "../commands/TeamCommand";
 import { AutoCaptainSelector } from "./AutoCaptainSelector";
+import { Scheduler } from "../util/SchedulerUtil";
+import CaptainPlanDMManager from "./CaptainPlanDMManager";
 
 export class CurrentGameManager {
   private static currentGame?: GameInstance;
@@ -22,10 +24,21 @@ export class CurrentGameManager {
     return this.currentGame;
   }
 
-  public static resetCurrentGame() {
+  public static async resetCurrentGame(): Promise<void> {
     // Cancel any ongoing votes/polls
-    this.currentGame?.mapVoteManager?.cancelVote();
-    this.currentGame?.minerushVoteManager?.cancelVote();
+    const game = this.getCurrentGame();
+    Scheduler.cancel("mapVote");
+    Scheduler.cancel("minerushVote");
+    try {
+      await game.mapVoteManager?.cancelVote();
+    } catch (e) {
+      console.warn("Failed to cancel map vote during reset:", e);
+    }
+    try {
+      await game.minerushVoteManager?.cancelVote();
+    } catch (e) {
+      console.warn("Failed to cancel minerush vote during reset:", e);
+    }
 
     // Clear any scheduled timers
     this.clearClassBanTimers();
@@ -49,14 +62,29 @@ export class CurrentGameManager {
       void e;
     }
 
+    // Reset any captain plan DM sessions
+    try {
+      CaptainPlanDMManager.resetAllInstances();
+    } catch (e) {
+      void e;
+    }
+
     // Finally, reset the in-memory game state
-    this.currentGame?.reset();
+    game.reset();
   }
 
   public static async cancelCurrentGame(guild: Guild) {
     const config = ConfigManager.getConfig();
-    this.currentGame?.mapVoteManager?.cancelVote();
-    this.currentGame?.minerushVoteManager?.cancelVote();
+    try {
+      await this.getCurrentGame().mapVoteManager?.cancelVote();
+    } catch {
+      // ignore vote cleanup failures
+    }
+    try {
+      await this.getCurrentGame().minerushVoteManager?.cancelVote();
+    } catch {
+      // ignore vote cleanup failures
+    }
     this.clearClassBanTimers();
     this.clearCaptainTimers();
     const chatChannelIds = [config.channels.gameFeed];
@@ -66,7 +94,7 @@ export class CurrentGameManager {
     } catch (error) {
       console.error("Failed to clean up messages:", error);
     }
-    this.resetCurrentGame();
+    await this.resetCurrentGame();
   }
 
   public static schedulePollCloseTime(startTime: Date) {
