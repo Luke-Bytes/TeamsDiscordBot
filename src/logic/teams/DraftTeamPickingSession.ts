@@ -264,7 +264,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
         break;
       }
       case "draft-cancel":
-        await this.embedMessage?.delete();
+        await this.embedMessage?.delete().catch(() => {});
         await interaction.channel.send("Draft picking cancelled.");
         this.state = "cancelled";
         this.clearTurnTimers();
@@ -303,7 +303,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     );
 
     if (lastTurnMessage) {
-      await lastTurnMessage.delete();
+      await lastTurnMessage.delete().catch(() => {});
     }
 
     await teamPickingChannel.send(
@@ -591,7 +591,9 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       (msg) => msg.author.bot && msg.content.includes("Invalid player pick:")
     );
 
-    await Promise.all(invalidMessages.map((msg) => msg.delete()));
+    await Promise.all(
+      invalidMessages.map((msg) => msg.delete().catch(() => {}))
+    );
   }
 
   public async registerLateSignup(player: PlayerInstance) {
