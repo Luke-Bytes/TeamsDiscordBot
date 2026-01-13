@@ -12,6 +12,21 @@ const DAYS_TO_KEEP = 14;
 let DATABASE_URL = process.env.DATABASE_URL;
 let DATABASE_BACKUP_URL = process.env.DATABASE_BACKUP_URL;
 
+function moveFileSync(src, dest) {
+  try {
+    fs.renameSync(src, dest);
+  } catch (err) {
+    if (err?.code === "EXDEV") {
+      const tmpDest = `${dest}.tmp-${process.pid}-${Date.now()}`;
+      fs.copyFileSync(src, tmpDest);
+      fs.renameSync(tmpDest, dest);
+      fs.unlinkSync(src);
+      return;
+    }
+    throw err;
+  }
+}
+
 function trimMongoURI(uri) {
   try {
     const urlObj = new URL(uri);
@@ -184,7 +199,7 @@ async function main() {
   }
 
   if (createdNewBackup) {
-    fs.renameSync(tempBackupPath, finalBackupPath);
+    moveFileSync(tempBackupPath, finalBackupPath);
     backupForRestore = finalBackupPath;
     console.log(`[Database backup] Backup saved: ${finalBackupPath}`);
     await pruneOldBackups();
