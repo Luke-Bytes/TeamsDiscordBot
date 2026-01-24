@@ -11,7 +11,7 @@ import {
 import { DiscordUtil } from "../util/DiscordUtil";
 import { MessageSafetyUtil } from "../util/MessageSafetyUtil";
 import { GameInstance } from "../database/GameInstance";
-import { prettifyName } from "../util/Utils";
+import { escapeText, prettifyName } from "../util/Utils";
 import { AnniClass, Team } from "@prisma/client";
 
 type TeamKey = "RED" | "BLUE";
@@ -442,7 +442,7 @@ export default class CaptainPlanDMManager {
     if (!user) return;
 
     const teamList = this.buildTemplate(this.formatTeamList(session.members));
-    const newIgns = trulyNew.map((m) => m.ign).join(", ");
+    const newIgns = trulyNew.map((m) => escapeText(m.ign)).join(", ");
     const context = this.getGameContextText();
 
     const promptContent = `New teammate(s) joined your ${team} team: ${newIgns}\n\n${context}\n\nReply with your updated plan below.\n${teamList}\n\nWhen you reply, you can send it to everyone or only the new joiners.`;
@@ -495,7 +495,7 @@ export default class CaptainPlanDMManager {
   }
 
   private formatTeamList(members: PlanMember[]): string {
-    return members.map((member) => member.ign).join("\n");
+    return members.map((member) => escapeText(member.ign)).join("\n");
   }
 
   private buildTemplate(teamList: string): string {

@@ -4,7 +4,7 @@ import { ConfigManager } from "../ConfigManager";
 import { Team } from "@prisma/client";
 import { Guild, EmbedBuilder } from "discord.js";
 import { gameFeed } from "../logic/gameFeed/GameFeed";
-import { prettifyName } from "../util/Utils";
+import { escapeText, prettifyName } from "../util/Utils";
 import TeamCommand from "../commands/TeamCommand";
 import { AutoCaptainSelector } from "./AutoCaptainSelector";
 import { Scheduler } from "../util/SchedulerUtil";
@@ -313,7 +313,9 @@ export class CurrentGameManager {
           }
           await DiscordUtil.sendMessage(
             "gameFeed",
-            `Captains have been auto-selected: BLUE - ${result.blue.ignUsed}, RED - ${result.red.ignUsed}.`
+            `Captains have been auto-selected: BLUE - ${escapeText(
+              result.blue.ignUsed ?? "Unknown"
+            )}, RED - ${escapeText(result.red.ignUsed ?? "Unknown")}.`
           );
         } catch (e) {
           console.error("Error enforcing auto-captain selection:", e);

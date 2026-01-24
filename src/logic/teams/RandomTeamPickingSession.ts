@@ -16,6 +16,7 @@ import { PlayerInstance } from "../../database/PlayerInstance";
 import { CurrentGameManager } from "../../logic/CurrentGameManager";
 import { Team } from "@prisma/client";
 import { EloUtil } from "../../util/EloUtil";
+import { escapeText } from "../../util/Utils";
 
 export class RandomTeamPickingSession extends TeamPickingSession {
   state: TeamPickingSessionState = "inProgress";
@@ -180,7 +181,7 @@ export class RandomTeamPickingSession extends TeamPickingSession {
         ? players
             .map((player, index) => {
               const playerString = `${EloUtil.getEloEmoji(player.elo)} ${
-                player.ignUsed ?? "Unknown Player"
+                escapeText(player.ignUsed ?? "Unknown Player")
               }`;
               return index === 0 ? `**${playerString}**` : playerString;
             })

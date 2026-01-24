@@ -11,6 +11,7 @@ import { Channels } from "../Channels";
 import { prismaClient } from "../database/prismaClient.js";
 import { ConfigManager } from "../ConfigManager";
 import { Team } from "@prisma/client";
+import { escapeText } from "../util/Utils";
 
 export default class StatsCommand implements Command {
   public name = "stats";
@@ -95,7 +96,7 @@ export default class StatsCommand implements Command {
       .fetch(player.discordSnowflake)
       .catch(() => null);
     let userDisplayName = player.minecraftAccounts
-      .map((n) => n.replace(/_/g, "\\_"))
+      .map((n) => escapeText(n))
       .join(", ");
     let avatarUrl: string | undefined;
     if (fetchedMember) {
@@ -105,7 +106,7 @@ export default class StatsCommand implements Command {
         .fetch(player.discordSnowflake)
         .catch(() => null);
       if (fetchedUser) {
-        userDisplayName = `${fetchedUser.tag} (${userDisplayName})`;
+        userDisplayName = `${escapeText(fetchedUser.tag)} (${userDisplayName})`;
         avatarUrl = fetchedUser.displayAvatarURL();
       }
     }

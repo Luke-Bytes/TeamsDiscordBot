@@ -13,6 +13,7 @@ import CaptainPlanDMManager, {
 } from "../logic/CaptainPlanDMManager";
 import { GameInstance } from "../database/GameInstance";
 import { PlayerInstance } from "../database/PlayerInstance";
+import { escapeText } from "../util/Utils";
 
 type ExtendedTeam = Team | "UNDECIDED";
 
@@ -133,10 +134,18 @@ export default class PlayerCommand implements Command {
       const inputOldPlayer = interaction.options.getString("old_player", false);
       const inputNewPlayer = interaction.options.getString("new_player", false);
 
-      const player =
-        inputPlayer !== null ? await PrismaUtils.findPlayer(inputPlayer) : null;
-
-      const playerName = player?.latestIGN ?? inputPlayer ?? "";
+      const playerInputs =
+        inputPlayer !== null ? inputPlayer.split(/\s+/).filter(Boolean) : [];
+      const resolvedPlayers =
+        playerInputs.length > 0
+          ? await Promise.all(
+              playerInputs.map(async (token) => {
+                const match = await PrismaUtils.findPlayer(token);
+                const name = match?.latestIGN ?? token;
+                return { name, safeName: escapeText(name) };
+              })
+            )
+          : [];
 
       const newTeam =
         subcommand === "move"
@@ -145,6 +154,20 @@ export default class PlayerCommand implements Command {
 
       let oldPlayerName = "";
       let targetPlayerName = "";
+      let safeOldPlayerName = "";
+      let safeTargetPlayerName = "";
+
+      if (
+        (subcommand === "move" ||
+          subcommand === "add" ||
+          subcommand === "remove") &&
+        resolvedPlayers.length === 0
+      ) {
+        await interaction.reply(
+          "No players provided. Supply one or more names separated by spaces."
+        );
+        return;
+      }
 
       if (subcommand === "replace") {
         const oldPlayer =
@@ -158,6 +181,8 @@ export default class PlayerCommand implements Command {
 
         oldPlayerName = oldPlayer?.latestIGN ?? inputOldPlayer ?? "";
         targetPlayerName = targetPlayer?.latestIGN ?? inputNewPlayer ?? "";
+        safeOldPlayerName = escapeText(oldPlayerName);
+        safeTargetPlayerName = escapeText(targetPlayerName);
       }
 
       switch (subcommand) {
@@ -171,52 +196,109 @@ export default class PlayerCommand implements Command {
             true
           ) as ExtendedTeam;
 
-          const success = await game.movePlayerBetweenTeams(
-            playerName,
-            fromTeam,
-            toTeam,
-            interaction.guild
-          );
+          const moved: string[] = [];
+          const failed: string[] = [];
+
+          for (const player of resolvedPlayers) {
+            const success = await game.movePlayerBetweenTeams(
+              player.name,
+              fromTeam,
+              toTeam,
+              interaction.guild
+            );
+            if (success) {
+              moved.push(player.safeName);
+            } else {
+              failed.push(player.safeName);
+            }
+          }
+
+          const successMessage = moved.length
+            ? `Successfully moved **${moved.join(
+                ", "
+              )}** from **${fromTeam.toUpperCase()}** to **${toTeam.toUpperCase()}**.`
+            : "";
+          const failureMessage = failed.length
+            ? `Failed to move **${failed.join(
+                ", "
+              )}**. Ensure they are currently in **${fromTeam.toUpperCase()}** and the move is valid.`
+            : "";
 
           await interaction.reply(
-            success
-              ? `Successfully moved **${playerName}** from **${fromTeam.toUpperCase()}** to **${toTeam.toUpperCase()}**.`
-              : `Failed to move **${playerName}**. Ensure they are currently in **${fromTeam.toUpperCase()}** and the move is valid.`
+            [successMessage, failureMessage].filter(Boolean).join("\n")
           );
-          if (success) {
+          if (moved.length > 0) {
             await this.syncLateJoinerPrompts(game, beforeRosters, interaction);
           }
           break;
         }
 
         case "add": {
-          const success = await game.addPlayerByNameOrDiscord(
-            playerName,
-            newTeam as ExtendedTeam,
-            interaction.guild
-          );
+          const added: string[] = [];
+          const failed: string[] = [];
+
+          for (const player of resolvedPlayers) {
+            const success = await game.addPlayerByNameOrDiscord(
+              player.name,
+              newTeam as ExtendedTeam,
+              interaction.guild
+            );
+            if (success) {
+              added.push(player.safeName);
+            } else {
+              failed.push(player.safeName);
+            }
+          }
+
+          const successMessage = added.length
+            ? `Successfully added **${added.join(
+                ", "
+              )}** to **${newTeam?.toUpperCase()}**.`
+            : "";
+          const failureMessage = failed.length
+            ? `Failed to add **${failed.join(
+                ", "
+              )}**. Ensure the player is registered with \`/register\`.`
+            : "";
+
           await interaction.reply(
-            success
-              ? `Successfully added **${playerName}** to **${newTeam?.toUpperCase()}**.`
-              : `Failed to add **${playerName}**. Ensure the player is registered with \`/register\`.`
+            [successMessage, failureMessage].filter(Boolean).join("\n")
           );
-          if (success) {
+          if (added.length > 0) {
             await this.syncLateJoinerPrompts(game, beforeRosters, interaction);
           }
           break;
         }
 
         case "remove": {
-          const success = await game.removePlayerByNameOrDiscord(
-            playerName,
-            interaction.guild
-          );
+          const removed: string[] = [];
+          const failed: string[] = [];
+
+          for (const player of resolvedPlayers) {
+            const success = await game.removePlayerByNameOrDiscord(
+              player.name,
+              interaction.guild
+            );
+            if (success) {
+              removed.push(player.safeName);
+            } else {
+              failed.push(player.safeName);
+            }
+          }
+
+          const successMessage = removed.length
+            ? `Successfully removed **${removed.join(", ")}** from the game.`
+            : "";
+          const failureMessage = failed.length
+            ? `Failed to remove **${failed.join(
+                ", "
+              )}**. The player could not be found in any team.`
+            : "";
+
           await interaction.reply(
-            success
-              ? `Successfully removed **${playerName}** from the game.`
-              : `Failed to remove **${playerName}**. The player could not be found in any team.`
+            [successMessage, failureMessage].filter(Boolean).join("\n")
           );
-          if (success) {
+          if (removed.length > 0) {
             await this.syncLateJoinerPrompts(game, beforeRosters, interaction);
           }
           break;
@@ -230,8 +312,8 @@ export default class PlayerCommand implements Command {
           );
           await interaction.reply(
             success
-              ? `Successfully replaced **${oldPlayerName}** with **${targetPlayerName}** in their current team.`
-              : `Failed to replace **${oldPlayerName}**. Ensure both players are correctly registered and in the appropriate teams.`
+              ? `Successfully replaced **${safeOldPlayerName}** with **${safeTargetPlayerName}** in their current team.`
+              : `Failed to replace **${safeOldPlayerName}**. Ensure both players are correctly registered and in the appropriate teams.`
           );
           if (success) {
             await this.syncLateJoinerPrompts(game, beforeRosters, interaction);

@@ -120,7 +120,7 @@ export default class MVPCommand implements Command {
         await interaction.reply({
           content: `Your MVP vote for ${escapeText(
             targetPlayer.ignUsed ?? "Unknown Player"
-          )} has been recorded! Enjoy +1 elo as a thank you for voting 🙂)`,
+          )} has been recorded! Enjoy +1 elo as a thank you for voting 🙂`,
           ephemeral: false,
         });
       }

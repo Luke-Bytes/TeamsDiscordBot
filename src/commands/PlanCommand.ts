@@ -11,6 +11,7 @@ import {
 import { Command } from "./CommandInterface";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { GameInstance } from "../database/GameInstance";
+import { escapeText } from "../util/Utils";
 
 type TeamPlans = {
   bunker?: string;
@@ -111,8 +112,13 @@ export default class PlanCommand implements Command {
             index
         );
         if (duplicatePlayers.length) {
+          const duplicateDisplay = [
+            ...new Set(duplicatePlayers.map((p) => p.toLowerCase())),
+          ]
+            .map((p) => escapeText(p))
+            .join(", ");
           await interaction.reply({
-            content: `A player can't be assigned multiple roles!Reassign these players: ${[...new Set(duplicatePlayers.map((p) => p.toLowerCase()))].join(", ")}`,
+            content: `A player can't be assigned multiple roles!Reassign these players: ${duplicateDisplay}`,
             ephemeral: false,
           });
           return;
@@ -125,8 +131,11 @@ export default class PlanCommand implements Command {
             )
         );
         if (invalidPlayers.length) {
+          const invalidDisplay = invalidPlayers
+            .map((p) => escapeText(p))
+            .join(", ");
           await interaction.reply({
-            content: `The following players are not on your team: ${invalidPlayers.join(", ")}`,
+            content: `The following players are not on your team: ${invalidDisplay}`,
             ephemeral: false,
           });
           return;
@@ -148,6 +157,9 @@ export default class PlanCommand implements Command {
         }
 
         const assignments = this.assignJobs(remainingPlayers);
+        const displayBunker = escapeText(bunker);
+        const displayGold = escapeText(gold);
+        const displayFarmer = escapeText(farmer);
 
         const embed = new EmbedBuilder()
           .setColor(teamColor)
@@ -157,7 +169,7 @@ export default class PlanCommand implements Command {
           .setDescription("Roles")
           .addFields({
             name: "\u200B",
-            value: `**${bunker}** - Bunker\n**${gold}** - Gold\n**${farmer}** - Farmer\n${assignments.join("\n")}`,
+            value: `**${displayBunker}** - Bunker\n**${displayGold}** - Gold\n**${displayFarmer}** - Farmer\n${assignments.join("\n")}`,
           });
 
         const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -221,6 +233,9 @@ export default class PlanCommand implements Command {
           (p) => !Object.values(this.plans[team]).includes(p)
         );
         const assignments = this.assignJobs(remainingPlayers);
+        const displayBunker = escapeText(this.plans[team].bunker ?? "none");
+        const displayGold = escapeText(this.plans[team].gold ?? "none");
+        const displayFarmer = escapeText(this.plans[team].farmer ?? "none");
 
         const embed = new EmbedBuilder()
           .setColor(teamColor)
@@ -230,7 +245,7 @@ export default class PlanCommand implements Command {
           .setDescription("Roles")
           .addFields({
             name: "\u200B",
-            value: `**${this.plans[team].bunker ?? "none"}** - Bunker\n**${this.plans[team].gold ?? "none"}** - Gold\n**${this.plans[team].farmer ?? "none"}** - Farmer\n${assignments.join("\n")}`,
+            value: `**${displayBunker}** - Bunker\n**${displayGold}** - Gold\n**${displayFarmer}** - Farmer\n${assignments.join("\n")}`,
           });
 
         await interaction.update({ embeds: [embed] });
@@ -269,7 +284,7 @@ export default class PlanCommand implements Command {
         availableJobs[Math.floor(Math.random() * availableJobs.length)];
       if (job) {
         jobCounts[job.name] = (jobCounts[job.name] || 0) + 1;
-        assignments.push(`**${player}** - ${job.name}`);
+        assignments.push(`**${escapeText(player)}** - ${job.name}`);
       }
     });
 

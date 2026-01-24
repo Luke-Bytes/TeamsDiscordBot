@@ -6,6 +6,7 @@ import { prismaClient } from "../database/prismaClient";
 import { MojangAPI } from "../api/MojangAPI";
 import TeamCommand from "../commands/TeamCommand";
 import { DraftTeamPickingSession } from "../logic/teams/DraftTeamPickingSession";
+import { escapeText } from "../util/Utils";
 
 export default class RegisterCommand implements Command {
   public data: SlashCommandBuilder;
@@ -55,6 +56,7 @@ export default class RegisterCommand implements Command {
       interaction.options.getUser("discorduser") || interaction.user;
     const discordUserId = targetUser.id;
     const discordUserName = targetUser.username;
+    const safeDiscordUserName = escapeText(discordUserName);
 
     const member = interaction.guild?.members.cache.get(interaction.user.id);
     await interaction.deferReply();
@@ -203,7 +205,7 @@ export default class RegisterCommand implements Command {
         });
       } else {
         await interaction.editReply({
-          content: `${discordUserName} has been successfully registered as \`${resolvedUsername}\`, but it's a late sign-up during team picking.`,
+          content: `${safeDiscordUserName} has been successfully registered as \`${resolvedUsername}\`, but it's a late sign-up during team picking.`,
         });
       }
       return;
@@ -216,7 +218,7 @@ export default class RegisterCommand implements Command {
         });
       } else {
         await interaction.editReply({
-          content: `${discordUserName} has been successfully registered as \`${resolvedUsername}\`, but it's a late sign-up post team picking.`,
+          content: `${safeDiscordUserName} has been successfully registered as \`${resolvedUsername}\`, but it's a late sign-up post team picking.`,
         });
       }
       return;
@@ -228,9 +230,9 @@ export default class RegisterCommand implements Command {
         content: `You have successfully registered as \`${resolvedUsername}\`!`,
       });
     } else {
-      await interaction.editReply({
-        content: `${discordUserName} has been successfully registered as \`${resolvedUsername}\`!`,
-      });
+    await interaction.editReply({
+      content: `${safeDiscordUserName} has been successfully registered as \`${resolvedUsername}\`!`,
+    });
     }
   }
 }
