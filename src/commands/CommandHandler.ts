@@ -1,4 +1,4 @@
-import { REST, Routes, Interaction } from "discord.js";
+import { REST, Routes, Interaction, MessageFlags } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import "dotenv/config";
 import { ConfigManager } from "../ConfigManager";
@@ -189,7 +189,7 @@ export class CommandHandler {
         try {
           await interaction.reply({
             content: "An error occurred while processing your request.",
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           });
         } catch (replyError) {
           console.error("Failed to send error reply:", replyError);

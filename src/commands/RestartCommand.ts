@@ -23,7 +23,6 @@ export default class RestartCommand implements Command {
     if (!member || !PermissionsUtil.hasRole(member, "organiserRole")) {
       await interaction.reply({
         content: "You do not have permission to restart the bot.",
-        ephemeral: false,
       });
       return;
     }
@@ -37,7 +36,6 @@ export default class RestartCommand implements Command {
     await interaction.reply({
       content: "⚠️ **Warning:** Are you sure you want to restart the bot?",
       components: [actionRow],
-      ephemeral: false,
     });
   }
 

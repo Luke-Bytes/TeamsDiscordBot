@@ -6,6 +6,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
   Message,
+  MessageFlags,
 } from "discord.js";
 import {
   TeamPickingSession,
@@ -66,7 +67,7 @@ export class RandomTeamPickingSession extends TeamPickingSession {
     const embed = this.createTeamGenerateEmbed(game);
 
     if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     }
 
     this.embedMessage = await interaction.editReply(embed);
@@ -180,9 +181,9 @@ export class RandomTeamPickingSession extends TeamPickingSession {
       players.length
         ? players
             .map((player, index) => {
-              const playerString = `${EloUtil.getEloEmoji(player.elo)} ${
-                escapeText(player.ignUsed ?? "Unknown Player")
-              }`;
+              const playerString = `${EloUtil.getEloEmoji(player.elo)} ${escapeText(
+                player.ignUsed ?? "Unknown Player"
+              )}`;
               return index === 0 ? `**${playerString}**` : playerString;
             })
             .join("\n")

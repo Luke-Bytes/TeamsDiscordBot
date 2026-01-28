@@ -26,7 +26,7 @@ export default class MissingCommand implements Command {
   async execute(interaction: ChatInputCommandInteraction) {
     const team = interaction.options.getString("team", true) as "RED" | "BLUE";
     await checkMissingPlayersInVC(interaction.guild!, team, async (msg) => {
-      await interaction.reply({ content: msg, ephemeral: false });
+      await interaction.reply({ content: msg });
     });
   }
 }

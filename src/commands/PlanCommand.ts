@@ -7,6 +7,7 @@ import {
   ButtonStyle,
   EmbedBuilder,
   SlashCommandBuilder,
+  MessageFlags,
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { PermissionsUtil } from "../util/PermissionsUtil";
@@ -68,7 +69,7 @@ export default class PlanCommand implements Command {
       if (!team) {
         await interaction.reply({
           content: "Use this command in team channels.",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -80,7 +81,7 @@ export default class PlanCommand implements Command {
       ) {
         await interaction.reply({
           content: "You need to be a captain or organiser to use this command.",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -94,7 +95,7 @@ export default class PlanCommand implements Command {
         console.warn(`No players found in ${team} team.`);
         await interaction.reply({
           content: `No players found in the ${team} team.`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -119,7 +120,6 @@ export default class PlanCommand implements Command {
             .join(", ");
           await interaction.reply({
             content: `A player can't be assigned multiple roles!Reassign these players: ${duplicateDisplay}`,
-            ephemeral: false,
           });
           return;
         }
@@ -136,7 +136,6 @@ export default class PlanCommand implements Command {
             .join(", ");
           await interaction.reply({
             content: `The following players are not on your team: ${invalidDisplay}`,
-            ephemeral: false,
           });
           return;
         }
@@ -151,7 +150,6 @@ export default class PlanCommand implements Command {
           console.warn(`No remaining players to assign jobs.`);
           await interaction.reply({
             content: `Plan created, but no additional players are available for assignment in ${team}.`,
-            ephemeral: false,
           });
           return;
         }
@@ -193,7 +191,6 @@ export default class PlanCommand implements Command {
       console.error(`Error executing plan command: ${error}`);
       await interaction.reply({
         content: "An error occurred while processing your command.",
-        ephemeral: false,
       });
     }
   }
@@ -218,7 +215,7 @@ export default class PlanCommand implements Command {
       if (!team) {
         await interaction.reply({
           content: "You can only use this button in team channels.",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -267,7 +264,7 @@ export default class PlanCommand implements Command {
       console.error(`Error handling button interaction: ${error}`);
       await interaction.reply({
         content: "An error occurred while processing your interaction.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
   }

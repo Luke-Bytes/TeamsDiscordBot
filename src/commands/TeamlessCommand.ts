@@ -25,14 +25,12 @@ export default class TeamlessCommand implements Command {
       .setDescription(
         undecidedPlayers.length
           ? undecidedPlayers
-              .map((player) =>
-                escapeText(player.ignUsed ?? "Unknown Player")
-              )
+              .map((player) => escapeText(player.ignUsed ?? "Unknown Player"))
               .join("\n")
           : "No registered players without a team."
       )
       .setColor("Yellow");
 
-    await interaction.reply({ embeds: [embed], ephemeral: false });
+    await interaction.reply({ embeds: [embed] });
   }
 }

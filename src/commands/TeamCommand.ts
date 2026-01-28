@@ -6,6 +6,7 @@ import {
   GuildMemberRoleManager,
   SlashCommandBuilder,
   SlashCommandSubcommandsOnlyBuilder,
+  MessageFlags,
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
@@ -139,7 +140,7 @@ export default class TeamCommand implements Command {
             );
           }
 
-          await interaction.deferReply({ ephemeral: false });
+          await interaction.deferReply();
 
           switch (method) {
             case "random":
@@ -228,7 +229,7 @@ export default class TeamCommand implements Command {
             return;
           }
 
-          await interaction.deferReply({ ephemeral: false });
+          await interaction.deferReply();
           game.changeHowTeamsDecided(null);
           game.resetTeams();
           this.resetTeamPickingSession();
@@ -263,7 +264,7 @@ export default class TeamCommand implements Command {
               "No game has been announced yet."
             );
           } else {
-            await interaction.deferReply({ ephemeral: false });
+            await interaction.deferReply();
             const embed = this.createTeamViewEmbed(game);
             await DiscordUtil.editReply(interaction, embed);
           }
@@ -304,7 +305,7 @@ export default class TeamCommand implements Command {
             await interaction.reply({
               content:
                 "A game has not been announced yet. Please use `/announce start`.",
-              ephemeral: true,
+              flags: MessageFlags.Ephemeral,
             });
             return;
           }
@@ -367,7 +368,7 @@ export default class TeamCommand implements Command {
         }
       );
 
-    return { embeds: [embed], ephemeral: false };
+    return { embeds: [embed] };
   }
 
   private async setRoles(guild: Guild) {
@@ -408,7 +409,6 @@ export default class TeamCommand implements Command {
             });
             await interaction.followUp({
               content: "Teams have been selected!",
-              ephemeral: false,
             });
           }
           break;

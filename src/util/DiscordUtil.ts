@@ -7,6 +7,7 @@ import {
   InteractionEditReplyOptions,
   Message,
   MessagePayload,
+  MessageFlags,
   Snowflake,
   TextChannel,
 } from "discord.js";
@@ -27,10 +28,11 @@ export class DiscordUtil {
     content: string,
     ephemeral = true
   ): Promise<void> {
-    await interaction.reply({
+    const options = {
       content,
-      ephemeral,
-    });
+      ...(ephemeral ? { flags: MessageFlags.Ephemeral } : {}),
+    };
+    await interaction.reply(options);
   }
 
   static async editReply(

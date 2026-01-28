@@ -42,7 +42,7 @@ export default class UsernameCommand implements Command {
     const safeOldUsername = escapeText(oldUsername);
     const safeNewUsername = escapeText(newUsername);
 
-    await interaction.deferReply({ ephemeral: false });
+    await interaction.deferReply();
 
     if (oldUsername.toLowerCase() === newUsername.toLowerCase()) {
       await interaction.editReply("Old and new usernames cannot be the same.");

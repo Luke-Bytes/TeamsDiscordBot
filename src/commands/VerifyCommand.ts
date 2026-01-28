@@ -146,7 +146,6 @@ export default class VerifyCommand implements Command {
     const content = `**Verification Results**:\n\n${results.join("\n")}`;
     await interaction.reply({
       content,
-      ephemeral: false,
       allowedMentions: { users: mentionableUserIds },
     });
   }

@@ -57,7 +57,7 @@ export default class GameCommand implements Command {
     const gameInstance = GameInstance.getInstance();
     switch (subCommand) {
       case "start":
-        await interaction.deferReply({ ephemeral: false });
+        await interaction.deferReply();
         try {
           const memberCache = await buildMemberCache(
             guild,
@@ -210,7 +210,6 @@ export default class GameCommand implements Command {
         if (!gameInstance.gameWinner) {
           await interaction.reply({
             content: "Please set a winner via /winner before ending the game.",
-            ephemeral: false,
           });
           return;
         }
@@ -218,14 +217,12 @@ export default class GameCommand implements Command {
           await interaction.reply({
             content:
               "The game should be finished first in order to wait for mvp votes, /game end",
-            ephemeral: false,
           });
           return;
         }
         if (gameInstance.isRestarting) {
           await interaction.reply({
             content: "A game shutdown is already in progress!",
-            ephemeral: false,
           });
           return;
         }

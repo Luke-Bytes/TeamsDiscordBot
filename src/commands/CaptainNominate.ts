@@ -5,6 +5,7 @@ import {
   ActionRowBuilder,
   ButtonStyle,
   ButtonInteraction,
+  MessageFlags,
 } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { DiscordUtil } from "../util/DiscordUtil.js";
@@ -27,7 +28,6 @@ export default class CaptainNominateCommand implements Command {
     if (!GameInstance.getInstance().announced) {
       await interaction.reply({
         content: "No game has been announced yet!",
-        ephemeral: false,
       });
       return;
     }
@@ -42,7 +42,6 @@ export default class CaptainNominateCommand implements Command {
       await interaction.reply({
         content:
           "You must be registered for the current game to nominate yourself.",
-        ephemeral: false,
       });
       return;
     }
@@ -50,7 +49,6 @@ export default class CaptainNominateCommand implements Command {
     if (game.captainNominations.has(user.id)) {
       await interaction.reply({
         content: "You have already nominated yourself to be a captain.",
-        ephemeral: false,
       });
       return;
     }
@@ -70,7 +68,7 @@ export default class CaptainNominateCommand implements Command {
     });
     await interaction.reply({
       content: "You have nominated yourself to be a captain!",
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
 
@@ -96,7 +94,6 @@ export default class CaptainNominateCommand implements Command {
     if (!nominatedId) {
       await interaction.reply({
         content: "Could not determine the nominated player.",
-        ephemeral: false,
       });
       return;
     }
@@ -105,7 +102,6 @@ export default class CaptainNominateCommand implements Command {
     if (!game.announced) {
       await interaction.reply({
         content: "No game is currently announced.",
-        ephemeral: false,
       });
       return;
     }
@@ -116,7 +112,6 @@ export default class CaptainNominateCommand implements Command {
     if (!player) {
       await interaction.reply({
         content: "The nominated player is not registered in the game.",
-        ephemeral: false,
       });
       return;
     }
@@ -126,7 +121,6 @@ export default class CaptainNominateCommand implements Command {
     if (redCaptain && blueCaptain) {
       await interaction.reply({
         content: "Both teams already have captains.",
-        ephemeral: false,
       });
       return;
     }
@@ -141,7 +135,7 @@ export default class CaptainNominateCommand implements Command {
     if (!teamToSet) {
       await interaction.reply({
         content: "Unable to determine which team to set.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -165,7 +159,7 @@ export default class CaptainNominateCommand implements Command {
     if (!newCaptainMember) {
       await interaction.reply({
         content: "Could not fetch the nominated player's guild member.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -191,7 +185,6 @@ export default class CaptainNominateCommand implements Command {
       content: `Set captain of team **${teamToSet.toLowerCase()}** to **${escapeText(
         player.ignUsed ?? "Unknown Player"
       )}**.`,
-      ephemeral: false,
     });
   }
 }

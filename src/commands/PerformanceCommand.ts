@@ -22,7 +22,7 @@ export default class PerformanceCommand implements Command {
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    await interaction.deferReply({ ephemeral: false }); // Ensure interaction stays active
+    await interaction.deferReply(); // Ensure interaction stays active
 
     const uptimeSeconds = process.uptime();
     const memoryUsage = process.memoryUsage();

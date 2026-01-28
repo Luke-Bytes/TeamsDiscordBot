@@ -74,7 +74,6 @@ export default class TimestampCommand implements Command {
     if (!parsed) {
       await interaction.reply({
         content: "❌ Could not parse the date/time input.",
-        ephemeral: false,
       });
       return;
     }
@@ -97,7 +96,6 @@ export default class TimestampCommand implements Command {
     if (!dt.isValid) {
       await interaction.reply({
         content: `❌ Invalid timezone: ${tz}`,
-        ephemeral: false,
       });
       return;
     }
@@ -107,7 +105,6 @@ export default class TimestampCommand implements Command {
 
     await interaction.reply({
       content: `${discordTimestamp}`,
-      ephemeral: false,
     });
 
     if (echo) {

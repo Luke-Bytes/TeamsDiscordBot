@@ -1,4 +1,8 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
+import {
+  SlashCommandBuilder,
+  ChatInputCommandInteraction,
+  MessageFlags,
+} from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { PermissionsUtil } from "../util/PermissionsUtil.js";
 import { CurrentGameManager } from "../logic/CurrentGameManager.js";
@@ -30,7 +34,7 @@ export default class UnregisterCommand implements Command {
     if (!PermissionsUtil.isChannel(interaction, "registration")) {
       await interaction.reply({
         content: "You can only unregister in the registration channel.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -40,7 +44,7 @@ export default class UnregisterCommand implements Command {
     if (!game.announced) {
       await interaction.reply({
         content: "No game has been announced yet!",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -57,7 +61,6 @@ export default class UnregisterCommand implements Command {
     ) {
       await interaction.reply({
         content: "You do not have permission to unregister other users.",
-        ephemeral: false,
       });
       return;
     }
@@ -72,7 +75,6 @@ export default class UnregisterCommand implements Command {
     if (!isRegistered) {
       await interaction.reply({
         content: `${discordUserName} is not registered for the announced game.`,
-        ephemeral: false,
       });
       return;
     }
@@ -88,7 +90,6 @@ export default class UnregisterCommand implements Command {
       await interaction.reply({
         content:
           "The game has already started, it's too late to unregister now!",
-        ephemeral: false,
       });
       return;
     }
@@ -102,7 +103,6 @@ export default class UnregisterCommand implements Command {
     if (this.teamCommand.isTeamPickingSessionActive()) {
       await interaction.reply({
         content: `${discordUserName} has been unregistered but will be punished for unregistering while teams were being drafted.`,
-        ephemeral: false,
       });
       //   TODO remove player from draft embed
     }
@@ -110,7 +110,6 @@ export default class UnregisterCommand implements Command {
     if (userTeam && userTeam !== "UNDECIDED" && game.teamsDecidedBy) {
       await interaction.reply({
         content: `${discordUserName} has been unregistered but will be punished for unregistering after teams were decided.`,
-        ephemeral: false,
       });
     }
 
@@ -126,12 +125,10 @@ export default class UnregisterCommand implements Command {
 
       await interaction.reply({
         content: message,
-        ephemeral: false,
       });
     } else {
       await interaction.reply({
         content: result?.error || `An unexpected error occurred.`,
-        ephemeral: false,
       });
     }
   }

@@ -1,4 +1,8 @@
-import { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import {
+  ChatInputCommandInteraction,
+  SlashCommandBuilder,
+  MessageFlags,
+} from "discord.js";
 import { Command } from "../commands/CommandInterface";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { Team } from "@prisma/client";
@@ -54,7 +58,7 @@ export default class CaptainCommand implements Command {
     if (!interaction.guild) {
       await interaction.reply({
         content: "This command can only be used in a server.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -63,7 +67,7 @@ export default class CaptainCommand implements Command {
     if (!PermissionsUtil.hasRole(member, "organiserRole")) {
       await interaction.reply({
         content: "Only organisers can use this command!",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -75,7 +79,7 @@ export default class CaptainCommand implements Command {
     if (!game.announced) {
       await interaction.reply({
         content: "No game has been announced yet!",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -83,7 +87,7 @@ export default class CaptainCommand implements Command {
     if (this.teamCommand.isTeamPickingSessionActive()) {
       await interaction.reply({
         content: "You can't change captains while team picking is in progress!",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -94,7 +98,10 @@ export default class CaptainCommand implements Command {
         false
       );
       if ("error" in result) {
-        await interaction.reply({ content: result.error, ephemeral: true });
+        await interaction.reply({
+          content: result.error,
+          flags: MessageFlags.Ephemeral,
+        });
         return;
       }
       await interaction.reply(
@@ -112,7 +119,7 @@ export default class CaptainCommand implements Command {
     if (!resolvedPlayer) {
       await interaction.reply({
         content: "Error: Player not found. Have they registered?",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -124,7 +131,7 @@ export default class CaptainCommand implements Command {
     if (!player) {
       await interaction.reply({
         content: "Error: Has this player registered yet? ",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -138,7 +145,7 @@ export default class CaptainCommand implements Command {
     ) {
       await interaction.reply({
         content: `Error: The player must already be in RED, BLUE, or UNDECIDED team to be assigned as captain.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }

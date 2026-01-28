@@ -120,7 +120,6 @@ export default class PlayerCommand implements Command {
     if (!member || !PermissionsUtil.hasRole(member, "organiserRole")) {
       await interaction.reply({
         content: "You do not have permission to use this command.",
-        ephemeral: false,
       });
       return;
     }

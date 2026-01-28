@@ -9,6 +9,7 @@ import {
   ButtonStyle,
   SlashCommandSubcommandsOnlyBuilder,
   Guild,
+  MessageFlags,
 } from "discord.js";
 import { Command } from "../commands/CommandInterface.js";
 import { AnniClass, AnniMap } from "@prisma/client";
@@ -364,7 +365,7 @@ export default class AnnouncementCommand implements Command {
       await interaction.reply({
         content:
           "You do not have permission to use this command. Only organisers can execute it.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -469,9 +470,7 @@ export default class AnnouncementCommand implements Command {
   public async handleButtonPress(
     interaction: ButtonInteraction
   ): Promise<void> {
-    await interaction.deferReply({
-      ephemeral: false,
-    });
+    await interaction.deferReply({});
 
     const isConfirmed = !!this.announcementMessage;
 

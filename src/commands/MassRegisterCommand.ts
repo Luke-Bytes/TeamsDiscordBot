@@ -2,6 +2,7 @@ import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
   GuildMember,
+  MessageFlags,
 } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { PermissionsUtil } from "../util/PermissionsUtil.js";
@@ -33,7 +34,6 @@ export default class MassRegisterCommand implements Command {
     if (!member || !PermissionsUtil.hasRole(member, "organiserRole")) {
       await interaction.reply({
         content: "You do not have permission to use this command.",
-        ephemeral: false,
       });
       return;
     }
@@ -42,7 +42,7 @@ export default class MassRegisterCommand implements Command {
     if (!currentGame.announced) {
       await interaction.reply({
         content: "No game has been announced yet!",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -96,7 +96,6 @@ export default class MassRegisterCommand implements Command {
 
     await interaction.reply({
       content: [successMessage, failureMessage].filter(Boolean).join("\n"),
-      ephemeral: false,
     });
   }
 }

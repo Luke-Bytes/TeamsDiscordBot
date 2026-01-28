@@ -1,4 +1,8 @@
-import { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import {
+  ChatInputCommandInteraction,
+  SlashCommandBuilder,
+  MessageFlags,
+} from "discord.js";
 import { Command } from "./CommandInterface";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { PermissionsUtil } from "../util/PermissionsUtil";
@@ -36,7 +40,7 @@ export default class WinnerCommand implements Command {
     if (team !== "BLUE" && team !== "RED") {
       await interaction.reply({
         content: "Invalid team selected. Choose either BLUE or RED.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -45,13 +49,11 @@ export default class WinnerCommand implements Command {
       await CurrentGameManager.getCurrentGame().setGameWinner(team);
       await interaction.reply({
         content: `The winning team has been set to **${team}**!`,
-        ephemeral: false,
       });
     } catch (error) {
       console.error("Failed to set game winner: ", error);
       await interaction.reply({
         content: "An error occurred while setting the winner.",
-        ephemeral: false,
       });
     }
   }

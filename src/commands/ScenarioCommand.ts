@@ -1,4 +1,8 @@
-import { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import {
+  ChatInputCommandInteraction,
+  SlashCommandBuilder,
+  MessageFlags,
+} from "discord.js";
 import { Command } from "./CommandInterface";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { GameInstance } from "../database/GameInstance";
@@ -32,7 +36,7 @@ export default class ScenarioCommand implements Command {
       if (!interaction.replied && !interaction.deferred) {
         await interaction.reply({
           content: "This command is only available in development mode.",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
       return;
@@ -73,14 +77,13 @@ export default class ScenarioCommand implements Command {
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({
         content: message,
-        ephemeral: false,
       });
     }
 
     if (!interaction.replied && !interaction.deferred) {
       await interaction.followUp({
         content: `${subCommand.replace("-", " ")} scenario setup complete.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
   }
