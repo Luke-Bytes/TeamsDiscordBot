@@ -142,7 +142,7 @@ export const EloUtil = {
       (game.blueMeanElo ?? 0) - (game.redMeanElo ?? 0)
     );
 
-    const underdogWeightingApplied = meanEloDifference < 25;
+    const underdogWeightingApplied = meanEloDifference >= 25;
     let finalChange = afterWinStreakChange;
     let underdogWeightFactor: number | undefined;
     if (underdogWeightingApplied) {
@@ -152,6 +152,9 @@ export const EloUtil = {
         expectedScore,
         underdogWeightFactor,
         isWin
+      );
+      console.log(
+        `Underdog weighting applied: ${afterWinStreakChange.toFixed(2)} -> ${finalChange.toFixed(2)} (factor ${underdogWeightFactor})`
       );
     }
 
