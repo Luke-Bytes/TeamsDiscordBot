@@ -3,6 +3,7 @@ import { Command } from "./CommandInterface";
 import { MojangAPI } from "../api/MojangAPI";
 import { PrismaClient } from "@prisma/client";
 import { escapeText } from "../util/Utils";
+import { PermissionsUtil } from "../util/PermissionsUtil";
 
 const prisma = new PrismaClient();
 
@@ -36,6 +37,7 @@ export default class UsernameCommand implements Command {
     if (!interaction.isChatInputCommand()) return;
     const subcommand = interaction.options.getSubcommand();
     if (subcommand !== "update") return;
+    if (!(await PermissionsUtil.isUserAuthorised(interaction))) return;
 
     const oldUsername = interaction.options.getString("oldusername", true);
     const newUsername = interaction.options.getString("newusername", true);
