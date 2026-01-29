@@ -177,7 +177,25 @@ export const EloUtil = {
     player: PlayerInstance
   ): number | undefined {
     const team = game.getPlayersTeam(player);
-    return team === "BLUE" ? game.blueExpectedScore : game.redExpectedScore;
+    const teamExpected =
+      team === "BLUE" ? game.blueExpectedScore : game.redExpectedScore;
+    if (teamExpected === undefined) return undefined;
+
+    // Use per-player expected only for the favoured team to avoid
+    // over-penalizing underdog players.
+    if (teamExpected <= 0.5) return teamExpected;
+
+    const opponentMean =
+      team === "BLUE" ? game.redMeanElo : game.blueMeanElo;
+    if (opponentMean === undefined) return teamExpected;
+
+    const perPlayerExpected = Number(
+      (1 / (1 + Math.pow(10, (opponentMean - player.elo) / 400))).toFixed(2)
+    );
+    console.log(
+      `Using per-player expected score for ${player.latestIGN ?? player.playerId ?? "Unknown"}: ${perPlayerExpected} (team expected ${teamExpected.toFixed(2)})`
+    );
+    return perPlayerExpected;
   },
 
   applyWinStreakBonus(
