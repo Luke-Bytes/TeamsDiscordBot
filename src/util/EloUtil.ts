@@ -48,6 +48,17 @@ export const EloUtil = {
   },
 
   getKFactor(elo: number) {
+    const maxK = kFactorRanges[800 as keyof typeof kFactorRanges];
+    const minK = kFactorRanges[1700 as keyof typeof kFactorRanges];
+    const base = 800;
+    const scale = 400;
+
+    if (scale > 0) {
+      const raw = minK + (maxK - minK) * Math.exp(-(elo - base) / scale);
+      const clamped = Math.min(Math.max(raw, minK), maxK);
+      return Math.round(clamped);
+    }
+
     const sortedKFactors = Object.keys(kFactorRanges)
       .map(Number)
       .sort((a, b) => b - a);
@@ -185,17 +196,20 @@ export const EloUtil = {
     // over-penalizing underdog players.
     if (teamExpected <= 0.5) return teamExpected;
 
-    const opponentMean =
-      team === "BLUE" ? game.redMeanElo : game.blueMeanElo;
+    const opponentMean = team === "BLUE" ? game.redMeanElo : game.blueMeanElo;
     if (opponentMean === undefined) return teamExpected;
 
     const perPlayerExpected = Number(
       (1 / (1 + Math.pow(10, (opponentMean - player.elo) / 400))).toFixed(2)
     );
-    console.log(
-      `Using per-player expected score for ${player.latestIGN ?? player.playerId ?? "Unknown"}: ${perPlayerExpected} (team expected ${teamExpected.toFixed(2)})`
+    const alpha = 0.35;
+    const blendedExpected = Number(
+      ((1 - alpha) * teamExpected + alpha * perPlayerExpected).toFixed(2)
     );
-    return perPlayerExpected;
+    console.log(
+      `Using blended expected score for ${player.latestIGN ?? player.playerId ?? "Unknown"}: ${blendedExpected} (team ${teamExpected.toFixed(2)}, player ${perPlayerExpected}, alpha ${alpha})`
+    );
+    return blendedExpected;
   },
 
   applyWinStreakBonus(
@@ -228,20 +242,15 @@ export const EloUtil = {
     weightFactor: number,
     isWin: boolean
   ): number {
-    if (expectedScore >= 0.4 && expectedScore <= 0.6) {
-      return eloChange;
-    }
-
-    const adjustment = (0.5 - expectedScore) * weightFactor;
+    const distance = Math.abs(0.5 - expectedScore);
     const role = expectedScore > 0.5 ? "favoured" : "underdog";
-    const difference = Math.abs(0.5 - expectedScore).toFixed(2);
+    const weight = 1 + distance * weightFactor;
 
     console.log(
-      `Player is ${role} with expected score of ${expectedScore.toFixed(2)} (${role === "favoured" ? "+" : "-"}${difference}).`
+      `Player is ${role} with expected score of ${expectedScore.toFixed(2)} (${role === "favoured" ? "+" : "-"}${distance.toFixed(2)}). Weight: ${weight.toFixed(2)}`
     );
 
-    return isWin
-      ? eloChange + eloChange * adjustment
-      : eloChange + eloChange * -adjustment;
+    void isWin;
+    return eloChange * weight;
   },
 };
