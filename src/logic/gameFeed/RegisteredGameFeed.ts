@@ -1,7 +1,6 @@
 import { gameFeed } from "../../logic/gameFeed/GameFeed";
 import { CurrentGameManager } from "../../logic/CurrentGameManager";
 import { EmbedBuilder, TextChannel } from "discord.js";
-import { escapeText } from "../../util/Utils";
 
 let cachedPlayerList = "";
 let cachedLatePlayerList = "";
@@ -28,11 +27,11 @@ const createRegisteredPlayersFeed = async (): Promise<EmbedBuilder> => {
     cachedLatePlayerList === ""
   ) {
     cachedPlayerList = regularPlayers
-      .map((p) => `${escapeText(p.ignUsed ?? "Unknown Player")}`)
+      .map((p) => `${p.ignUsed ?? "Unknown Player"}`)
       .join("\n");
 
     cachedLatePlayerList = latePlayers
-      .map((p) => `${escapeText(p.ignUsed ?? "Unknown Player")}`)
+      .map((p) => `${p.ignUsed ?? "Unknown Player"}`)
       .join("\n");
 
     if (cachedPlayerList.length > 4096) {

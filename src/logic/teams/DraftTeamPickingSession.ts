@@ -40,6 +40,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
   lateSignups: PlayerInstance[] = [];
   latePickingStarted = false;
   private lateDraftableWindow = 0;
+  private lateDraftableBonus = 0;
   private pickCounts: Record<Team, number> = { RED: 0, BLUE: 0 };
   private pickWarningTimeout?: NodeJS.Timeout;
   private pickAutoTimeout?: NodeJS.Timeout;
@@ -340,9 +341,12 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     if (pickingFrom === "LATE") {
       this.latePickingStarted = true;
       this.lateSignups = this.lateSignups.filter((p) => p !== player);
-      if (this.lateDraftableWindow > 0) {
+      if (this.lateDraftableBonus > 0) {
+        this.lateDraftableBonus -= 1;
+      } else if (this.lateDraftableWindow > 0) {
         this.lateDraftableWindow = Math.max(this.lateDraftableWindow - 1, 0);
       }
+      this.syncLateDraftableWindow();
     } else {
       this.proposedTeams.UNDECIDED = this.proposedTeams.UNDECIDED.filter(
         (p) => p !== player
@@ -606,23 +610,27 @@ export class DraftTeamPickingSession extends TeamPickingSession {
   }
 
   private syncLateDraftableWindow() {
+    const evenLateCount =
+      this.lateSignups.length - (this.lateSignups.length % 2);
     if (this.latePickingStarted) {
       this.lateDraftableWindow = Math.min(
-        this.lateDraftableWindow,
-        this.lateSignups.length
+        this.lateSignups.length,
+        this.lateDraftableWindow
       );
       return;
     }
-    const evenLateCount =
-      this.lateSignups.length - (this.lateSignups.length % 2);
     this.lateDraftableWindow = evenLateCount;
   }
 
   private getLateDraftablePlayers(): PlayerInstance[] {
-    if (this.lateDraftableWindow <= 0) {
+    const window = Math.min(
+      this.lateSignups.length,
+      this.lateDraftableWindow + this.lateDraftableBonus
+    );
+    if (window <= 0) {
       return [];
     }
-    return this.lateSignups.slice(0, this.lateDraftableWindow);
+    return this.lateSignups.slice(0, window);
   }
 
   private async handleRemainingLateSignups(channel: TextChannel) {
@@ -641,6 +649,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     this.proposedTeams.UNDECIDED.push(...uniqueLeftovers);
     this.lateSignups = [];
     this.lateDraftableWindow = 0;
+    this.lateDraftableBonus = 0;
     await this.embedMessage?.edit(this.createDraftEmbed(false));
     if (channel.isSendable()) {
       const names = uniqueLeftovers
@@ -649,6 +658,34 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       await channel.send(
         `Late signup${uniqueLeftovers.length > 1 ? "s" : ""} ${names} remain undecided and may not participate.`
       );
+    }
+  }
+
+  public async handleUnregister(discordSnowflake: string): Promise<void> {
+    let removedFromTeams = false;
+    const teams: Array<Team | "UNDECIDED"> = ["RED", "BLUE", "UNDECIDED"];
+
+    for (const team of teams) {
+      const before = this.proposedTeams[team].length;
+      this.proposedTeams[team] = this.proposedTeams[team].filter(
+        (player) => player.discordSnowflake !== discordSnowflake
+      );
+      if (this.proposedTeams[team].length !== before) {
+        removedFromTeams = true;
+      }
+    }
+
+    this.lateSignups = this.lateSignups.filter(
+      (player) => player.discordSnowflake !== discordSnowflake
+    );
+
+    if (removedFromTeams) {
+      this.lateDraftableBonus += 1;
+    }
+
+    this.syncLateDraftableWindow();
+    if (this.embedMessage) {
+      await this.embedMessage.edit(this.createDraftEmbed(false));
     }
   }
 }

@@ -120,11 +120,14 @@ export const withTimeout = <T>(
 
 export async function formatTeamIGNs(
   game: GameInstance,
-  team: Team
+  team: Team,
+  escape = true
 ): Promise<string> {
   return game
     .getPlayersOfTeam(team)
-    .map((p) => `${escapeText(String(p.latestIGN ?? p.ignUsed))} = `)
+    .map((p) =>
+      `${escape ? escapeText(String(p.latestIGN ?? p.ignUsed)) : String(p.latestIGN ?? p.ignUsed)} = `
+    )
     .join("\n");
 }
 

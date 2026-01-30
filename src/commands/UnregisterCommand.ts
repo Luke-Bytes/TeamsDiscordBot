@@ -8,6 +8,7 @@ import { PermissionsUtil } from "../util/PermissionsUtil.js";
 import { CurrentGameManager } from "../logic/CurrentGameManager.js";
 import { Team } from "@prisma/client";
 import TeamCommand from "../commands/TeamCommand";
+import { DraftTeamPickingSession } from "../logic/teams/DraftTeamPickingSession";
 
 export default class UnregisterCommand implements Command {
   public data: SlashCommandBuilder;
@@ -119,6 +120,10 @@ export default class UnregisterCommand implements Command {
       );
 
     if (!result?.error) {
+      const session = this.teamCommand.teamPickingSession;
+      if (session instanceof DraftTeamPickingSession) {
+        await session.handleUnregister(discordUserId);
+      }
       const message = PermissionsUtil.isSameUser(interaction, targetUser.id)
         ? `You have successfully unregistered from the game!`
         : `${discordUserName} has been successfully unregistered.`;

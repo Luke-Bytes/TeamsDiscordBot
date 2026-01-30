@@ -495,7 +495,7 @@ export default class CaptainPlanDMManager {
   }
 
   private formatTeamList(members: PlanMember[]): string {
-    return members.map((member) => escapeText(member.ign)).join("\n");
+    return members.map((member) => member.ign).join("\n");
   }
 
   private buildTemplate(teamList: string): string {

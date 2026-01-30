@@ -99,8 +99,16 @@ export default class GameCommand implements Command {
             }
           );
 
-          const redNamesFormatted = await formatTeamIGNs(gameInstance, "RED");
-          const blueNamesFormatted = await formatTeamIGNs(gameInstance, "BLUE");
+          const redNamesFormatted = await formatTeamIGNs(
+            gameInstance,
+            "RED",
+            false
+          );
+          const blueNamesFormatted = await formatTeamIGNs(
+            gameInstance,
+            "BLUE",
+            false
+          );
           await DiscordUtil.sendMessage(
             "redTeamChat",
             `**Mid Blocks Plan**\n\`\`\`\n${redNamesFormatted}\n\`\`\`\n**Game Plan**\n\`\`\`\n${redNamesFormatted}\n\`\`\``
@@ -149,7 +157,7 @@ export default class GameCommand implements Command {
               client,
               captainId: redCaptain.discordSnowflake,
               team: "RED",
-              teamList: await formatTeamIGNs(gameInstance, "RED"),
+              teamList: await formatTeamIGNs(gameInstance, "RED", false),
               members: gameInstance.getPlayersOfTeam("RED").map((p) => ({
                 id: p.discordSnowflake,
                 ign: p.ignUsed ?? p.latestIGN ?? "Unknown",
@@ -161,7 +169,7 @@ export default class GameCommand implements Command {
               client,
               captainId: blueCaptain.discordSnowflake,
               team: "BLUE",
-              teamList: await formatTeamIGNs(gameInstance, "BLUE"),
+              teamList: await formatTeamIGNs(gameInstance, "BLUE", false),
               members: gameInstance.getPlayersOfTeam("BLUE").map((p) => ({
                 id: p.discordSnowflake,
                 ign: p.ignUsed ?? p.latestIGN ?? "Unknown",
