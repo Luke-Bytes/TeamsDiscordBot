@@ -9,6 +9,7 @@ import TeamCommand from "../commands/TeamCommand";
 import { AutoCaptainSelector } from "./AutoCaptainSelector";
 import { Scheduler } from "../util/SchedulerUtil";
 import CaptainPlanDMManager from "./CaptainPlanDMManager";
+import { DraftTeamPickingSession } from "./teams/DraftTeamPickingSession";
 
 export class CurrentGameManager {
   private static currentGame?: GameInstance;
@@ -17,6 +18,7 @@ export class CurrentGameManager {
   static classBanDeadlineTimeout?: NodeJS.Timeout;
   static captainReminderTimeout?: NodeJS.Timeout;
   static captainEnforceTimeout?: NodeJS.Timeout;
+  static draftAutoStartTimeout?: NodeJS.Timeout;
   public static getCurrentGame() {
     if (!this.currentGame) {
       this.currentGame = GameInstance.getInstance();
@@ -301,7 +303,10 @@ export class CurrentGameManager {
           const redCap = game.getCaptainOfTeam("RED");
           const blueCap = game.getCaptainOfTeam("BLUE");
           const haveBoth = !!redCap && !!blueCap;
-          if (haveBoth) return;
+          if (haveBoth) {
+            await this.attemptAutoStartDraft(guild);
+            return;
+          }
 
           const result = await AutoCaptainSelector.randomiseCaptains(
             guild,
@@ -324,6 +329,104 @@ export class CurrentGameManager {
     }
   }
 
+  private static async attemptAutoStartDraft(guild: Guild): Promise<void> {
+    const game = this.getCurrentGame();
+    const teamCommand = TeamCommand.instance;
+    if (!teamCommand || teamCommand.isTeamPickingSessionActive()) return;
+    if (game.teamsDecidedBy) return;
+
+    const redCap = game.getCaptainOfTeam("RED");
+    const blueCap = game.getCaptainOfTeam("BLUE");
+    if (!redCap || !blueCap) return;
+
+    const startDraft = async () => {
+      try {
+        const fakeInteraction = {
+          editReply: async (_: unknown) => {},
+          guild,
+        } as unknown as import("discord.js").ChatInputCommandInteraction;
+        const session = new DraftTeamPickingSession();
+        await session.initialize(fakeInteraction);
+        teamCommand.teamPickingSession = session;
+      } catch (e) {
+        console.error("Failed to auto-start draft team picking:", e);
+      }
+    };
+
+    const undecidedCount = game.getPlayersOfTeam("UNDECIDED").length;
+    if (undecidedCount % 2 === 0) {
+      await startDraft();
+      return;
+    }
+
+    await DiscordUtil.sendMessage(
+      "registration",
+      "⚠️ Registered players are uneven. Waiting 1 minute for another player to register; otherwise the last registered player will be removed and team picking will start."
+    );
+
+    if (this.draftAutoStartTimeout) {
+      clearTimeout(this.draftAutoStartTimeout);
+    }
+    this.draftAutoStartTimeout = setTimeout(async () => {
+      const currentGame = this.getCurrentGame();
+      if (teamCommand.isTeamPickingSessionActive()) return;
+      if (currentGame.teamsDecidedBy) return;
+
+      const red = currentGame.getCaptainOfTeam("RED");
+      const blue = currentGame.getCaptainOfTeam("BLUE");
+      if (!red || !blue) return;
+
+      const undecided = currentGame.getPlayersOfTeam("UNDECIDED");
+      if (undecided.length % 2 === 0) {
+        await startDraft();
+        return;
+      }
+
+      const removalId = this.getAutoBalanceRemovalId(currentGame);
+      if (!removalId) {
+        await DiscordUtil.sendMessage(
+          "registration",
+          "Unable to auto-balance teams to start picking. Please unregister a player manually."
+        );
+        return;
+      }
+
+      const removedPlayer = currentGame
+        .getPlayers()
+        .find((p) => p.discordSnowflake === removalId);
+      const removedName = escapeText(removedPlayer?.ignUsed ?? "Unknown Player");
+
+      await currentGame.removePlayerByDiscordId(removalId);
+      await DiscordUtil.sendMessage(
+        "registration",
+        `Teams must be even to start picking. <@${removalId}> (${removedName}) was the last to register and has been removed. You may re-register if another player joins.`
+      );
+
+      await startDraft();
+    }, 60_000);
+  }
+
+  private static getAutoBalanceRemovalId(
+    game: GameInstance
+  ): string | null {
+    const isCaptain = (id: string) =>
+      game.getCaptainOfTeam("RED")?.discordSnowflake === id ||
+      game.getCaptainOfTeam("BLUE")?.discordSnowflake === id;
+
+    const last = game.lastRegisteredSnowflake;
+    if (
+      last &&
+      !isCaptain(last) &&
+      game.getPlayers().some((p) => p.discordSnowflake === last)
+    ) {
+      return last;
+    }
+
+    const undecided = [...game.getPlayersOfTeam("UNDECIDED")].reverse();
+    const fallback = undecided.find((p) => !isCaptain(p.discordSnowflake));
+    return fallback?.discordSnowflake ?? null;
+  }
+
   private static clearCaptainTimers() {
     if (this.captainReminderTimeout) {
       clearTimeout(this.captainReminderTimeout);
@@ -332,6 +435,10 @@ export class CurrentGameManager {
     if (this.captainEnforceTimeout) {
       clearTimeout(this.captainEnforceTimeout);
       this.captainEnforceTimeout = undefined;
+    }
+    if (this.draftAutoStartTimeout) {
+      clearTimeout(this.draftAutoStartTimeout);
+      this.draftAutoStartTimeout = undefined;
     }
   }
 }

@@ -61,6 +61,7 @@ export class GameInstance {
 
   organiser?: string | null;
   host?: string | null;
+  lastRegisteredSnowflake?: Snowflake;
 
   mapVoteManager?: MapVoteManager;
   minerushVoteManager?: MinerushVoteManager;
@@ -118,6 +119,7 @@ export class GameInstance {
     this.pickOtherTeamsSupportRoles = false;
     this.classBanLimit = 2;
     this.captainBanCounts.clear();
+    this.lastRegisteredSnowflake = undefined;
     this.captainNominations.clear();
     this.captainBanLocked.clear();
     this.classBansAnnounced = false;
@@ -318,6 +320,7 @@ export class GameInstance {
     }
 
     this.teams["UNDECIDED"].push(player);
+    this.lastRegisteredSnowflake = discordSnowflake;
 
     return {
       error: false,
@@ -341,6 +344,9 @@ export class GameInstance {
     this.teams[playerIndex as Team] = this.teams[playerIndex as Team].filter(
       (player) => player.discordSnowflake !== discordSnowflake
     );
+    if (this.lastRegisteredSnowflake === discordSnowflake) {
+      this.lastRegisteredSnowflake = undefined;
+    }
   }
 
   public getPlayers() {
