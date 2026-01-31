@@ -360,14 +360,21 @@ async function runOneGame(params: {
   );
 
   const winnerCmd = new WinnerCommand();
-  await winnerCmd.execute(
-    createChatInputInteraction(organiser.id, {
-      guild,
-      member: organiser as any,
-      strings: { team: "BLUE" },
-      subcommand: "set",
-    })
-  );
+  const winnerInteraction = createChatInputInteraction(organiser.id, {
+    guild,
+    member: organiser as any,
+    strings: { team: "BLUE" },
+    subcommand: "set",
+  });
+  winnerInteraction.fetchReply = async () => ({ id: "winner-msg" });
+  await winnerCmd.execute(winnerInteraction);
+  await winnerCmd.handleButtonPress({
+    customId: "winner_confirm_yes",
+    message: { id: "winner-msg" },
+    user: { id: organiser.id },
+    update: async (_payload: any) => {},
+    reply: async (_payload: any) => {},
+  } as any);
 
   // Shutdown triggers cleanup + resets.
   await gameCmd.execute(

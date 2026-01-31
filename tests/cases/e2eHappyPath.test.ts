@@ -342,7 +342,15 @@ test("E2E happy path: announce -> register -> nominate -> set captains -> random
     strings: { team: "BLUE" },
     subcommand: "set",
   });
+  win.fetchReply = async () => ({ id: "winner-msg" });
   await winnerCmd.execute(win);
+  await winnerCmd.handleButtonPress({
+    customId: "winner_confirm_yes",
+    message: { id: "winner-msg" },
+    user: { id: organiser.id },
+    update: async (_payload: any) => {},
+    reply: async (_payload: any) => {},
+  } as any);
   assert(game.gameWinner === "BLUE", "Winner should be BLUE");
 
   // Step 11: Organiser shuts the game down

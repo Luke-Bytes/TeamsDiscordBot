@@ -99,6 +99,9 @@ export function createChatInputInteraction(
       replies.push({ type: "editReply", payload });
       return {} as any;
     }) as any,
+    fetchReply: (async () => {
+      return { id: `msg-${replies.length}` } as any;
+    }) as any,
     deleteReply: (async () => {
       replies.push({ type: "deleteReply" });
       return {} as any;
