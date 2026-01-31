@@ -169,6 +169,22 @@ export const EloUtil = {
       );
     }
 
+    if (!isWin && expectedScore > 0.5) {
+      const teamMean =
+        game.getPlayersTeam(player) === "BLUE"
+          ? game.blueMeanElo
+          : game.redMeanElo;
+      if (teamMean !== undefined && player.elo > teamMean) {
+        const diff = player.elo - teamMean;
+        const penaltyMultiplier = 1 + diff * 0.005;
+        const beforePenalty = finalChange;
+        finalChange = finalChange * penaltyMultiplier;
+        console.log(
+          `Favoured loss high-elo penalty: ${beforePenalty.toFixed(2)} -> ${finalChange.toFixed(2)} (+${diff.toFixed(0)} Elo over team mean)`
+        );
+      }
+    }
+
     return {
       kFactor,
       expectedScore,
