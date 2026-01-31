@@ -26,5 +26,9 @@
   "dev": {
     "enabled": false,
     "guildId": ""
+  },
+  "wiki": {
+    "mapImageBaseUrl": "",
+    "mapImageDir": ""
   }
 }

@@ -39,6 +39,7 @@ import NicknameCommand from "../commands/NicknameCommand";
 import HelpCommand from "../commands/HelpCommand";
 import SpectateCommand from "../commands/SpectateCommand";
 import WebsiteCommand from "../commands/WebsiteCommand";
+import WikiCommand from "../commands/WikiCommand";
 import CaptainPlanDMManager from "../logic/CaptainPlanDMManager";
 
 export class CommandHandler {
@@ -83,6 +84,7 @@ export class CommandHandler {
   helpCommand = new HelpCommand(() => this.commands);
   spectateCommand = new SpectateCommand();
   websiteCommand = new WebsiteCommand();
+  wikiCommand = new WikiCommand();
 
   public loadCommands() {
     this.commands = [
@@ -123,6 +125,7 @@ export class CommandHandler {
       this.helpCommand,
       this.spectateCommand,
       this.websiteCommand,
+      this.wikiCommand,
     ];
   }
 

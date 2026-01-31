@@ -20,6 +20,7 @@ const MANUAL_OVERRIDES: Record<string, HelpCategory> = {
   team: "user",
   spectate: "user",
   website: "user",
+  wiki: "user",
 };
 
 const ORGANISER_HINTS = [

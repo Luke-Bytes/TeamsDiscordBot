@@ -30,6 +30,10 @@ export type Config = {
     enabled: boolean;
     guildId: string;
   };
+  wiki?: {
+    mapImageBaseUrl?: string;
+    mapImageDir?: string;
+  };
 };
 
 export class ConfigManager {
