@@ -40,6 +40,8 @@ import HelpCommand from "../commands/HelpCommand";
 import SpectateCommand from "../commands/SpectateCommand";
 import WebsiteCommand from "../commands/WebsiteCommand";
 import WikiCommand from "../commands/WikiCommand";
+import ProfileCommand from "../commands/ProfileCommand";
+import ProfileEditCommand from "../commands/ProfileEditCommand";
 import CaptainPlanDMManager from "../logic/CaptainPlanDMManager";
 
 export class CommandHandler {
@@ -85,6 +87,8 @@ export class CommandHandler {
   spectateCommand = new SpectateCommand();
   websiteCommand = new WebsiteCommand();
   wikiCommand = new WikiCommand();
+  profileCommand = new ProfileCommand();
+  profileEditCommand = new ProfileEditCommand();
 
   public loadCommands() {
     this.commands = [
@@ -126,6 +130,8 @@ export class CommandHandler {
       this.spectateCommand,
       this.websiteCommand,
       this.wikiCommand,
+      this.profileCommand,
+      this.profileEditCommand,
     ];
   }
 
@@ -179,6 +185,16 @@ export class CommandHandler {
 
         if (command && command.handleButtonPress) {
           await command.handleButtonPress(interaction);
+        }
+      } else if (interaction.isStringSelectMenu()) {
+        const command = this.commands.find((command) =>
+          (command.selectMenuIds ?? []).some(
+            (id) =>
+              interaction.customId === id || interaction.customId.startsWith(id)
+          )
+        );
+        if (command && command.handleSelectMenu) {
+          await command.handleSelectMenu(interaction);
         }
       }
     } catch (error: unknown) {

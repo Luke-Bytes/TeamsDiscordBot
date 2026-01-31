@@ -60,6 +60,7 @@ model Player {
   games        GameParticipation[]
   punishments  PlayerPunishment[]
   PlayerStats  PlayerStats[]
+  profile      Profile?
 
   @@index([latestIGN])
 }
@@ -172,6 +173,99 @@ enum gameType {
   RANDOMISED
   ELO
   BALANCE
+}
+
+model Profile {
+  id String @id @default(uuid()) @map("_id")
+
+  playerId String @unique
+  player   Player @relation(fields: [playerId], references: [id])
+
+  preferredName String?
+  pronouns      Pronouns?
+  languages     Language[]
+  region        Region?
+  rank          PlayerRank?
+
+  preferredRoles Role[]
+  proficientAtRoles Role[]
+  improveRoles   Role[]
+
+  playstyles Playstyle[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum Pronouns {
+  HE_HIM
+  SHE_HER
+  THEY_THEM
+  ANY
+  ASK
+}
+
+enum Language {
+  ENGLISH
+  SPANISH
+  JAPANESE
+  DUTCH
+  GERMAN
+  TURKISH
+  OTHER
+}
+
+enum Region {
+  NA
+  SA
+  EU
+  JP
+  AS
+  AF
+  AU
+}
+
+enum PlayerRank {
+  NOVICE
+  SILVER
+  GOLD
+  MASTER
+  GRANDMASTER_I
+  GRANDMASTER_II
+  GRANDMASTER_III
+  ANNIHILATOR
+}
+
+enum Role {
+  RUSHER
+  MID
+  FLEX
+  GRIEFER
+  MINERUSHER
+  DEFENDER
+  SKY_TP
+  WALL_BUILDER
+  BUNKER
+  FARMER
+  GOLD_MINER
+}
+
+enum Playstyle {
+  TEAM_FIRST
+  SHOTCALLER
+  PROACTIVE
+  DEFENSIVE
+  GAP_DROPPER
+  SUPPORTER
+  FLEXIBLE
+  STRATEGIST
+  SUPPORTIVE
+  CLUTCH
+  CHILL
+  EGOIST
+  WHIMSICAL
+  ADAPTABLE
+  INVIS_OPPORTUNIST
 }
 
 enum AnniClass {

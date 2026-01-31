@@ -9,6 +9,7 @@ import "./cases/nicknameCommand.test";
 import "./cases/helpCommand.test";
 import "./cases/spectateCommand.test";
 import "./cases/websiteCommand.test";
+import "./cases/profileCommand.test";
 import "./critical/mvpCritical.test";
 import "./critical/classbanCritical.test";
 import "./critical/captainNominateCritical.test";

@@ -21,6 +21,8 @@ const MANUAL_OVERRIDES: Record<string, HelpCategory> = {
   spectate: "user",
   website: "user",
   wiki: "user",
+  profile: "user",
+  profilecreate: "user",
 };
 
 const ORGANISER_HINTS = [
