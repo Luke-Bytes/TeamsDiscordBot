@@ -110,6 +110,7 @@ export default class RegisterCommand implements Command {
 
     let uuid: string | null = null;
     let resolvedUsername: string | null = null;
+    const hasStoredIgn = Boolean(player?.primaryMinecraftAccount);
 
     if (!inGameNameOption) {
       if (!player || !player.primaryMinecraftAccount) {
@@ -197,6 +198,13 @@ export default class RegisterCommand implements Command {
     }
 
     // late signups
+    const shouldNudgeIgn =
+      Boolean(inGameNameOption) &&
+      hasStoredIgn &&
+      PermissionsUtil.isSameUser(interaction, targetUser.id);
+    const ignNudge = shouldNudgeIgn
+      ? " You don't need to type your IGN next time."
+      : "";
 
     if (this.teamCommand.isTeamPickingSessionActive()) {
       const session = this.teamCommand.teamPickingSession;
@@ -208,7 +216,7 @@ export default class RegisterCommand implements Command {
       }
       if (PermissionsUtil.isSameUser(interaction, targetUser.id)) {
         await interaction.editReply({
-          content: `You have successfully registered as \`${resolvedUsername}\` but please note this is a late sign-up as team picking is currently ongoing. You may be unable to play.`,
+          content: `You have successfully registered as \`${resolvedUsername}\` but please note this is a late sign-up as team picking is currently ongoing. You may be unable to play.${ignNudge}`,
         });
       } else {
         await interaction.editReply({
@@ -221,7 +229,7 @@ export default class RegisterCommand implements Command {
     if (CurrentGameManager.getCurrentGame().teamsDecidedBy !== null) {
       if (PermissionsUtil.isSameUser(interaction, targetUser.id)) {
         await interaction.editReply({
-          content: `You have successfully registered as \`${resolvedUsername}\` but please note this is a late sign-up as team picking has been completed. You may be unable to play.`,
+          content: `You have successfully registered as \`${resolvedUsername}\` but please note this is a late sign-up as team picking has been completed. You may be unable to play.${ignNudge}`,
         });
       } else {
         await interaction.editReply({
@@ -234,7 +242,7 @@ export default class RegisterCommand implements Command {
     // success messages
     if (PermissionsUtil.isSameUser(interaction, targetUser.id)) {
       await interaction.editReply({
-        content: `You have successfully registered as \`${resolvedUsername}\`!`,
+        content: `You have successfully registered as \`${resolvedUsername}\`!${ignNudge}`,
       });
     } else {
       await interaction.editReply({

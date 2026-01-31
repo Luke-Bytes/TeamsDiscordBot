@@ -7,6 +7,8 @@ import "./cases/timeBased.test";
 import "./cases/snakeDraftTeams.test";
 import "./cases/nicknameCommand.test";
 import "./cases/helpCommand.test";
+import "./cases/spectateCommand.test";
+import "./cases/websiteCommand.test";
 import "./critical/mvpCritical.test";
 import "./critical/classbanCritical.test";
 import "./critical/captainNominateCritical.test";

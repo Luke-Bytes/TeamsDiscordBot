@@ -18,6 +18,8 @@ const MANUAL_OVERRIDES: Record<string, HelpCategory> = {
   unregister: "user",
   captainnominate: "user",
   team: "user",
+  spectate: "user",
+  website: "user",
 };
 
 const ORGANISER_HINTS = [

@@ -37,6 +37,8 @@ import MapsCommand from "../commands/MapsCommand";
 import CoinflipCommand from "../commands/CoinflipCommand";
 import NicknameCommand from "../commands/NicknameCommand";
 import HelpCommand from "../commands/HelpCommand";
+import SpectateCommand from "../commands/SpectateCommand";
+import WebsiteCommand from "../commands/WebsiteCommand";
 import CaptainPlanDMManager from "../logic/CaptainPlanDMManager";
 
 export class CommandHandler {
@@ -79,6 +81,8 @@ export class CommandHandler {
   coinflipCommand = new CoinflipCommand();
   nicknameCommand = new NicknameCommand();
   helpCommand = new HelpCommand(() => this.commands);
+  spectateCommand = new SpectateCommand();
+  websiteCommand = new WebsiteCommand();
 
   public loadCommands() {
     this.commands = [
@@ -117,6 +121,8 @@ export class CommandHandler {
       this.coinflipCommand,
       this.nicknameCommand,
       this.helpCommand,
+      this.spectateCommand,
+      this.websiteCommand,
     ];
   }
 
@@ -162,7 +168,11 @@ export class CommandHandler {
         }
       } else if (interaction.isButton()) {
         const command = this.commands.find((command) =>
-          command.buttonIds.includes(interaction.customId)
+          command.buttonIds.some(
+            (id) =>
+              interaction.customId === id ||
+              interaction.customId.startsWith(id)
+          )
         );
 
         if (command && command.handleButtonPress) {

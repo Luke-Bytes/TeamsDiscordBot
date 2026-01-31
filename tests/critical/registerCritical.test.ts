@@ -135,3 +135,42 @@ test("Register late signups message when teams decided", async () => {
   const edit = i.replies.find((r) => r.type === "editReply");
   assert(!!edit, "Shows a late signup message when teams decided");
 });
+
+test("Register nudges when IGN provided but already known", async () => {
+  const teamCmd = new TeamCommand();
+  const cmd = new RegisterCommand(teamCmd);
+  const game = CurrentGameManager.getCurrentGame();
+  game.reset();
+  game.announced = true;
+  const cfg = ConfigManager.getConfig();
+  const guild = new FakeGuild() as any;
+  const member = new FakeGuildMember("U11") as any;
+  guild.addMember(member);
+
+  (MojangAPI as any).usernameToUUID = async (name: string) => `uuid-${name}`;
+  (prismaClient as any).player.byDiscordSnowflake = async () => ({
+    id: "db-U11",
+    discordSnowflake: "U11",
+    minecraftAccounts: ["KnownIgn"],
+    latestIGN: "KnownIgn",
+    primaryMinecraftAccount: "uuid-KnownIgn",
+  });
+  (prismaClient as any).playerPunishment = {
+    findMany: async () => [],
+    findFirst: async () => null,
+    update: async () => {},
+  };
+
+  const i = createChatInputInteraction("U11", {
+    guild,
+    channelId: cfg.channels.registration,
+    strings: { ingamename: "KnownIgn" },
+  });
+  await cmd.execute(i);
+  const edit = i.replies.find((r) => r.type === "editReply");
+  assert(
+    !!edit &&
+      /don't need to type your IGN/i.test(String(edit.payload?.content)),
+    "Includes IGN nudge when already known"
+  );
+});
