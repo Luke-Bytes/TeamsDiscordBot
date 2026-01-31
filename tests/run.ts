@@ -5,6 +5,7 @@ import "./cases/e2eHappyPath.test";
 import "./cases/captainPlanDM.test";
 import "./cases/timeBased.test";
 import "./cases/snakeDraftTeams.test";
+import "./cases/nicknameCommand.test";
 import "./critical/mvpCritical.test";
 import "./critical/classbanCritical.test";
 import "./critical/captainNominateCritical.test";
