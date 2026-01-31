@@ -354,6 +354,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     }
 
     this.pickCounts[pickingTeam] += 1;
+    player.draftSlotPlacement = this.pickCounts[pickingTeam];
     await this.embedMessage?.edit(this.createDraftEmbed(false));
 
     const safeName = escapeText(player.ignUsed ?? "Unknown Player");

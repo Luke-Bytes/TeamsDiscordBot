@@ -5,6 +5,7 @@ import {
   GuildMember,
   Message,
   ButtonInteraction,
+  TextChannel,
 } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { ConfigManager } from "../ConfigManager";
@@ -13,6 +14,7 @@ import { GameInstance } from "../database/GameInstance";
 import { cleanUpAfterGame } from "../logic/GameEndCleanUp";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { checkMissingPlayersInVC, formatTeamIGNs } from "../util/Utils";
+import { parsePlanText, TeamPlanRecord } from "../util/PlanUtil";
 import CaptainPlanDMManager from "../logic/CaptainPlanDMManager";
 
 export default class GameCommand implements Command {
@@ -191,6 +193,8 @@ export default class GameCommand implements Command {
         );
         await movePlayersToTeamPickingAfterGameEnd(guild);
 
+        await captureTeamPlansFromChannels(guild, gameInstance);
+
         const config = ConfigManager.getConfig();
         const blueTeamRoleId = config.roles.blueTeamRole;
         const redTeamRoleId = config.roles.redTeamRole;
@@ -253,6 +257,95 @@ export default class GameCommand implements Command {
   async handleButtonPress(interaction: ButtonInteraction) {
     await this.captainPlanDMManager.handleButtonPress(interaction);
   }
+}
+
+async function captureTeamPlansFromChannels(
+  guild: Guild,
+  gameInstance: GameInstance
+): Promise<void> {
+  const config = ConfigManager.getConfig();
+  const redChannel = guild.channels.cache.get(
+    config.channels.redTeamChat
+  ) as TextChannel | undefined;
+  const blueChannel = guild.channels.cache.get(
+    config.channels.blueTeamChat
+  ) as TextChannel | undefined;
+
+  const [redPlan, bluePlan] = await Promise.all([
+    extractLatestPlanFromChannel(redChannel),
+    extractLatestPlanFromChannel(blueChannel),
+  ]);
+
+  const mergedRed = mergePlans(gameInstance.redTeamPlan, redPlan);
+  if (mergedRed) gameInstance.redTeamPlan = mergedRed;
+  const mergedBlue = mergePlans(gameInstance.blueTeamPlan, bluePlan);
+  if (mergedBlue) gameInstance.blueTeamPlan = mergedBlue;
+}
+
+async function extractLatestPlanFromChannel(
+  channel?: TextChannel
+): Promise<TeamPlanRecord | null> {
+  if (!channel?.messages?.fetch) return null;
+  const fetched = await channel.messages
+    .fetch({ limit: 100 })
+    .catch(() => null);
+  if (!fetched) return null;
+
+  const messages = Array.from(fetched.values()).sort(
+    (a, b) => (b.createdTimestamp ?? 0) - (a.createdTimestamp ?? 0)
+  );
+
+  let midBlocks: string | null = null;
+  let gamePlan: string | null = null;
+  let raw: string | null = null;
+
+  for (const message of messages) {
+    const parsed = parsePlanText(message.content ?? "");
+    if (parsed.confidence === "none") continue;
+
+    if (!midBlocks && parsed.midBlocks) midBlocks = parsed.midBlocks;
+    if (!gamePlan && parsed.gamePlan) gamePlan = parsed.gamePlan;
+    if (!raw) raw = parsed.raw ?? message.content ?? null;
+
+    if (midBlocks && gamePlan) break;
+  }
+
+  if (!midBlocks && !gamePlan && !raw) return null;
+  return {
+    midBlocks,
+    gamePlan,
+    raw: midBlocks && gamePlan ? null : raw,
+    source: "CHANNEL",
+    capturedAt: new Date(),
+  };
+}
+
+function mergePlans(
+  dmPlan: TeamPlanRecord | undefined,
+  channelPlan: TeamPlanRecord | null
+): TeamPlanRecord | null {
+  if (!dmPlan && !channelPlan) return null;
+  if (channelPlan && channelPlan.midBlocks && channelPlan.gamePlan) {
+    return channelPlan;
+  }
+  if (channelPlan && (channelPlan.midBlocks || channelPlan.gamePlan)) {
+    const merged = {
+      midBlocks: channelPlan.midBlocks ?? dmPlan?.midBlocks ?? null,
+      gamePlan: channelPlan.gamePlan ?? dmPlan?.gamePlan ?? null,
+      raw: channelPlan.raw ?? dmPlan?.raw ?? null,
+      source: dmPlan ? "MIXED" : "CHANNEL",
+      capturedAt: new Date(),
+    };
+    return merged;
+  }
+  if (dmPlan) {
+    return {
+      ...dmPlan,
+      source: dmPlan.source === "MIXED" ? "MIXED" : "DM",
+      capturedAt: new Date(),
+    };
+  }
+  return channelPlan;
 }
 
 export async function assignTeamVCAfterPicking(

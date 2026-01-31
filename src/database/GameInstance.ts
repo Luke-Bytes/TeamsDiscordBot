@@ -13,6 +13,7 @@ import { addRegisteredPlayersFeed } from "../logic/gameFeed/RegisteredGameFeed";
 import { addTeamsGameFeed } from "../logic/gameFeed/TeamsGameFeed";
 import { Elo } from "../logic/Elo";
 import { ModifierSelector } from "../logic/ModifierSelector";
+import { TeamPlanRecord } from "../util/PlanUtil";
 
 // wrapper class for Game
 export class GameInstance {
@@ -54,7 +55,7 @@ export class GameInstance {
   redExpectedScore?: number;
 
   gameWinner?: "RED" | "BLUE";
-  teamsDecidedBy?: "DRAFT" | "RANDOMISED" | null;
+  teamsDecidedBy?: "DRAFT" | "RANDOMISED" | "ELO" | "BALANCE" | null;
 
   MVPPlayerBlue?: string;
   MVPPlayerRed?: string;
@@ -62,6 +63,8 @@ export class GameInstance {
   organiser?: string | null;
   host?: string | null;
   lastRegisteredSnowflake?: Snowflake;
+  redTeamPlan?: TeamPlanRecord;
+  blueTeamPlan?: TeamPlanRecord;
 
   mapVoteManager?: MapVoteManager;
   minerushVoteManager?: MinerushVoteManager;
@@ -123,6 +126,8 @@ export class GameInstance {
     this.captainNominations.clear();
     this.captainBanLocked.clear();
     this.classBansAnnounced = false;
+    this.redTeamPlan = undefined;
+    this.blueTeamPlan = undefined;
   }
 
   public static async resetGameInstance() {
@@ -1004,8 +1009,18 @@ export class GameInstance {
     return player?.ignUsed ?? "";
   }
 
-  public changeHowTeamsDecided(type: "DRAFT" | "RANDOMISED" | null) {
+  public changeHowTeamsDecided(
+    type: "DRAFT" | "RANDOMISED" | "ELO" | "BALANCE" | null
+  ) {
     this.teamsDecidedBy = typeof type === "string" ? type : null;
+  }
+
+  public setTeamPlan(team: Team, plan: TeamPlanRecord) {
+    if (team === Team.RED) {
+      this.redTeamPlan = plan;
+    } else {
+      this.blueTeamPlan = plan;
+    }
   }
 
   public calculateMeanEloAndExpectedScore() {

@@ -12,6 +12,7 @@ import { DiscordUtil } from "../util/DiscordUtil";
 import { MessageSafetyUtil } from "../util/MessageSafetyUtil";
 import { GameInstance } from "../database/GameInstance";
 import { escapeText, prettifyName } from "../util/Utils";
+import { buildTeamPlanRecord } from "../util/PlanUtil";
 import { AnniClass, Team } from "@prisma/client";
 
 type TeamKey = "RED" | "BLUE";
@@ -310,6 +311,10 @@ export default class CaptainPlanDMManager {
         .catch(() => {});
 
       session.hasSentPlan = true;
+      const dmPlan = buildTeamPlanRecord(session.lastContent ?? "", "DM");
+      if (dmPlan) {
+        GameInstance.getInstance().setTeamPlan(session.team, dmPlan);
+      }
 
       if (failed.length) {
         const channelKey =
@@ -364,6 +369,12 @@ export default class CaptainPlanDMManager {
           components: [],
         })
         .catch(() => {});
+
+      session.hasSentPlan = true;
+      const dmPlan = buildTeamPlanRecord(session.lastContent ?? "", "DM");
+      if (dmPlan) {
+        GameInstance.getInstance().setTeamPlan(session.team, dmPlan);
+      }
 
       if (failed.length) {
         const channelKey =

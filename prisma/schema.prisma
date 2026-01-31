@@ -79,6 +79,8 @@ model Game {
   host      String
 
   participantsIGNs String[]
+  redTeamPlan Json?
+  blueTeamPlan Json?
 
   eloHistories       EloHistory[]
   gameParticipations GameParticipation[]
@@ -92,6 +94,7 @@ model GameParticipation {
 
   ignUsed String
   team    Team
+  draftSlotPlacement Int?
 
   playerId String
   gameId   String
@@ -166,6 +169,8 @@ enum Team {
 enum gameType {
   DRAFT
   RANDOMISED
+  ELO
+  BALANCE
 }
 
 enum AnniClass {

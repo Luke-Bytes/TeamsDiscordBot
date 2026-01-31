@@ -16,6 +16,7 @@ import "./critical/systemEdgeCases.test";
 import "./critical/punishmentExpiry.test";
 import "./critical/randomTeams.test";
 import "./critical/eloBalanceTeams.test";
+import "./critical/teamPlanCapture.test";
 import "./critical/sharedBansDefault.test";
 import "./critical/classBanModes.test";
 import "./cases/ignsCommand.test";

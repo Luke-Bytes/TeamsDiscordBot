@@ -136,7 +136,13 @@ export class RandomTeamPickingSession extends TeamPickingSession {
         });
 
         await interaction.update({});
-        game.changeHowTeamsDecided("RANDOMISED");
+        if (this.mode === "random") {
+          game.changeHowTeamsDecided("RANDOMISED");
+        } else if (this.mode === "elo") {
+          game.changeHowTeamsDecided("ELO");
+        } else {
+          game.changeHowTeamsDecided("BALANCE");
+        }
         this.state = "finalized";
         break;
       }

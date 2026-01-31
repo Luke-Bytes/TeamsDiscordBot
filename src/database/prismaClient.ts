@@ -244,6 +244,7 @@ export const prismaClient = new PrismaClient({
               player: { connect: { id: playerRecord.id } },
               mvp,
               captain: playerInstance.captain === true,
+              draftSlotPlacement: playerInstance.draftSlotPlacement ?? undefined,
               season: { connect: { id: season.id } },
             } as Prisma.GameParticipationCreateWithoutGameInput;
           })
@@ -271,6 +272,8 @@ export const prismaClient = new PrismaClient({
             participantsIGNs: validParticipants.map(
               (p) => p.ignUsed || "UnknownIGN"
             ),
+            redTeamPlan: gameInstance.redTeamPlan ?? undefined,
+            blueTeamPlan: gameInstance.blueTeamPlan ?? undefined,
             gameParticipations: {
               create: validParticipants,
             },
@@ -297,6 +300,8 @@ export const prismaClient = new PrismaClient({
             participantsIGNs: validParticipants.map(
               (p) => p.ignUsed ?? "UnknownIGN"
             ),
+            redTeamPlan: gameInstance.redTeamPlan ?? undefined,
+            blueTeamPlan: gameInstance.blueTeamPlan ?? undefined,
             gameParticipations: {
               create: validParticipants,
             },
