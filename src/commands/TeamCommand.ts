@@ -50,8 +50,10 @@ export default class TeamCommand implements Command {
               .setDescription("Method to generate teams")
               .setRequired(true)
               .addChoices(
+                { name: "draft", value: "draft" },
+                { name: "elo", value: "elo" },
                 { name: "random", value: "random" },
-                { name: "draft", value: "draft" }
+                { name: "balance", value: "balance" }
               )
           )
       )
@@ -144,11 +146,19 @@ export default class TeamCommand implements Command {
 
           switch (method) {
             case "random":
-              this.teamPickingSession = new RandomTeamPickingSession();
+              this.teamPickingSession = new RandomTeamPickingSession("random");
               await this.teamPickingSession.initialize(interaction);
               break;
             case "draft":
               this.teamPickingSession = new DraftTeamPickingSession();
+              await this.teamPickingSession.initialize(interaction);
+              break;
+            case "elo":
+              this.teamPickingSession = new RandomTeamPickingSession("elo");
+              await this.teamPickingSession.initialize(interaction);
+              break;
+            case "balance":
+              this.teamPickingSession = new RandomTeamPickingSession("balance");
               await this.teamPickingSession.initialize(interaction);
               break;
           }

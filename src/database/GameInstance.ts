@@ -368,10 +368,22 @@ export class GameInstance {
     this.teams["BLUE"] = [];
   }
 
-  public createTeams(createMethod: "random") {
+  public createTeams(createMethod: "random" | "elo" | "balance") {
     switch (createMethod) {
       case "random": {
         const simulatedTeams = this.simulateShuffledTeams();
+        this.teams.BLUE = simulatedTeams.BLUE;
+        this.teams.RED = simulatedTeams.RED;
+        break;
+      }
+      case "elo": {
+        const simulatedTeams = this.simulateEloTeams();
+        this.teams.BLUE = simulatedTeams.BLUE;
+        this.teams.RED = simulatedTeams.RED;
+        break;
+      }
+      case "balance": {
+        const simulatedTeams = this.simulateBalancedTeams();
         this.teams.BLUE = simulatedTeams.BLUE;
         this.teams.RED = simulatedTeams.RED;
         break;
@@ -388,6 +400,102 @@ export class GameInstance {
       BLUE: shuffled.slice(0, half),
       RED: shuffled.slice(half),
     };
+  }
+
+  public simulateEloTeams(): Record<Team, PlayerInstance[]> {
+    const players = [
+      ...this.getPlayersOfTeam("RED"),
+      ...this.getPlayersOfTeam("BLUE"),
+      ...this.getPlayersOfTeam("UNDECIDED"),
+    ];
+
+    players.forEach((p) => {
+      p.captain = false;
+    });
+
+    const sorted = players.sort((a, b) => (b.elo ?? 0) - (a.elo ?? 0));
+    const blue: PlayerInstance[] = [];
+    const red: PlayerInstance[] = [];
+
+    sorted.forEach((player, idx) => {
+      if (idx % 2 === 0) {
+        blue.push(player);
+      } else {
+        red.push(player);
+      }
+    });
+
+    if (blue[0]) blue[0].captain = true;
+    if (red[0]) red[0].captain = true;
+
+    this.teams.UNDECIDED = [];
+
+    return { BLUE: blue, RED: red };
+  }
+
+  public simulateBalancedTeams(): Record<Team, PlayerInstance[]> {
+    const players = [
+      ...this.getPlayersOfTeam("RED"),
+      ...this.getPlayersOfTeam("BLUE"),
+      ...this.getPlayersOfTeam("UNDECIDED"),
+    ];
+
+    players.forEach((p) => {
+      p.captain = false;
+    });
+
+    if (players.length === 0) {
+      return { BLUE: [], RED: [] };
+    }
+
+    const sorted = players.sort((a, b) => (b.elo ?? 0) - (a.elo ?? 0));
+    const firstIdx = Math.floor(Math.random() * sorted.length);
+    const firstCaptain = sorted.splice(firstIdx, 1)[0];
+    let secondCaptain = sorted[0];
+    let closestDiff = Math.abs((firstCaptain.elo ?? 0) - (secondCaptain?.elo ?? 0));
+    for (const candidate of sorted) {
+      const diff = Math.abs((firstCaptain.elo ?? 0) - (candidate.elo ?? 0));
+      if (diff < closestDiff) {
+        closestDiff = diff;
+        secondCaptain = candidate;
+      }
+    }
+    sorted.splice(sorted.indexOf(secondCaptain), 1);
+
+    const blue: PlayerInstance[] = [firstCaptain];
+    const red: PlayerInstance[] = [secondCaptain];
+    let blueTotal = firstCaptain.elo ?? 0;
+    let redTotal = secondCaptain.elo ?? 0;
+
+    for (const player of sorted) {
+      const elo = player.elo ?? 0;
+      const blueAvg = blueTotal / blue.length;
+      const redAvg = redTotal / red.length;
+      if (blue.length < red.length) {
+        blue.push(player);
+        blueTotal += elo;
+        continue;
+      }
+      if (red.length < blue.length) {
+        red.push(player);
+        redTotal += elo;
+        continue;
+      }
+      if (blueAvg <= redAvg) {
+        blue.push(player);
+        blueTotal += elo;
+      } else {
+        red.push(player);
+        redTotal += elo;
+      }
+    }
+
+    if (blue[0]) blue[0].captain = true;
+    if (red[0]) red[0].captain = true;
+
+    this.teams.UNDECIDED = [];
+
+    return { BLUE: blue, RED: red };
   }
 
   public setTeamCaptain(team: Team, player: PlayerInstance) {
