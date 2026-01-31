@@ -13,6 +13,7 @@ import "./critical/schedulerCancelCritical.test";
 import "./critical/twoConsecutiveGames.test";
 import "./critical/lateSignupDraft.test";
 import "./critical/systemEdgeCases.test";
+import "./critical/punishmentExpiry.test";
 import "./critical/sharedBansDefault.test";
 import "./critical/classBanModes.test";
 import "./cases/ignsCommand.test";

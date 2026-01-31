@@ -87,6 +87,7 @@ function stubPrismaAndMojang() {
 
   (prismaClient as any).playerPunishment = {
     findFirst: async () => null,
+    findMany: async () => [],
     update: async () => {},
   };
   (prismaClient as any).season = {

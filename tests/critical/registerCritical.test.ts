@@ -42,6 +42,11 @@ test("Register blocks non-organiser from registering others and blocks duplicate
     findUnique: async () => ({ seasonId: "S1" }),
     create: async ({ data }: any) => ({ ...data }),
   };
+  (prismaClient as any).playerPunishment = {
+    findMany: async () => [],
+    findFirst: async () => null,
+    update: async () => {},
+  };
 
   // Non-organiser tries to register another user
   const normal = new FakeGuildMember("U1") as any;
@@ -114,6 +119,11 @@ test("Register late signups message when teams decided", async () => {
   (prismaClient as any).playerStats = {
     findUnique: async () => ({ seasonId: "S1" }),
     create: async ({ data }: any) => ({ ...data }),
+  };
+  (prismaClient as any).playerPunishment = {
+    findMany: async () => [],
+    findFirst: async () => null,
+    update: async () => {},
   };
 
   const i = createChatInputInteraction("U9", {

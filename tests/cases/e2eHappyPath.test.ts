@@ -132,6 +132,7 @@ test("E2E happy path: announce -> register -> nominate -> set captains -> random
   };
   (prismaClient as any).playerPunishment = {
     findFirst: async () => null,
+    findMany: async () => [],
     update: async () => {},
   };
   (prismaClient as any).season = {

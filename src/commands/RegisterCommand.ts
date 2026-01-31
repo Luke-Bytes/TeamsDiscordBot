@@ -11,6 +11,7 @@ import { MojangAPI } from "../api/MojangAPI";
 import TeamCommand from "../commands/TeamCommand";
 import { DraftTeamPickingSession } from "../logic/teams/DraftTeamPickingSession";
 import { escapeText } from "../util/Utils";
+import { PrismaUtils } from "../util/PrismaUtils";
 
 export default class RegisterCommand implements Command {
   public data: SlashCommandBuilder;
@@ -54,6 +55,8 @@ export default class RegisterCommand implements Command {
       });
       return;
     }
+
+    await PrismaUtils.updatePunishmentsForExpiry();
 
     const inGameNameOption = interaction.options.getString("ingamename");
     const targetUser =

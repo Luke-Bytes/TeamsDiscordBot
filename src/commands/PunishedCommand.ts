@@ -27,6 +27,8 @@ export default class PunishedCommand implements Command {
     const userInput = interaction.options.getString("user", false);
     const safeUserInput = userInput ? escapeText(userInput) : "";
 
+    await PrismaUtils.updatePunishmentsForExpiry();
+
     try {
       if (userInput) {
         const player = await PrismaUtils.findPlayer(userInput);
