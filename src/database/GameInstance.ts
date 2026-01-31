@@ -55,7 +55,13 @@ export class GameInstance {
   redExpectedScore?: number;
 
   gameWinner?: "RED" | "BLUE";
-  teamsDecidedBy?: "DRAFT" | "RANDOMISED" | "ELO" | "BALANCE" | null;
+  teamsDecidedBy?:
+    | "DRAFT"
+    | "SNAKE_DRAFT"
+    | "RANDOMISED"
+    | "ELO"
+    | "BALANCE"
+    | null;
 
   MVPPlayerBlue?: string;
   MVPPlayerRed?: string;

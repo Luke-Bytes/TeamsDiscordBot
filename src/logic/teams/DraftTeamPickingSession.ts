@@ -45,6 +45,14 @@ export class DraftTeamPickingSession extends TeamPickingSession {
   private pickWarningTimeout?: NodeJS.Timeout;
   private pickAutoTimeout?: NodeJS.Timeout;
   private pickDmTimeout?: NodeJS.Timeout;
+  private readonly mode: "draft" | "snake";
+  private totalPicksMade = 0;
+  private firstPickTeam?: Team;
+
+  constructor(mode: "draft" | "snake" = "draft") {
+    super();
+    this.mode = mode;
+  }
 
   public getState(): TeamPickingSessionState {
     return this.state;
@@ -92,15 +100,21 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       return;
     }
 
+    const modeLabel =
+      this.mode === "snake" ? "snake draft" : "draft team picking";
     await interaction.editReply({
-      content: `Started a draft team picking session in <#${teamPickingChannel.id}>`,
+      content: `Started a ${modeLabel} session in <#${teamPickingChannel.id}>`,
     });
 
     if (teamPickingChannel.isSendable()) {
       const embed = this.createDraftEmbed(false);
       this.embedMessage = await teamPickingChannel.send(embed);
       await teamPickingChannel.send(
-        "⚠️ Captains have **2 minutes** for their opening pick and **1 minute** for every pick after that. If time expires, random eligible player will be automatically picked. You'll get a DM with 1 minute remaining on your opening pick and a channel warning 15 seconds before any auto-pick."
+        `⚠️ Captains have **2 minutes** for their opening pick and **1 minute** for every pick after that. If time expires, random eligible player will be automatically picked. You'll get a DM with 1 minute remaining on your opening pick and a channel warning 15 seconds before any auto-pick.${
+          this.mode === "snake"
+            ? " Snake draft uses a 1-2-2-1 pick order."
+            : ""
+        }`
       );
 
       if (Math.random() < 0.5) {
@@ -114,6 +128,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
           "**Blue** team has been randomly picked to select first."
         );
       }
+      this.firstPickTeam = this.turn;
       await this.sendTurnMessage();
     } else {
       console.error(
@@ -162,7 +177,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
 
     const embed = new EmbedBuilder()
       .setColor("#0099ff")
-      .setTitle("Drafting Teams")
+      .setTitle(this.mode === "snake" ? "Snake Drafting Teams" : "Drafting Teams")
       .addFields(
         {
           name: "🔵  Blue Team  🔵  ",
@@ -259,7 +274,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
             (p) => !allPickedPlayers.has(p.discordSnowflake)
           ),
         ];
-        game.changeHowTeamsDecided("DRAFT");
+        game.changeHowTeamsDecided(this.mode === "snake" ? "SNAKE_DRAFT" : "DRAFT");
         this.state = "finalized";
         this.clearTurnTimers();
         break;
@@ -394,8 +409,22 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       return;
     }
 
-    this.turn = pickingTeam === "RED" ? "BLUE" : "RED";
+    this.totalPicksMade += 1;
+    this.turn = this.getNextTurn(pickingTeam);
     await this.sendTurnMessage();
+  }
+
+  private getNextTurn(pickingTeam: Team): Team {
+    if (this.mode !== "snake" || !this.firstPickTeam) {
+      return pickingTeam === "RED" ? "BLUE" : "RED";
+    }
+    const start = this.firstPickTeam;
+    const other = start === "RED" ? "BLUE" : "RED";
+    if (this.totalPicksMade === 1) {
+      return other;
+    }
+    const block = Math.floor((this.totalPicksMade - 1) / 2);
+    return block % 2 === 0 ? other : start;
   }
 
   private async sendFinalizationMessage(channel: TextChannel) {

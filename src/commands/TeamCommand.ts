@@ -50,6 +50,7 @@ export default class TeamCommand implements Command {
               .setDescription("Method to generate teams")
               .setRequired(true)
               .addChoices(
+                { name: "snake draft", value: "snake" },
                 { name: "draft", value: "draft" },
                 { name: "elo", value: "elo" },
                 { name: "balance", value: "balance" },
@@ -108,7 +109,7 @@ export default class TeamCommand implements Command {
           }
           const method = interaction.options.getString("method");
           if (
-            method === "draft" &&
+            (method === "draft" || method === "snake") &&
             (!game.getCaptainOfTeam("RED") || !game.getCaptainOfTeam("BLUE"))
           ) {
             await DiscordUtil.reply(
@@ -118,7 +119,7 @@ export default class TeamCommand implements Command {
             return;
           }
 
-          if (method === "draft") {
+          if (method === "draft" || method === "snake") {
             const undecidedCount = game.getPlayersOfTeam("UNDECIDED").length;
             if (undecidedCount % 2 !== 0) {
               await DiscordUtil.reply(
@@ -150,7 +151,11 @@ export default class TeamCommand implements Command {
               await this.teamPickingSession.initialize(interaction);
               break;
             case "draft":
-              this.teamPickingSession = new DraftTeamPickingSession();
+              this.teamPickingSession = new DraftTeamPickingSession("draft");
+              await this.teamPickingSession.initialize(interaction);
+              break;
+            case "snake":
+              this.teamPickingSession = new DraftTeamPickingSession("snake");
               await this.teamPickingSession.initialize(interaction);
               break;
             case "elo":
