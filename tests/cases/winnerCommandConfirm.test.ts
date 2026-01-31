@@ -26,7 +26,8 @@ test("WinnerCommand /winner set replies with confirmation embed", async () => {
 
   const game = {
     getCaptainOfTeam: (team: string) => (team === "RED" ? redCap : blueCap),
-    getPlayersOfTeam: (team: string) => (team === "RED" ? redPlayers : bluePlayers),
+    getPlayersOfTeam: (team: string) =>
+      team === "RED" ? redPlayers : bluePlayers,
   };
 
   (PermissionsUtil as any).isUserAuthorised = async () => true;

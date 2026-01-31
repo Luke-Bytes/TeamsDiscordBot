@@ -111,9 +111,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       this.embedMessage = await teamPickingChannel.send(embed);
       await teamPickingChannel.send(
         `⚠️ Captains have **2 minutes** for their opening pick and **1 minute** for every pick after that. If time expires, random eligible player will be automatically picked. You'll get a DM with 1 minute remaining on your opening pick and a channel warning 15 seconds before any auto-pick.${
-          this.mode === "snake"
-            ? " Snake draft uses a 1-2-2-1 pick order."
-            : ""
+          this.mode === "snake" ? " Snake draft uses a 1-2-2-1 pick order." : ""
         }`
       );
 
@@ -177,7 +175,9 @@ export class DraftTeamPickingSession extends TeamPickingSession {
 
     const embed = new EmbedBuilder()
       .setColor("#0099ff")
-      .setTitle(this.mode === "snake" ? "Snake Drafting Teams" : "Drafting Teams")
+      .setTitle(
+        this.mode === "snake" ? "Snake Drafting Teams" : "Drafting Teams"
+      )
       .addFields(
         {
           name: "🔵  Blue Team  🔵  ",
@@ -274,7 +274,9 @@ export class DraftTeamPickingSession extends TeamPickingSession {
             (p) => !allPickedPlayers.has(p.discordSnowflake)
           ),
         ];
-        game.changeHowTeamsDecided(this.mode === "snake" ? "SNAKE_DRAFT" : "DRAFT");
+        game.changeHowTeamsDecided(
+          this.mode === "snake" ? "SNAKE_DRAFT" : "DRAFT"
+        );
         this.state = "finalized";
         this.clearTurnTimers();
         break;

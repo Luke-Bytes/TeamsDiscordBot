@@ -57,11 +57,15 @@ test("Random teams accept uses the previewed teams", async () => {
     await session.initialize(interaction as any);
     await session.handleInteraction(button as any);
     assert(
-      game.getPlayersOfTeam("BLUE").some((p: any) => p.discordSnowflake === "p1"),
+      game
+        .getPlayersOfTeam("BLUE")
+        .some((p: any) => p.discordSnowflake === "p1"),
       "Should commit previewed BLUE team"
     );
     assert(
-      game.getPlayersOfTeam("RED").some((p: any) => p.discordSnowflake === "p3"),
+      game
+        .getPlayersOfTeam("RED")
+        .some((p: any) => p.discordSnowflake === "p3"),
       "Should commit previewed RED team"
     );
   } finally {
@@ -124,11 +128,15 @@ test("Random team reroll updates the previewed teams used on accept", async () =
     await session.handleInteraction(rerollButton as any);
     await session.handleInteraction(acceptButton as any);
     assert(
-      game.getPlayersOfTeam("BLUE").some((p: any) => p.discordSnowflake === "p3"),
+      game
+        .getPlayersOfTeam("BLUE")
+        .some((p: any) => p.discordSnowflake === "p3"),
       "Accept should use the rerolled BLUE team"
     );
     assert(
-      game.getPlayersOfTeam("RED").some((p: any) => p.discordSnowflake === "p1"),
+      game
+        .getPlayersOfTeam("RED")
+        .some((p: any) => p.discordSnowflake === "p1"),
       "Accept should use the rerolled RED team"
     );
   } finally {

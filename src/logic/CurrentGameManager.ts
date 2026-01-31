@@ -394,7 +394,9 @@ export class CurrentGameManager {
       const removedPlayer = currentGame
         .getPlayers()
         .find((p) => p.discordSnowflake === removalId);
-      const removedName = escapeText(removedPlayer?.ignUsed ?? "Unknown Player");
+      const removedName = escapeText(
+        removedPlayer?.ignUsed ?? "Unknown Player"
+      );
 
       await currentGame.removePlayerByDiscordId(removalId);
       await DiscordUtil.sendMessage(
@@ -406,9 +408,7 @@ export class CurrentGameManager {
     }, 60_000);
   }
 
-  private static getAutoBalanceRemovalId(
-    game: GameInstance
-  ): string | null {
+  private static getAutoBalanceRemovalId(game: GameInstance): string | null {
     const isCaptain = (id: string) =>
       game.getCaptainOfTeam("RED")?.discordSnowflake === id ||
       game.getCaptainOfTeam("BLUE")?.discordSnowflake === id;

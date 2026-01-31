@@ -54,7 +54,7 @@ export default class TeamCommand implements Command {
                 { name: "draft", value: "draft" },
                 { name: "elo", value: "elo" },
                 { name: "balance", value: "balance" },
-                { name: "random", value: "random" },
+                { name: "random", value: "random" }
               )
           )
       )

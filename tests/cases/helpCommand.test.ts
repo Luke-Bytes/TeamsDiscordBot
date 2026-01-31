@@ -12,6 +12,7 @@ const makeCmd = (
 ): Command => {
   const exec = new Function(`return async function(){ ${executeSource} }`)();
   return {
+    data: {} as any,
     name,
     description,
     buttonIds: [],

@@ -22,8 +22,12 @@ test("Elo team generation alternates by rank and sets top captains", async () =>
 
   game.createTeams("elo");
 
-  const blueIds = game.getPlayersOfTeam("BLUE").map((p: any) => p.discordSnowflake);
-  const redIds = game.getPlayersOfTeam("RED").map((p: any) => p.discordSnowflake);
+  const blueIds = game
+    .getPlayersOfTeam("BLUE")
+    .map((p: any) => p.discordSnowflake);
+  const redIds = game
+    .getPlayersOfTeam("RED")
+    .map((p: any) => p.discordSnowflake);
 
   assertEqual(
     blueIds.join(","),
@@ -68,16 +72,13 @@ test("Balance team generation picks closest-Elo captains after random first pick
 
   const blueCaptain = game.getCaptainOfTeam("BLUE");
   const redCaptain = game.getCaptainOfTeam("RED");
-  const captainIds = [blueCaptain?.discordSnowflake, redCaptain?.discordSnowflake];
+  const captainIds = [
+    blueCaptain?.discordSnowflake,
+    redCaptain?.discordSnowflake,
+  ];
 
-  assert(
-    captainIds.includes("P1"),
-    "First random captain should be P1"
-  );
-  assert(
-    captainIds.includes("P2"),
-    "Closest Elo captain should be P2"
-  );
+  assert(captainIds.includes("P1"), "First random captain should be P1");
+  assert(captainIds.includes("P2"), "Closest Elo captain should be P2");
 });
 
 test("Balance team generation keeps team sizes even", async () => {
@@ -110,4 +111,3 @@ test("Balance team generation keeps team sizes even", async () => {
     "Balanced teams should be even sizes"
   );
 });
-

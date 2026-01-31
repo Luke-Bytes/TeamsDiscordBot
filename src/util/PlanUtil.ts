@@ -53,7 +53,12 @@ export function parsePlanText(text: string): ParsedPlan {
 
   const raw = confidence === "none" ? null : trimmed;
 
-  return { midBlocks: midBlocks ?? null, gamePlan: gamePlan ?? null, confidence, raw };
+  return {
+    midBlocks: midBlocks ?? null,
+    gamePlan: gamePlan ?? null,
+    confidence,
+    raw,
+  };
 }
 
 export function buildTeamPlanRecord(

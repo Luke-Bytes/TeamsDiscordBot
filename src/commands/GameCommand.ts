@@ -14,7 +14,11 @@ import { GameInstance } from "../database/GameInstance";
 import { cleanUpAfterGame } from "../logic/GameEndCleanUp";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { checkMissingPlayersInVC, formatTeamIGNs } from "../util/Utils";
-import { parsePlanText, TeamPlanRecord } from "../util/PlanUtil";
+import {
+  parsePlanText,
+  TeamPlanRecord,
+  TeamPlanSource,
+} from "../util/PlanUtil";
 import CaptainPlanDMManager from "../logic/CaptainPlanDMManager";
 
 export default class GameCommand implements Command {
@@ -264,12 +268,12 @@ async function captureTeamPlansFromChannels(
   gameInstance: GameInstance
 ): Promise<void> {
   const config = ConfigManager.getConfig();
-  const redChannel = guild.channels.cache.get(
-    config.channels.redTeamChat
-  ) as TextChannel | undefined;
-  const blueChannel = guild.channels.cache.get(
-    config.channels.blueTeamChat
-  ) as TextChannel | undefined;
+  const redChannel = guild.channels.cache.get(config.channels.redTeamChat) as
+    | TextChannel
+    | undefined;
+  const blueChannel = guild.channels.cache.get(config.channels.blueTeamChat) as
+    | TextChannel
+    | undefined;
 
   const [redPlan, bluePlan] = await Promise.all([
     extractLatestPlanFromChannel(redChannel),
@@ -329,11 +333,11 @@ function mergePlans(
     return channelPlan;
   }
   if (channelPlan && (channelPlan.midBlocks || channelPlan.gamePlan)) {
-    const merged = {
+    const merged: TeamPlanRecord = {
       midBlocks: channelPlan.midBlocks ?? dmPlan?.midBlocks ?? null,
       gamePlan: channelPlan.gamePlan ?? dmPlan?.gamePlan ?? null,
       raw: channelPlan.raw ?? dmPlan?.raw ?? null,
-      source: dmPlan ? "MIXED" : "CHANNEL",
+      source: (dmPlan ? "MIXED" : "CHANNEL") as TeamPlanSource,
       capturedAt: new Date(),
     };
     return merged;
@@ -341,7 +345,7 @@ function mergePlans(
   if (dmPlan) {
     return {
       ...dmPlan,
-      source: dmPlan.source === "MIXED" ? "MIXED" : "DM",
+      source: (dmPlan.source === "MIXED" ? "MIXED" : "DM") as TeamPlanSource,
       capturedAt: new Date(),
     };
   }

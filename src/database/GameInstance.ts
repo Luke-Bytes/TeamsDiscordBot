@@ -463,7 +463,9 @@ export class GameInstance {
     const firstIdx = Math.floor(Math.random() * sorted.length);
     const firstCaptain = sorted.splice(firstIdx, 1)[0];
     let secondCaptain = sorted[0];
-    let closestDiff = Math.abs((firstCaptain.elo ?? 0) - (secondCaptain?.elo ?? 0));
+    let closestDiff = Math.abs(
+      (firstCaptain.elo ?? 0) - (secondCaptain?.elo ?? 0)
+    );
     for (const candidate of sorted) {
       const diff = Math.abs((firstCaptain.elo ?? 0) - (candidate.elo ?? 0));
       if (diff < closestDiff) {
@@ -1016,7 +1018,7 @@ export class GameInstance {
   }
 
   public changeHowTeamsDecided(
-    type: "DRAFT" | "RANDOMISED" | "ELO" | "BALANCE" | null
+    type: "DRAFT" | "SNAKE_DRAFT" | "RANDOMISED" | "ELO" | "BALANCE" | null
   ) {
     this.teamsDecidedBy = typeof type === "string" ? type : null;
   }

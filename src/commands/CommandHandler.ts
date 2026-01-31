@@ -170,8 +170,7 @@ export class CommandHandler {
         const command = this.commands.find((command) =>
           command.buttonIds.some(
             (id) =>
-              interaction.customId === id ||
-              interaction.customId.startsWith(id)
+              interaction.customId === id || interaction.customId.startsWith(id)
           )
         );
 

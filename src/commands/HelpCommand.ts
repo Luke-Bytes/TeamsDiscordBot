@@ -29,7 +29,12 @@ const ORGANISER_HINTS = [
   "PermissionsUtil.hasRole",
 ];
 
-const DEV_HINTS = ["isDebugEnabled", "config.dev", "dev.enabled", "dev.guildId"];
+const DEV_HINTS = [
+  "isDebugEnabled",
+  "config.dev",
+  "dev.enabled",
+  "dev.guildId",
+];
 
 export default class HelpCommand implements Command {
   public name = "help";
@@ -62,8 +67,8 @@ export default class HelpCommand implements Command {
       (interaction.options.getString("scope") as HelpCategory | null) ?? "user";
 
     const commands = this.getCommands().filter((cmd) => cmd.name !== this.name);
-    const filtered = commands.filter((cmd) =>
-      this.inferCategory(cmd) === scope
+    const filtered = commands.filter(
+      (cmd) => this.inferCategory(cmd) === scope
     );
 
     const title =
@@ -86,7 +91,9 @@ export default class HelpCommand implements Command {
             .join("\n")
         : "No commands matched this category.";
 
-    const embed = new EmbedBuilder().setTitle(title).setDescription(description);
+    const embed = new EmbedBuilder()
+      .setTitle(title)
+      .setDescription(description);
 
     if (scope === "dev" && !ConfigManager.getConfig().dev.enabled) {
       embed.setFooter({

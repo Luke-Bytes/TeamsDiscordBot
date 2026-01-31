@@ -34,7 +34,10 @@ test("Plan parser handles only mid blocks present (sad path)", async () => {
   const parsed = parsePlanText(text);
   assert(parsed.midBlocks === "A", "Mid blocks parsed");
   assert(parsed.gamePlan === null, "Game plan missing");
-  assert(parsed.confidence === "partial", "Parser confidence should be partial");
+  assert(
+    parsed.confidence === "partial",
+    "Parser confidence should be partial"
+  );
 });
 
 test("Plan parser ignores extra lines after header without code block (edge)", async () => {
@@ -59,7 +62,10 @@ test("Plan parser uses the first matching section when duplicated (edge)", async
 test("Plan parser trims whitespace inside code blocks (edge)", async () => {
   const text = `**Game Plan**\n\`\`\`\n  A\n  B\n\`\`\``;
   const parsed = parsePlanText(text);
-  assert(parsed.gamePlan === "A\n  B", "Whitespace trimmed but internal spacing preserved");
+  assert(
+    parsed.gamePlan === "A\n  B",
+    "Whitespace trimmed but internal spacing preserved"
+  );
 });
 
 test("buildTeamPlanRecord uses raw only when partial (edge)", async () => {

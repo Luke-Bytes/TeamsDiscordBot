@@ -102,7 +102,10 @@ test("/spectate request sends DM and stores pending", async () => {
 
     await cmd.execute(i);
     assert(!!dmPayload?.components, "DM sent with buttons");
-    assert(i.replies.some((r: any) => r.type === "reply"), "Request replied");
+    assert(
+      i.replies.some((r: any) => r.type === "reply"),
+      "Request replied"
+    );
   });
 });
 
@@ -241,7 +244,9 @@ test("spectate accept button rejects wrong target", async () => {
     };
     await cmd.handleButtonPress(interaction);
     assert(
-      String(interaction.lastReply?.content || "").includes("Only the requested"),
+      String(interaction.lastReply?.content || "").includes(
+        "Only the requested"
+      ),
       "Rejects wrong target"
     );
   });
@@ -331,10 +336,7 @@ test("/spectate rejoin works within window", async () => {
     i.inGuild = () => true;
     i.guild = guild;
     await cmd.execute(i);
-    assert(
-      requester.voice.channel?.id === "vc-9",
-      "Rejoined target channel"
-    );
+    assert(requester.voice.channel?.id === "vc-9", "Rejoined target channel");
     assert(
       requester.roles.cache.has(ROLE_IDS.spectator),
       "Spectator role restored"
@@ -422,18 +424,9 @@ test("Multiple requests handled without cross-contamination", async () => {
     await deny(id2);
     await accept(id3);
 
-    assert(
-      r1.roles.cache.has(ROLE_IDS.spectator),
-      "First requester accepted"
-    );
-    assert(
-      !r2.roles.cache.has(ROLE_IDS.spectator),
-      "Second requester denied"
-    );
-    assert(
-      r3.roles.cache.has(ROLE_IDS.spectator),
-      "Third requester accepted"
-    );
+    assert(r1.roles.cache.has(ROLE_IDS.spectator), "First requester accepted");
+    assert(!r2.roles.cache.has(ROLE_IDS.spectator), "Second requester denied");
+    assert(r3.roles.cache.has(ROLE_IDS.spectator), "Third requester accepted");
     assert(
       r1.voice.channel?.id === "vc-1" &&
         r3.voice.channel?.id === "vc-1" &&

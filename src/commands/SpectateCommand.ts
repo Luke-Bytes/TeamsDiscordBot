@@ -4,6 +4,7 @@ import {
   ButtonInteraction,
   ButtonStyle,
   ChatInputCommandInteraction,
+  GuildMember,
   SlashCommandBuilder,
 } from "discord.js";
 import { Command } from "./CommandInterface";
@@ -124,7 +125,7 @@ export default class SpectateCommand implements Command {
     }
   }
 
-  private isCaptainOrClanLeader(member: any): boolean {
+  private isCaptainOrClanLeader(member: GuildMember | null): boolean {
     if (!member) return false;
     return (
       PermissionsUtil.hasRole(member, "captainRole") ||
@@ -132,7 +133,7 @@ export default class SpectateCommand implements Command {
     );
   }
 
-  private getMemberVoiceChannelId(member: any): string | null {
+  private getMemberVoiceChannelId(member: GuildMember | null): string | null {
     return member?.voice?.channel?.id ?? null;
   }
 
@@ -436,7 +437,9 @@ export default class SpectateCommand implements Command {
     interaction: ChatInputCommandInteraction
   ): Promise<void> {
     const guild = interaction.guild!;
-    const member = await guild.members.fetch(interaction.user.id).catch(() => null);
+    const member = await guild.members
+      .fetch(interaction.user.id)
+      .catch(() => null);
     if (!member || !member.voice?.channel?.id) {
       await DiscordUtil.reply(
         interaction,

@@ -47,7 +47,12 @@ test("Snake draft uses A-B-B-A order from red start", async () => {
   };
   (session as any).embedMessage = { edit: async () => {} };
 
-  await (session as any).processPick("RED", undecided[0], "UNDECIDED", "manual");
+  await (session as any).processPick(
+    "RED",
+    undecided[0],
+    "UNDECIDED",
+    "manual"
+  );
   assertEqual(session.turn, "BLUE", "Pick 1 -> BLUE");
 
   await (session as any).processPick(

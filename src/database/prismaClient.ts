@@ -244,7 +244,8 @@ export const prismaClient = new PrismaClient({
               player: { connect: { id: playerRecord.id } },
               mvp,
               captain: playerInstance.captain === true,
-              draftSlotPlacement: playerInstance.draftSlotPlacement ?? undefined,
+              draftSlotPlacement:
+                playerInstance.draftSlotPlacement ?? undefined,
               season: { connect: { id: season.id } },
             } as Prisma.GameParticipationCreateWithoutGameInput;
           })
