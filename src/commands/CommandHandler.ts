@@ -36,6 +36,7 @@ import ForfeitCommand from "../commands/ForfeitCommand";
 import MapsCommand from "../commands/MapsCommand";
 import CoinflipCommand from "../commands/CoinflipCommand";
 import NicknameCommand from "../commands/NicknameCommand";
+import HelpCommand from "../commands/HelpCommand";
 import CaptainPlanDMManager from "../logic/CaptainPlanDMManager";
 
 export class CommandHandler {
@@ -77,6 +78,7 @@ export class CommandHandler {
   mapsCommand = new MapsCommand();
   coinflipCommand = new CoinflipCommand();
   nicknameCommand = new NicknameCommand();
+  helpCommand = new HelpCommand(() => this.commands);
 
   public loadCommands() {
     this.commands = [
@@ -114,6 +116,7 @@ export class CommandHandler {
       this.mapsCommand,
       this.coinflipCommand,
       this.nicknameCommand,
+      this.helpCommand,
     ];
   }
 
