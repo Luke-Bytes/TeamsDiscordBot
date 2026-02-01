@@ -9,6 +9,7 @@ import {
   StringSelectMenuInteraction,
   SlashCommandSubcommandsOnlyBuilder,
   SlashCommandOptionsOnlyBuilder,
+  ModalSubmitInteraction,
 } from "discord.js";
 
 export interface Command {
@@ -31,4 +32,6 @@ export interface Command {
 
   handleButtonPress?(interaction: ButtonInteraction): Promise<void>;
   handleSelectMenu?(interaction: StringSelectMenuInteraction): Promise<void>;
+  modalIds?: string[];
+  handleModalSubmit?(interaction: ModalSubmitInteraction): Promise<void>;
 }

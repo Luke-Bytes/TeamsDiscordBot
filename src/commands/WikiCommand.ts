@@ -29,10 +29,7 @@ export default class WikiCommand implements Command {
         )
     )
     .addStringOption((opt) =>
-      opt
-        .setName("name")
-        .setDescription("Map/Class name")
-        .setRequired(false)
+      opt.setName("name").setDescription("Map/Class name").setRequired(false)
     );
 
   public async execute(
@@ -73,9 +70,7 @@ export default class WikiCommand implements Command {
       // TODO: Attach local map images from config.wiki.mapImageDir when available.
       const imageUrl = await this.fetchMapImageUrl(mapTitle);
       const embed = imageUrl
-        ? new EmbedBuilder()
-            .setTitle(escapeText(mapTitle))
-            .setImage(imageUrl)
+        ? new EmbedBuilder().setTitle(escapeText(mapTitle)).setImage(imageUrl)
         : null;
       await interaction.reply({
         content: `↗ ${mapUrl}`,

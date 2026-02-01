@@ -2,7 +2,11 @@ import { test } from "../framework/test";
 import { assert } from "../framework/assert";
 import ProfileCommand from "../../src/commands/ProfileCommand";
 import ProfileEditCommand from "../../src/commands/ProfileEditCommand";
-import { createChatInputInteraction, FakeGuild, FakeGuildMember } from "../framework/mocks";
+import {
+  createChatInputInteraction,
+  FakeGuild,
+  FakeGuildMember,
+} from "../framework/mocks";
 import { PrismaUtils } from "../../src/util/PrismaUtils";
 import { prismaClient } from "../../src/database/prismaClient";
 import { ConfigManager } from "../../src/ConfigManager";
@@ -31,7 +35,9 @@ test("/profile shows profile data when available", async () => {
       }),
     };
 
-    const i = createChatInputInteraction("U1", { strings: { name: "KnownIgn" } });
+    const i = createChatInputInteraction("U1", {
+      strings: { name: "KnownIgn" },
+    });
     await cmd.execute(i as any);
     const reply = i.replies.find((r: any) => r.type === "reply");
     assert(!!reply?.payload?.embeds, "Profile embed returned");
@@ -48,7 +54,10 @@ test("/profilecreate denied outside bot commands channel", async () => {
   i.guild = new FakeGuild();
   await cmd.execute(i);
   const reply = i.replies.find((r: any) => r.type === "reply");
-  assert(!!reply && /bot commands/i.test(String(reply.payload?.content)), "Blocked outside bot commands");
+  assert(
+    !!reply && /bot commands/i.test(String(reply.payload?.content)),
+    "Blocked outside bot commands"
+  );
 });
 
 test("/profilecreate denied in DMs", async () => {
@@ -58,7 +67,10 @@ test("/profilecreate denied in DMs", async () => {
   i.guild = null;
   await cmd.execute(i);
   const reply = i.replies.find((r: any) => r.type === "reply");
-  assert(!!reply && /server/i.test(String(reply.payload?.content)), "Blocked in DMs");
+  assert(
+    !!reply && /server/i.test(String(reply.payload?.content)),
+    "Blocked in DMs"
+  );
 });
 
 test("/profilecreate saves a section and /profile shows it", async () => {
@@ -78,7 +90,11 @@ test("/profilecreate saves a section and /profile shows it", async () => {
     (prismaClient as any).profile = {
       findUnique: async ({ where }: any) => store[where.playerId] ?? null,
       upsert: async ({ where, update, create }: any) => {
-        store[where.playerId] = { ...(store[where.playerId] ?? {}), ...create, ...update };
+        store[where.playerId] = {
+          ...(store[where.playerId] ?? {}),
+          ...create,
+          ...update,
+        };
         return store[where.playerId];
       },
     };
@@ -105,7 +121,9 @@ test("/profilecreate saves a section and /profile shows it", async () => {
     };
     await edit.handleSelectMenu!(selectInteraction);
 
-    const v = createChatInputInteraction("U3", { strings: { name: "PlayerThree" } });
+    const v = createChatInputInteraction("U3", {
+      strings: { name: "PlayerThree" },
+    });
     await view.execute(v as any);
     const reply = v.replies.find((r: any) => r.type === "reply");
     const fields = reply?.payload?.embeds?.[0]?.data?.fields ?? [];
@@ -135,7 +153,11 @@ test("/profilecreate clear removes section", async () => {
     (prismaClient as any).profile = {
       findUnique: async ({ where }: any) => store[where.playerId] ?? null,
       upsert: async ({ where, update, create }: any) => {
-        store[where.playerId] = { ...(store[where.playerId] ?? {}), ...create, ...update };
+        store[where.playerId] = {
+          ...(store[where.playerId] ?? {}),
+          ...create,
+          ...update,
+        };
         return store[where.playerId];
       },
     };

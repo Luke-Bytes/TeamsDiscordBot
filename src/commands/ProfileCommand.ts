@@ -15,6 +15,12 @@ import {
   RANK_LABELS,
   REGION_LABELS,
   ROLE_LABELS,
+  Pronouns,
+  Region,
+  PlayerRank,
+  Language,
+  Role,
+  Playstyle,
 } from "../util/ProfileUtil";
 
 export default class ProfileCommand implements Command {
@@ -35,18 +41,28 @@ export default class ProfileCommand implements Command {
     interaction: ChatInputCommandInteraction
   ): Promise<void> {
     const input = interaction.options.getString("name");
-    const lookup = input ? input.replace(/<@([^>]+)>/g, "$1") : interaction.user.id;
+    const lookup = input
+      ? input.replace(/<@([^>]+)>/g, "$1")
+      : interaction.user.id;
 
     const player = await PrismaUtils.findPlayer(lookup);
     if (!player) {
       await interaction.reply({
-        content: "Player not found.",
+        content: "No player found for that input.",
         ephemeral: true,
       });
       return;
     }
 
-    const profile = await prismaClient.profile.findUnique({
+    const profile = await (
+      prismaClient as unknown as {
+        profile?: {
+          findUnique: (args: {
+            where: { playerId: string };
+          }) => Promise<unknown>;
+        };
+      }
+    ).profile?.findUnique({
       where: { playerId: player.id },
     });
 
@@ -54,7 +70,9 @@ export default class ProfileCommand implements Command {
       ? escapeText(player.latestIGN)
       : escapeText(player.discordSnowflake);
 
-    const embed = new EmbedBuilder().setTitle(`Profile — ${displayName}`);
+    const embed = new EmbedBuilder()
+      .setTitle(`Profile • ${displayName}`)
+      .setDescription("View a player.");
 
     if (player.latestIGN) {
       embed.addFields({
@@ -64,80 +82,92 @@ export default class ProfileCommand implements Command {
       });
     }
 
-    if (profile?.preferredName) {
+    const data = profile as {
+      preferredName?: string | null;
+      pronouns?: Pronouns | null;
+      languages?: Language[];
+      region?: Region | null;
+      rank?: PlayerRank | null;
+      preferredRoles?: Role[];
+      proficientAtRoles?: Role[];
+      improveRoles?: Role[];
+      playstyles?: Playstyle[];
+    } | null;
+
+    if (data?.preferredName) {
       embed.addFields({
         name: "Preferred Name",
-        value: escapeText(profile.preferredName),
+        value: escapeText(data.preferredName),
         inline: true,
       });
     }
 
-    if (profile?.pronouns) {
+    if (data?.pronouns) {
       embed.addFields({
         name: "Pronouns",
-        value: PRONOUNS_LABELS[profile.pronouns],
+        value: PRONOUNS_LABELS[data.pronouns],
         inline: true,
       });
     }
 
-    if (profile?.languages?.length) {
+    if (data?.languages?.length) {
       embed.addFields({
         name: "Languages",
-        value: formatEnumList(profile.languages, LANGUAGE_LABELS),
+        value: formatEnumList(data.languages, LANGUAGE_LABELS),
         inline: true,
       });
     }
 
-    if (profile?.region) {
+    if (data?.region) {
       embed.addFields({
         name: "Region",
-        value: REGION_LABELS[profile.region],
+        value: REGION_LABELS[data.region],
         inline: true,
       });
     }
 
-    if (profile?.rank) {
+    if (data?.rank) {
       embed.addFields({
         name: "Rank",
-        value: RANK_LABELS[profile.rank],
+        value: RANK_LABELS[data.rank],
         inline: true,
       });
     }
 
-    if (profile?.preferredRoles?.length) {
+    if (data?.preferredRoles?.length) {
       embed.addFields({
         name: "Preferred Roles",
-        value: formatEnumList(profile.preferredRoles, ROLE_LABELS),
+        value: formatEnumList(data.preferredRoles, ROLE_LABELS),
         inline: false,
       });
     }
 
-    if (profile?.proficientAtRoles?.length) {
+    if (data?.proficientAtRoles?.length) {
       embed.addFields({
-        name: "Proficient At",
-        value: formatEnumList(profile.proficientAtRoles, ROLE_LABELS),
+        name: "Proficient Roles",
+        value: formatEnumList(data.proficientAtRoles, ROLE_LABELS),
         inline: false,
       });
     }
 
-    if (profile?.improveRoles?.length) {
+    if (data?.improveRoles?.length) {
       embed.addFields({
-        name: "Looking to Improve",
-        value: formatEnumList(profile.improveRoles, ROLE_LABELS),
+        name: "Want to Improve Roles",
+        value: formatEnumList(data.improveRoles, ROLE_LABELS),
         inline: false,
       });
     }
 
-    if (profile?.playstyles?.length) {
+    if (data?.playstyles?.length) {
       embed.addFields({
         name: "Playstyle",
-        value: formatEnumList(profile.playstyles, PLAYSTYLE_LABELS),
+        value: formatEnumList(data.playstyles, PLAYSTYLE_LABELS),
         inline: false,
       });
     }
 
     if ((embed.data.fields?.length ?? 0) === 0) {
-      embed.setDescription("No profile details set yet.");
+      embed.setDescription("Nothing here yet — run `/profilecreate` to begin.");
     }
 
     await interaction.reply({ embeds: [embed] });

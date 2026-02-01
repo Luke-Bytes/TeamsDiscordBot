@@ -196,6 +196,16 @@ export class CommandHandler {
         if (command && command.handleSelectMenu) {
           await command.handleSelectMenu(interaction);
         }
+      } else if (interaction.isModalSubmit()) {
+        const command = this.commands.find((command) =>
+          (command.modalIds ?? []).some(
+            (id) =>
+              interaction.customId === id || interaction.customId.startsWith(id)
+          )
+        );
+        if (command && command.handleModalSubmit) {
+          await command.handleModalSubmit(interaction);
+        }
       }
     } catch (error: unknown) {
       console.error("Error handling interaction:", error);

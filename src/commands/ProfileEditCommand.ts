@@ -5,9 +5,12 @@ import {
   ButtonStyle,
   ChatInputCommandInteraction,
   EmbedBuilder,
+  ModalBuilder,
   SlashCommandBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuInteraction,
+  TextInputBuilder,
+  TextInputStyle,
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { PermissionsUtil } from "../util/PermissionsUtil";
@@ -48,6 +51,19 @@ type Session = {
   discordName: string;
 };
 
+type ProfileModel = {
+  findUnique: (args: { where: { playerId: string } }) => Promise<unknown>;
+  upsert: (args: {
+    where: { playerId: string };
+    update: Record<string, unknown>;
+    create: Record<string, unknown>;
+  }) => Promise<unknown>;
+};
+
+function getProfileModel(): ProfileModel | undefined {
+  return (prismaClient as unknown as { profile?: ProfileModel }).profile;
+}
+
 export default class ProfileEditCommand implements Command {
   public name = "profilecreate";
   public description = "Create or edit your profile";
@@ -56,8 +72,10 @@ export default class ProfileEditCommand implements Command {
     "profile-clear:",
     "profile-back",
     "profile-cancel",
+    "profile-name-custom",
   ];
   public selectMenuIds: string[] = ["profile-select:"];
+  public modalIds: string[] = ["profile-name-modal"];
   public data = new SlashCommandBuilder()
     .setName(this.name)
     .setDescription(this.description);
@@ -69,15 +87,13 @@ export default class ProfileEditCommand implements Command {
   ): Promise<void> {
     if (!interaction.inGuild() || !interaction.guild) {
       await interaction.reply({
-        content: "This command can only be used in a server.",
-        ephemeral: true,
+        content: "Profiles can only be edited inside the server.",
       });
       return;
     }
     if (!PermissionsUtil.isChannel(interaction, "botCommands")) {
       await interaction.reply({
-        content: "Please use this command in the bot commands channel.",
-        ephemeral: true,
+        content: "Please use this in the bot commands channel.",
       });
       return;
     }
@@ -85,8 +101,7 @@ export default class ProfileEditCommand implements Command {
     const player = await PrismaUtils.findPlayer(interaction.user.id);
     if (!player) {
       await interaction.reply({
-        content: "Player not found. Please register first.",
-        ephemeral: true,
+        content: "No profile found yet — register first, then try again.",
       });
       return;
     }
@@ -98,11 +113,11 @@ export default class ProfileEditCommand implements Command {
       discordName: interaction.user.username,
     });
 
-    const profile = await prismaClient.profile.findUnique({
+    const profile = await getProfileModel()?.findUnique({
       where: { playerId: player.id },
     });
     const view = this.buildMainView(player.latestIGN ?? null, profile);
-    await interaction.reply({ ...view, ephemeral: true });
+    await interaction.reply({ ...view });
   }
 
   public async handleButtonPress(
@@ -111,15 +126,13 @@ export default class ProfileEditCommand implements Command {
     const session = this.sessions.get(interaction.user.id);
     if (!session) {
       await interaction.reply({
-        content:
-          "This profile session has expired. Run /profilecreate again.",
-        ephemeral: true,
+        content: "This profile session has expired. Run /profilecreate again.",
       });
       return;
     }
 
     if (interaction.customId === "profile-back") {
-      const profile = await prismaClient.profile.findUnique({
+      const profile = await getProfileModel()?.findUnique({
         where: { playerId: session.playerId },
       });
       const view = this.buildMainView(null, profile);
@@ -130,17 +143,33 @@ export default class ProfileEditCommand implements Command {
     if (interaction.customId === "profile-cancel") {
       this.sessions.delete(interaction.user.id);
       await interaction.update({
-        content: "Profile edit cancelled.",
+        content: "All set! Your profile has been updated.",
         embeds: [],
         components: [],
       });
       return;
     }
 
+    if (interaction.customId === "profile-name-custom") {
+      const modal = new ModalBuilder()
+        .setCustomId("profile-name-modal")
+        .setTitle("Preferred Name");
+      const input = new TextInputBuilder()
+        .setCustomId("preferredName")
+        .setLabel("Enter your name")
+        .setStyle(TextInputStyle.Short)
+        .setMaxLength(32)
+        .setRequired(true);
+      const row = new ActionRowBuilder<TextInputBuilder>().addComponents(input);
+      modal.addComponents(row);
+      await interaction.showModal(modal);
+      return;
+    }
+
     if (interaction.customId.startsWith("profile-clear:")) {
       const section = interaction.customId.split(":")[1] as SectionKey;
       await this.clearSection(session.playerId, section);
-      const profile = await prismaClient.profile.findUnique({
+      const profile = await getProfileModel()?.findUnique({
         where: { playerId: session.playerId },
       });
       const view = this.buildSectionView(section, session, null, profile);
@@ -150,7 +179,7 @@ export default class ProfileEditCommand implements Command {
 
     if (interaction.customId.startsWith("profile-edit:")) {
       const section = interaction.customId.split(":")[1] as SectionKey;
-      const profile = await prismaClient.profile.findUnique({
+      const profile = await getProfileModel()?.findUnique({
         where: { playerId: session.playerId },
       });
       const view = this.buildSectionView(section, session, null, profile);
@@ -164,9 +193,7 @@ export default class ProfileEditCommand implements Command {
     const session = this.sessions.get(interaction.user.id);
     if (!session) {
       await interaction.reply({
-        content:
-          "This profile session has expired. Run /profilecreate again.",
-        ephemeral: true,
+        content: "This session expired — run /profilecreate to continue.",
       });
       return;
     }
@@ -174,20 +201,53 @@ export default class ProfileEditCommand implements Command {
     const section = interaction.customId.split(":")[1] as SectionKey;
     const values = interaction.values;
     await this.saveSection(session.playerId, section, values);
-    const profile = await prismaClient.profile.findUnique({
+    const profile = await getProfileModel()?.findUnique({
       where: { playerId: session.playerId },
     });
     const view = this.buildSectionView(section, session, values, profile);
     await interaction.update({ ...view });
   }
 
+  public async handleModalSubmit(
+    interaction: import("discord.js").ModalSubmitInteraction
+  ): Promise<void> {
+    const session = this.sessions.get(interaction.user.id);
+    if (!session) {
+      await interaction.reply({
+        content: "This session expired — run /profilecreate to continue.",
+      });
+      return;
+    }
+    if (interaction.customId !== "profile-name-modal") return;
+    const value = interaction.fields
+      ?.getTextInputValue("preferredName")
+      ?.trim();
+    if (!value) {
+      await interaction.reply({
+        content: "Preferred name can't be empty.",
+      });
+      return;
+    }
+    await this.saveSection(session.playerId, "preferredName", [value]);
+    const profile = await getProfileModel()?.findUnique({
+      where: { playerId: session.playerId },
+    });
+    const view = this.buildSectionView(
+      "preferredName",
+      session,
+      [value],
+      profile
+    );
+    await interaction.reply({ ...view });
+  }
+
   private buildMainView(
     latestIgn: string | null,
-    profile: any
+    profile: unknown
   ): { embeds: EmbedBuilder[]; components: ActionRowBuilder<ButtonBuilder>[] } {
     const embed = new EmbedBuilder()
-      .setTitle("Edit Profile")
-      .setDescription("Choose a section to update.");
+      .setTitle("Profile Builder")
+      .setDescription("Pick a section to personalise.");
 
     if (latestIgn) {
       embed.addFields({
@@ -202,7 +262,7 @@ export default class ProfileEditCommand implements Command {
       new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
           .setCustomId("profile-edit:preferredName")
-          .setLabel("Preferred Name")
+          .setLabel("Name")
           .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
           .setCustomId("profile-edit:pronouns")
@@ -228,19 +288,19 @@ export default class ProfileEditCommand implements Command {
           .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
           .setCustomId("profile-edit:proficientAtRoles")
-          .setLabel("Proficient At Roles")
+          .setLabel("Proficient")
           .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
           .setCustomId("profile-edit:improveRoles")
-          .setLabel("Improve Roles")
+          .setLabel("Want to Improve")
           .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
           .setCustomId("profile-edit:playstyles")
-          .setLabel("Playstyles")
+          .setLabel("Playstyle")
           .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
           .setCustomId("profile-cancel")
-          .setLabel("Done")
+          .setLabel("Finish")
           .setStyle(ButtonStyle.Success)
       ),
     ];
@@ -252,12 +312,14 @@ export default class ProfileEditCommand implements Command {
     section: SectionKey,
     session: Session,
     lastValues: string[] | null,
-    profile: any
+    profile: unknown
   ): {
     embeds: EmbedBuilder[];
-    components: Array<ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>>;
+    components: Array<
+      ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>
+    >;
   } {
-    const embed = new EmbedBuilder().setTitle("Edit Profile");
+    const embed = new EmbedBuilder().setTitle("Profile Builder");
     this.addProfileFields(embed, profile);
 
     const menu = this.buildSelectMenu(section, session, profile);
@@ -271,6 +333,14 @@ export default class ProfileEditCommand implements Command {
         .setLabel("Clear")
         .setStyle(ButtonStyle.Danger)
     );
+    if (section === "preferredName") {
+      controls.addComponents(
+        new ButtonBuilder()
+          .setCustomId("profile-name-custom")
+          .setLabel("Type Name")
+          .setStyle(ButtonStyle.Primary)
+      );
+    }
 
     if (lastValues && lastValues.length > 0) {
       embed.setFooter({
@@ -284,68 +354,79 @@ export default class ProfileEditCommand implements Command {
     };
   }
 
-  private addProfileFields(embed: EmbedBuilder, profile: any) {
-    if (!profile) return;
-    if (profile.preferredName) {
+  private addProfileFields(embed: EmbedBuilder, profile: unknown) {
+    const data = profile as {
+      preferredName?: string | null;
+      pronouns?: keyof typeof PRONOUNS_LABELS | null;
+      languages?: Array<keyof typeof LANGUAGE_LABELS>;
+      region?: keyof typeof REGION_LABELS | null;
+      rank?: keyof typeof RANK_LABELS | null;
+      preferredRoles?: Array<keyof typeof ROLE_LABELS>;
+      proficientAtRoles?: Array<keyof typeof ROLE_LABELS>;
+      improveRoles?: Array<keyof typeof ROLE_LABELS>;
+      playstyles?: Array<keyof typeof PLAYSTYLE_LABELS>;
+    } | null;
+    if (!data) return;
+    if (data.preferredName) {
       embed.addFields({
         name: "Preferred Name",
-        value: escapeText(profile.preferredName),
+        value: escapeText(data.preferredName),
         inline: true,
       });
     }
-    if (profile.pronouns) {
+    if (data.pronouns) {
       embed.addFields({
         name: "Pronouns",
-        value: PRONOUNS_LABELS[profile.pronouns],
+        value: PRONOUNS_LABELS[data.pronouns],
         inline: true,
       });
     }
-    if (profile.languages?.length) {
+    if (data.languages?.length) {
       embed.addFields({
         name: "Languages",
-        value: formatEnumList(profile.languages, LANGUAGE_LABELS),
+        value: formatEnumList(data.languages, LANGUAGE_LABELS),
         inline: true,
       });
     }
-    if (profile.region) {
+    if (data.region) {
       embed.addFields({
         name: "Region",
-        value: REGION_LABELS[profile.region],
+        value: REGION_LABELS[data.region],
         inline: true,
       });
     }
-    if (profile.rank) {
+    if (data.rank) {
       embed.addFields({
         name: "Rank",
-        value: RANK_LABELS[profile.rank],
+        value: RANK_LABELS[data.rank],
         inline: true,
       });
     }
-    if (profile.preferredRoles?.length) {
+    if (data.preferredRoles?.length) {
       embed.addFields({
         name: "Preferred Roles",
-        value: formatEnumList(profile.preferredRoles, ROLE_LABELS),
+        value: formatEnumList(data.preferredRoles, ROLE_LABELS),
         inline: false,
       });
     }
-    if (profile.proficientAtRoles?.length) {
+    if (data.proficientAtRoles?.length) {
       embed.addFields({
-        name: "Proficient At",
-        value: formatEnumList(profile.proficientAtRoles, ROLE_LABELS),
+        name: "Proficient Roles",
+        value: formatEnumList(data.proficientAtRoles, ROLE_LABELS),
         inline: false,
       });
     }
-    if (profile.improveRoles?.length) {
+    if (data.improveRoles?.length) {
       embed.addFields({
-        name: "Looking to Improve",
-        value: formatEnumList(profile.improveRoles, ROLE_LABELS),
+        name: "Want to Improve Roles",
+        value: formatEnumList(data.improveRoles, ROLE_LABELS),
         inline: false,
       });
     }
-    if (profile.playstyles?.length) {
+    if (data.playstyles?.length) {
       embed.addFields({
         name: "Playstyle",
-        value: formatEnumList(profile.playstyles, PLAYSTYLE_LABELS),
+        value: formatEnumList(data.playstyles, PLAYSTYLE_LABELS),
         inline: false,
       });
     }
@@ -354,7 +435,7 @@ export default class ProfileEditCommand implements Command {
   private buildSelectMenu(
     section: SectionKey,
     session: Session,
-    profile: any
+    _profile: unknown
   ): ActionRowBuilder<StringSelectMenuBuilder> {
     const select = new StringSelectMenuBuilder()
       .setCustomId(`profile-select:${section}`)
@@ -446,7 +527,9 @@ export default class ProfileEditCommand implements Command {
         break;
     }
 
-    return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
+    return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+      select
+    );
   }
 
   private async saveSection(
@@ -454,7 +537,7 @@ export default class ProfileEditCommand implements Command {
     section: SectionKey,
     values: string[]
   ) {
-    const data: any = {};
+    const data: Record<string, unknown> = {};
     switch (section) {
       case "preferredName":
         data.preferredName = values[0] ?? null;
@@ -484,7 +567,7 @@ export default class ProfileEditCommand implements Command {
         data.playstyles = values;
         break;
     }
-    await prismaClient.profile.upsert({
+    await getProfileModel()?.upsert({
       where: { playerId },
       update: data,
       create: { playerId, ...data },
@@ -492,7 +575,7 @@ export default class ProfileEditCommand implements Command {
   }
 
   private async clearSection(playerId: string, section: SectionKey) {
-    const data: any = {};
+    const data: Record<string, unknown> = {};
     switch (section) {
       case "preferredName":
         data.preferredName = null;
@@ -522,7 +605,7 @@ export default class ProfileEditCommand implements Command {
         data.playstyles = [];
         break;
     }
-    await prismaClient.profile.upsert({
+    await getProfileModel()?.upsert({
       where: { playerId },
       update: data,
       create: { playerId, ...data },
@@ -544,7 +627,9 @@ export default class ProfileEditCommand implements Command {
       case "improveRoles":
         return ROLE_LABELS[value as keyof typeof ROLE_LABELS] ?? value;
       case "playstyles":
-        return PLAYSTYLE_LABELS[value as keyof typeof PLAYSTYLE_LABELS] ?? value;
+        return (
+          PLAYSTYLE_LABELS[value as keyof typeof PLAYSTYLE_LABELS] ?? value
+        );
       default:
         return value;
     }
