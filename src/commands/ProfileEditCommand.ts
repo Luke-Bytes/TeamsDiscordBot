@@ -30,7 +30,6 @@ import {
   ROLE_LABELS,
   ROLE_LIST,
   TITLE_LABELS,
-  TITLE_LIST,
   formatEnumList,
 } from "../util/ProfileUtil";
 import { escapeText } from "../util/Utils";
@@ -498,6 +497,7 @@ export default class ProfileEditCommand implements Command {
           .setPlaceholder("No titles available yet")
           .setMaxValues(0)
           .setDisabled(true);
+        (select as unknown as { disabled?: boolean }).disabled = true;
         break;
       case "languages":
         select

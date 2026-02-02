@@ -104,6 +104,7 @@ model GameParticipation {
 
   mvp     Boolean @default(false)
   captain Boolean @default(false)
+  votedForAMVP Boolean? @default(false)
 
   seasonId String
   season   Season @relation(fields: [seasonId], references: [id])
@@ -145,6 +146,7 @@ type GameSettings {
   nonSharedCaptainBannedClasses BanList?
   map                           AnniMap
   modifiers                     ModifierTypes[]
+  delayedBan                    Int @default(0)
 }
 
 model PlayerPunishment {
