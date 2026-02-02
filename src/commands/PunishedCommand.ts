@@ -2,6 +2,7 @@ import { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { PrismaClient } from "@prisma/client";
 import { PrismaUtils } from "../util/PrismaUtils";
+import { escapeText } from "../util/Utils";
 
 const prisma = new PrismaClient();
 
@@ -24,6 +25,9 @@ export default class PunishedCommand implements Command {
     await interaction.deferReply();
 
     const userInput = interaction.options.getString("user", false);
+    const safeUserInput = userInput ? escapeText(userInput) : "";
+
+    await PrismaUtils.updatePunishmentsForExpiry();
 
     try {
       if (userInput) {
@@ -31,7 +35,7 @@ export default class PunishedCommand implements Command {
 
         if (!player) {
           await interaction.editReply(
-            `❌ **Player "${userInput}" not found.**`
+            `❌ **Player "${safeUserInput}" not found.**`
           );
           return;
         }
@@ -42,7 +46,7 @@ export default class PunishedCommand implements Command {
 
         if (punishments.length === 0) {
           await interaction.editReply(
-            `✅ **${userInput} has never been punished.**`
+            `✅ **${safeUserInput} has never been punished.**`
           );
           return;
         }
@@ -69,7 +73,7 @@ export default class PunishedCommand implements Command {
         });
 
         await interaction.editReply(
-          `📋 **Punishment record for ${userInput}:**\n\n${punishmentDetails.join("\n\n")}`
+          `📋 **Punishment record for ${safeUserInput}:**\n\n${punishmentDetails.join("\n\n")}`
         );
       } else {
         const punishedUsers = await prisma.playerPunishment.findMany({
@@ -87,9 +91,9 @@ export default class PunishedCommand implements Command {
         }
 
         const userDetails = punishedUsers.map((entry, index) => {
-          const username =
-            entry.player.latestIGN ||
-            `Discord: <@${entry.player.discordSnowflake}>`;
+          const username = entry.player.latestIGN
+            ? escapeText(entry.player.latestIGN)
+            : `Discord: <@${entry.player.discordSnowflake}>`;
           const expiryDate = entry.punishmentExpiry
             ? `<t:${Math.floor(entry.punishmentExpiry.getTime() / 1000)}:R>`
             : "No expiry";

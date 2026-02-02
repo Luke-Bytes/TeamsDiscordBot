@@ -9,6 +9,7 @@ import logger from "./util/Logger";
 import { PermissionsUtil } from "./util/PermissionsUtil";
 import { MaintenanceLoggingUtil } from "./util/MaintenanceLoggingUtil";
 import { PrismaUtils } from "./util/PrismaUtils";
+import { ConfigManager } from "./ConfigManager";
 
 export class TeamsBot {
   client: Client;
@@ -17,6 +18,7 @@ export class TeamsBot {
   messageHandler: MessageHandler;
   reactionHandler: ReactionHandler;
   voiceChannelHandler: VoiceChannelHandler;
+  private static processHandlersAttached = false;
 
   constructor() {
     this.client = new Client({
@@ -40,6 +42,48 @@ export class TeamsBot {
     this.messageHandler = new MessageHandler(this.client);
     this.reactionHandler = new ReactionHandler();
     this.voiceChannelHandler = new VoiceChannelHandler();
+
+    this.attachGlobalGuards();
+  }
+
+  private attachGlobalGuards() {
+    if (TeamsBot.processHandlersAttached) return;
+    TeamsBot.processHandlersAttached = true;
+    const config = ConfigManager.getConfig();
+    const isDev = config.dev.enabled || process.env.NODE_ENV === "development";
+
+    process.on("unhandledRejection", (reason, promise) => {
+      console.error("Unhandled promise rejection:", reason, promise);
+    });
+
+    process.on("uncaughtException", (error) => {
+      console.error("Uncaught exception:", error);
+      if (isDev) {
+        process.exit(1);
+      }
+    });
+
+    process.on("warning", (warning) => {
+      console.warn("Process warning:", warning);
+    });
+
+    this.client.on("error", (error) => {
+      console.error("Discord client error:", error);
+      if (isDev) {
+        throw error;
+      }
+    });
+
+    this.client.on("shardError", (error) => {
+      console.error("Discord shard error:", error);
+      if (isDev) {
+        throw error;
+      }
+    });
+
+    this.client.on("warn", (warning) => {
+      console.warn("Discord client warning:", warning);
+    });
   }
 
   public async start() {
@@ -86,7 +130,7 @@ export class TeamsBot {
               return;
             }
           } catch (e) {
-            void e;
+            console.log(`Failed to create message: ${e}`);
           }
         }
         return;
@@ -103,9 +147,13 @@ export class TeamsBot {
         return;
       }
       if (this.commandHandler.teamCommand.teamPickingSession) {
-        await this.commandHandler.teamCommand.teamPickingSession.handleMessage(
-          msg
-        );
+        try {
+          await this.commandHandler.teamCommand.teamPickingSession.handleMessage(
+            msg
+          );
+        } catch (error) {
+          console.error("Team picking message handling failed: ", error);
+        }
       }
     });
 

@@ -7,7 +7,9 @@
     "blueTeamRole": "",
     "redTeamRole": "",
     "captainRole": "",
-    "organiserRole": ""
+    "organiserRole": "",
+    "clanLeaderRole": "",
+    "spectatorRole": ""
   },
   "channels": {
     "registration": "",
@@ -24,5 +26,9 @@
   "dev": {
     "enabled": false,
     "guildId": ""
+  },
+  "wiki": {
+    "mapImageBaseUrl": "",
+    "mapImageDir": ""
   }
 }

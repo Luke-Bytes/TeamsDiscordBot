@@ -6,6 +6,7 @@ import {
   ChatInputCommandInteraction,
   EmbedBuilder,
   SlashCommandBuilder,
+  MessageFlags,
 } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
@@ -27,7 +28,6 @@ export default class ForfeitCommand implements Command {
     if (!game?.announced) {
       await interaction.reply({
         content: "No game is currently in progress.",
-        ephemeral: false,
       });
       return;
     }
@@ -36,7 +36,6 @@ export default class ForfeitCommand implements Command {
     if (!PermissionsUtil.hasRole(member, "captainRole")) {
       await interaction.reply({
         content: "Only team captains can forfeit!",
-        ephemeral: false,
       });
       return;
     }
@@ -46,7 +45,6 @@ export default class ForfeitCommand implements Command {
     if (!isBlue && !isRed) {
       await interaction.reply({
         content: "You are not on Blue or Red team.",
-        ephemeral: false,
       });
       return;
     }
@@ -76,7 +74,6 @@ export default class ForfeitCommand implements Command {
     await interaction.reply({
       embeds: [embed],
       components: [row],
-      ephemeral: false,
     });
   }
 
@@ -89,7 +86,7 @@ export default class ForfeitCommand implements Command {
     if (!originalInvokerId || originalInvokerId !== interaction.user.id) {
       await interaction.reply({
         content: "Only the captain who initiated this can confirm/cancel.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }

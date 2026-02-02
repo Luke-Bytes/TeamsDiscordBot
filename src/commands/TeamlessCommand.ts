@@ -5,6 +5,7 @@ import {
   EmbedBuilder,
 } from "discord.js";
 import { GameInstance } from "../database/GameInstance";
+import { escapeText } from "../util/Utils";
 
 export default class TeamlessCommand implements Command {
   data = new SlashCommandBuilder()
@@ -24,14 +25,12 @@ export default class TeamlessCommand implements Command {
       .setDescription(
         undecidedPlayers.length
           ? undecidedPlayers
-              .map((player) =>
-                (player.ignUsed ?? "Unknown Player").replace(/_/g, "\\_")
-              )
+              .map((player) => escapeText(player.ignUsed ?? "Unknown Player"))
               .join("\n")
           : "No registered players without a team."
       )
       .setColor("Yellow");
 
-    await interaction.reply({ embeds: [embed], ephemeral: false });
+    await interaction.reply({ embeds: [embed] });
   }
 }

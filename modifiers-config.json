@@ -11,24 +11,27 @@
         { "name": "All Combat Classes Banned", "weight": 1 },
         { "name": "1 Captain Ban Each (Shared)", "weight": 4 },
         { "name": "2 Captain Bans Each (Shared)", "weight": 1 },
-        { "name": "1 Captain Ban Each (Opponent Only, No Core)", "weight": 4 },
-        { "name": "2 Captain Bans Each (Opponent Only, No Core)", "weight": 1 }
+        { "name": "1 Captain Ban Each (Opponent Only, No Core)", "weight": 1 },
+        { "name": "2 Captain Bans Each (Opponent Only, No Core)", "weight": 1 },
+        { "name": "Delayed Ban (Phase 2)", "weight": 1 },
+        { "name": "Delayed Ban (Phase 3)", "weight": 1 },
+        { "name": "Delayed Ban (Phase 4)", "weight": 1 }
       ]
     },
     {
       "name": "Nexus Damage Catalyst",
       "maxPerRun": 1,
       "modifiers": [
-        { "name": "No Double Damage or Nexus Bleed", "weight": 15 },
+        { "name": "No Double Damage or Nexus Bleed", "weight": 25 },
         { "name": "Double Damage", "weight": 1 },
-        { "name": "Nexus Bleed", "weight": 4 }
+        { "name": "Nexus Bleed", "weight": 1 }
       ]
     },
     {
       "name": "Nexus HP",
       "maxPerRun": 1,
       "modifiers": [
-        { "name": "75", "weight": 8 },
+        { "name": "75", "weight": 18 },
         { "name": "100", "weight": 1 },
         { "name": "125", "weight": 1 }
       ]
@@ -45,7 +48,7 @@
       "name": "Minerushing",
       "maxPerRun": 1,
       "modifiers": [
-        { "name": "Always", "weight": 18 },
+        { "name": "Always", "weight": 28 },
         { "name": "Not before phase 2 (Two)", "weight": 1 },
         { "name": "Not before phase 3 (Three)", "weight": 1 }
       ]
@@ -54,7 +57,7 @@
       "name": "Nexus Damage",
       "maxPerRun": 1,
       "modifiers": [
-        { "name": "Always", "weight": 17 },
+        { "name": "Always", "weight": 27 },
         { "name": "No Nexus Damage before phase 2 (Two)", "weight": 1 },
         { "name": "No Nexus Damage before phase 3 (Three)", "weight": 1 },
         { "name": "No Nexus Damage before phase 4 (Four)", "weight": 1 }
@@ -69,7 +72,15 @@
       ]
     },
     {
-      "name": "Skip Phase",
+      "name": "Class Changing Portal Removed",
+      "maxPerRun": 1,
+      "modifiers": [
+        { "name": "No", "weight": 49 },
+        { "name": "Yes", "weight": 1 }
+      ]
+    },
+    {
+      "name": "Phase Skip",
       "maxPerRun": 1,
       "modifiers": [
         { "name": "No Phase Skip", "weight": 17 },

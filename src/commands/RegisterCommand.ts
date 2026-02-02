@@ -1,4 +1,8 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
+import {
+  SlashCommandBuilder,
+  ChatInputCommandInteraction,
+  MessageFlags,
+} from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { PermissionsUtil } from "../util/PermissionsUtil.js";
 import { CurrentGameManager } from "../logic/CurrentGameManager.js";
@@ -6,6 +10,8 @@ import { prismaClient } from "../database/prismaClient";
 import { MojangAPI } from "../api/MojangAPI";
 import TeamCommand from "../commands/TeamCommand";
 import { DraftTeamPickingSession } from "../logic/teams/DraftTeamPickingSession";
+import { escapeText } from "../util/Utils";
+import { PrismaUtils } from "../util/PrismaUtils";
 
 export default class RegisterCommand implements Command {
   public data: SlashCommandBuilder;
@@ -37,7 +43,7 @@ export default class RegisterCommand implements Command {
     if (!PermissionsUtil.isChannel(interaction, "registration")) {
       await interaction.reply({
         content: "You can only register in the registration channel.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -45,16 +51,19 @@ export default class RegisterCommand implements Command {
     if (!CurrentGameManager.getCurrentGame().announced) {
       await interaction.reply({
         content: "No game has been announced yet!",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
+
+    await PrismaUtils.updatePunishmentsForExpiry();
 
     const inGameNameOption = interaction.options.getString("ingamename");
     const targetUser =
       interaction.options.getUser("discorduser") || interaction.user;
     const discordUserId = targetUser.id;
     const discordUserName = targetUser.username;
+    const safeDiscordUserName = escapeText(discordUserName);
 
     const member = interaction.guild?.members.cache.get(interaction.user.id);
     await interaction.deferReply();
@@ -101,6 +110,7 @@ export default class RegisterCommand implements Command {
 
     let uuid: string | null = null;
     let resolvedUsername: string | null = null;
+    const hasStoredIgn = Boolean(player?.primaryMinecraftAccount);
 
     if (!inGameNameOption) {
       if (!player || !player.primaryMinecraftAccount) {
@@ -188,6 +198,13 @@ export default class RegisterCommand implements Command {
     }
 
     // late signups
+    const shouldNudgeIgn =
+      Boolean(inGameNameOption) &&
+      hasStoredIgn &&
+      PermissionsUtil.isSameUser(interaction, targetUser.id);
+    const ignNudge = shouldNudgeIgn
+      ? " You don't need to type your IGN next time."
+      : "";
 
     if (this.teamCommand.isTeamPickingSessionActive()) {
       const session = this.teamCommand.teamPickingSession;
@@ -199,11 +216,11 @@ export default class RegisterCommand implements Command {
       }
       if (PermissionsUtil.isSameUser(interaction, targetUser.id)) {
         await interaction.editReply({
-          content: `You have successfully registered as \`${resolvedUsername}\` but please note this is a late sign-up as team picking is currently ongoing. You may be unable to play.`,
+          content: `You have successfully registered as \`${resolvedUsername}\` but please note this is a late sign-up as team picking is currently ongoing. You may be unable to play.${ignNudge}`,
         });
       } else {
         await interaction.editReply({
-          content: `${discordUserName} has been successfully registered as \`${resolvedUsername}\`, but it's a late sign-up during team picking.`,
+          content: `${safeDiscordUserName} has been successfully registered as \`${resolvedUsername}\`, but it's a late sign-up during team picking.`,
         });
       }
       return;
@@ -212,11 +229,11 @@ export default class RegisterCommand implements Command {
     if (CurrentGameManager.getCurrentGame().teamsDecidedBy !== null) {
       if (PermissionsUtil.isSameUser(interaction, targetUser.id)) {
         await interaction.editReply({
-          content: `You have successfully registered as \`${resolvedUsername}\` but please note this is a late sign-up as team picking has been completed. You may be unable to play.`,
+          content: `You have successfully registered as \`${resolvedUsername}\` but please note this is a late sign-up as team picking has been completed. You may be unable to play.${ignNudge}`,
         });
       } else {
         await interaction.editReply({
-          content: `${discordUserName} has been successfully registered as \`${resolvedUsername}\`, but it's a late sign-up post team picking.`,
+          content: `${safeDiscordUserName} has been successfully registered as \`${resolvedUsername}\`, but it's a late sign-up post team picking.`,
         });
       }
       return;
@@ -225,11 +242,11 @@ export default class RegisterCommand implements Command {
     // success messages
     if (PermissionsUtil.isSameUser(interaction, targetUser.id)) {
       await interaction.editReply({
-        content: `You have successfully registered as \`${resolvedUsername}\`!`,
+        content: `You have successfully registered as \`${resolvedUsername}\`!${ignNudge}`,
       });
     } else {
       await interaction.editReply({
-        content: `${discordUserName} has been successfully registered as \`${resolvedUsername}\`!`,
+        content: `${safeDiscordUserName} has been successfully registered as \`${resolvedUsername}\`!`,
       });
     }
   }

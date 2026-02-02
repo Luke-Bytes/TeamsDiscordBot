@@ -11,6 +11,7 @@ export abstract class TeamPickingSession {
   public state: TeamPickingSessionState = "inProgress";
   public embedMessage?: Message<boolean>;
   public abstract getState(): TeamPickingSessionState;
+  public cancelSession?(): Promise<void> | void;
 
   public abstract initialize(
     interaction: ChatInputCommandInteraction

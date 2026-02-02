@@ -1,3 +1,5 @@
+import { UUID } from "mongodb";
+
 export class MojangAPI {
   public static async usernameToUUID(username: string): Promise<string | null> {
     if (!this.validateUsername(username)) {
@@ -14,7 +16,7 @@ export class MojangAPI {
         const data = await response.json();
         return data?.id ?? null;
       } else if (response.status === 404) {
-        console.warn(`Username ${username} not found in Mojang API.`);
+        console.warn(`Username ${username} not found by Mojang API.`);
         return null;
       } else {
         console.error(
@@ -52,14 +54,14 @@ export class MojangAPI {
         return username;
       }
     } catch (error) {
-      console.error("Error fetching UUID from Gapple API:", error);
+      console.error(`Error fetching UUID '${UUID}' from Gapple API:`, error);
       return username;
     }
   }
 
   public static async uuidToUsername(uuid: string): Promise<string | null> {
     if (!uuid || !/^[0-9a-f]{32}$/.test(uuid)) {
-      console.error("Invalid UUID format.");
+      console.error(`Invalid UUID format passed: ${uuid}`);
       return null;
     }
 

@@ -2,6 +2,8 @@ import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
 import { Command } from "./CommandInterface";
 import { MojangAPI } from "../api/MojangAPI";
 import { PrismaClient } from "@prisma/client";
+import { escapeText } from "../util/Utils";
+import { PermissionsUtil } from "../util/PermissionsUtil";
 
 const prisma = new PrismaClient();
 
@@ -35,11 +37,14 @@ export default class UsernameCommand implements Command {
     if (!interaction.isChatInputCommand()) return;
     const subcommand = interaction.options.getSubcommand();
     if (subcommand !== "update") return;
+    if (!(await PermissionsUtil.isUserAuthorised(interaction))) return;
 
     const oldUsername = interaction.options.getString("oldusername", true);
     const newUsername = interaction.options.getString("newusername", true);
+    const safeOldUsername = escapeText(oldUsername);
+    const safeNewUsername = escapeText(newUsername);
 
-    await interaction.deferReply({ ephemeral: false });
+    await interaction.deferReply();
 
     if (oldUsername.toLowerCase() === newUsername.toLowerCase()) {
       await interaction.editReply("Old and new usernames cannot be the same.");
@@ -60,7 +65,7 @@ export default class UsernameCommand implements Command {
 
     if (!oldPlayer) {
       await interaction.editReply(
-        `No player found with username: ${oldUsername}`
+        `No player found with username: ${safeOldUsername}`
       );
       return;
     }
@@ -71,7 +76,7 @@ export default class UsernameCommand implements Command {
 
     if (newPlayer) {
       await interaction.editReply(
-        `Another player already uses the username: ${newUsername}`
+        `Another player already uses the username: ${safeNewUsername}`
       );
       return;
     }
@@ -90,8 +95,8 @@ export default class UsernameCommand implements Command {
 
     await interaction.editReply(
       `✅ Successfully updated player **${oldPlayer.id}**:\n` +
-        `• From **${oldUsername}** (${oldUUID})\n` +
-        `• To **${newUsername}** (${newUUID})`
+        `• From **${safeOldUsername}** (${oldUUID})\n` +
+        `• To **${safeNewUsername}** (${newUUID})`
     );
   }
 }

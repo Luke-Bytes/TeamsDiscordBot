@@ -19,7 +19,7 @@ test("No modifiers defaults to shared: all bans appear under Shared", async () =
   (game as any).classBanMode = "shared";
   game.setClassBanLimit(2);
   // organiser shared ban
-  game.settings.bannedClasses = ["TRANSPORTER" as any];
+  game.settings.organiserBannedClasses = ["TRANSPORTER" as any];
 
   const cfg = ConfigManager.getConfig();
   const guild = new FakeGuild() as any;

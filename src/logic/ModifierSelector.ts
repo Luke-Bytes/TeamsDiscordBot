@@ -68,9 +68,10 @@ export class ModifierSelector {
 
     if (swapperMod) {
       const game = GameInstance.getInstance();
-      game.settings.bannedClasses = game.settings.bannedClasses.filter(
-        (c) => c !== AnniClass.SWAPPER
-      );
+      game.settings.organiserBannedClasses =
+        game.settings.organiserBannedClasses.filter(
+          (c) => c !== AnniClass.SWAPPER
+        );
     }
 
     GameInstance.getInstance().pickOtherTeamsSupportRoles =
@@ -80,7 +81,8 @@ export class ModifierSelector {
   private static handleClassBans(name: string) {
     const game = GameInstance.getInstance();
     game.classBanMode = null;
-    const banned = game.settings.bannedClasses;
+    game.settings.delayedBan = 0;
+    const organiserBans = game.settings.organiserBannedClasses;
 
     switch (name) {
       case "No Bans":
@@ -93,8 +95,8 @@ export class ModifierSelector {
           let cls: AnniClass;
           do {
             cls = getRandomAnniClass();
-          } while (banned.includes(cls));
-          banned.push(cls);
+          } while (organiserBans.includes(cls));
+          organiserBans.push(cls);
         }
         break;
 
@@ -104,8 +106,8 @@ export class ModifierSelector {
           let cls: AnniClass;
           do {
             cls = getRandomAnniClass();
-          } while (banned.includes(cls));
-          banned.push(cls);
+          } while (organiserBans.includes(cls));
+          organiserBans.push(cls);
         }
         break;
 
@@ -119,7 +121,7 @@ export class ModifierSelector {
           AnniClass.ROBINHOOD,
           AnniClass.TRANSPORTER,
         ].forEach((c) => {
-          if (!banned.includes(c)) banned.push(c);
+          if (!organiserBans.includes(c)) organiserBans.push(c);
         });
         break;
 
@@ -134,7 +136,7 @@ export class ModifierSelector {
           AnniClass.WARRIOR,
           AnniClass.SUCCUBUS,
         ].forEach((c) => {
-          if (!banned.includes(c)) banned.push(c);
+          if (!organiserBans.includes(c)) organiserBans.push(c);
         });
         break;
 
@@ -156,6 +158,24 @@ export class ModifierSelector {
       case "2 Captain Bans Each (Opponent Only, No Core)":
         game.classBanMode = "opponentOnly";
         game.setClassBanLimit(4);
+        break;
+
+      case "Delayed Ban (Phase 2)":
+        game.classBanMode = "shared";
+        game.settings.delayedBan = 2;
+        game.setClassBanLimit(2);
+        break;
+
+      case "Delayed Ban (Phase 3)":
+        game.classBanMode = "shared";
+        game.settings.delayedBan = 3;
+        game.setClassBanLimit(2);
+        break;
+
+      case "Delayed Ban (Phase 4)":
+        game.classBanMode = "shared";
+        game.settings.delayedBan = 4;
+        game.setClassBanLimit(2);
         break;
 
       default:

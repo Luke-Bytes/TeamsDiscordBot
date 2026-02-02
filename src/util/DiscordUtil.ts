@@ -27,10 +27,11 @@ export class DiscordUtil {
     content: string,
     ephemeral = true
   ): Promise<void> {
-    await interaction.reply({
+    const options = {
       content,
-      ephemeral,
-    });
+      ...(ephemeral ? { ephemeral: true } : {}),
+    };
+    await interaction.reply(options);
   }
 
   static async editReply(

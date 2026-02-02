@@ -11,6 +11,7 @@ import { Channels } from "../Channels";
 import { prismaClient } from "../database/prismaClient.js";
 import { ConfigManager } from "../ConfigManager";
 import { Team } from "@prisma/client";
+import { escapeText } from "../util/Utils";
 
 export default class StatsCommand implements Command {
   public name = "stats";
@@ -95,7 +96,7 @@ export default class StatsCommand implements Command {
       .fetch(player.discordSnowflake)
       .catch(() => null);
     let userDisplayName = player.minecraftAccounts
-      .map((n) => n.replace(/_/g, "\\_"))
+      .map((n) => escapeText(n))
       .join(", ");
     let avatarUrl: string | undefined;
     if (fetchedMember) {
@@ -105,7 +106,7 @@ export default class StatsCommand implements Command {
         .fetch(player.discordSnowflake)
         .catch(() => null);
       if (fetchedUser) {
-        userDisplayName = `${fetchedUser.tag} (${userDisplayName})`;
+        userDisplayName = `${escapeText(fetchedUser.tag)} (${userDisplayName})`;
         avatarUrl = fetchedUser.displayAvatarURL();
       }
     }
@@ -137,7 +138,7 @@ export default class StatsCommand implements Command {
       .setThumbnail(avatarUrl ?? null);
 
     if (detailed) {
-      const [mvpCount, captainCount, captainWinCount, lastGP] =
+      const [mvpCount, captainCount, captainWinCount, doubleEloWins, lastGP] =
         await Promise.all([
           prismaClient.gameParticipation.count({
             where: { playerId: player.id, seasonId: season.id, mvp: true },
@@ -150,6 +151,17 @@ export default class StatsCommand implements Command {
               playerId: player.id,
               seasonId: season.id,
               captain: true,
+              OR: [
+                { team: Team.RED, game: { winner: Team.RED } },
+                { team: Team.BLUE, game: { winner: Team.BLUE } },
+              ],
+            },
+          }),
+          prismaClient.gameParticipation.count({
+            where: {
+              playerId: player.id,
+              seasonId: season.id,
+              game: { doubleElo: true },
               OR: [
                 { team: Team.RED, game: { winner: Team.RED } },
                 { team: Team.BLUE, game: { winner: Team.BLUE } },
@@ -203,6 +215,7 @@ export default class StatsCommand implements Command {
         { name: "MVP Count", value: `${mvpCount}`, inline: true },
         { name: "Captain Count", value: `${captainCount}`, inline: true },
         { name: "Captain Win Rate", value: captainWinRate, inline: true },
+        { name: "Double Elo Wins", value: `${doubleEloWins}`, inline: true },
         { name: "Average Elo Change", value: avgEloChange, inline: true },
         { name: "Last Game Date", value: lastGameDate, inline: true }
       );

@@ -3,6 +3,8 @@ import { prismaClient } from "../src/database/prismaClient";
 import { ConfigManager } from "../src/ConfigManager";
 import { Team, type Season, Prisma } from "@prisma/client";
 import { EloUtil } from "../src/util/EloUtil";
+import type { GameInstance } from "../src/database/GameInstance";
+import type { PlayerInstance } from "../src/database/PlayerInstance";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 
@@ -19,6 +21,11 @@ type PlayerState = {
   biggestWinStreak: number;
   biggestLosingStreak: number;
 };
+
+type EloPlayer = Pick<
+  PlayerInstance,
+  "playerId" | "elo" | "winStreak" | "latestIGN"
+>;
 
 const rl = createInterface({ input, output });
 const fmt = (dt?: Date) => (dt ? new Date(dt).toLocaleString() : "n/a");
@@ -57,45 +64,47 @@ function mean(arr: number[]) {
     : 1000;
 }
 
-function calcNewEloForPlayer(
-  base: PlayerState,
-  team: Team,
-  winner: Team,
+function buildGameContext(
+  teamByPlayerId: Map<string, Team>,
   blueMean: number,
   redMean: number,
   blueExp: number,
-  redExp: number,
+  redExp: number
+): GameInstance {
+  return {
+    blueMeanElo: blueMean,
+    redMeanElo: redMean,
+    blueExpectedScore: blueExp,
+    redExpectedScore: redExp,
+    getPlayersTeam: (player: PlayerInstance) =>
+      teamByPlayerId.get(player.playerId) ?? null,
+  } as GameInstance;
+}
+
+function calcNewEloForPlayer(
+  base: PlayerState,
+  playerId: string,
+  latestIGN: string | null,
+  team: Team,
+  winner: Team,
+  gameContext: GameInstance,
   isDoubleElo: boolean,
   mvp: boolean,
   captain: boolean
 ): number {
   const config = ConfigManager.getConfig();
-  const expected = team === Team.BLUE ? blueExp : redExp;
   const isWin = team === winner;
-
-  const k = EloUtil.getKFactor(base.elo);
-  let delta = Math.abs(k * ((isWin ? 1 : 0) - expected));
-
-  if (isWin && base.winStreak >= EloUtil.WIN_STREAK_MIN) {
-    const ws = Math.min(base.winStreak, EloUtil.WIN_STREAK_MAX_THRESHOLD);
-    const bonus =
-      ws > EloUtil.WIN_STREAK_MEDIUM_THRESHOLD
-        ? EloUtil.BONUS_MULTIPLIER_MEDIUM +
-          (ws - EloUtil.WIN_STREAK_MEDIUM_THRESHOLD) *
-            EloUtil.BONUS_MULTIPLIER_INCREMENT_HIGH
-        : 1 +
-          (ws - (EloUtil.WIN_STREAK_MIN - 1)) *
-            EloUtil.BONUS_MULTIPLIER_INCREMENT_LOW;
-    delta = delta * bonus;
-  }
-
-  const meanDiff = Math.abs(blueMean - redMean);
-  if (meanDiff < 25) {
-    const adj = (0.5 - expected) * config.underdogMultiplier;
-    delta = isWin ? delta + delta * adj : delta + delta * -adj;
-  }
-
-  delta = Number(delta.toFixed(1));
+  const player: EloPlayer = {
+    playerId,
+    elo: base.elo,
+    winStreak: base.winStreak,
+    latestIGN: latestIGN ?? undefined,
+  };
+  const delta = EloUtil.calculateEloChange(
+    gameContext,
+    player as PlayerInstance,
+    isWin
+  );
 
   let newElo = base.elo;
   if (isWin) newElo += isDoubleElo ? delta * 2 : delta;
@@ -152,22 +161,31 @@ async function main() {
     const redElos = g.gameParticipations
       .filter((p) => p.team === Team.RED)
       .map((p) => state.get(p.playerId)!.elo);
+    const teamByPlayerId = new Map(
+      g.gameParticipations.map((p) => [p.playerId, p.team])
+    );
     const blueMean = mean(blueElos);
     const redMean = mean(redElos);
     const [blueExp, redExp] = EloUtil.calculateExpectedScore(blueMean, redMean);
     const isDouble = g.doubleElo ?? false;
+    const gameContext = buildGameContext(
+      teamByPlayerId,
+      blueMean,
+      redMean,
+      blueExp,
+      redExp
+    );
 
     const after: { playerId: string; elo: number }[] = [];
     for (const gp of g.gameParticipations) {
       const ps = state.get(gp.playerId)!;
       const newElo = calcNewEloForPlayer(
         ps,
+        gp.playerId,
+        gp.ignUsed,
         gp.team,
         g.winner,
-        blueMean,
-        redMean,
-        blueExp,
-        redExp,
+        gameContext,
         isDouble,
         gp.mvp,
         gp.captain

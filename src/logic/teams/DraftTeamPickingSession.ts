@@ -40,10 +40,19 @@ export class DraftTeamPickingSession extends TeamPickingSession {
   lateSignups: PlayerInstance[] = [];
   latePickingStarted = false;
   private lateDraftableWindow = 0;
+  private lateDraftableBonus = 0;
   private pickCounts: Record<Team, number> = { RED: 0, BLUE: 0 };
   private pickWarningTimeout?: NodeJS.Timeout;
   private pickAutoTimeout?: NodeJS.Timeout;
   private pickDmTimeout?: NodeJS.Timeout;
+  private readonly mode: "draft" | "snake";
+  private totalPicksMade = 0;
+  private firstPickTeam?: Team;
+
+  constructor(mode: "draft" | "snake" = "draft") {
+    super();
+    this.mode = mode;
+  }
 
   public getState(): TeamPickingSessionState {
     return this.state;
@@ -91,15 +100,19 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       return;
     }
 
+    const modeLabel =
+      this.mode === "snake" ? "snake draft" : "draft team picking";
     await interaction.editReply({
-      content: `Started a draft team picking session in <#${teamPickingChannel.id}>`,
+      content: `Started a ${modeLabel} session in <#${teamPickingChannel.id}>`,
     });
 
     if (teamPickingChannel.isSendable()) {
       const embed = this.createDraftEmbed(false);
       this.embedMessage = await teamPickingChannel.send(embed);
       await teamPickingChannel.send(
-        "⚠️ Captains have **2 minutes** for their opening pick and **1 minute** for every pick after that. If time expires, random eligible player will be automatically picked. You'll get a DM with 1 minute remaining on your opening pick and a channel warning 15 seconds before any auto-pick."
+        `⚠️ Captains have **2 minutes** for their opening pick and **1 minute** for every pick after that. If time expires, random eligible player will be automatically picked. You'll get a DM with 1 minute remaining on your opening pick and a channel warning 15 seconds before any auto-pick.${
+          this.mode === "snake" ? " Snake draft uses a 1-2-2-1 pick order." : ""
+        }`
       );
 
       if (Math.random() < 0.5) {
@@ -113,6 +126,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
           "**Blue** team has been randomly picked to select first."
         );
       }
+      this.firstPickTeam = this.turn;
       await this.sendTurnMessage();
     } else {
       console.error(
@@ -161,7 +175,9 @@ export class DraftTeamPickingSession extends TeamPickingSession {
 
     const embed = new EmbedBuilder()
       .setColor("#0099ff")
-      .setTitle("Drafting Teams")
+      .setTitle(
+        this.mode === "snake" ? "Snake Drafting Teams" : "Drafting Teams"
+      )
       .addFields(
         {
           name: "🔵  Blue Team  🔵  ",
@@ -258,13 +274,15 @@ export class DraftTeamPickingSession extends TeamPickingSession {
             (p) => !allPickedPlayers.has(p.discordSnowflake)
           ),
         ];
-        game.changeHowTeamsDecided("DRAFT");
+        game.changeHowTeamsDecided(
+          this.mode === "snake" ? "SNAKE_DRAFT" : "DRAFT"
+        );
         this.state = "finalized";
         this.clearTurnTimers();
         break;
       }
       case "draft-cancel":
-        await this.embedMessage?.delete();
+        await this.embedMessage?.delete().catch(() => {});
         await interaction.channel.send("Draft picking cancelled.");
         this.state = "cancelled";
         this.clearTurnTimers();
@@ -303,7 +321,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     );
 
     if (lastTurnMessage) {
-      await lastTurnMessage.delete();
+      await lastTurnMessage.delete().catch(() => {});
     }
 
     await teamPickingChannel.send(
@@ -340,9 +358,12 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     if (pickingFrom === "LATE") {
       this.latePickingStarted = true;
       this.lateSignups = this.lateSignups.filter((p) => p !== player);
-      if (this.lateDraftableWindow > 0) {
+      if (this.lateDraftableBonus > 0) {
+        this.lateDraftableBonus -= 1;
+      } else if (this.lateDraftableWindow > 0) {
         this.lateDraftableWindow = Math.max(this.lateDraftableWindow - 1, 0);
       }
+      this.syncLateDraftableWindow();
     } else {
       this.proposedTeams.UNDECIDED = this.proposedTeams.UNDECIDED.filter(
         (p) => p !== player
@@ -350,6 +371,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     }
 
     this.pickCounts[pickingTeam] += 1;
+    player.draftSlotPlacement = this.pickCounts[pickingTeam];
     await this.embedMessage?.edit(this.createDraftEmbed(false));
 
     const safeName = escapeText(player.ignUsed ?? "Unknown Player");
@@ -389,8 +411,22 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       return;
     }
 
-    this.turn = pickingTeam === "RED" ? "BLUE" : "RED";
+    this.totalPicksMade += 1;
+    this.turn = this.getNextTurn(pickingTeam);
     await this.sendTurnMessage();
+  }
+
+  private getNextTurn(pickingTeam: Team): Team {
+    if (this.mode !== "snake" || !this.firstPickTeam) {
+      return pickingTeam === "RED" ? "BLUE" : "RED";
+    }
+    const start = this.firstPickTeam;
+    const other = start === "RED" ? "BLUE" : "RED";
+    if (this.totalPicksMade === 1) {
+      return other;
+    }
+    const block = Math.floor((this.totalPicksMade - 1) / 2);
+    return block % 2 === 0 ? other : start;
   }
 
   private async sendFinalizationMessage(channel: TextChannel) {
@@ -416,6 +452,16 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     if (this.pickDmTimeout) {
       clearTimeout(this.pickDmTimeout);
       this.pickDmTimeout = undefined;
+    }
+  }
+
+  public async cancelSession(): Promise<void> {
+    this.state = "cancelled";
+    this.clearTurnTimers();
+    await this.embedMessage?.delete().catch(() => {});
+    const channel = Channels.teamPicking;
+    if (channel.isSendable()) {
+      await channel.send("Draft picking cancelled.");
     }
   }
 
@@ -581,7 +627,9 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       (msg) => msg.author.bot && msg.content.includes("Invalid player pick:")
     );
 
-    await Promise.all(invalidMessages.map((msg) => msg.delete()));
+    await Promise.all(
+      invalidMessages.map((msg) => msg.delete().catch(() => {}))
+    );
   }
 
   public async registerLateSignup(player: PlayerInstance) {
@@ -594,23 +642,27 @@ export class DraftTeamPickingSession extends TeamPickingSession {
   }
 
   private syncLateDraftableWindow() {
+    const evenLateCount =
+      this.lateSignups.length - (this.lateSignups.length % 2);
     if (this.latePickingStarted) {
       this.lateDraftableWindow = Math.min(
-        this.lateDraftableWindow,
-        this.lateSignups.length
+        this.lateSignups.length,
+        this.lateDraftableWindow
       );
       return;
     }
-    const evenLateCount =
-      this.lateSignups.length - (this.lateSignups.length % 2);
     this.lateDraftableWindow = evenLateCount;
   }
 
   private getLateDraftablePlayers(): PlayerInstance[] {
-    if (this.lateDraftableWindow <= 0) {
+    const window = Math.min(
+      this.lateSignups.length,
+      this.lateDraftableWindow + this.lateDraftableBonus
+    );
+    if (window <= 0) {
       return [];
     }
-    return this.lateSignups.slice(0, this.lateDraftableWindow);
+    return this.lateSignups.slice(0, window);
   }
 
   private async handleRemainingLateSignups(channel: TextChannel) {
@@ -618,17 +670,54 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       return;
     }
     const leftovers = [...this.lateSignups];
-    this.proposedTeams.UNDECIDED.push(...leftovers);
+    const uniqueLeftovers = leftovers.filter(
+      (p, idx, arr) =>
+        arr.findIndex((o) => o.discordSnowflake === p.discordSnowflake) ===
+          idx &&
+        !this.proposedTeams.UNDECIDED.some(
+          (u) => u.discordSnowflake === p.discordSnowflake
+        )
+    );
+    this.proposedTeams.UNDECIDED.push(...uniqueLeftovers);
     this.lateSignups = [];
     this.lateDraftableWindow = 0;
+    this.lateDraftableBonus = 0;
     await this.embedMessage?.edit(this.createDraftEmbed(false));
     if (channel.isSendable()) {
-      const names = leftovers
+      const names = uniqueLeftovers
         .map((p) => escapeText(p.ignUsed ?? "Unknown Player"))
         .join(", ");
       await channel.send(
-        `Late signup${leftovers.length > 1 ? "s" : ""} ${names} remain undecided and may not participate.`
+        `Late signup${uniqueLeftovers.length > 1 ? "s" : ""} ${names} remain undecided and may not participate.`
       );
+    }
+  }
+
+  public async handleUnregister(discordSnowflake: string): Promise<void> {
+    let removedFromTeams = false;
+    const teams: Array<Team | "UNDECIDED"> = ["RED", "BLUE", "UNDECIDED"];
+
+    for (const team of teams) {
+      const before = this.proposedTeams[team].length;
+      this.proposedTeams[team] = this.proposedTeams[team].filter(
+        (player) => player.discordSnowflake !== discordSnowflake
+      );
+      if (this.proposedTeams[team].length !== before) {
+        removedFromTeams = true;
+      }
+    }
+
+    this.lateSignups = this.lateSignups.filter(
+      (player) => player.discordSnowflake !== discordSnowflake
+    );
+
+    if (removedFromTeams) {
+      this.lateDraftableBonus += 1;
+    }
+
+    this.syncLateDraftableWindow();
+    if (this.embedMessage) {
+      await this.embedMessage.edit(this.createDraftEmbed(false));
     }
   }
 }

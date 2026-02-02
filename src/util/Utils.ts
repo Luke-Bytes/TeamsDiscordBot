@@ -120,11 +120,15 @@ export const withTimeout = <T>(
 
 export async function formatTeamIGNs(
   game: GameInstance,
-  team: Team
+  team: Team,
+  escape = true
 ): Promise<string> {
   return game
     .getPlayersOfTeam(team)
-    .map((p) => `${escapeText(String(p.latestIGN ?? p.ignUsed))} = `)
+    .map(
+      (p) =>
+        `${escape ? escapeText(String(p.latestIGN ?? p.ignUsed)) : String(p.latestIGN ?? p.ignUsed)} = `
+    )
     .join("\n");
 }
 
@@ -175,6 +179,7 @@ export function escapeText(text: string): string {
   }
   for (const delimiter of singleDelimiters) {
     escaped = escapeDelimitedSections(escaped, delimiter);
+    escaped = escapeUnpairedDelimiter(escaped, delimiter);
   }
 
   return escaped.replace(/(^|\n)>/g, "$1\\>");
@@ -205,6 +210,12 @@ function escapeDelimitedSections(text: string, delimiter: string) {
   return text.replace(pairPattern, (match) =>
     match.replace(new RegExp(escapedDelimiter, "g"), replacement)
   );
+}
+
+function escapeUnpairedDelimiter(text: string, delimiter: string): string {
+  const escapedDelimiter = escapeForRegex(delimiter);
+  const pattern = new RegExp(`(?<!\\\\)${escapedDelimiter}`, "g");
+  return text.replace(pattern, `\\${delimiter}`);
 }
 
 function escapeForRegex(value: string) {

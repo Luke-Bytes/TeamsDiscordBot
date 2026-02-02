@@ -6,6 +6,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
   PermissionFlagsBits,
+  MessageFlags,
 } from "discord.js";
 import { Command } from "../commands/CommandInterface.js";
 import { cleanUpAfterGame } from "../logic/GameEndCleanUp.js";
@@ -48,7 +49,6 @@ export default class CleanupCommand implements Command {
         content:
           "⚠️ **WARNING:** This command is for debugging only and should not be used carelessly. Confirm to proceed or cancel.",
         components: [row],
-        ephemeral: false,
       });
     }
   }
@@ -66,7 +66,7 @@ export default class CleanupCommand implements Command {
         if (!guild) {
           await interaction.followUp({
             content: "This command can only be used in a guild.",
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           });
           return;
         }
@@ -75,14 +75,12 @@ export default class CleanupCommand implements Command {
 
         await interaction.followUp({
           content: "✅ Cleanup completed successfully.",
-          ephemeral: false,
         });
       } catch (error) {
         console.error("Error during cleanup:", error);
 
         await interaction.followUp({
           content: "❌ Cleanup failed. Check the logs for details.",
-          ephemeral: false,
         });
       }
     } else if (interaction.customId === "cleanup_cancel") {

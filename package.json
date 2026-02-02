@@ -29,6 +29,9 @@
     "rebuild:dev": "git pull && npm run stop:pm2:dev && npm run build && npm run prod:pm2:dev",
     "tests": "node tests/run-tests.js",
     "update-db-igns": "tsx scripts/fetch-latest-igns.ts",
+    "season-recap": "tsx scripts/seasonRecap.ts",
+    "manage-season": "node scripts/manage-season.js",
+    "fix-last-game-winner": "tsx scripts/fix-last-game-winner.ts",
     "typecheck": "tsc --noEmit",
     "check": "npm run build && npm run typecheck && npm run lint && npm run tests"
   },

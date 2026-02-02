@@ -72,7 +72,7 @@ export async function cleanUpAfterGame(guild: Guild) {
     void e;
   }
   try {
-    CurrentGameManager.resetCurrentGame();
+    await CurrentGameManager.resetCurrentGame();
   } catch (e) {
     void e;
   }
@@ -85,22 +85,28 @@ export async function cleanUpAfterGame(guild: Guild) {
   const captainRoleId = config.roles.captainRole;
 
   try {
-    const captainRole = guild.roles.cache.get(captainRoleId);
-    if (captainRole) {
-      for (const [, member] of captainRole.members) {
-        try {
-          await member.roles.remove(captainRole);
-          console.log(`Removed Captain role from ${member.user.tag}`);
-        } catch (error) {
-          console.error(
-            `Failed to remove Captain role from ${member.user.tag}:`,
-            error
-          );
-        }
-      }
-      console.log("Completed cleaning up captains.");
+    if (!guild.roles?.cache) {
+      console.warn(
+        "[Cleanup] Guild roles cache unavailable; skipping captain cleanup."
+      );
     } else {
-      console.error("Captain role not found.");
+      const captainRole = guild.roles.cache.get(captainRoleId);
+      if (captainRole) {
+        for (const [, member] of captainRole.members) {
+          try {
+            await member.roles.remove(captainRole);
+            console.log(`Removed Captain role from ${member.user.tag}`);
+          } catch (error) {
+            console.error(
+              `Failed to remove Captain role from ${member.user.tag}:`,
+              error
+            );
+          }
+        }
+        console.log("Completed cleaning up captains.");
+      } else {
+        console.error("Captain role not found.");
+      }
     }
   } catch (error) {
     console.error("Failed to clean up captains:", error);

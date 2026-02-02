@@ -8,9 +8,12 @@ export async function withImmediateTimers<T>(
     _ms?: number,
     ...args: any[]
   ) => {
-    const handle = setImmediate(() => {
+    const handle = setImmediate(async () => {
       try {
-        cb(...args);
+        const result = cb(...args);
+        if (result && typeof (result as any).then === "function") {
+          await result;
+        }
       } catch (e) {
         // Bubble up async to avoid breaking scheduler flow
         setImmediate(() => {

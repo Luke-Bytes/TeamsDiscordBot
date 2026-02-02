@@ -25,6 +25,7 @@ export class PlayerInstance {
   // used in memory during a game
   ignUsed?: string;
   captain?: boolean;
+  draftSlotPlacement?: number;
 
   constructor(player: Player, stats: PlayerStats) {
     this.playerId = player.id;

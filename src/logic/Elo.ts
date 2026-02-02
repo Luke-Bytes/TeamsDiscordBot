@@ -7,6 +7,7 @@ export class Elo {
   public calculateNewElo(player: PlayerInstance): number {
     const config = ConfigManager.getConfig();
     const game = CurrentGameManager.getCurrentGame();
+    const mvpVoteBonus = 1;
 
     if (!game || !player) {
       console.error("Game or Player not found.");
@@ -19,6 +20,13 @@ export class Elo {
     );
 
     const playerTeam = game.getPlayersTeam(player);
+    const expectedScore =
+      playerTeam === "BLUE" ? game.blueExpectedScore : game.redExpectedScore;
+    if (expectedScore !== undefined && playerTeam !== "UNDECIDED") {
+      console.log(
+        `Team: ${playerTeam} | Expected Score: ${expectedScore.toFixed(2)} | Win Streak: ${player.winStreak}`
+      );
+    }
 
     if (!playerTeam || playerTeam === "UNDECIDED") {
       console.warn(`Player team is undecided for ${player.ignUsed}.`);
@@ -57,6 +65,13 @@ export class Elo {
       currentElo += config.captainBonus;
       console.log(
         `Captain bonus applied to ${player.ignUsed}: +${config.captainBonus}`
+      );
+    }
+
+    if (game.hasVotedMvp(player.discordSnowflake)) {
+      currentElo += mvpVoteBonus;
+      console.log(
+        `MVP vote bonus applied to ${player.ignUsed}: +${mvpVoteBonus}`
       );
     }
 

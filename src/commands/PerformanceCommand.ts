@@ -22,7 +22,7 @@ export default class PerformanceCommand implements Command {
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    await interaction.deferReply({ ephemeral: false }); // Ensure interaction stays active
+    await interaction.deferReply(); // Ensure interaction stays active
 
     const uptimeSeconds = process.uptime();
     const memoryUsage = process.memoryUsage();
@@ -77,9 +77,12 @@ async function pingMojangAPI(): Promise<string> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000); // Timeout after 5 seconds
 
-    const response = await fetch("https://api.mojang.com/", {
-      signal: controller.signal,
-    });
+    const response = await fetch(
+      "https://api.mojang.com/users/profiles/minecraft/Notch",
+      {
+        signal: controller.signal,
+      }
+    );
     clearTimeout(timeout);
 
     if (response.ok) {

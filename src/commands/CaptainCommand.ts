@@ -1,4 +1,8 @@
-import { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import {
+  ChatInputCommandInteraction,
+  SlashCommandBuilder,
+  MessageFlags,
+} from "discord.js";
 import { Command } from "../commands/CommandInterface";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { Team } from "@prisma/client";
@@ -6,6 +10,7 @@ import { CurrentGameManager } from "../logic/CurrentGameManager";
 import TeamCommand from "../commands/TeamCommand";
 import { PrismaUtils } from "../util/PrismaUtils";
 import { escapeText } from "../util/Utils";
+import { AutoCaptainSelector } from "../logic/AutoCaptainSelector";
 
 export default class CaptainCommand implements Command {
   public data: SlashCommandBuilder;
@@ -39,6 +44,13 @@ export default class CaptainCommand implements Command {
                 { name: "red", value: "red" }
               )
           )
+      )
+      .addSubcommand((sub) =>
+        sub
+          .setName("randomise")
+          .setDescription(
+            "Randomly select two captains based on eligibility (elo + presence)."
+          )
       ) as SlashCommandBuilder;
   }
 
@@ -46,7 +58,7 @@ export default class CaptainCommand implements Command {
     if (!interaction.guild) {
       await interaction.reply({
         content: "This command can only be used in a server.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -55,8 +67,46 @@ export default class CaptainCommand implements Command {
     if (!PermissionsUtil.hasRole(member, "organiserRole")) {
       await interaction.reply({
         content: "Only organisers can use this command!",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
+      return;
+    }
+
+    const subCommand = interaction.options.getSubcommand(true);
+
+    const game = CurrentGameManager.getCurrentGame();
+
+    if (!game.announced) {
+      await interaction.reply({
+        content: "No game has been announced yet!",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if (this.teamCommand.isTeamPickingSessionActive()) {
+      await interaction.reply({
+        content: "You can't change captains while team picking is in progress!",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if (subCommand === "randomise") {
+      const result = await AutoCaptainSelector.randomiseCaptains(
+        interaction.guild,
+        false
+      );
+      if ("error" in result) {
+        await interaction.reply({
+          content: result.error,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      await interaction.reply(
+        `Captains have been selected:\n🔵 Blue: **${escapeText(result.blue.ignUsed ?? "Unknown")}**\n🔴 Red: **${escapeText(result.red.ignUsed ?? "Unknown")}**`
+      );
       return;
     }
 
@@ -69,25 +119,7 @@ export default class CaptainCommand implements Command {
     if (!resolvedPlayer) {
       await interaction.reply({
         content: "Error: Player not found. Have they registered?",
-        ephemeral: true,
-      });
-      return;
-    }
-
-    const game = CurrentGameManager.getCurrentGame();
-
-    if (!game.announced) {
-      await interaction.reply({
-        content: "No game has been announced yet!",
-        ephemeral: true,
-      });
-      return;
-    }
-
-    if (this.teamCommand.isTeamPickingSessionActive()) {
-      await interaction.reply({
-        content: "You can't change captains while team picking is in progress!",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -99,7 +131,7 @@ export default class CaptainCommand implements Command {
     if (!player) {
       await interaction.reply({
         content: "Error: Has this player registered yet? ",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -113,7 +145,7 @@ export default class CaptainCommand implements Command {
     ) {
       await interaction.reply({
         content: `Error: The player must already be in RED, BLUE, or UNDECIDED team to be assigned as captain.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }

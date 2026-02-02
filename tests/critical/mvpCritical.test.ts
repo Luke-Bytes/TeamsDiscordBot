@@ -133,4 +133,44 @@ test("MVP voting validations (channel, same team, not captain, not self)", async
     !!reply && /has been recorded/i.test(String(reply.payload?.content)),
     "Records valid MVP vote"
   );
+  assert(
+    /\+1\s*Elo/i.test(String(reply.payload?.content)),
+    "Success message mentions +1 Elo reward"
+  );
+});
+
+test("Voting MVP grants +1 Elo at Elo calculation time", async () => {
+  const game = CurrentGameManager.getCurrentGame();
+  game.reset();
+  game.isFinished = true;
+  game.gameWinner = "RED";
+
+  const voter = {
+    discordSnowflake: "V100",
+    ignUsed: "Voter",
+    captain: false,
+    elo: 1000,
+    winStreak: 0,
+  } as any;
+  const target = {
+    discordSnowflake: "T100",
+    ignUsed: "Target",
+    captain: false,
+    elo: 1000,
+    winStreak: 0,
+  } as any;
+  (game as any).teams = { RED: [voter, target], BLUE: [], UNDECIDED: [] };
+  game.calculateMeanEloAndExpectedScore();
+
+  const { Elo } = await import("../../src/logic/Elo");
+  const elo = new Elo();
+
+  const beforeVote = elo.calculateNewElo(voter);
+  game.voteMvp("V100", "T100");
+  const afterVote = elo.calculateNewElo(voter);
+
+  assert(
+    afterVote - beforeVote === 1,
+    `Expected +1 Elo, got ${afterVote - beforeVote}`
+  );
 });

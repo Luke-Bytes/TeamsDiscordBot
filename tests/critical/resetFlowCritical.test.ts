@@ -53,13 +53,13 @@ test("resetCurrentGame clears timers, sessions, votes, and state in-place", asyn
   );
 
   // Act: reset the game via manager
-  CurrentGameManager.resetCurrentGame();
+  await CurrentGameManager.resetCurrentGame();
 
   // Assertions: same instance object, but state reset
   const post = GameInstance.getInstance();
   if (post !== pre)
     throw new Error("GameInstance reference changed (should reset in-place)");
-  if (post.announced !== false) throw new Error("announced not reset to false");
+  if (post.announced) throw new Error("announced not reset to false");
   if (post.getPlayers().length !== 0) throw new Error("players not cleared");
   if (!mapCanceled) throw new Error("mapVoteManager.cancelVote was not called");
   if (!minerushCanceled)
@@ -90,7 +90,7 @@ test("resetGameInstance saves and resets in-place without stale references", asy
   const inst = GameInstance.getInstance();
   inst.announced = true;
   inst.isFinished = true;
-  inst.settings.bannedClasses = ["ACROBAT" as any];
+  inst.settings.organiserBannedClasses = ["ACROBAT" as any];
 
   const beforeRef = inst;
   await GameInstance.resetGameInstance();
@@ -102,6 +102,6 @@ test("resetGameInstance saves and resets in-place without stale references", asy
     throw new Error("GameInstance reference replaced (should reset in-place)");
   if (afterRef.announced)
     throw new Error("announced not cleared on in-place reset");
-  if (afterRef.settings.bannedClasses.length !== 0)
-    throw new Error("bannedClasses not cleared on in-place reset");
+  if (afterRef.settings.organiserBannedClasses.length !== 0)
+    throw new Error("organiserBannedClasses not cleared on in-place reset");
 });

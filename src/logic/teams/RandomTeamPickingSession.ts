@@ -6,6 +6,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
   Message,
+  MessageFlags,
 } from "discord.js";
 import {
   TeamPickingSession,
@@ -16,6 +17,7 @@ import { PlayerInstance } from "../../database/PlayerInstance";
 import { CurrentGameManager } from "../../logic/CurrentGameManager";
 import { Team } from "@prisma/client";
 import { EloUtil } from "../../util/EloUtil";
+import { escapeText } from "../../util/Utils";
 
 export class RandomTeamPickingSession extends TeamPickingSession {
   state: TeamPickingSessionState = "inProgress";
@@ -27,9 +29,11 @@ export class RandomTeamPickingSession extends TeamPickingSession {
   };
   redCaptain?: PlayerInstance;
   blueCaptain?: PlayerInstance;
+  private mode: "random" | "elo" | "balance";
 
-  constructor() {
+  constructor(mode: "random" | "elo" | "balance" = "random") {
     super();
+    this.mode = mode;
   }
 
   public async initialize(interaction: ChatInputCommandInteraction) {
@@ -61,11 +65,16 @@ export class RandomTeamPickingSession extends TeamPickingSession {
     //       this.state = "cancelled";
     //       return;
     //   }
-    game.createTeams("random");
+    game.createTeams(this.mode);
+    this.proposedTeams = {
+      RED: [...game.teams.RED],
+      BLUE: [...game.teams.BLUE],
+      UNDECIDED: [...game.teams.UNDECIDED],
+    };
     const embed = this.createTeamGenerateEmbed(game);
 
     if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     }
 
     this.embedMessage = await interaction.editReply(embed);
@@ -113,27 +122,42 @@ export class RandomTeamPickingSession extends TeamPickingSession {
       //           await interaction.update({});
       //         }
       case "random-team-accept": {
-        const simulatedTeams = game.simulateShuffledTeams();
-        game.teams.BLUE = simulatedTeams.BLUE;
-        game.teams.RED = simulatedTeams.RED;
-        game.teams.UNDECIDED = [];
-        simulatedTeams.BLUE = [];
-        simulatedTeams.RED = [];
+        game.teams.BLUE = [...this.proposedTeams.BLUE];
+        game.teams.RED = [...this.proposedTeams.RED];
+        game.teams.UNDECIDED = [...this.proposedTeams.UNDECIDED];
 
-        const { embeds, components } = this.createTeamGenerateEmbed(game);
+        const { embeds, components } = this.createTeamGenerateEmbed(
+          game,
+          this.proposedTeams
+        );
         await this.embedMessage?.edit({
           embeds,
           components,
         });
 
         await interaction.update({});
-        game.changeHowTeamsDecided("RANDOMISED");
+        if (this.mode === "random") {
+          game.changeHowTeamsDecided("RANDOMISED");
+        } else if (this.mode === "elo") {
+          game.changeHowTeamsDecided("ELO");
+        } else {
+          game.changeHowTeamsDecided("BALANCE");
+        }
         this.state = "finalized";
         break;
       }
 
       case "random-team-generate-reroll": {
+        if (this.mode !== "random") {
+          await interaction.update({});
+          return;
+        }
         const simulatedTeams = game.simulateShuffledTeams();
+        this.proposedTeams = {
+          RED: [...simulatedTeams.RED],
+          BLUE: [...simulatedTeams.BLUE],
+          UNDECIDED: [],
+        };
         const { embeds, components } = this.createTeamGenerateEmbed(
           game,
           simulatedTeams
@@ -179,9 +203,9 @@ export class RandomTeamPickingSession extends TeamPickingSession {
       players.length
         ? players
             .map((player, index) => {
-              const playerString = `${EloUtil.getEloEmoji(player.elo)} ${
+              const playerString = `${EloUtil.getEloEmoji(player.elo)} ${escapeText(
                 player.ignUsed ?? "Unknown Player"
-              }`;
+              )}`;
               return index === 0 ? `**${playerString}**` : playerString;
             })
             .join("\n")
@@ -192,7 +216,13 @@ export class RandomTeamPickingSession extends TeamPickingSession {
 
     const embed = new EmbedBuilder()
       .setColor("#0099ff")
-      .setTitle("Randomised Teams")
+      .setTitle(
+        this.mode === "elo"
+          ? "Elo Teams"
+          : this.mode === "balance"
+            ? "Balanced Teams"
+            : "Randomised Teams"
+      )
       .addFields(
         //         {
         //           name: "🔵 Blue Team 🔵  ",
@@ -213,11 +243,19 @@ export class RandomTeamPickingSession extends TeamPickingSession {
       new ButtonBuilder()
         .setCustomId("random-team-accept")
         .setLabel("Confirm Teams")
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId("random-team-generate-reroll")
-        .setLabel("Reroll")
-        .setStyle(ButtonStyle.Primary),
+        .setStyle(ButtonStyle.Success)
+    );
+
+    if (this.mode === "random") {
+      row.addComponents(
+        new ButtonBuilder()
+          .setCustomId("random-team-generate-reroll")
+          .setLabel("Reroll")
+          .setStyle(ButtonStyle.Primary)
+      );
+    }
+
+    row.addComponents(
       new ButtonBuilder()
         .setCustomId("random-team-generate-cancel")
         .setLabel("Cancel")
@@ -231,5 +269,10 @@ export class RandomTeamPickingSession extends TeamPickingSession {
 
   public getState() {
     return this.state;
+  }
+
+  public async cancelSession(): Promise<void> {
+    this.state = "cancelled";
+    await this.embedMessage?.delete().catch(() => {});
   }
 }

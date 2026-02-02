@@ -194,7 +194,7 @@ The order of the classes discussed will roughly follow how game operation flows.
 **Announcement Creation:**
 
 - Handles game announcements via commands.
-- Configures options like time, map, banned classes, and minerushing.
+- Configures options like time, map, banned classes, and modifiers (includes minerushing).
 - Offers previews and manages user interactions for confirmation, cancellation, or edits.
 
 ---
@@ -203,7 +203,7 @@ The order of the classes discussed will roughly follow how game operation flows.
 
 **Singleton Design and Game State Management:**
 
-- Maintains a single instance of game state, including settings (map, minerushing, banned classes) and progress (start/end time, announcement, reset).
+- Maintains a single instance of game state, including settings (map, modifiers such as minerushing, banned classes) and progress (start/end time, announcement, reset).
 
 **Team Management:**
 

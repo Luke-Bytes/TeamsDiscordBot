@@ -1,4 +1,8 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
+import {
+  SlashCommandBuilder,
+  ChatInputCommandInteraction,
+  MessageFlags,
+} from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { escapeText } from "../util/Utils";
@@ -36,7 +40,7 @@ export default class MVPCommand implements Command {
       if (!currentGame.isFinished) {
         await interaction.reply({
           content: "The game is not finished yet.",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -48,7 +52,7 @@ export default class MVPCommand implements Command {
       if (!voterPlayer) {
         await interaction.reply({
           content: "You are not part of the game and cannot vote.",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -57,7 +61,7 @@ export default class MVPCommand implements Command {
       if (!userTeam) {
         await interaction.reply({
           content: "Are you on a team?",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -66,7 +70,7 @@ export default class MVPCommand implements Command {
       if (!PermissionsUtil.isChannel(interaction, requiredChannel)) {
         await interaction.reply({
           content: `You must use this command in your team's respective channel!`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -76,7 +80,7 @@ export default class MVPCommand implements Command {
       if (!targetPlayer) {
         await interaction.reply({
           content: "Player not found.",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -85,7 +89,6 @@ export default class MVPCommand implements Command {
       if (!targetTeam || targetTeam !== userTeam) {
         await interaction.reply({
           content: "You can only vote for players on your own team!",
-          ephemeral: false,
         });
         return;
       }
@@ -93,7 +96,7 @@ export default class MVPCommand implements Command {
       if (targetPlayer.captain) {
         await interaction.reply({
           content: "You cannot vote for a team captain!",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -101,7 +104,6 @@ export default class MVPCommand implements Command {
       if (targetPlayer.discordSnowflake === voterPlayer.discordSnowflake) {
         await interaction.reply({
           content: "You cannot vote for yourself!",
-          ephemeral: false,
         });
         return;
       }
@@ -114,14 +116,12 @@ export default class MVPCommand implements Command {
       if (result.error) {
         await interaction.reply({
           content: result.error,
-          ephemeral: false,
         });
       } else {
         await interaction.reply({
           content: `Your MVP vote for ${escapeText(
             targetPlayer.ignUsed ?? "Unknown Player"
-          )} has been recorded!`,
-          ephemeral: false,
+          )} has been recorded! Enjoy +1 elo as a thank you for voting 🙂`,
         });
       }
     }

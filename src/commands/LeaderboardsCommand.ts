@@ -7,6 +7,7 @@ import {
   ActionRowBuilder,
   ButtonInteraction,
   SlashCommandOptionsOnlyBuilder,
+  MessageFlags,
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { EloUtil } from "../util/EloUtil";
@@ -234,7 +235,7 @@ export default class LeaderboardsCommand implements Command {
           error instanceof Error && error.message
             ? `❌ ${error.message}`
             : "❌ An error occurred while fetching the leaderboards. Please try again later.";
-        await interaction.reply({ content: msg, ephemeral: false });
+        await interaction.reply({ content: msg });
       }
     }
   }
@@ -250,7 +251,7 @@ export default class LeaderboardsCommand implements Command {
     ) {
       await interaction.reply({
         content: "❌ You didn't summon this leaderboard embed!",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -278,7 +279,7 @@ export default class LeaderboardsCommand implements Command {
         error instanceof Error && error.message
           ? `❌ ${error.message}`
           : "❌ Failed to update leaderboard.";
-      await interaction.reply({ content: msg, ephemeral: false });
+      await interaction.reply({ content: msg });
     }
   }
 }

@@ -6,6 +6,7 @@ import {
   GuildMemberRoleManager,
   SlashCommandBuilder,
   SlashCommandSubcommandsOnlyBuilder,
+  MessageFlags,
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
@@ -49,8 +50,11 @@ export default class TeamCommand implements Command {
               .setDescription("Method to generate teams")
               .setRequired(true)
               .addChoices(
-                { name: "random", value: "random" },
-                { name: "draft", value: "draft" }
+                { name: "snake draft", value: "snake" },
+                { name: "draft", value: "draft" },
+                { name: "elo", value: "elo" },
+                { name: "balance", value: "balance" },
+                { name: "random", value: "random" }
               )
           )
       )
@@ -105,7 +109,7 @@ export default class TeamCommand implements Command {
           }
           const method = interaction.options.getString("method");
           if (
-            method === "draft" &&
+            (method === "draft" || method === "snake") &&
             (!game.getCaptainOfTeam("RED") || !game.getCaptainOfTeam("BLUE"))
           ) {
             await DiscordUtil.reply(
@@ -115,7 +119,7 @@ export default class TeamCommand implements Command {
             return;
           }
 
-          if (method === "draft") {
+          if (method === "draft" || method === "snake") {
             const undecidedCount = game.getPlayersOfTeam("UNDECIDED").length;
             if (undecidedCount % 2 !== 0) {
               await DiscordUtil.reply(
@@ -139,15 +143,27 @@ export default class TeamCommand implements Command {
             );
           }
 
-          await interaction.deferReply({ ephemeral: false });
+          await interaction.deferReply();
 
           switch (method) {
             case "random":
-              this.teamPickingSession = new RandomTeamPickingSession();
+              this.teamPickingSession = new RandomTeamPickingSession("random");
               await this.teamPickingSession.initialize(interaction);
               break;
             case "draft":
-              this.teamPickingSession = new DraftTeamPickingSession();
+              this.teamPickingSession = new DraftTeamPickingSession("draft");
+              await this.teamPickingSession.initialize(interaction);
+              break;
+            case "snake":
+              this.teamPickingSession = new DraftTeamPickingSession("snake");
+              await this.teamPickingSession.initialize(interaction);
+              break;
+            case "elo":
+              this.teamPickingSession = new RandomTeamPickingSession("elo");
+              await this.teamPickingSession.initialize(interaction);
+              break;
+            case "balance":
+              this.teamPickingSession = new RandomTeamPickingSession("balance");
               await this.teamPickingSession.initialize(interaction);
               break;
           }
@@ -228,7 +244,7 @@ export default class TeamCommand implements Command {
             return;
           }
 
-          await interaction.deferReply({ ephemeral: false });
+          await interaction.deferReply();
           game.changeHowTeamsDecided(null);
           game.resetTeams();
           this.resetTeamPickingSession();
@@ -263,7 +279,7 @@ export default class TeamCommand implements Command {
               "No game has been announced yet."
             );
           } else {
-            await interaction.deferReply({ ephemeral: false });
+            await interaction.deferReply();
             const embed = this.createTeamViewEmbed(game);
             await DiscordUtil.editReply(interaction, embed);
           }
@@ -304,7 +320,7 @@ export default class TeamCommand implements Command {
             await interaction.reply({
               content:
                 "A game has not been announced yet. Please use `/announce start`.",
-              ephemeral: true,
+              flags: MessageFlags.Ephemeral,
             });
             return;
           }
@@ -367,7 +383,7 @@ export default class TeamCommand implements Command {
         }
       );
 
-    return { embeds: [embed], ephemeral: false };
+    return { embeds: [embed] };
   }
 
   private async setRoles(guild: Guild) {
@@ -408,7 +424,6 @@ export default class TeamCommand implements Command {
             });
             await interaction.followUp({
               content: "Teams have been selected!",
-              ephemeral: false,
             });
           }
           break;
@@ -420,6 +435,9 @@ export default class TeamCommand implements Command {
   }
 
   public resetTeamPickingSession(): void {
+    if (this.teamPickingSession?.cancelSession) {
+      void this.teamPickingSession.cancelSession();
+    }
     this.teamPickingSession = undefined;
   }
 

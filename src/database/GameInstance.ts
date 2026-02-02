@@ -13,6 +13,7 @@ import { addRegisteredPlayersFeed } from "../logic/gameFeed/RegisteredGameFeed";
 import { addTeamsGameFeed } from "../logic/gameFeed/TeamsGameFeed";
 import { Elo } from "../logic/Elo";
 import { ModifierSelector } from "../logic/ModifierSelector";
+import { TeamPlanRecord } from "../util/PlanUtil";
 
 // wrapper class for Game
 export class GameInstance {
@@ -25,15 +26,18 @@ export class GameInstance {
   startTime?: Date;
   endTime?: Date;
   settings: {
-    minerushing?: boolean;
-    bannedClasses: $Enums.AnniClass[];
-    bannedClassesByTeam: Record<Team, $Enums.AnniClass[]>;
+    organiserBannedClasses: $Enums.AnniClass[];
+    sharedCaptainBannedClasses: $Enums.AnniClass[];
+    nonSharedCaptainBannedClasses: Record<Team, $Enums.AnniClass[]>;
     map?: $Enums.AnniMap;
     modifiers: { category: string; name: string }[];
+    delayedBan: number;
   } = {
-    bannedClasses: [],
-    bannedClassesByTeam: { [Team.RED]: [], [Team.BLUE]: [] },
+    organiserBannedClasses: [],
+    sharedCaptainBannedClasses: [],
+    nonSharedCaptainBannedClasses: { [Team.RED]: [], [Team.BLUE]: [] },
     modifiers: [],
+    delayedBan: 0,
   };
 
   public classBanMode: "shared" | "opponentOnly" | null = null;
@@ -53,13 +57,22 @@ export class GameInstance {
   redExpectedScore?: number;
 
   gameWinner?: "RED" | "BLUE";
-  teamsDecidedBy?: "DRAFT" | "RANDOMISED" | null;
+  teamsDecidedBy?:
+    | "DRAFT"
+    | "SNAKE_DRAFT"
+    | "RANDOMISED"
+    | "ELO"
+    | "BALANCE"
+    | null;
 
   MVPPlayerBlue?: string;
   MVPPlayerRed?: string;
 
   organiser?: string | null;
   host?: string | null;
+  lastRegisteredSnowflake?: Snowflake;
+  redTeamPlan?: TeamPlanRecord;
+  blueTeamPlan?: TeamPlanRecord;
 
   mapVoteManager?: MapVoteManager;
   minerushVoteManager?: MinerushVoteManager;
@@ -99,11 +112,12 @@ export class GameInstance {
     this.startTime = undefined;
     this.endTime = undefined;
     this.settings = {
-      minerushing: undefined,
-      bannedClasses: [],
-      bannedClassesByTeam: { [Team.RED]: [], [Team.BLUE]: [] },
+      organiserBannedClasses: [],
+      sharedCaptainBannedClasses: [],
+      nonSharedCaptainBannedClasses: { [Team.RED]: [], [Team.BLUE]: [] },
       map: undefined,
       modifiers: [],
+      delayedBan: 0,
     };
     this.classBanMode = null;
     this.teams = { RED: [], BLUE: [], UNDECIDED: [] };
@@ -117,15 +131,30 @@ export class GameInstance {
     this.pickOtherTeamsSupportRoles = false;
     this.classBanLimit = 2;
     this.captainBanCounts.clear();
+    this.lastRegisteredSnowflake = undefined;
     this.captainNominations.clear();
     this.captainBanLocked.clear();
     this.classBansAnnounced = false;
+    this.redTeamPlan = undefined;
+    this.blueTeamPlan = undefined;
   }
 
   public static async resetGameInstance() {
     const currentInstance = this.getInstance();
     if (currentInstance) {
       await prismaClient.game.saveGameFromInstance(currentInstance);
+      // Ensure any scheduled vote tasks and poll messages are cleaned up
+      // before we drop references in reset().
+      try {
+        await currentInstance.mapVoteManager?.cancelVote();
+      } catch {
+        // ignore vote cleanup failures
+      }
+      try {
+        await currentInstance.minerushVoteManager?.cancelVote();
+      } catch {
+        // ignore vote cleanup failures
+      }
       currentInstance.reset();
     }
   }
@@ -182,7 +211,14 @@ export class GameInstance {
   }
 
   public setMinerushing(minerush: boolean) {
-    this.settings.minerushing = minerush;
+    // Minerushing is now captured as a modifier; set or replace the entry.
+    this.settings.modifiers = [
+      ...this.settings.modifiers.filter((m) => m.category !== "Minerushing"),
+      {
+        category: "Minerushing",
+        name: minerush ? "Always" : "Not before phase 3 (Three)",
+      },
+    ];
     console.log("Minerushing is: " + minerush);
   }
 
@@ -298,6 +334,7 @@ export class GameInstance {
     }
 
     this.teams["UNDECIDED"].push(player);
+    this.lastRegisteredSnowflake = discordSnowflake;
 
     return {
       error: false,
@@ -321,6 +358,9 @@ export class GameInstance {
     this.teams[playerIndex as Team] = this.teams[playerIndex as Team].filter(
       (player) => player.discordSnowflake !== discordSnowflake
     );
+    if (this.lastRegisteredSnowflake === discordSnowflake) {
+      this.lastRegisteredSnowflake = undefined;
+    }
   }
 
   public getPlayers() {
@@ -342,10 +382,22 @@ export class GameInstance {
     this.teams["BLUE"] = [];
   }
 
-  public createTeams(createMethod: "random") {
+  public createTeams(createMethod: "random" | "elo" | "balance") {
     switch (createMethod) {
       case "random": {
         const simulatedTeams = this.simulateShuffledTeams();
+        this.teams.BLUE = simulatedTeams.BLUE;
+        this.teams.RED = simulatedTeams.RED;
+        break;
+      }
+      case "elo": {
+        const simulatedTeams = this.simulateEloTeams();
+        this.teams.BLUE = simulatedTeams.BLUE;
+        this.teams.RED = simulatedTeams.RED;
+        break;
+      }
+      case "balance": {
+        const simulatedTeams = this.simulateBalancedTeams();
         this.teams.BLUE = simulatedTeams.BLUE;
         this.teams.RED = simulatedTeams.RED;
         break;
@@ -364,20 +416,116 @@ export class GameInstance {
     };
   }
 
+  public simulateEloTeams(): Record<Team, PlayerInstance[]> {
+    const players = [
+      ...this.getPlayersOfTeam("RED"),
+      ...this.getPlayersOfTeam("BLUE"),
+      ...this.getPlayersOfTeam("UNDECIDED"),
+    ];
+
+    players.forEach((p) => {
+      p.captain = false;
+    });
+
+    const sorted = players.sort((a, b) => (b.elo ?? 0) - (a.elo ?? 0));
+    const blue: PlayerInstance[] = [];
+    const red: PlayerInstance[] = [];
+
+    sorted.forEach((player, idx) => {
+      if (idx % 2 === 0) {
+        blue.push(player);
+      } else {
+        red.push(player);
+      }
+    });
+
+    if (blue[0]) blue[0].captain = true;
+    if (red[0]) red[0].captain = true;
+
+    this.teams.UNDECIDED = [];
+
+    return { BLUE: blue, RED: red };
+  }
+
+  public simulateBalancedTeams(): Record<Team, PlayerInstance[]> {
+    const players = [
+      ...this.getPlayersOfTeam("RED"),
+      ...this.getPlayersOfTeam("BLUE"),
+      ...this.getPlayersOfTeam("UNDECIDED"),
+    ];
+
+    players.forEach((p) => {
+      p.captain = false;
+    });
+
+    if (players.length === 0) {
+      return { BLUE: [], RED: [] };
+    }
+
+    const sorted = players.sort((a, b) => (b.elo ?? 0) - (a.elo ?? 0));
+    const firstIdx = Math.floor(Math.random() * sorted.length);
+    const firstCaptain = sorted.splice(firstIdx, 1)[0];
+    let secondCaptain = sorted[0];
+    let closestDiff = Math.abs(
+      (firstCaptain.elo ?? 0) - (secondCaptain?.elo ?? 0)
+    );
+    for (const candidate of sorted) {
+      const diff = Math.abs((firstCaptain.elo ?? 0) - (candidate.elo ?? 0));
+      if (diff < closestDiff) {
+        closestDiff = diff;
+        secondCaptain = candidate;
+      }
+    }
+    sorted.splice(sorted.indexOf(secondCaptain), 1);
+
+    const blue: PlayerInstance[] = [firstCaptain];
+    const red: PlayerInstance[] = [secondCaptain];
+    let blueTotal = firstCaptain.elo ?? 0;
+    let redTotal = secondCaptain.elo ?? 0;
+
+    for (const player of sorted) {
+      const elo = player.elo ?? 0;
+      const blueAvg = blueTotal / blue.length;
+      const redAvg = redTotal / red.length;
+      if (blue.length < red.length) {
+        blue.push(player);
+        blueTotal += elo;
+        continue;
+      }
+      if (red.length < blue.length) {
+        red.push(player);
+        redTotal += elo;
+        continue;
+      }
+      if (blueAvg <= redAvg) {
+        blue.push(player);
+        blueTotal += elo;
+      } else {
+        red.push(player);
+        redTotal += elo;
+      }
+    }
+
+    if (blue[0]) blue[0].captain = true;
+    if (red[0]) red[0].captain = true;
+
+    this.teams.UNDECIDED = [];
+
+    return { BLUE: blue, RED: red };
+  }
+
   public setTeamCaptain(team: Team, player: PlayerInstance) {
     const oldTeamCaptain = this.getCaptainOfTeam(team);
 
     if (oldTeamCaptain && oldTeamCaptain !== player) {
       oldTeamCaptain.captain = false;
 
-      if (!this.teamsDecidedBy) {
-        (Object.keys(this.teams) as Array<Team | "UNDECIDED">).forEach(
-          (k) =>
-            (this.teams[k] = this.teams[k].filter((p) => p !== oldTeamCaptain))
-        );
-        if (!this.teams["UNDECIDED"].includes(oldTeamCaptain)) {
-          this.teams["UNDECIDED"].push(oldTeamCaptain);
-        }
+      (Object.keys(this.teams) as Array<Team | "UNDECIDED">).forEach(
+        (k) =>
+          (this.teams[k] = this.teams[k].filter((p) => p !== oldTeamCaptain))
+      );
+      if (!this.teams["UNDECIDED"].includes(oldTeamCaptain)) {
+        this.teams["UNDECIDED"].push(oldTeamCaptain);
       }
     }
 
@@ -412,11 +560,12 @@ export class GameInstance {
     this.startTime = new Date(Date.now() + 6 * 60 * 1000); // 6m from now for polls
     this.endTime = new Date("2025-01-01T02:00:00Z");
     this.settings = {
-      minerushing: true,
-      bannedClasses: ["SNIPER"],
-      bannedClassesByTeam: { RED: ["SCOUT"], BLUE: ["NEPTUNE"] },
+      organiserBannedClasses: ["SNIPER"],
+      sharedCaptainBannedClasses: [],
+      nonSharedCaptainBannedClasses: { RED: ["SCOUT"], BLUE: ["NEPTUNE"] },
       map: "DUELSTAL",
-      modifiers: [],
+      modifiers: [{ category: "Minerushing", name: "Always" }],
+      delayedBan: 0,
     };
     this.MVPPlayerBlue = "Immortal";
     this.MVPPlayerRed = "5trawHato";
@@ -815,6 +964,10 @@ export class GameInstance {
     return {};
   }
 
+  public hasVotedMvp(voterId: string): boolean {
+    return this.mvpVoters.has(voterId);
+  }
+
   public async countMVPVotes() {
     console.log("Starting to count MVP votes now...");
     this.MVPPlayerRed = await this.determineTeamMVP("RED");
@@ -868,8 +1021,18 @@ export class GameInstance {
     return player?.ignUsed ?? "";
   }
 
-  public changeHowTeamsDecided(type: "DRAFT" | "RANDOMISED" | null) {
+  public changeHowTeamsDecided(
+    type: "DRAFT" | "SNAKE_DRAFT" | "RANDOMISED" | "ELO" | "BALANCE" | null
+  ) {
     this.teamsDecidedBy = typeof type === "string" ? type : null;
+  }
+
+  public setTeamPlan(team: Team, plan: TeamPlanRecord) {
+    if (team === Team.RED) {
+      this.redTeamPlan = plan;
+    } else {
+      this.blueTeamPlan = plan;
+    }
   }
 
   public calculateMeanEloAndExpectedScore() {

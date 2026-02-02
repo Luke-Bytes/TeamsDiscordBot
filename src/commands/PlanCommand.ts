@@ -7,10 +7,12 @@ import {
   ButtonStyle,
   EmbedBuilder,
   SlashCommandBuilder,
+  MessageFlags,
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { GameInstance } from "../database/GameInstance";
+import { escapeText } from "../util/Utils";
 
 type TeamPlans = {
   bunker?: string;
@@ -67,7 +69,7 @@ export default class PlanCommand implements Command {
       if (!team) {
         await interaction.reply({
           content: "Use this command in team channels.",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -79,7 +81,7 @@ export default class PlanCommand implements Command {
       ) {
         await interaction.reply({
           content: "You need to be a captain or organiser to use this command.",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -93,7 +95,7 @@ export default class PlanCommand implements Command {
         console.warn(`No players found in ${team} team.`);
         await interaction.reply({
           content: `No players found in the ${team} team.`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -111,9 +113,13 @@ export default class PlanCommand implements Command {
             index
         );
         if (duplicatePlayers.length) {
+          const duplicateDisplay = [
+            ...new Set(duplicatePlayers.map((p) => p.toLowerCase())),
+          ]
+            .map((p) => escapeText(p))
+            .join(", ");
           await interaction.reply({
-            content: `A player can't be assigned multiple roles!Reassign these players: ${[...new Set(duplicatePlayers.map((p) => p.toLowerCase()))].join(", ")}`,
-            ephemeral: false,
+            content: `A player can't be assigned multiple roles!Reassign these players: ${duplicateDisplay}`,
           });
           return;
         }
@@ -125,9 +131,11 @@ export default class PlanCommand implements Command {
             )
         );
         if (invalidPlayers.length) {
+          const invalidDisplay = invalidPlayers
+            .map((p) => escapeText(p))
+            .join(", ");
           await interaction.reply({
-            content: `The following players are not on your team: ${invalidPlayers.join(", ")}`,
-            ephemeral: false,
+            content: `The following players are not on your team: ${invalidDisplay}`,
           });
           return;
         }
@@ -142,12 +150,14 @@ export default class PlanCommand implements Command {
           console.warn(`No remaining players to assign jobs.`);
           await interaction.reply({
             content: `Plan created, but no additional players are available for assignment in ${team}.`,
-            ephemeral: false,
           });
           return;
         }
 
         const assignments = this.assignJobs(remainingPlayers);
+        const displayBunker = escapeText(bunker);
+        const displayGold = escapeText(gold);
+        const displayFarmer = escapeText(farmer);
 
         const embed = new EmbedBuilder()
           .setColor(teamColor)
@@ -157,7 +167,7 @@ export default class PlanCommand implements Command {
           .setDescription("Roles")
           .addFields({
             name: "\u200B",
-            value: `**${bunker}** - Bunker\n**${gold}** - Gold\n**${farmer}** - Farmer\n${assignments.join("\n")}`,
+            value: `**${displayBunker}** - Bunker\n**${displayGold}** - Gold\n**${displayFarmer}** - Farmer\n${assignments.join("\n")}`,
           });
 
         const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -181,7 +191,6 @@ export default class PlanCommand implements Command {
       console.error(`Error executing plan command: ${error}`);
       await interaction.reply({
         content: "An error occurred while processing your command.",
-        ephemeral: false,
       });
     }
   }
@@ -206,7 +215,7 @@ export default class PlanCommand implements Command {
       if (!team) {
         await interaction.reply({
           content: "You can only use this button in team channels.",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -221,6 +230,9 @@ export default class PlanCommand implements Command {
           (p) => !Object.values(this.plans[team]).includes(p)
         );
         const assignments = this.assignJobs(remainingPlayers);
+        const displayBunker = escapeText(this.plans[team].bunker ?? "none");
+        const displayGold = escapeText(this.plans[team].gold ?? "none");
+        const displayFarmer = escapeText(this.plans[team].farmer ?? "none");
 
         const embed = new EmbedBuilder()
           .setColor(teamColor)
@@ -230,7 +242,7 @@ export default class PlanCommand implements Command {
           .setDescription("Roles")
           .addFields({
             name: "\u200B",
-            value: `**${this.plans[team].bunker ?? "none"}** - Bunker\n**${this.plans[team].gold ?? "none"}** - Gold\n**${this.plans[team].farmer ?? "none"}** - Farmer\n${assignments.join("\n")}`,
+            value: `**${displayBunker}** - Bunker\n**${displayGold}** - Gold\n**${displayFarmer}** - Farmer\n${assignments.join("\n")}`,
           });
 
         await interaction.update({ embeds: [embed] });
@@ -252,7 +264,7 @@ export default class PlanCommand implements Command {
       console.error(`Error handling button interaction: ${error}`);
       await interaction.reply({
         content: "An error occurred while processing your interaction.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
   }
@@ -269,7 +281,7 @@ export default class PlanCommand implements Command {
         availableJobs[Math.floor(Math.random() * availableJobs.length)];
       if (job) {
         jobCounts[job.name] = (jobCounts[job.name] || 0) + 1;
-        assignments.push(`**${player}** - ${job.name}`);
+        assignments.push(`**${escapeText(player)}** - ${job.name}`);
       }
     });
 

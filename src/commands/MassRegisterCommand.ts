@@ -2,11 +2,13 @@ import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
   GuildMember,
+  MessageFlags,
 } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { PermissionsUtil } from "../util/PermissionsUtil.js";
 import { GameInstance } from "../database/GameInstance";
 import { prismaClient } from "../database/prismaClient";
+import { escapeText } from "../util/Utils";
 
 export default class MassRegisterCommand implements Command {
   public data: SlashCommandBuilder;
@@ -32,7 +34,6 @@ export default class MassRegisterCommand implements Command {
     if (!member || !PermissionsUtil.hasRole(member, "organiserRole")) {
       await interaction.reply({
         content: "You do not have permission to use this command.",
-        ephemeral: false,
       });
       return;
     }
@@ -41,7 +42,7 @@ export default class MassRegisterCommand implements Command {
     if (!currentGame.announced) {
       await interaction.reply({
         content: "No game has been announced yet!",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -85,17 +86,16 @@ export default class MassRegisterCommand implements Command {
     }
 
     const successMessage = successful.length
-      ? `Successfully registered: ${successful.join(", ")}.`
+      ? `Successfully registered: ${successful.map(escapeText).join(", ")}.`
       : "";
     const failureMessage = failed.length
-      ? `Skipped (not previously registered or already registered): ${failed.join(
-          ", "
-        )}.`
+      ? `Skipped (not previously registered or already registered): ${failed
+          .map(escapeText)
+          .join(", ")}.`
       : "";
 
     await interaction.reply({
       content: [successMessage, failureMessage].filter(Boolean).join("\n"),
-      ephemeral: false,
     });
   }
 }

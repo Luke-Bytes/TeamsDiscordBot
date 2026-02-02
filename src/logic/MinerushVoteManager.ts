@@ -117,19 +117,16 @@ export class MinerushVoteManager extends EventEmitter<MinerushVoteManagerEvents>
   }
 
   async cancelVote() {
+    Scheduler.cancel("minerushVote");
     if (this.pollMessage) {
-      Scheduler.cancel("minerushVote");
-      await this.pollMessage.delete();
+      await this.pollMessage.delete().catch(() => {});
       this.pollMessage = undefined;
-
-      console.info("Minerush vote and its scheduler have been canceled.");
-    } else {
-      console.warn("No poll message to delete or cancel.");
     }
+    console.info("Minerush vote scheduler has been canceled.");
   }
 
   async stopVote() {
-    Scheduler.cancel("mapVote");
+    Scheduler.cancel("minerushVote");
     if (this.pollMessage) {
       console.info("Minerush voting has been ended.");
       this.pollMessage.poll?.end();

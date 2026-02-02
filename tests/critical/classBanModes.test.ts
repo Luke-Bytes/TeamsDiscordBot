@@ -105,7 +105,7 @@ test("Shared mode with organiser shared + per-team bans shows all under Shared",
   game.announced = true;
   (game as any).classBanMode = "shared";
   game.setClassBanLimit(2);
-  game.settings.bannedClasses = ["TRANSPORTER" as any];
+  game.settings.organiserBannedClasses = ["TRANSPORTER" as any];
   const { guild, redM, blueM } = await setupCaptains();
   (game as any).teams = {
     RED: [{ discordSnowflake: "RC", captain: true }],

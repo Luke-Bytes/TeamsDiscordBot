@@ -9,7 +9,11 @@ import {
   ButtonStyle,
   SlashCommandSubcommandsOnlyBuilder,
   Guild,
+  MessageFlags,
+  AutocompleteInteraction,
 } from "discord.js";
+import { readFileSync } from "fs";
+import path from "path";
 import { Command } from "../commands/CommandInterface.js";
 import { AnniClass, AnniMap } from "@prisma/client";
 import { prettifyName, randomEnum, formatTimestamp } from "../util/Utils.js";
@@ -40,6 +44,11 @@ export default class AnnouncementCommand implements Command {
 
   private announcementPreviewMessage?: Message;
   private announcementMessage?: Message;
+  private static readonly namesPath = path.resolve(
+    process.cwd(),
+    "organisers-hosts.json"
+  );
+  private static readonly maxAutoResults = 25;
   private initialBannedClasses: AnniClass[] = [];
 
   constructor() {
@@ -92,14 +101,16 @@ export default class AnnouncementCommand implements Command {
             .addStringOption((option) =>
               option
                 .setName("organiser")
-                .setDescription("Organiser Name")
+                .setDescription("Organiser name (select or type)")
                 .setRequired(true)
+                .setAutocomplete(true)
             )
             .addStringOption((option) =>
               option
                 .setName("host")
-                .setDescription("Host Name")
+                .setDescription("Host name (select or type)")
                 .setRequired(true)
+                .setAutocomplete(true)
             )
             .addStringOption((option) =>
               option
@@ -200,7 +211,7 @@ export default class AnnouncementCommand implements Command {
     const bannedClasses = this.getBannedClasses(bannedClassesOption);
 
     if (!bannedClasses.error) {
-      CurrentGameManager.getCurrentGame().settings.bannedClasses =
+      CurrentGameManager.getCurrentGame().settings.organiserBannedClasses =
         bannedClasses.bannedClasses;
     } else {
       await interaction.editReply(bannedClasses.error);
@@ -261,11 +272,11 @@ export default class AnnouncementCommand implements Command {
     if (minerushingOption === "poll") {
       game.startMinerushVote();
     } else if (minerushingOption.toLowerCase() === "yes") {
-      game.settings.minerushing = true;
+      game.setMinerushing(true);
     } else if (minerushingOption.toLowerCase() === "no") {
-      game.settings.minerushing = false;
+      game.setMinerushing(false);
     } else {
-      game.settings.minerushing = false;
+      game.setMinerushing(false);
       if (!interaction.deferred && !interaction.replied) {
         await interaction.reply(
           `Minerushing option '${minerushingOption}' unrecognized.`
@@ -308,7 +319,7 @@ export default class AnnouncementCommand implements Command {
     }
 
     this.initialBannedClasses = [
-      ...CurrentGameManager.getCurrentGame().settings.bannedClasses,
+      ...CurrentGameManager.getCurrentGame().settings.organiserBannedClasses,
     ];
 
     // if (!this.setMinerushing(interaction)) {
@@ -364,7 +375,7 @@ export default class AnnouncementCommand implements Command {
       await interaction.reply({
         content:
           "You do not have permission to use this command. Only organisers can execute it.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -469,9 +480,7 @@ export default class AnnouncementCommand implements Command {
   public async handleButtonPress(
     interaction: ButtonInteraction
   ): Promise<void> {
-    await interaction.deferReply({
-      ephemeral: false,
-    });
+    await interaction.deferReply({});
 
     const isConfirmed = !!this.announcementMessage;
 
@@ -503,9 +512,13 @@ export default class AnnouncementCommand implements Command {
         break;
 
       case "announcement-edit-modifiers":
-        CurrentGameManager.getCurrentGame().settings.bannedClasses = [
+        CurrentGameManager.getCurrentGame().settings.organiserBannedClasses = [
           ...this.initialBannedClasses,
         ];
+        CurrentGameManager.getCurrentGame().settings.sharedCaptainBannedClasses =
+          [];
+        CurrentGameManager.getCurrentGame().settings.nonSharedCaptainBannedClasses =
+          { RED: [], BLUE: [] };
         ModifierSelector.runSelection();
         await this.updateAnnouncementMessages();
         await interaction.editReply("🔄 Modifiers have been rerolled.");
@@ -524,6 +537,50 @@ export default class AnnouncementCommand implements Command {
     }
   }
 
+  public async handleAutocomplete(
+    interaction: AutocompleteInteraction
+  ): Promise<void> {
+    const focused = interaction.options.getFocused(true);
+    if (focused.name !== "organiser" && focused.name !== "host") {
+      await interaction.respond([]);
+      return;
+    }
+    const list =
+      focused.name === "organiser"
+        ? this.loadNames().organisers
+        : this.loadNames().hosts;
+    const query = String(focused.value ?? "").toLowerCase();
+    const filtered = list
+      .filter((entry) => entry.ign.toLowerCase().includes(query))
+      .slice(0, AnnouncementCommand.maxAutoResults)
+      .map((entry) => ({
+        name: entry.discordId
+          ? `${entry.ign} (ID: ${entry.discordId})`
+          : entry.ign,
+        value: entry.ign,
+      }));
+    await interaction.respond(filtered);
+  }
+
+  private loadNames(): {
+    organisers: Array<{ ign: string; discordId?: string }>;
+    hosts: Array<{ ign: string; discordId?: string }>;
+  } {
+    try {
+      const raw = readFileSync(AnnouncementCommand.namesPath, "utf8");
+      const parsed = JSON.parse(raw) as {
+        organisers?: Array<{ ign: string; discordId?: string }>;
+        hosts?: Array<{ ign: string; discordId?: string }>;
+      };
+      return {
+        organisers: parsed.organisers ?? [],
+        hosts: parsed.hosts ?? [],
+      };
+    } catch {
+      return { organisers: [], hosts: [] };
+    }
+  }
+
   private createGameAnnouncementEmbed(
     preview: boolean,
     organiser?: string | null,
@@ -536,6 +593,16 @@ export default class AnnouncementCommand implements Command {
     const doubleEloMessage = game.isDoubleElo
       ? "\n\n**🌟 A special DOUBLE ELO game! 🌟**\n\n"
       : "";
+
+    const sharedBans = Array.from(
+      new Set([
+        ...(game.settings.organiserBannedClasses ?? []),
+        ...(game.settings.sharedCaptainBannedClasses ?? []),
+      ])
+    );
+    const bannedClassesValue = sharedBans.length
+      ? sharedBans.map((v) => prettifyName(v)).join(", ")
+      : "None";
 
     const embed = new EmbedBuilder()
       .setColor("#00FF7F")
@@ -581,13 +648,7 @@ export default class AnnouncementCommand implements Command {
         // },
         {
           name: "🚫 **BANNED CLASSES**",
-          value:
-            game.settings.bannedClasses &&
-            game.settings.bannedClasses.length > 0
-              ? `**${game.settings.bannedClasses
-                  .map((v) => prettifyName(v))
-                  .join(", ")}**`
-              : "**None**",
+          value: bannedClassesValue,
           inline: false,
         },
         {
@@ -815,8 +876,9 @@ export default class AnnouncementCommand implements Command {
         return;
       }
 
-      CurrentGameManager.getCurrentGame().settings.bannedClasses =
+      CurrentGameManager.getCurrentGame().settings.organiserBannedClasses =
         bannedClasses.bannedClasses;
+      this.initialBannedClasses = [...bannedClasses.bannedClasses];
 
       await this.updateAnnouncementMessages(); // Update both messages
       await interaction.followUp(

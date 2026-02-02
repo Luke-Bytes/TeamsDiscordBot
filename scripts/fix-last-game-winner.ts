@@ -6,6 +6,7 @@ import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { EloUtil } from "../src/util/EloUtil";
 
+// npx tsx scripts/fix-last-game-winner.ts
 type GameWithParts = Prisma.GameGetPayload<{
   include: { gameParticipations: { include: { player: true } }; season: true };
 }>;
@@ -14,6 +15,10 @@ const rl = createInterface({ input, output });
 
 const fmt = (dt?: Date) => (dt ? new Date(dt).toLocaleString() : "n/a");
 const ask = async (q: string) => (await rl.question(q)).trim();
+const minerushLabel = (mods?: { category: string; name: string }[]): string => {
+  const entry = mods?.find((m) => m.category === "Minerushing");
+  return entry?.name ?? "n/a";
+};
 
 async function resolveSeason(): Promise<Season> {
   const cfg = ConfigManager?.getConfig?.();
@@ -231,7 +236,7 @@ async function main() {
       `  Game ID: ${game.id}`,
       `  Start: ${fmt(game.startTime)}  End: ${fmt(game.endTime)}`,
       `  Current Winner: ${game.winner ?? "n/a"}  Type: ${game.type ?? "n/a"}`,
-      `  Map: ${game.settings?.map ?? "n/a"}  Minerushing: ${game.settings?.minerushing ? "on" : "off"}`,
+      `  Map: ${game.settings?.map ?? "n/a"}  Minerushing: ${minerushLabel(game.settings?.modifiers)}`,
       `  Organiser: ${game.organiser ?? "n/a"}  Host: ${game.host ?? "n/a"}`,
       `  RED (${red.length}): ${red.map((p) => p.ignUsed).join(", ") || "-"}`,
       `  BLUE (${blue.length}): ${blue.map((p) => p.ignUsed).join(", ") || "-"}`,

@@ -1,4 +1,4 @@
-import { REST, Routes, Interaction } from "discord.js";
+import { REST, Routes, Interaction, MessageFlags } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import "dotenv/config";
 import { ConfigManager } from "../ConfigManager";
@@ -35,11 +35,20 @@ import UsernameCommand from "../commands/UsernameCommand";
 import ForfeitCommand from "../commands/ForfeitCommand";
 import MapsCommand from "../commands/MapsCommand";
 import CoinflipCommand from "../commands/CoinflipCommand";
+import NicknameCommand from "../commands/NicknameCommand";
+import HelpCommand from "../commands/HelpCommand";
+import SpectateCommand from "../commands/SpectateCommand";
+import WebsiteCommand from "../commands/WebsiteCommand";
+import WikiCommand from "../commands/WikiCommand";
+import ProfileCommand from "../commands/ProfileCommand";
+import ProfileEditCommand from "../commands/ProfileEditCommand";
+import CaptainPlanDMManager from "../logic/CaptainPlanDMManager";
 
 export class CommandHandler {
   commands: Command[] = [];
 
   //todo: just make these singletons.
+  captainPlanDMManager = new CaptainPlanDMManager();
   announcementCommand = new AnnouncementCommand();
   ignsCommand = new IgnsCommand();
   leaderboardsCommand = new LeaderboardsCommand();
@@ -53,11 +62,11 @@ export class CommandHandler {
   registerCommand = new RegisterCommand(this.teamCommand);
   unregisterCommand = new UnregisterCommand(this.teamCommand);
   restartCommand = new RestartCommand();
-  playerCommand = new PlayerCommand();
+  playerCommand = new PlayerCommand(this.captainPlanDMManager);
   winnerCommand = new WinnerCommand();
   performanceCommand = new PerformanceCommand();
   MVPCommand = new MVPCommand();
-  gameCommand = new GameCommand();
+  gameCommand = new GameCommand(this.captainPlanDMManager);
   missingCommand = new MissingCommand();
   captainNominateCommand = new CaptainNominateCommand();
   teamlessCommand = new TeamlessCommand();
@@ -73,6 +82,13 @@ export class CommandHandler {
   forfeitCommand = new ForfeitCommand();
   mapsCommand = new MapsCommand();
   coinflipCommand = new CoinflipCommand();
+  nicknameCommand = new NicknameCommand();
+  helpCommand = new HelpCommand(() => this.commands);
+  spectateCommand = new SpectateCommand();
+  websiteCommand = new WebsiteCommand();
+  wikiCommand = new WikiCommand();
+  profileCommand = new ProfileCommand();
+  profileEditCommand = new ProfileEditCommand();
 
   public loadCommands() {
     this.commands = [
@@ -109,6 +125,13 @@ export class CommandHandler {
       this.forfeitCommand,
       this.mapsCommand,
       this.coinflipCommand,
+      this.nicknameCommand,
+      this.helpCommand,
+      this.spectateCommand,
+      this.websiteCommand,
+      this.wikiCommand,
+      this.profileCommand,
+      this.profileEditCommand,
     ];
   }
 
@@ -154,11 +177,41 @@ export class CommandHandler {
         }
       } else if (interaction.isButton()) {
         const command = this.commands.find((command) =>
-          command.buttonIds.includes(interaction.customId)
+          command.buttonIds.some(
+            (id) =>
+              interaction.customId === id || interaction.customId.startsWith(id)
+          )
         );
 
         if (command && command.handleButtonPress) {
           await command.handleButtonPress(interaction);
+        }
+      } else if (interaction.isStringSelectMenu()) {
+        const command = this.commands.find((command) =>
+          (command.selectMenuIds ?? []).some(
+            (id) =>
+              interaction.customId === id || interaction.customId.startsWith(id)
+          )
+        );
+        if (command && command.handleSelectMenu) {
+          await command.handleSelectMenu(interaction);
+        }
+      } else if (interaction.isAutocomplete()) {
+        const command = this.commands.find(
+          (cmd) => cmd.name === interaction.commandName
+        );
+        if (command && command.handleAutocomplete) {
+          await command.handleAutocomplete(interaction);
+        }
+      } else if (interaction.isModalSubmit()) {
+        const command = this.commands.find((command) =>
+          (command.modalIds ?? []).some(
+            (id) =>
+              interaction.customId === id || interaction.customId.startsWith(id)
+          )
+        );
+        if (command && command.handleModalSubmit) {
+          await command.handleModalSubmit(interaction);
         }
       }
     } catch (error: unknown) {
@@ -187,7 +240,7 @@ export class CommandHandler {
         try {
           await interaction.reply({
             content: "An error occurred while processing your request.",
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           });
         } catch (replyError) {
           console.error("Failed to send error reply:", replyError);
@@ -201,35 +254,39 @@ export class CommandHandler {
     const rest = new REST({ version: "10" }).setToken(
       process.env.BOT_TOKEN as string
     );
+    const appId = process.env.APP_ID as string;
 
     const commandsData = this.commands.map((cmd) => cmd.data.toJSON());
 
     try {
       if (config.dev.enabled) {
         console.log(
-          `Development mode enabled. Registering guild specific commands to ${config.dev.guildId}.`
+          "Dev mode: clearing global commands and registering guild commands."
         );
 
+        await rest.put(Routes.applicationCommands(appId), { body: [] });
+
         await rest.put(
-          Routes.applicationGuildCommands(
-            process.env.APP_ID as string,
-            config.dev.guildId
-          ),
+          Routes.applicationGuildCommands(appId, config.dev.guildId),
           { body: commandsData }
         );
 
         console.log(
-          `Successfully registered commands to guild: ${config.dev.guildId}`
+          `Successfully registered commands to dev guild: ${config.dev.guildId}`
         );
       } else {
-        console.log("Started refreshing global application (/) commands.");
+        console.log("Prod mode: registering global application (/) commands.");
 
-        await rest.put(
-          Routes.applicationCommands(process.env.APP_ID as string),
-          { body: commandsData }
-        );
+        await rest.put(Routes.applicationCommands(appId), {
+          body: commandsData,
+        });
 
         console.log("Successfully reloaded global application (/) commands.");
+
+        await rest.put(
+          Routes.applicationGuildCommands(appId, config.dev.guildId),
+          { body: [] }
+        );
       }
     } catch (error) {
       console.error("Failed to register commands: ", error);

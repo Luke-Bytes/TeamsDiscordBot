@@ -613,3 +613,160 @@ test("Late signups registered after late picking begins are ignored", async () =
     "Additional late signup ignored once late picking started"
   );
 });
+
+test("Late signup left over is not duplicated in registered counts", async () => {
+  Channels.teamPicking = fakeChannel("TEAM_PICK");
+  const session = new DraftTeamPickingSession();
+  const redCaptain = mkPlayer("RC", "RedCap", true);
+  const blueCaptain = mkPlayer("BC", "BlueCap", true);
+  const undecidedOne = mkPlayer("U1", "UndecidedOne");
+  const lateOdd = mkPlayer("L3", "LateOdd");
+  session.redCaptain = redCaptain;
+  session.blueCaptain = blueCaptain;
+  session.turn = "RED";
+  session["proposedTeams"] = {
+    RED: [redCaptain],
+    BLUE: [blueCaptain],
+    UNDECIDED: [undecidedOne],
+  } as any;
+  session["embedMessage"] = { edit: async () => {} } as any;
+
+  await session.registerLateSignup!(lateOdd);
+
+  session["finishedPicking"] = true;
+  await (session as any).handleRemainingLateSignups(Channels.teamPicking);
+
+  const game = CurrentGameManager.getCurrentGame();
+  game.reset();
+  (game as any).teams = {
+    RED: session["proposedTeams"].RED,
+    BLUE: session["proposedTeams"].BLUE,
+    UNDECIDED: session["proposedTeams"].UNDECIDED,
+  };
+
+  const lateSet = new Set(
+    game.getPlayersOfTeam("UNDECIDED").map((p) => p.discordSnowflake)
+  );
+  assertEqual(
+    lateSet.size,
+    game.getPlayersOfTeam("UNDECIDED").length,
+    "UNDECIDED list should not contain duplicate late signup entries"
+  );
+});
+
+test("Unregister during draft opens a late signup slot", async () => {
+  Channels.teamPicking = fakeChannel("TEAM_PICK");
+  const session = new DraftTeamPickingSession();
+  const undecided = mkPlayer("U1", "UndecidedOne");
+  const lateOne = mkPlayer("L1", "LateOne");
+  session["proposedTeams"] = {
+    RED: [],
+    BLUE: [],
+    UNDECIDED: [undecided],
+  } as any;
+  session["lateSignups"] = [lateOne];
+  session["lateDraftableWindow"] = 0;
+  session["embedMessage"] = { edit: async () => {} } as any;
+
+  await session.handleUnregister(undecided.discordSnowflake);
+
+  assertEqual(
+    session["proposedTeams"].UNDECIDED.length,
+    0,
+    "Unregistered player removed from undecided pool"
+  );
+  assertEqual(
+    (session as any).getLateDraftablePlayers().length,
+    1,
+    "Late signup should be allowed after unregister"
+  );
+});
+
+test("Unregistering unknown player does not change draft pools", async () => {
+  Channels.teamPicking = fakeChannel("TEAM_PICK");
+  const session = new DraftTeamPickingSession();
+  const undecidedOne = mkPlayer("U1", "UndecidedOne");
+  const undecidedTwo = mkPlayer("U2", "UndecidedTwo");
+  const lateOne = mkPlayer("L1", "LateOne");
+  const lateTwo = mkPlayer("L2", "LateTwo");
+  session["proposedTeams"] = {
+    RED: [],
+    BLUE: [],
+    UNDECIDED: [undecidedOne, undecidedTwo],
+  } as any;
+  session["lateSignups"] = [lateOne, lateTwo];
+  session["lateDraftableWindow"] = 2;
+  session["embedMessage"] = { edit: async () => {} } as any;
+
+  await session.handleUnregister("MISSING");
+
+  assertEqual(
+    session["proposedTeams"].UNDECIDED.length,
+    2,
+    "Undecided pool unchanged"
+  );
+  assertEqual(
+    (session as any).getLateDraftablePlayers().length,
+    2,
+    "Late signup window unchanged"
+  );
+});
+
+test("Unregistering drafted player allows odd late signups", async () => {
+  Channels.teamPicking = fakeChannel("TEAM_PICK");
+  const session = new DraftTeamPickingSession();
+  const drafted = mkPlayer("D1", "DraftedOne");
+  const lateOne = mkPlayer("L1", "LateOne");
+  const lateTwo = mkPlayer("L2", "LateTwo");
+  const lateThree = mkPlayer("L3", "LateThree");
+  session["proposedTeams"] = {
+    RED: [drafted],
+    BLUE: [],
+    UNDECIDED: [],
+  } as any;
+  session["lateSignups"] = [lateOne, lateTwo, lateThree];
+  session["lateDraftableWindow"] = 2;
+  session["embedMessage"] = { edit: async () => {} } as any;
+
+  await session.handleUnregister(drafted.discordSnowflake);
+
+  assert(
+    !session["proposedTeams"].RED.some(
+      (p: any) => p.discordSnowflake === drafted.discordSnowflake
+    ),
+    "Drafted player removed from team"
+  );
+  assertEqual(
+    (session as any).getLateDraftablePlayers().length,
+    3,
+    "Odd late signups allowed after unregister"
+  );
+});
+
+test("Unregistering late signup removes them without bonus slot", async () => {
+  Channels.teamPicking = fakeChannel("TEAM_PICK");
+  const session = new DraftTeamPickingSession();
+  const lateOne = mkPlayer("L1", "LateOne");
+  const lateTwo = mkPlayer("L2", "LateTwo");
+  session["proposedTeams"] = {
+    RED: [],
+    BLUE: [],
+    UNDECIDED: [],
+  } as any;
+  session["lateSignups"] = [lateOne, lateTwo];
+  session["lateDraftableWindow"] = 2;
+  session["embedMessage"] = { edit: async () => {} } as any;
+
+  await session.handleUnregister(lateOne.discordSnowflake);
+
+  assertEqual(
+    (session as any).lateSignups.length,
+    1,
+    "Late signup removed from queue"
+  );
+  assertEqual(
+    (session as any).getLateDraftablePlayers().length,
+    0,
+    "Late signup window collapses to even count without bonus"
+  );
+});

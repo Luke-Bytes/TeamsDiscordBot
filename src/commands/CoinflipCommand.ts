@@ -1,4 +1,8 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
+import {
+  SlashCommandBuilder,
+  ChatInputCommandInteraction,
+  MessageFlags,
+} from "discord.js";
 import { Command } from "./CommandInterface";
 
 export default class CoinflipCommand implements Command {
@@ -26,7 +30,7 @@ export default class CoinflipCommand implements Command {
     if (u1.id === u2.id) {
       await interaction.reply({
         content: "Please choose two different users for a fair coin flip.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }

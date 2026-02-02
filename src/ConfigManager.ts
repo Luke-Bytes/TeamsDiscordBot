@@ -11,6 +11,8 @@ export type Config = {
     redTeamRole: string;
     captainRole: string;
     organiserRole: string;
+    clanLeaderRole: string;
+    spectatorRole: string;
   };
   channels: {
     registration: string;
@@ -27,6 +29,10 @@ export type Config = {
   dev: {
     enabled: boolean;
     guildId: string;
+  };
+  wiki?: {
+    mapImageBaseUrl?: string;
+    mapImageDir?: string;
   };
 };
 

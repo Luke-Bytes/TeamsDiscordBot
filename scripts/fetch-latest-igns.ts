@@ -2,6 +2,12 @@ import "dotenv/config";
 import { prismaClient } from "../src/database/prismaClient";
 import { MojangAPI } from "../src/api/MojangAPI";
 
+const SLEEP_MS = 500;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function main() {
   console.log("Starting latestIGN refresh...");
   const players = await prismaClient.player.findMany({
@@ -31,6 +37,8 @@ async function main() {
     } catch (e) {
       console.warn(`Failed to refresh IGN for player ${p.id}:`, e);
     }
+
+    await sleep(SLEEP_MS);
   }
 
   console.log(`Finished. Checked: ${checked}, Updated: ${updated}.`);

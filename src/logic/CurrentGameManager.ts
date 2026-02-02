@@ -1,13 +1,15 @@
 import { GameInstance } from "../database/GameInstance";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { ConfigManager } from "../ConfigManager";
-import { Guild, EmbedBuilder, GuildMember } from "discord.js";
+import { Team } from "@prisma/client";
+import { Guild, EmbedBuilder } from "discord.js";
 import { gameFeed } from "../logic/gameFeed/GameFeed";
-import { prettifyName } from "../util/Utils";
+import { escapeText, prettifyName } from "../util/Utils";
 import TeamCommand from "../commands/TeamCommand";
+import { AutoCaptainSelector } from "./AutoCaptainSelector";
+import { Scheduler } from "../util/SchedulerUtil";
+import CaptainPlanDMManager from "./CaptainPlanDMManager";
 import { DraftTeamPickingSession } from "./teams/DraftTeamPickingSession";
-import { PermissionsUtil } from "../util/PermissionsUtil";
-import type { PlayerInstance } from "../database/PlayerInstance";
 
 export class CurrentGameManager {
   private static currentGame?: GameInstance;
@@ -16,6 +18,7 @@ export class CurrentGameManager {
   static classBanDeadlineTimeout?: NodeJS.Timeout;
   static captainReminderTimeout?: NodeJS.Timeout;
   static captainEnforceTimeout?: NodeJS.Timeout;
+  static draftAutoStartTimeout?: NodeJS.Timeout;
   public static getCurrentGame() {
     if (!this.currentGame) {
       this.currentGame = GameInstance.getInstance();
@@ -23,10 +26,21 @@ export class CurrentGameManager {
     return this.currentGame;
   }
 
-  public static resetCurrentGame() {
+  public static async resetCurrentGame(): Promise<void> {
     // Cancel any ongoing votes/polls
-    this.currentGame?.mapVoteManager?.cancelVote();
-    this.currentGame?.minerushVoteManager?.cancelVote();
+    const game = this.getCurrentGame();
+    Scheduler.cancel("mapVote");
+    Scheduler.cancel("minerushVote");
+    try {
+      await game.mapVoteManager?.cancelVote();
+    } catch (e) {
+      console.warn("Failed to cancel map vote during reset:", e);
+    }
+    try {
+      await game.minerushVoteManager?.cancelVote();
+    } catch (e) {
+      console.warn("Failed to cancel minerush vote during reset:", e);
+    }
 
     // Clear any scheduled timers
     this.clearClassBanTimers();
@@ -50,14 +64,29 @@ export class CurrentGameManager {
       void e;
     }
 
+    // Reset any captain plan DM sessions
+    try {
+      CaptainPlanDMManager.resetAllInstances();
+    } catch (e) {
+      void e;
+    }
+
     // Finally, reset the in-memory game state
-    this.currentGame?.reset();
+    game.reset();
   }
 
   public static async cancelCurrentGame(guild: Guild) {
     const config = ConfigManager.getConfig();
-    this.currentGame?.mapVoteManager?.cancelVote();
-    this.currentGame?.minerushVoteManager?.cancelVote();
+    try {
+      await this.getCurrentGame().mapVoteManager?.cancelVote();
+    } catch {
+      // ignore vote cleanup failures
+    }
+    try {
+      await this.getCurrentGame().minerushVoteManager?.cancelVote();
+    } catch {
+      // ignore vote cleanup failures
+    }
     this.clearClassBanTimers();
     this.clearCaptainTimers();
     const chatChannelIds = [config.channels.gameFeed];
@@ -67,7 +96,7 @@ export class CurrentGameManager {
     } catch (error) {
       console.error("Failed to clean up messages:", error);
     }
-    this.resetCurrentGame();
+    await this.resetCurrentGame();
   }
 
   public static schedulePollCloseTime(startTime: Date) {
@@ -180,25 +209,34 @@ export class CurrentGameManager {
     }
 
     if (game.getClassBanLimit() > 0 && !game.areClassBansAnnounced()) {
-      const byTeam = game.settings.bannedClassesByTeam;
-      const banned = game.settings.bannedClasses;
+      const byTeam = game.settings.nonSharedCaptainBannedClasses ?? {
+        [Team.RED]: [],
+        [Team.BLUE]: [],
+      };
+      game.settings.nonSharedCaptainBannedClasses = byTeam;
+      const organiserBans = game.settings.organiserBannedClasses ?? [];
+      const sharedCaptainBans = game.settings.sharedCaptainBannedClasses ?? [];
       let both: string[];
       let redOnly: string[];
       let blueOnly: string[];
 
       if (game.classBanMode === "shared") {
         // In shared mode, ALL bans are shared (organiser + any captain bans)
-        const sharedSet = new Set([...banned, ...byTeam.RED, ...byTeam.BLUE]);
+        const sharedSet = new Set([
+          ...organiserBans,
+          ...sharedCaptainBans,
+          ...byTeam.RED,
+          ...byTeam.BLUE,
+        ]);
         both = Array.from(sharedSet);
         redOnly = [];
         blueOnly = [];
       } else {
-        // Default behavior: organiser shared bans + team-only bans
-        both = banned.filter(
-          (c) => !byTeam.RED.includes(c) && !byTeam.BLUE.includes(c)
-        );
-        redOnly = byTeam.RED.filter((c) => !both.includes(c));
-        blueOnly = byTeam.BLUE.filter((c) => !both.includes(c));
+        // Default behavior: organiser/shared captain bans + team-only bans
+        const sharedSet = new Set([...organiserBans, ...sharedCaptainBans]);
+        both = Array.from(sharedSet);
+        redOnly = byTeam.RED.filter((c) => !sharedSet.has(c));
+        blueOnly = byTeam.BLUE.filter((c) => !sharedSet.has(c));
       }
       const lockedEmbed = new EmbedBuilder()
         .setColor("DarkRed")
@@ -236,6 +274,7 @@ export class CurrentGameManager {
     const game = this.getCurrentGame();
     if (!game.startTime) return;
     this.clearCaptainTimers();
+    // The rest of the logic has been moved to AutoCaptainSelector; keep timer scheduling here.
 
     const now = Date.now();
     const reminderTime = new Date(game.startTime.getTime() - 20 * 60 * 1000);
@@ -244,6 +283,10 @@ export class CurrentGameManager {
     if (reminderTime.getTime() > now) {
       this.captainReminderTimeout = setTimeout(async () => {
         try {
+          const redCap = game.getCaptainOfTeam("RED");
+          const blueCap = game.getCaptainOfTeam("BLUE");
+          const haveBoth = !!redCap && !!blueCap;
+          if (haveBoth) return;
           await DiscordUtil.sendMessage(
             "gameFeed",
             "**Reminder**: Captains are still needed. If not set in time then two will be chosen at random."
@@ -260,123 +303,128 @@ export class CurrentGameManager {
           const redCap = game.getCaptainOfTeam("RED");
           const blueCap = game.getCaptainOfTeam("BLUE");
           const haveBoth = !!redCap && !!blueCap;
-          if (haveBoth) return;
-
-          // Clear any existing single captain as per rules
-          for (const t of ["RED", "BLUE"] as const) {
-            const c = game.getCaptainOfTeam(t);
-            if (c) {
-              c.captain = false;
-              // Remove captain role
-              await guild.members
-                .fetch(c.discordSnowflake)
-                .then((m) =>
-                  m.roles.remove(PermissionsUtil.config.roles.captainRole)
-                )
-                .catch(() => {});
-            }
-          }
-
-          // Eligible players: registered, elo > 1000, presence in online/idle/dnd
-          const players = game.getPlayers();
-          const presenceOk = new Set(["online", "idle", "dnd"]);
-          const eligible: { p: PlayerInstance; elo: number }[] = [];
-
-          for (const p of players) {
-            const elo = Number(p.elo ?? 0);
-            if (elo <= 1000) continue;
-
-            const member: GuildMember | null = await guild.members
-              .fetch(p.discordSnowflake)
-              .catch(() => null);
-            const status = member?.presence?.status ?? undefined;
-
-            if (status && !presenceOk.has(status)) continue;
-
-            eligible.push({ p, elo });
-          }
-
-          if (eligible.length < 2) {
-            await DiscordUtil.sendMessage(
-              "gameFeed",
-              "Could not find enough eligible players for captains. Organisers, please set captains manually."
-            );
+          if (haveBoth) {
+            await this.attemptAutoStartDraft(guild);
             return;
           }
 
-          // Pick first captain randomly
-          const first = eligible[Math.floor(Math.random() * eligible.length)];
-          // Pick second: nearest higher elo
-          const rest = eligible.filter((e) => e.p !== first.p);
-          let higher = rest
-            .filter((e) => e.elo >= first.elo)
-            .sort((a, b) => a.elo - b.elo);
-          let second =
-            higher[0] ||
-            rest.sort(
-              (a, b) =>
-                Math.abs(a.elo - first.elo) - Math.abs(b.elo - first.elo)
-            )[0];
-
-          const assignCaptain = async (
-            team: "RED" | "BLUE",
-            player: PlayerInstance
-          ) => {
-            const res = game.setTeamCaptain(team, player);
-            if (res.oldCaptain) {
-              await guild.members
-                .fetch(res.oldCaptain)
-                .then((oldM) =>
-                  oldM.roles.remove(PermissionsUtil.config.roles.captainRole)
-                )
-                .catch(() => undefined);
-            }
-            await guild.members
-              .fetch(player.discordSnowflake)
-              .then(async (m) => {
-                await m.roles.add(PermissionsUtil.config.roles.captainRole);
-                if (team === "RED") {
-                  await m.roles.add(PermissionsUtil.config.roles.redTeamRole);
-                  await m.roles.remove(
-                    PermissionsUtil.config.roles.blueTeamRole
-                  );
-                } else {
-                  await m.roles.add(PermissionsUtil.config.roles.blueTeamRole);
-                  await m.roles.remove(
-                    PermissionsUtil.config.roles.redTeamRole
-                  );
-                }
-              })
-              .catch(() => undefined);
-          };
-
-          await assignCaptain("BLUE", first.p);
-          await assignCaptain("RED", second.p);
-
+          const result = await AutoCaptainSelector.randomiseCaptains(
+            guild,
+            true
+          );
+          if ("error" in result) {
+            await DiscordUtil.sendMessage("gameFeed", result.error);
+            return;
+          }
           await DiscordUtil.sendMessage(
             "gameFeed",
-            `Captains have been auto-selected: BLUE - ${first.p.ignUsed}, RED - ${second.p.ignUsed}.`
+            `Captains have been auto-selected: BLUE - ${escapeText(
+              result.blue.ignUsed ?? "Unknown"
+            )}, RED - ${escapeText(result.red.ignUsed ?? "Unknown")}.`
           );
-
-          // Auto-start draft team picking
-          try {
-            const fakeInteraction = {
-              editReply: async (_: unknown) => {},
-              guild,
-            } as unknown as import("discord.js").ChatInputCommandInteraction;
-            const session = new DraftTeamPickingSession();
-            await session.initialize(fakeInteraction);
-            if (TeamCommand.instance) {
-              TeamCommand.instance.teamPickingSession = session;
-            }
-          } catch (e) {
-            console.error("Failed to auto-start draft team picking:", e);
-          }
         } catch (e) {
           console.error("Error enforcing auto-captain selection:", e);
         }
       }, enforceTime.getTime() - now);
     }
+  }
+
+  private static async attemptAutoStartDraft(guild: Guild): Promise<void> {
+    const game = this.getCurrentGame();
+    const teamCommand = TeamCommand.instance;
+    if (!teamCommand || teamCommand.isTeamPickingSessionActive()) return;
+    if (game.teamsDecidedBy) return;
+
+    const redCap = game.getCaptainOfTeam("RED");
+    const blueCap = game.getCaptainOfTeam("BLUE");
+    if (!redCap || !blueCap) return;
+
+    const startDraft = async () => {
+      try {
+        const fakeInteraction = {
+          editReply: async (_: unknown) => {},
+          guild,
+        } as unknown as import("discord.js").ChatInputCommandInteraction;
+        const session = new DraftTeamPickingSession();
+        await session.initialize(fakeInteraction);
+        teamCommand.teamPickingSession = session;
+      } catch (e) {
+        console.error("Failed to auto-start draft team picking:", e);
+      }
+    };
+
+    const undecidedCount = game.getPlayersOfTeam("UNDECIDED").length;
+    if (undecidedCount % 2 === 0) {
+      await startDraft();
+      return;
+    }
+
+    await DiscordUtil.sendMessage(
+      "registration",
+      "⚠️ Registered players are uneven. Waiting 1 minute for another player to register; otherwise the last registered player will be removed and team picking will start."
+    );
+
+    if (this.draftAutoStartTimeout) {
+      clearTimeout(this.draftAutoStartTimeout);
+    }
+    this.draftAutoStartTimeout = setTimeout(async () => {
+      const currentGame = this.getCurrentGame();
+      if (teamCommand.isTeamPickingSessionActive()) return;
+      if (currentGame.teamsDecidedBy) return;
+
+      const red = currentGame.getCaptainOfTeam("RED");
+      const blue = currentGame.getCaptainOfTeam("BLUE");
+      if (!red || !blue) return;
+
+      const undecided = currentGame.getPlayersOfTeam("UNDECIDED");
+      if (undecided.length % 2 === 0) {
+        await startDraft();
+        return;
+      }
+
+      const removalId = this.getAutoBalanceRemovalId(currentGame);
+      if (!removalId) {
+        await DiscordUtil.sendMessage(
+          "registration",
+          "Unable to auto-balance teams to start picking. Please unregister a player manually."
+        );
+        return;
+      }
+
+      const removedPlayer = currentGame
+        .getPlayers()
+        .find((p) => p.discordSnowflake === removalId);
+      const removedName = escapeText(
+        removedPlayer?.ignUsed ?? "Unknown Player"
+      );
+
+      await currentGame.removePlayerByDiscordId(removalId);
+      await DiscordUtil.sendMessage(
+        "registration",
+        `Teams must be even to start picking. <@${removalId}> (${removedName}) was the last to register and has been removed. You may re-register if another player joins.`
+      );
+
+      await startDraft();
+    }, 60_000);
+  }
+
+  private static getAutoBalanceRemovalId(game: GameInstance): string | null {
+    const isCaptain = (id: string) =>
+      game.getCaptainOfTeam("RED")?.discordSnowflake === id ||
+      game.getCaptainOfTeam("BLUE")?.discordSnowflake === id;
+
+    const last = game.lastRegisteredSnowflake;
+    if (
+      last &&
+      !isCaptain(last) &&
+      game.getPlayers().some((p) => p.discordSnowflake === last)
+    ) {
+      return last;
+    }
+
+    const undecided = [...game.getPlayersOfTeam("UNDECIDED")].reverse();
+    const fallback = undecided.find((p) => !isCaptain(p.discordSnowflake));
+    return fallback?.discordSnowflake ?? null;
   }
 
   private static clearCaptainTimers() {
@@ -387,6 +435,10 @@ export class CurrentGameManager {
     if (this.captainEnforceTimeout) {
       clearTimeout(this.captainEnforceTimeout);
       this.captainEnforceTimeout = undefined;
+    }
+    if (this.draftAutoStartTimeout) {
+      clearTimeout(this.draftAutoStartTimeout);
+      this.draftAutoStartTimeout = undefined;
     }
   }
 }

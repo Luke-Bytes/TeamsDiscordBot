@@ -8,6 +8,12 @@ import { Team } from "@prisma/client";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { PrismaUtils } from "../util/PrismaUtils";
+import CaptainPlanDMManager, {
+  PlanMember,
+} from "../logic/CaptainPlanDMManager";
+import { GameInstance } from "../database/GameInstance";
+import { PlayerInstance } from "../database/PlayerInstance";
+import { escapeText } from "../util/Utils";
 
 type ExtendedTeam = Team | "UNDECIDED";
 
@@ -15,6 +21,11 @@ export default class PlayerCommand implements Command {
   name = "player";
   description = "Manage players and teams";
   buttonIds: string[] = [];
+  private captainPlanDMManager?: CaptainPlanDMManager;
+
+  constructor(captainPlanDMManager?: CaptainPlanDMManager) {
+    this.captainPlanDMManager = captainPlanDMManager;
+  }
 
   data = new SlashCommandBuilder()
     .setName(this.name)
@@ -109,12 +120,12 @@ export default class PlayerCommand implements Command {
     if (!member || !PermissionsUtil.hasRole(member, "organiserRole")) {
       await interaction.reply({
         content: "You do not have permission to use this command.",
-        ephemeral: false,
       });
       return;
     }
 
     const game = CurrentGameManager.getCurrentGame();
+    const beforeRosters = this.captureTeamRosters(game);
     const subcommand = interaction.options.getSubcommand();
 
     try {
@@ -122,10 +133,18 @@ export default class PlayerCommand implements Command {
       const inputOldPlayer = interaction.options.getString("old_player", false);
       const inputNewPlayer = interaction.options.getString("new_player", false);
 
-      const player =
-        inputPlayer !== null ? await PrismaUtils.findPlayer(inputPlayer) : null;
-
-      const playerName = player?.latestIGN ?? inputPlayer ?? "";
+      const playerInputs =
+        inputPlayer !== null ? inputPlayer.split(/\s+/).filter(Boolean) : [];
+      const resolvedPlayers =
+        playerInputs.length > 0
+          ? await Promise.all(
+              playerInputs.map(async (token) => {
+                const match = await PrismaUtils.findPlayer(token);
+                const name = match?.latestIGN ?? token;
+                return { name, safeName: escapeText(name) };
+              })
+            )
+          : [];
 
       const newTeam =
         subcommand === "move"
@@ -134,6 +153,20 @@ export default class PlayerCommand implements Command {
 
       let oldPlayerName = "";
       let targetPlayerName = "";
+      let safeOldPlayerName = "";
+      let safeTargetPlayerName = "";
+
+      if (
+        (subcommand === "move" ||
+          subcommand === "add" ||
+          subcommand === "remove") &&
+        resolvedPlayers.length === 0
+      ) {
+        await interaction.reply(
+          "No players provided. Supply one or more names separated by spaces."
+        );
+        return;
+      }
 
       if (subcommand === "replace") {
         const oldPlayer =
@@ -147,6 +180,8 @@ export default class PlayerCommand implements Command {
 
         oldPlayerName = oldPlayer?.latestIGN ?? inputOldPlayer ?? "";
         targetPlayerName = targetPlayer?.latestIGN ?? inputNewPlayer ?? "";
+        safeOldPlayerName = escapeText(oldPlayerName);
+        safeTargetPlayerName = escapeText(targetPlayerName);
       }
 
       switch (subcommand) {
@@ -160,56 +195,128 @@ export default class PlayerCommand implements Command {
             true
           ) as ExtendedTeam;
 
-          const success = await game.movePlayerBetweenTeams(
-            playerName,
-            fromTeam,
-            toTeam,
-            interaction.guild
-          );
+          const moved: string[] = [];
+          const failed: string[] = [];
+
+          for (const player of resolvedPlayers) {
+            const success = await game.movePlayerBetweenTeams(
+              player.name,
+              fromTeam,
+              toTeam,
+              interaction.guild
+            );
+            if (success) {
+              moved.push(player.safeName);
+            } else {
+              failed.push(player.safeName);
+            }
+          }
+
+          const successMessage = moved.length
+            ? `Successfully moved **${moved.join(
+                ", "
+              )}** from **${fromTeam.toUpperCase()}** to **${toTeam.toUpperCase()}**.`
+            : "";
+          const failureMessage = failed.length
+            ? `Failed to move **${failed.join(
+                ", "
+              )}**. Ensure they are currently in **${fromTeam.toUpperCase()}** and the move is valid.`
+            : "";
 
           await interaction.reply(
-            success
-              ? `Successfully moved **${playerName}** from **${fromTeam.toUpperCase()}** to **${toTeam.toUpperCase()}**.`
-              : `Failed to move **${playerName}**. Ensure they are currently in **${fromTeam.toUpperCase()}** and the move is valid.`
+            [successMessage, failureMessage].filter(Boolean).join("\n")
           );
+          if (moved.length > 0) {
+            await this.syncLateJoinerPrompts(game, beforeRosters, interaction);
+          }
           break;
         }
 
         case "add": {
-          await interaction.reply(
-            (await game.addPlayerByNameOrDiscord(
-              playerName,
+          const added: string[] = [];
+          const failed: string[] = [];
+
+          for (const player of resolvedPlayers) {
+            const success = await game.addPlayerByNameOrDiscord(
+              player.name,
               newTeam as ExtendedTeam,
               interaction.guild
-            ))
-              ? `Successfully added **${playerName}** to **${newTeam?.toUpperCase()}**.`
-              : `Failed to add **${playerName}**. Ensure the player is registered with \`/register\`.`
+            );
+            if (success) {
+              added.push(player.safeName);
+            } else {
+              failed.push(player.safeName);
+            }
+          }
+
+          const successMessage = added.length
+            ? `Successfully added **${added.join(
+                ", "
+              )}** to **${newTeam?.toUpperCase()}**.`
+            : "";
+          const failureMessage = failed.length
+            ? `Failed to add **${failed.join(
+                ", "
+              )}**. Ensure the player is registered with \`/register\`.`
+            : "";
+
+          await interaction.reply(
+            [successMessage, failureMessage].filter(Boolean).join("\n")
           );
+          if (added.length > 0) {
+            await this.syncLateJoinerPrompts(game, beforeRosters, interaction);
+          }
           break;
         }
 
         case "remove": {
-          await interaction.reply(
-            (await game.removePlayerByNameOrDiscord(
-              playerName,
+          const removed: string[] = [];
+          const failed: string[] = [];
+
+          for (const player of resolvedPlayers) {
+            const success = await game.removePlayerByNameOrDiscord(
+              player.name,
               interaction.guild
-            ))
-              ? `Successfully removed **${playerName}** from the game.`
-              : `Failed to remove **${playerName}**. The player could not be found in any team.`
+            );
+            if (success) {
+              removed.push(player.safeName);
+            } else {
+              failed.push(player.safeName);
+            }
+          }
+
+          const successMessage = removed.length
+            ? `Successfully removed **${removed.join(", ")}** from the game.`
+            : "";
+          const failureMessage = failed.length
+            ? `Failed to remove **${failed.join(
+                ", "
+              )}**. The player could not be found in any team.`
+            : "";
+
+          await interaction.reply(
+            [successMessage, failureMessage].filter(Boolean).join("\n")
           );
+          if (removed.length > 0) {
+            await this.syncLateJoinerPrompts(game, beforeRosters, interaction);
+          }
           break;
         }
 
         case "replace": {
-          await interaction.reply(
-            (await game.replacePlayerByNameOrDiscord(
-              oldPlayerName,
-              targetPlayerName,
-              interaction.guild
-            ))
-              ? `Successfully replaced **${oldPlayerName}** with **${targetPlayerName}** in their current team.`
-              : `Failed to replace **${oldPlayerName}**. Ensure both players are correctly registered and in the appropriate teams.`
+          const success = await game.replacePlayerByNameOrDiscord(
+            oldPlayerName,
+            targetPlayerName,
+            interaction.guild
           );
+          await interaction.reply(
+            success
+              ? `Successfully replaced **${safeOldPlayerName}** with **${safeTargetPlayerName}** in their current team.`
+              : `Failed to replace **${safeOldPlayerName}**. Ensure both players are correctly registered and in the appropriate teams.`
+          );
+          if (success) {
+            await this.syncLateJoinerPrompts(game, beforeRosters, interaction);
+          }
           break;
         }
 
@@ -223,6 +330,68 @@ export default class PlayerCommand implements Command {
       await interaction.reply(
         "An unexpected error occurred while managing players."
       );
+    }
+  }
+
+  private captureTeamRosters(
+    game: GameInstance
+  ): Record<"RED" | "BLUE", PlanMember[]> {
+    return {
+      RED: game.getPlayersOfTeam("RED").map((p) => this.toPlanMember(p)),
+      BLUE: game.getPlayersOfTeam("BLUE").map((p) => this.toPlanMember(p)),
+    };
+  }
+
+  private toPlanMember(player: PlayerInstance): PlanMember {
+    return {
+      id: player.discordSnowflake,
+      ign: player.ignUsed ?? player.latestIGN ?? "Unknown",
+    };
+  }
+
+  private diffNewMembers(
+    before: Record<"RED" | "BLUE", PlanMember[]>,
+    after: Record<"RED" | "BLUE", PlanMember[]>
+  ): Record<"RED" | "BLUE", PlanMember[]> {
+    const added: Record<"RED" | "BLUE", PlanMember[]> = { RED: [], BLUE: [] };
+    (["RED", "BLUE"] as const).forEach((team) => {
+      const beforeIds = new Set(before[team].map((m) => m.id));
+      added[team] = after[team].filter((m) => !beforeIds.has(m.id));
+    });
+    return added;
+  }
+
+  private async syncLateJoinerPrompts(
+    game: GameInstance,
+    beforeRosters: Record<"RED" | "BLUE", PlanMember[]>,
+    interaction: ChatInputCommandInteraction
+  ) {
+    if (!this.captainPlanDMManager) return;
+    const client = interaction.client;
+    if (!client || !client.users) return;
+    const afterRosters = this.captureTeamRosters(game);
+    const added = this.diffNewMembers(beforeRosters, afterRosters);
+
+    const redCaptain = game.getCaptainOfTeam("RED");
+    if (redCaptain) {
+      await this.captainPlanDMManager.handleRosterUpdate({
+        captainId: redCaptain.discordSnowflake,
+        team: "RED",
+        members: afterRosters.RED,
+        newJoiners: added.RED,
+        client,
+      });
+    }
+
+    const blueCaptain = game.getCaptainOfTeam("BLUE");
+    if (blueCaptain) {
+      await this.captainPlanDMManager.handleRosterUpdate({
+        captainId: blueCaptain.discordSnowflake,
+        team: "BLUE",
+        members: afterRosters.BLUE,
+        newJoiners: added.BLUE,
+        client,
+      });
     }
   }
 }

@@ -139,11 +139,16 @@ export const prismaClient = new PrismaClient({
         }
 
         const gameSettings = {
-          minerushing: settings.minerushing ?? false,
-          bannedClasses: settings.bannedClasses ?? [],
-          bannedClassesByTeam: settings.bannedClassesByTeam ?? [],
+          organiserBannedClasses: settings.organiserBannedClasses ?? [],
+          sharedCaptainBannedClasses: settings.sharedCaptainBannedClasses ?? [],
+          nonSharedCaptainBannedClasses:
+            settings.nonSharedCaptainBannedClasses ?? {
+              RED: [],
+              BLUE: [],
+            },
           map: settings.map ?? "DUELSTAL",
           modifiers: settings.modifiers ?? [],
+          delayedBan: settings.delayedBan ?? 0,
         };
 
         const allParticipants = await Promise.all(
@@ -162,14 +167,27 @@ export const prismaClient = new PrismaClient({
             const team = teams.RED.includes(playerInstance) ? "RED" : "BLUE";
             const currentGame = CurrentGameManager.getCurrentGame();
             const winningTeam = currentGame.gameWinner;
-            const losingTeam = winningTeam === "RED" ? "BLUE" : "RED";
+            const losingTeam: Team | null =
+              winningTeam === "RED"
+                ? "BLUE"
+                : winningTeam === "BLUE"
+                  ? "RED"
+                  : null;
 
             const pStats =
               await prismaClient.player.getPlayerStatsForCurrentSeason(
                 playerRecord.id
               );
 
-            if (team === winningTeam) {
+            if (winningTeam && team === winningTeam) {
+              playerInstance.wins += 1;
+              playerInstance.winStreak += 1;
+              playerInstance.loseStreak = 0;
+              playerInstance.biggestWinStreak = Math.max(
+                playerInstance.winStreak,
+                playerInstance.biggestWinStreak
+              );
+
               await prismaClient.playerStats.update({
                 where: {
                   playerId_seasonId: {
@@ -187,7 +205,15 @@ export const prismaClient = new PrismaClient({
                   ),
                 },
               });
-            } else if (team === losingTeam) {
+            } else if (losingTeam && team === losingTeam) {
+              playerInstance.losses += 1;
+              playerInstance.loseStreak += 1;
+              playerInstance.winStreak = 0;
+              playerInstance.biggestLosingStreak = Math.max(
+                playerInstance.loseStreak,
+                playerInstance.biggestLosingStreak
+              );
+
               await prismaClient.playerStats.update({
                 where: {
                   playerId_seasonId: {
@@ -212,13 +238,19 @@ export const prismaClient = new PrismaClient({
                 currentGame.MVPPlayerRed === playerInstance.ignUsed) ||
               (team === "BLUE" &&
                 currentGame.MVPPlayerBlue === playerInstance.ignUsed);
+            const votedForAMVP = currentGame.hasVotedMvp(
+              playerInstance.discordSnowflake
+            );
 
             return {
               ignUsed: playerInstance.ignUsed ?? "UnknownIGN",
               team,
               player: { connect: { id: playerRecord.id } },
               mvp,
+              votedForAMVP,
               captain: playerInstance.captain === true,
+              draftSlotPlacement:
+                playerInstance.draftSlotPlacement ?? undefined,
               season: { connect: { id: season.id } },
             } as Prisma.GameParticipationCreateWithoutGameInput;
           })
@@ -240,12 +272,14 @@ export const prismaClient = new PrismaClient({
                 ? (gameWinner as Team)
                 : undefined,
             type: teamsDecidedBy as gameType | null,
-            organiser,
-            host,
+            organiser: organiser ?? undefined,
+            host: host ?? undefined,
             doubleElo: isDoubleElo,
             participantsIGNs: validParticipants.map(
               (p) => p.ignUsed || "UnknownIGN"
             ),
+            redTeamPlan: gameInstance.redTeamPlan ?? undefined,
+            blueTeamPlan: gameInstance.blueTeamPlan ?? undefined,
             gameParticipations: {
               create: validParticipants,
             },
@@ -257,17 +291,23 @@ export const prismaClient = new PrismaClient({
             startTime: startTime ?? new Date(),
             endTime: endTime ?? new Date(),
             settings: gameSettings,
-            winner:
-              gameWinner === "RED" || gameWinner === "BLUE"
-                ? (gameWinner as Team)
-                : undefined,
+            winner: (() => {
+              if (gameWinner === "RED" || gameWinner === "BLUE") {
+                return gameWinner as Team;
+              }
+              throw new Error(
+                "Attempted to save a game without a winner (gameWinner was not RED/BLUE)."
+              );
+            })(),
             type: teamsDecidedBy as gameType | null,
-            organiser,
-            host,
+            organiser: organiser ?? "Unknown",
+            host: host ?? "Unknown",
             doubleElo: isDoubleElo,
             participantsIGNs: validParticipants.map(
               (p) => p.ignUsed ?? "UnknownIGN"
             ),
+            redTeamPlan: gameInstance.redTeamPlan ?? undefined,
+            blueTeamPlan: gameInstance.blueTeamPlan ?? undefined,
             gameParticipations: {
               create: validParticipants,
             },

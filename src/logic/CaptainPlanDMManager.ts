@@ -10,15 +10,31 @@ import {
 } from "discord.js";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { MessageSafetyUtil } from "../util/MessageSafetyUtil";
+import { GameInstance } from "../database/GameInstance";
+import { escapeText, prettifyName } from "../util/Utils";
+import { buildTeamPlanRecord } from "../util/PlanUtil";
+import { AnniClass, Team } from "@prisma/client";
 
 type TeamKey = "RED" | "BLUE";
+
+export type PlanMember = { id: string; ign: string };
 
 type PlanSession = {
   captainId: string;
   team: TeamKey;
-  members: string[];
-  stage: "awaitMessage" | "awaitConfirm";
+  members: PlanMember[];
+  stage:
+    | "awaitMessage"
+    | "awaitConfirm"
+    | "awaitLateMessage"
+    | "awaitLateConfirm"
+    | "sending"
+    | "idle";
   lastContent?: string;
+  hasSentPlan: boolean;
+  pendingLateMembers: Set<string>;
+  latePromptMessage?: Message;
+  debugDeliveryHook?: (memberId: string, content: string) => void;
 };
 
 type StartSessionParams = {
@@ -26,25 +42,117 @@ type StartSessionParams = {
   captainId: string;
   team: TeamKey;
   teamList: string;
-  members: string[];
+  members: PlanMember[];
 };
 
 export default class CaptainPlanDMManager {
+  public static instance?: CaptainPlanDMManager;
+  private static readonly instances = new Set<CaptainPlanDMManager>();
+
   private sessions = new Map<string, PlanSession>();
 
   private buttonIdSet = new Set<string>();
+  private debugHooks = new Map<
+    string,
+    (memberId: string, content: string) => void
+  >();
+  private deliveryLog = new Map<string, number>();
+  private transport?: (
+    memberId: string,
+    content: string
+  ) => Promise<boolean> | boolean;
+
+  constructor() {
+    CaptainPlanDMManager.instance = this;
+    CaptainPlanDMManager.instances.add(this);
+  }
 
   public get buttonIds(): string[] {
     return [...this.buttonIdSet];
   }
 
-  private addButtonsFor(captainId: string) {
-    this.buttonIdSet.add(`plan-confirm:${captainId}`);
+  public resetAllSessions(): void {
+    this.sessions.clear();
+    this.buttonIdSet.clear();
+    this.deliveryLog.clear();
+  }
+
+  public static resetAllInstances(): void {
+    for (const manager of CaptainPlanDMManager.instances) {
+      manager.resetAllSessions();
+    }
+  }
+
+  public getDeliveryCount(memberId: string): number {
+    return this.deliveryLog.get(memberId) ?? 0;
+  }
+
+  // Test helper: sends to all current members using the configured transport.
+  public async __testSendAll(
+    captainId: string
+  ): Promise<{ failed: string[]; sentCount: number }> {
+    const session = this.sessions.get(captainId);
+    if (!session) throw new Error("No session");
+    session.lastContent = session.lastContent ?? "";
+    const result = await this.sendPlanToMembers({
+      captainId,
+      members: session.members.map((m) => m.id),
+      content: session.lastContent,
+      client: {} as Client,
+    });
+    session.hasSentPlan = true;
+    return result;
+  }
+
+  // Test helper: sends to pending late members only.
+  public async __testSendLate(
+    captainId: string
+  ): Promise<{ failed: string[]; sentCount: number }> {
+    const session = this.sessions.get(captainId);
+    if (!session) throw new Error("No session");
+    session.lastContent = session.lastContent ?? "";
+    const targetIds = session.members
+      .filter((m) => session.pendingLateMembers.has(m.id))
+      .map((m) => m.id);
+    return this.sendPlanToMembers({
+      captainId,
+      members: targetIds,
+      content: session.lastContent,
+      client: {} as Client,
+    });
+  }
+
+  public setDebugDeliveryHook(
+    captainId: string,
+    hook: (memberId: string, content: string) => void
+  ): void {
+    this.debugHooks.set(captainId, hook);
+    const session = this.sessions.get(captainId);
+    if (session) {
+      session.debugDeliveryHook = hook;
+    }
+  }
+
+  public setTransport(
+    transport: (memberId: string, content: string) => Promise<boolean> | boolean
+  ): void {
+    this.transport = transport;
+  }
+
+  private addButtonsFor(captainId: string, mode: "initial" | "late") {
+    if (mode === "initial") {
+      this.buttonIdSet.add(`plan-confirm:${captainId}`);
+    } else {
+      this.buttonIdSet.add(`plan-confirm-all:${captainId}`);
+      this.buttonIdSet.add(`plan-confirm-new:${captainId}`);
+    }
     this.buttonIdSet.add(`plan-resend:${captainId}`);
   }
 
   private removeButtonsFor(captainId: string) {
     this.buttonIdSet.delete(`plan-confirm:${captainId}`);
+    this.buttonIdSet.delete(`plan-confirm-all:${captainId}`);
+    this.buttonIdSet.delete(`plan-confirm-new:${captainId}`);
     this.buttonIdSet.delete(`plan-resend:${captainId}`);
   }
 
@@ -55,14 +163,19 @@ export default class CaptainPlanDMManager {
     teamList,
     members,
   }: StartSessionParams): Promise<void> {
+    const dedupedMembers = this.mergeMembers([], members);
     this.sessions.set(captainId, {
       captainId,
       team,
-      members,
+      members: dedupedMembers,
       stage: "awaitMessage",
+      hasSentPlan: false,
+      pendingLateMembers: new Set(),
+      debugDeliveryHook: this.debugHooks.get(captainId),
     });
 
-    const template = `**Mid Blocks Plan**\n\`\`\`\n${teamList}\n\`\`\`\n**Game Plan**\n\`\`\`\n${teamList}\n\`\`\``;
+    const template = this.buildTemplate(teamList);
+    const context = this.getGameContextText();
     const intro = `Hi ${team} Captain! Reply to this DM with your team's plan filled in with the below format. I will then forward it to your team members.
 
 `;
@@ -75,7 +188,7 @@ export default class CaptainPlanDMManager {
 
     if (user) {
       await this.safeSend(user, {
-        content: `${intro}${template}\n\n${instructions}`,
+        content: `${intro}${context}\n\n${template}\n\n${instructions}`,
       });
       return;
     }
@@ -89,7 +202,11 @@ export default class CaptainPlanDMManager {
 
   public hasPendingSession(userId: string): boolean {
     const session = this.sessions.get(userId);
-    return Boolean(session && session.stage === "awaitMessage");
+    return Boolean(
+      session &&
+        (session.stage === "awaitMessage" ||
+          session.stage === "awaitLateMessage")
+    );
   }
 
   public async handleDM(message: Message): Promise<boolean> {
@@ -97,7 +214,11 @@ export default class CaptainPlanDMManager {
 
     const captainId = message.author.id;
     const session = this.sessions.get(captainId);
-    if (!session || session.stage !== "awaitMessage") return false;
+    if (
+      !session ||
+      (session.stage !== "awaitMessage" && session.stage !== "awaitLateMessage")
+    )
+      return false;
 
     const trimmed = (message.content ?? "").trim();
     const hasAttachment = message.attachments.size > 0;
@@ -115,24 +236,41 @@ export default class CaptainPlanDMManager {
     }
 
     session.lastContent = message.content;
-    session.stage = "awaitConfirm";
-    this.addButtonsFor(captainId);
+    const isLate = session.stage === "awaitLateMessage";
+    session.stage = isLate ? "awaitLateConfirm" : "awaitConfirm";
+    this.addButtonsFor(captainId, isLate ? "late" : "initial");
 
-    const confirmBtn = new ButtonBuilder()
-      .setCustomId(`plan-confirm:${captainId}`)
-      .setLabel("Confirm")
-      .setStyle(ButtonStyle.Success);
-    const resendBtn = new ButtonBuilder()
-      .setCustomId(`plan-resend:${captainId}`)
-      .setLabel("Let me send again")
-      .setStyle(ButtonStyle.Secondary);
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      confirmBtn,
-      resendBtn
+    const previewContent = this.buildPlanDeliveryContent(
+      session.lastContent ?? ""
     );
+    const row = isLate
+      ? new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`plan-confirm-new:${captainId}`)
+            .setLabel("Send to new joiners only")
+            .setStyle(ButtonStyle.Primary),
+          new ButtonBuilder()
+            .setCustomId(`plan-confirm-all:${captainId}`)
+            .setLabel("Send to all team members")
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId(`plan-resend:${captainId}`)
+            .setLabel("Let me send again")
+            .setStyle(ButtonStyle.Secondary)
+        )
+      : new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`plan-confirm:${captainId}`)
+            .setLabel("Confirm")
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId(`plan-resend:${captainId}`)
+            .setLabel("Let me send again")
+            .setStyle(ButtonStyle.Secondary)
+        );
 
     await this.safeSend(message.author, {
-      content: `Preview:\n\n${session.lastContent}\n\nSend to ${session.team} team members?`,
+      content: `Preview:\n\n${previewContent}\n\nSend to ${session.team} team members?`,
       components: [row],
     });
     return true;
@@ -151,27 +289,32 @@ export default class CaptainPlanDMManager {
         return;
       }
 
-      const failed: string[] = [];
-      const content = session.lastContent ?? "";
+      session.stage = "sending";
+      await interaction.deferUpdate().catch(() => {});
 
-      for (const memberId of session.members) {
-        if (memberId === captainId) continue;
-        try {
-          const user: User = await interaction.client.users.fetch(memberId);
-          await user.send(content);
-        } catch {
-          failed.push(memberId);
-        }
-      }
-
-      await interaction.update({
-        content: `Your plan has been sent to ${session.members.length - 1} team members${
-          failed.length
-            ? ` Failed to DM ${failed.length} of your team members.`
-            : ""
-        }`,
-        components: [],
+      const { failed, sentCount } = await this.sendPlanToMembers({
+        captainId,
+        content: session.lastContent ?? "",
+        members: session.members.map((m) => m.id),
+        client: interaction.client,
       });
+
+      await interaction
+        .editReply({
+          content: `Your plan has been sent to ${sentCount} team members${
+            failed.length
+              ? ` Failed to DM ${failed.length} of your team members.`
+              : ""
+          }`,
+          components: [],
+        })
+        .catch(() => {});
+
+      session.hasSentPlan = true;
+      const dmPlan = buildTeamPlanRecord(session.lastContent ?? "", "DM");
+      if (dmPlan) {
+        GameInstance.getInstance().setTeamPlan(session.team, dmPlan);
+      }
 
       if (failed.length) {
         const channelKey =
@@ -183,7 +326,68 @@ export default class CaptainPlanDMManager {
         );
       }
 
-      this.sessions.delete(captainId);
+      session.stage = "idle";
+      session.pendingLateMembers.clear();
+      this.removeButtonsFor(captainId);
+      return;
+    }
+
+    if (
+      id.startsWith("plan-confirm-all:") ||
+      id.startsWith("plan-confirm-new:")
+    ) {
+      const captainId = id.split(":")[1];
+      const session = this.sessions.get(captainId);
+      if (!session || session.stage !== "awaitLateConfirm") {
+        await interaction.deferUpdate().catch(() => {});
+        return;
+      }
+
+      session.stage = "sending";
+      await interaction.deferUpdate().catch(() => {});
+
+      const targetIds = id.startsWith("plan-confirm-new:")
+        ? session.members
+            .filter((m) => session.pendingLateMembers.has(m.id))
+            .map((m) => m.id)
+        : session.members.map((m) => m.id);
+
+      const { failed, sentCount } = await this.sendPlanToMembers({
+        captainId,
+        content: session.lastContent ?? "",
+        members: targetIds,
+        client: interaction.client,
+      });
+
+      await interaction
+        .editReply({
+          content: `Your updated plan has been sent to ${sentCount} team members${
+            failed.length
+              ? ` Failed to DM ${failed.length} of your team members.`
+              : ""
+          }`,
+          components: [],
+        })
+        .catch(() => {});
+
+      session.hasSentPlan = true;
+      const dmPlan = buildTeamPlanRecord(session.lastContent ?? "", "DM");
+      if (dmPlan) {
+        GameInstance.getInstance().setTeamPlan(session.team, dmPlan);
+      }
+
+      if (failed.length) {
+        const channelKey =
+          session.team === "RED" ? "redTeamChat" : "blueTeamChat";
+        const mentions = failed.map((memberId) => `<@${memberId}>`).join(" ");
+        await DiscordUtil.sendMessage(
+          channelKey,
+          `I couldn't DM the plan to: ${mentions} - Please enable DMs from server members.`
+        );
+      }
+
+      session.stage = "idle";
+      session.pendingLateMembers.clear();
       this.removeButtonsFor(captainId);
       return;
     }
@@ -196,7 +400,10 @@ export default class CaptainPlanDMManager {
         return;
       }
 
-      session.stage = "awaitMessage";
+      session.stage =
+        session.pendingLateMembers.size > 0 && session.hasSentPlan
+          ? "awaitLateMessage"
+          : "awaitMessage";
       session.lastContent = undefined;
       this.removeButtonsFor(captainId);
 
@@ -208,18 +415,287 @@ export default class CaptainPlanDMManager {
     }
   }
 
+  public async handleRosterUpdate(params: {
+    captainId: string;
+    team: TeamKey;
+    members: PlanMember[];
+    newJoiners: PlanMember[];
+    client: Client;
+  }): Promise<void> {
+    const { captainId, team, members, newJoiners, client } = params;
+    const session = this.sessions.get(captainId);
+    if (!session) return;
+
+    const previousMembers = new Map(session.members.map((m) => [m.id, m.ign]));
+    session.members = this.mergeMembers([], members);
+    for (const pendingId of Array.from(session.pendingLateMembers)) {
+      if (!session.members.find((m) => m.id === pendingId)) {
+        session.pendingLateMembers.delete(pendingId);
+      }
+    }
+
+    const trulyNew = newJoiners.filter(
+      (m) => !previousMembers.has(m.id) && m.id !== captainId
+    );
+    if (!trulyNew.length) {
+      return;
+    }
+
+    if (!session.hasSentPlan) {
+      return;
+    }
+
+    trulyNew.forEach((m) => session.pendingLateMembers.add(m.id));
+
+    const user = await client.users
+      .fetch(captainId)
+      .catch(() => null as User | null);
+    if (!user) return;
+
+    const teamList = this.buildTemplate(this.formatTeamList(session.members));
+    const newIgns = trulyNew.map((m) => escapeText(m.ign)).join(", ");
+    const context = this.getGameContextText();
+
+    const promptContent = `New teammate(s) joined your ${team} team: ${newIgns}\n\n${context}\n\nReply with your updated plan below.\n${teamList}\n\nWhen you reply, you can send it to everyone or only the new joiners.`;
+
+    if (
+      session.stage === "awaitLateMessage" ||
+      session.stage === "awaitLateConfirm"
+    ) {
+      if (session.latePromptMessage) {
+        const edited = await session.latePromptMessage
+          .edit({ content: promptContent })
+          .catch(() => null);
+        if (!edited) {
+          const msg = await this.safeSend(user, {
+            content: promptContent,
+          });
+          if (msg) {
+            session.latePromptMessage = msg;
+          }
+        }
+      } else {
+        const msg = await this.safeSend(user, {
+          content: promptContent,
+        });
+        if (msg) {
+          session.latePromptMessage = msg;
+        }
+      }
+      return;
+    }
+
+    session.stage = "awaitLateMessage";
+    const prompt = await this.safeSend(user, {
+      content: promptContent,
+    });
+    if (prompt) {
+      session.latePromptMessage = prompt;
+    }
+  }
+
+  private mergeMembers(
+    current: PlanMember[],
+    incoming: PlanMember[]
+  ): PlanMember[] {
+    const merged = new Map<string, PlanMember>();
+    for (const member of [...current, ...incoming]) {
+      merged.set(member.id, { id: member.id, ign: member.ign });
+    }
+    return Array.from(merged.values());
+  }
+
+  private formatTeamList(members: PlanMember[]): string {
+    return members.map((member) => member.ign).join("\n");
+  }
+
+  private buildTemplate(teamList: string): string {
+    return `**Mid Blocks Plan**\n\`\`\`\n${teamList}\n\`\`\`\n**Game Plan**\n\`\`\`\n${teamList}\n\`\`\``;
+  }
+
+  private getGameContextText(): string {
+    return `${this.getMapContextText()}\n${this.getClassBansContextText()}`;
+  }
+
+  private getMapContextText(): string {
+    const game = GameInstance.getInstance();
+
+    const decidedMap = game.settings.map;
+    if (decidedMap) {
+      return `**Map:** ${prettifyName(decidedMap)}`;
+    }
+
+    const polledMaps = game.mapVoteManager?.maps ?? [];
+    if (polledMaps.length) {
+      return `**Map Poll Options:** ${polledMaps.map(prettifyName).join(", ")}`;
+    }
+
+    return "**Map:** Not decided yet";
+  }
+
+  private getClassBansContextText(): string {
+    const game = GameInstance.getInstance();
+
+    const limit = game.getClassBanLimit();
+    const used = game.getTotalCaptainBans();
+    const mode = game.classBanMode;
+    const modifierLabel =
+      game.settings.modifiers?.find((m) => m.category === "Class Bans")?.name ??
+      null;
+
+    const organiserBans: AnniClass[] =
+      game.settings.organiserBannedClasses ?? [];
+    const sharedCaptainBans: AnniClass[] =
+      game.settings.sharedCaptainBannedClasses ?? [];
+    game.settings.nonSharedCaptainBannedClasses ??= {
+      [Team.RED]: [],
+      [Team.BLUE]: [],
+    };
+    const byTeam = game.settings.nonSharedCaptainBannedClasses;
+
+    const sharedBaseSet = new Set<AnniClass>([
+      ...organiserBans,
+      ...sharedCaptainBans,
+    ]);
+
+    let banType: string;
+    if (modifierLabel) {
+      banType = modifierLabel;
+    } else if (limit <= 0) {
+      banType = "No Bans";
+    } else if (mode === "shared") {
+      banType = "Captain Bans (Shared)";
+    } else if (mode === "opponentOnly") {
+      banType = "Captain Bans (Opponent Only)";
+    } else {
+      banType = "Captain Bans";
+    }
+
+    let sharedBans: AnniClass[] = [];
+    let redCantUse: AnniClass[] = [];
+    let blueCantUse: AnniClass[] = [];
+
+    if (mode === "shared") {
+      sharedBans = Array.from(
+        new Set<AnniClass>([
+          ...sharedBaseSet,
+          ...(byTeam[Team.RED] ?? []),
+          ...(byTeam[Team.BLUE] ?? []),
+        ])
+      );
+    } else {
+      sharedBans = Array.from(sharedBaseSet);
+      redCantUse = (byTeam[Team.RED] ?? []).filter(
+        (c) => !sharedBaseSet.has(c)
+      );
+      blueCantUse = (byTeam[Team.BLUE] ?? []).filter(
+        (c) => !sharedBaseSet.has(c)
+      );
+    }
+
+    const header =
+      limit > 0
+        ? `**Class Bans:** ${banType} (${used}/${limit})`
+        : `**Class Bans:** ${banType}`;
+
+    const sharedLine = `Shared: ${
+      sharedBans.length
+        ? sharedBans.map((c) => prettifyName(c)).join(", ")
+        : "None"
+    }`;
+    const redLine = `Red can't use: ${
+      redCantUse.length
+        ? redCantUse.map((c) => prettifyName(c)).join(", ")
+        : "None"
+    }`;
+    const blueLine = `Blue can't use: ${
+      blueCantUse.length
+        ? blueCantUse.map((c) => prettifyName(c)).join(", ")
+        : "None"
+    }`;
+
+    return `${header}\n${sharedLine}\n${redLine}\n${blueLine}`;
+  }
+
+  private buildPlanDeliveryContent(planText: string): string {
+    const header = this.getGameContextText();
+    return `${header}\n\n${planText}`;
+  }
+
   private async safeSend(
     user: User,
     payload: string | MessageCreateOptions
-  ): Promise<void> {
+  ): Promise<Message | null> {
     try {
       if (typeof payload === "string") {
-        await user.send(payload);
-      } else {
-        await user.send(payload);
+        return await user.send(payload);
       }
+      return await user.send(payload);
     } catch {
       // No-op: DM failures shouldn't crash the flow.
+      return null;
     }
+  }
+
+  private async sendPlanToMembers(params: {
+    captainId: string;
+    members: string[];
+    content: string;
+    client: Client;
+  }): Promise<{ failed: string[]; sentCount: number }> {
+    const { captainId, members, content, client } = params;
+    const failed: string[] = [];
+    const hook = this.debugHooks.get(captainId);
+    const uniqueTargets = Array.from(new Set(members));
+    const deliveryContent = this.buildPlanDeliveryContent(content);
+
+    for (const memberId of uniqueTargets) {
+      if (memberId === captainId) continue;
+      if (this.transport) {
+        const result = await this.transport(memberId, deliveryContent);
+        if (result) {
+          this.deliveryLog.set(
+            memberId,
+            (this.deliveryLog.get(memberId) ?? 0) + 1
+          );
+        } else {
+          failed.push(memberId);
+        }
+        continue;
+      }
+
+      if (hook) {
+        hook(memberId, deliveryContent);
+        this.deliveryLog.set(
+          memberId,
+          (this.deliveryLog.get(memberId) ?? 0) + 1
+        );
+        continue; // In test mode, trust hook and skip real DM.
+      }
+      try {
+        const user = await client.users
+          .fetch(memberId)
+          .catch(() => null as User | null);
+        if (!user) {
+          failed.push(memberId);
+          continue;
+        }
+        const sent = await this.safeSend(user, deliveryContent);
+        if (!sent) {
+          failed.push(memberId);
+          continue;
+        }
+        this.deliveryLog.set(
+          memberId,
+          (this.deliveryLog.get(memberId) ?? 0) + 1
+        );
+      } catch {
+        failed.push(memberId);
+      }
+    }
+
+    const sentCount =
+      uniqueTargets.filter((id) => id !== captainId).length - failed.length;
+    return { failed, sentCount };
   }
 }

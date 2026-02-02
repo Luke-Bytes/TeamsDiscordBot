@@ -49,6 +49,11 @@ function fmt(dt?: Date) {
   return dt ? new Date(dt).toLocaleString() : "n/a";
 }
 
+function minerushLabel(mods?: { category: string; name: string }[]): string {
+  const entry = mods?.find((m) => m.category === "Minerushing");
+  return entry?.name ?? "n/a";
+}
+
 function partitionTeams(g: GameWithParts) {
   const red = g.gameParticipations.filter((p) => p.team === Team.RED);
   const blue = g.gameParticipations.filter((p) => p.team === Team.BLUE);
@@ -146,7 +151,7 @@ async function main() {
       `  Game ID: ${game.id}`,
       `  Start: ${fmt(game.startTime)}  End: ${fmt(game.endTime)}`,
       `  Winner: ${game.winner ?? "n/a"}  Type: ${game.type ?? "n/a"}`,
-      `  Map: ${game.settings?.map ?? "n/a"}  Minerushing: ${game.settings?.minerushing ? "on" : "off"}`,
+      `  Map: ${game.settings?.map ?? "n/a"}  Minerushing: ${minerushLabel(game.settings?.modifiers)}`,
       `  Organiser: ${game.organiser ?? "n/a"}  Host: ${game.host ?? "n/a"}`,
       `  RED (${red.length}): ${red.map((p) => p.ignUsed).join(", ") || "-"}`,
       `  BLUE (${blue.length}): ${blue.map((p) => p.ignUsed).join(", ") || "-"}`,

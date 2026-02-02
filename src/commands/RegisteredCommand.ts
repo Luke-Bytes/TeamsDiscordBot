@@ -2,6 +2,7 @@ import {
   ChatInputCommandInteraction,
   EmbedBuilder,
   SlashCommandBuilder,
+  MessageFlags,
 } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
@@ -30,7 +31,7 @@ export default class RegisteredCommand implements Command {
     if (allPlayers.length === 0) {
       await interaction.reply({
         content: "No players are currently registered.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }

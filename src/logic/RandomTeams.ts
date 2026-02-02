@@ -1,5 +1,5 @@
 import { ConfigManager } from "../ConfigManager.js";
-import { ButtonInteraction } from "discord.js";
+import { ButtonInteraction, MessageFlags } from "discord.js";
 import { GuildMemberRoleManager } from "discord.js";
 
 export class RandomTeams {
@@ -32,7 +32,7 @@ export class RandomTeams {
     } else {
       await interaction.reply({
         content: "You do not have permission to perform this action!",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
   }

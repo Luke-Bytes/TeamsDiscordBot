@@ -10,6 +10,8 @@ import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { prettifyName } from "../util/Utils.js";
 import { DiscordUtil } from "../util/DiscordUtil";
+import { readFileSync } from "fs";
+import path from "path";
 
 export default class ClassbanCommand implements Command {
   public data = new SlashCommandBuilder()
@@ -139,11 +141,30 @@ export default class ClassbanCommand implements Command {
       : Team.RED;
     const opponent = team === Team.BLUE ? Team.RED : Team.BLUE;
 
-    const banned = game.settings.bannedClasses;
-    const byTeam = game.settings.bannedClassesByTeam;
+    const organiserBans = game.settings.organiserBannedClasses ?? [];
+    const sharedCaptainBans = game.settings.sharedCaptainBannedClasses;
+    const byTeam = game.settings.nonSharedCaptainBannedClasses ?? {
+      [Team.RED]: [],
+      [Team.BLUE]: [],
+    };
+    game.settings.nonSharedCaptainBannedClasses = byTeam;
+
+    if (organiserBans.includes(cls)) {
+      return interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor("Yellow")
+            .setTitle("⚠️ Already Banned")
+            .setDescription(
+              `${prettifyName(cls)} is already banned by the organiser. Please choose a different class so your ban isn't wasted.`
+            )
+            .setTimestamp(),
+        ],
+      });
+    }
 
     if (mode === "shared") {
-      if (!banned.includes(cls)) banned.push(cls);
+      if (!sharedCaptainBans.includes(cls)) sharedCaptainBans.push(cls);
     } else if (mode === "opponentOnly") {
       const forbidden: AnniClass[] = [
         AnniClass.ENCHANTER,
@@ -169,7 +190,9 @@ export default class ClassbanCommand implements Command {
         });
       }
       if (!byTeam[opponent].includes(cls)) byTeam[opponent].push(cls);
-    } else if (!byTeam[team].includes(cls)) byTeam[team].push(cls);
+    } else if (!byTeam[team].includes(cls)) {
+      byTeam[team].push(cls);
+    }
 
     game.markCaptainHasBanned(interaction.user.id);
 
@@ -188,8 +211,13 @@ export default class ClassbanCommand implements Command {
       game.getTotalCaptainBans() === game.getClassBanLimit() &&
       !game.areClassBansAnnounced()
     ) {
-      const byTeam = game.settings.bannedClassesByTeam;
-      const banned = game.settings.bannedClasses;
+      const byTeam = game.settings.nonSharedCaptainBannedClasses ?? {
+        [Team.RED]: [],
+        [Team.BLUE]: [],
+      };
+      game.settings.nonSharedCaptainBannedClasses = byTeam;
+      const organiserBans = game.settings.organiserBannedClasses;
+      const sharedCaptainBans = game.settings.sharedCaptainBannedClasses;
       let both: string[];
       let redOnly: string[];
       let blueOnly: string[];
@@ -197,7 +225,8 @@ export default class ClassbanCommand implements Command {
       if (game.classBanMode === "shared") {
         // In shared mode, ALL bans are presented as shared
         const sharedSet = new Set([
-          ...banned,
+          ...organiserBans,
+          ...sharedCaptainBans,
           ...byTeam[Team.RED],
           ...byTeam[Team.BLUE],
         ]);
@@ -205,42 +234,52 @@ export default class ClassbanCommand implements Command {
         redOnly = [];
         blueOnly = [];
       } else {
-        both = banned.filter(
-          (c) => !byTeam[Team.RED].includes(c) && !byTeam[Team.BLUE].includes(c)
-        );
-        redOnly = byTeam[Team.RED].filter((c) => !both.includes(c));
-        blueOnly = byTeam[Team.BLUE].filter((c) => !both.includes(c));
+        const sharedSet = new Set([...organiserBans, ...sharedCaptainBans]);
+        both = Array.from(sharedSet);
+        redOnly = byTeam[Team.RED].filter((c) => !sharedSet.has(c));
+        blueOnly = byTeam[Team.BLUE].filter((c) => !sharedSet.has(c));
       }
 
-      const lockedEmbed = new EmbedBuilder()
-        .setColor("DarkRed")
-        .setTitle("🚫 Class Bans Locked In")
-        .addFields(
-          {
-            name: "⚫ Shared Bans",
-            value: both.length ? both.map(prettifyName).join("\n") : "None",
-            inline: true,
-          },
-          {
-            name: "🔴 Red Can't Use",
-            value: redOnly.length
-              ? redOnly.map(prettifyName).join("\n")
-              : "None",
-            inline: true,
-          },
-          {
-            name: "🔵 Blue Can't Use",
-            value: blueOnly.length
-              ? blueOnly.map(prettifyName).join("\n")
-              : "None",
-            inline: true,
-          }
-        )
-        .setTimestamp();
-
-      await DiscordUtil.sendMessage("gameFeed", { embeds: [lockedEmbed] });
-      await DiscordUtil.sendMessage("redTeamChat", { embeds: [lockedEmbed] });
-      await DiscordUtil.sendMessage("blueTeamChat", { embeds: [lockedEmbed] });
+      if (game.settings.delayedBan > 0) {
+        const dmOk = await this.notifyHostDelayedBans(
+          interaction,
+          both,
+          game.settings.delayedBan
+        );
+        if (dmOk) {
+          const delayedEmbed = this.buildDelayedBanEmbed(
+            both.length,
+            game.settings.delayedBan
+          );
+          await DiscordUtil.sendMessage("gameFeed", { embeds: [delayedEmbed] });
+          await DiscordUtil.sendMessage("redTeamChat", {
+            embeds: [delayedEmbed],
+          });
+          await DiscordUtil.sendMessage("blueTeamChat", {
+            embeds: [delayedEmbed],
+          });
+        } else {
+          const lockedEmbed = this.buildLockedBansEmbed(
+            both,
+            redOnly,
+            blueOnly
+          );
+          await DiscordUtil.sendMessage("gameFeed", { embeds: [lockedEmbed] });
+          await DiscordUtil.sendMessage("redTeamChat", {
+            embeds: [lockedEmbed],
+          });
+          await DiscordUtil.sendMessage("blueTeamChat", {
+            embeds: [lockedEmbed],
+          });
+        }
+      } else {
+        const lockedEmbed = this.buildLockedBansEmbed(both, redOnly, blueOnly);
+        await DiscordUtil.sendMessage("gameFeed", { embeds: [lockedEmbed] });
+        await DiscordUtil.sendMessage("redTeamChat", { embeds: [lockedEmbed] });
+        await DiscordUtil.sendMessage("blueTeamChat", {
+          embeds: [lockedEmbed],
+        });
+      }
       game.markClassBansAnnounced();
     }
   }
@@ -272,15 +311,177 @@ export default class ClassbanCommand implements Command {
       });
     }
 
-    const banned = game.settings.bannedClasses;
+    if (game.settings.delayedBan > 0) {
+      const byTeam = game.settings.nonSharedCaptainBannedClasses ?? {
+        [Team.RED]: [],
+        [Team.BLUE]: [],
+      };
+      game.settings.nonSharedCaptainBannedClasses = byTeam;
+      const organiserBans = game.settings.organiserBannedClasses;
+      const sharedCaptainBans = game.settings.sharedCaptainBannedClasses;
+      const sharedSet = new Set([
+        ...organiserBans,
+        ...sharedCaptainBans,
+        ...byTeam[Team.RED],
+        ...byTeam[Team.BLUE],
+      ]);
+      return interaction.reply({
+        embeds: [
+          this.buildDelayedBanEmbed(sharedSet.size, game.settings.delayedBan),
+        ],
+      });
+    }
+
+    const byTeam = game.settings.nonSharedCaptainBannedClasses ?? {
+      [Team.RED]: [],
+      [Team.BLUE]: [],
+    };
+    game.settings.nonSharedCaptainBannedClasses = byTeam;
+    const organiserBans = game.settings.organiserBannedClasses;
+    const sharedCaptainBans = game.settings.sharedCaptainBannedClasses;
+
+    const sharedSet =
+      game.classBanMode === "shared"
+        ? new Set([
+            ...organiserBans,
+            ...sharedCaptainBans,
+            ...byTeam[Team.RED],
+            ...byTeam[Team.BLUE],
+          ])
+        : new Set([...organiserBans, ...sharedCaptainBans]);
+
+    const both = Array.from(sharedSet);
+    const redOnly =
+      game.classBanMode === "shared"
+        ? []
+        : byTeam[Team.RED].filter((c) => !sharedSet.has(c));
+    const blueOnly =
+      game.classBanMode === "shared"
+        ? []
+        : byTeam[Team.BLUE].filter((c) => !sharedSet.has(c));
+
     return interaction.reply({
       embeds: [
         new EmbedBuilder()
           .setColor("Blue")
           .setTitle("📋 Banned Classes")
-          .setDescription(banned.map(prettifyName).join("\n"))
+          .addFields(
+            {
+              name: "⚫ Shared Bans",
+              value: both.length ? both.map(prettifyName).join("\n") : "None",
+              inline: true,
+            },
+            {
+              name: "🔴 Red Can't Use",
+              value: redOnly.length
+                ? redOnly.map(prettifyName).join("\n")
+                : "None",
+              inline: true,
+            },
+            {
+              name: "🔵 Blue Can't Use",
+              value: blueOnly.length
+                ? blueOnly.map(prettifyName).join("\n")
+                : "None",
+              inline: true,
+            }
+          )
           .setTimestamp(),
       ],
     });
+  }
+
+  private buildDelayedBanEmbed(count: number, phase: number) {
+    return new EmbedBuilder()
+      .setColor("DarkPurple")
+      .setTitle("⏳ Delayed Class Bans")
+      .setDescription(
+        `**${count}** ban${count === 1 ? "" : "s"} will become active at **Phase ${phase}**.`
+      )
+      .setTimestamp();
+  }
+
+  private loadHostDiscordId(hostIgn?: string | null): string | null {
+    if (!hostIgn) return null;
+    const namesPath = path.resolve(process.cwd(), "organisers-hosts.json");
+    try {
+      const raw = readFileSync(namesPath, "utf8");
+      const parsed = JSON.parse(raw) as {
+        hosts?: Array<{ ign: string; discordId?: string }>;
+      };
+      const hostEntry = parsed.hosts?.find(
+        (entry) => entry.ign.toLowerCase() === hostIgn.toLowerCase()
+      );
+      return hostEntry?.discordId ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async notifyHostDelayedBans(
+    interaction: ChatInputCommandInteraction,
+    bans: string[],
+    phase: number
+  ): Promise<boolean> {
+    const hostIgn = CurrentGameManager.getCurrentGame().host;
+    const hostId = this.loadHostDiscordId(hostIgn);
+    if (!hostId) {
+      console.warn(
+        `[ClassbanCommand] No host discord ID found for ${hostIgn ?? "unknown"}`
+      );
+      return false;
+    }
+    try {
+      const user = await interaction.client.users.fetch(hostId);
+      const embed = new EmbedBuilder()
+        .setColor("DarkPurple")
+        .setTitle("⏳ Delayed Class Bans (For Host's Eyes Only!)")
+        .setDescription(
+          `These bans are secret until **Phase ${phase}**. Please ban them only then! Thank you`
+        )
+        .addFields({
+          name: "Bans",
+          value: bans.length ? bans.map(prettifyName).join("\n") : "None",
+        })
+        .setTimestamp();
+      await user.send({ embeds: [embed] });
+      return true;
+    } catch (error) {
+      console.error(
+        `[ClassbanCommand] Failed to DM host ${hostId} about delayed bans:`,
+        error
+      );
+      return false;
+    }
+  }
+
+  private buildLockedBansEmbed(
+    both: string[],
+    redOnly: string[],
+    blueOnly: string[]
+  ) {
+    return new EmbedBuilder()
+      .setColor("DarkRed")
+      .setTitle("🚫 Class Bans Locked In")
+      .addFields(
+        {
+          name: "⚫ Shared Bans",
+          value: both.length ? both.map(prettifyName).join("\n") : "None",
+          inline: true,
+        },
+        {
+          name: "🔴 Red Can't Use",
+          value: redOnly.length ? redOnly.map(prettifyName).join("\n") : "None",
+          inline: true,
+        },
+        {
+          name: "🔵 Blue Can't Use",
+          value: blueOnly.length
+            ? blueOnly.map(prettifyName).join("\n")
+            : "None",
+          inline: true,
+        }
+      )
+      .setTimestamp();
   }
 }

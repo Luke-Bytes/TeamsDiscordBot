@@ -5,6 +5,7 @@ import {
   GuildMember,
   Message,
   ButtonInteraction,
+  TextChannel,
 } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { ConfigManager } from "../ConfigManager";
@@ -13,6 +14,11 @@ import { GameInstance } from "../database/GameInstance";
 import { cleanUpAfterGame } from "../logic/GameEndCleanUp";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { checkMissingPlayersInVC, formatTeamIGNs } from "../util/Utils";
+import {
+  parsePlanText,
+  TeamPlanRecord,
+  TeamPlanSource,
+} from "../util/PlanUtil";
 import CaptainPlanDMManager from "../logic/CaptainPlanDMManager";
 
 export default class GameCommand implements Command {
@@ -35,7 +41,11 @@ export default class GameCommand implements Command {
 
   name = "game";
   description = "Manage game session";
-  private captainPlanDMManager = new CaptainPlanDMManager();
+  private captainPlanDMManager: CaptainPlanDMManager;
+
+  constructor(captainPlanDMManager = new CaptainPlanDMManager()) {
+    this.captainPlanDMManager = captainPlanDMManager;
+  }
 
   get buttonIds(): string[] {
     return this.captainPlanDMManager.buttonIds;
@@ -53,7 +63,7 @@ export default class GameCommand implements Command {
     const gameInstance = GameInstance.getInstance();
     switch (subCommand) {
       case "start":
-        await interaction.deferReply({ ephemeral: false });
+        await interaction.deferReply();
         try {
           const memberCache = await buildMemberCache(
             guild,
@@ -95,8 +105,16 @@ export default class GameCommand implements Command {
             }
           );
 
-          const redNamesFormatted = await formatTeamIGNs(gameInstance, "RED");
-          const blueNamesFormatted = await formatTeamIGNs(gameInstance, "BLUE");
+          const redNamesFormatted = await formatTeamIGNs(
+            gameInstance,
+            "RED",
+            false
+          );
+          const blueNamesFormatted = await formatTeamIGNs(
+            gameInstance,
+            "BLUE",
+            false
+          );
           await DiscordUtil.sendMessage(
             "redTeamChat",
             `**Mid Blocks Plan**\n\`\`\`\n${redNamesFormatted}\n\`\`\`\n**Game Plan**\n\`\`\`\n${redNamesFormatted}\n\`\`\``
@@ -133,26 +151,35 @@ export default class GameCommand implements Command {
           // After team picking is finished and just before start, DM captains plan template
           const redCaptain = gameInstance.getCaptainOfTeam("RED");
           const blueCaptain = gameInstance.getCaptainOfTeam("BLUE");
+          const client = interaction.client;
+          if (!client || !client.users) {
+            console.warn(
+              "[CaptainPlanDM] Interaction client missing; skipping captain plan DMs."
+            );
+            break;
+          }
           if (redCaptain) {
             await this.captainPlanDMManager.startForCaptain({
-              client: interaction.client,
+              client,
               captainId: redCaptain.discordSnowflake,
               team: "RED",
-              teamList: await formatTeamIGNs(gameInstance, "RED"),
-              members: gameInstance
-                .getPlayersOfTeam("RED")
-                .map((p) => p.discordSnowflake),
+              teamList: await formatTeamIGNs(gameInstance, "RED", false),
+              members: gameInstance.getPlayersOfTeam("RED").map((p) => ({
+                id: p.discordSnowflake,
+                ign: p.ignUsed ?? p.latestIGN ?? "Unknown",
+              })),
             });
           }
           if (blueCaptain) {
             await this.captainPlanDMManager.startForCaptain({
-              client: interaction.client,
+              client,
               captainId: blueCaptain.discordSnowflake,
               team: "BLUE",
-              teamList: await formatTeamIGNs(gameInstance, "BLUE"),
-              members: gameInstance
-                .getPlayersOfTeam("BLUE")
-                .map((p) => p.discordSnowflake),
+              teamList: await formatTeamIGNs(gameInstance, "BLUE", false),
+              members: gameInstance.getPlayersOfTeam("BLUE").map((p) => ({
+                id: p.discordSnowflake,
+                ign: p.ignUsed ?? p.latestIGN ?? "Unknown",
+              })),
             });
           }
         } catch (error) {
@@ -169,6 +196,8 @@ export default class GameCommand implements Command {
           "Moving players back to team picking and starting MVP votes.."
         );
         await movePlayersToTeamPickingAfterGameEnd(guild);
+
+        await captureTeamPlansFromChannels(guild, gameInstance);
 
         const config = ConfigManager.getConfig();
         const blueTeamRoleId = config.roles.blueTeamRole;
@@ -197,7 +226,6 @@ export default class GameCommand implements Command {
         if (!gameInstance.gameWinner) {
           await interaction.reply({
             content: "Please set a winner via /winner before ending the game.",
-            ephemeral: false,
           });
           return;
         }
@@ -205,14 +233,12 @@ export default class GameCommand implements Command {
           await interaction.reply({
             content:
               "The game should be finished first in order to wait for mvp votes, /game end",
-            ephemeral: false,
           });
           return;
         }
         if (gameInstance.isRestarting) {
           await interaction.reply({
             content: "A game shutdown is already in progress!",
-            ephemeral: false,
           });
           return;
         }
@@ -235,6 +261,95 @@ export default class GameCommand implements Command {
   async handleButtonPress(interaction: ButtonInteraction) {
     await this.captainPlanDMManager.handleButtonPress(interaction);
   }
+}
+
+async function captureTeamPlansFromChannels(
+  guild: Guild,
+  gameInstance: GameInstance
+): Promise<void> {
+  const config = ConfigManager.getConfig();
+  const redChannel = guild.channels.cache.get(config.channels.redTeamChat) as
+    | TextChannel
+    | undefined;
+  const blueChannel = guild.channels.cache.get(config.channels.blueTeamChat) as
+    | TextChannel
+    | undefined;
+
+  const [redPlan, bluePlan] = await Promise.all([
+    extractLatestPlanFromChannel(redChannel),
+    extractLatestPlanFromChannel(blueChannel),
+  ]);
+
+  const mergedRed = mergePlans(gameInstance.redTeamPlan, redPlan);
+  if (mergedRed) gameInstance.redTeamPlan = mergedRed;
+  const mergedBlue = mergePlans(gameInstance.blueTeamPlan, bluePlan);
+  if (mergedBlue) gameInstance.blueTeamPlan = mergedBlue;
+}
+
+async function extractLatestPlanFromChannel(
+  channel?: TextChannel
+): Promise<TeamPlanRecord | null> {
+  if (!channel?.messages?.fetch) return null;
+  const fetched = await channel.messages
+    .fetch({ limit: 100 })
+    .catch(() => null);
+  if (!fetched) return null;
+
+  const messages = Array.from(fetched.values()).sort(
+    (a, b) => (b.createdTimestamp ?? 0) - (a.createdTimestamp ?? 0)
+  );
+
+  let midBlocks: string | null = null;
+  let gamePlan: string | null = null;
+  let raw: string | null = null;
+
+  for (const message of messages) {
+    const parsed = parsePlanText(message.content ?? "");
+    if (parsed.confidence === "none") continue;
+
+    if (!midBlocks && parsed.midBlocks) midBlocks = parsed.midBlocks;
+    if (!gamePlan && parsed.gamePlan) gamePlan = parsed.gamePlan;
+    if (!raw) raw = parsed.raw ?? message.content ?? null;
+
+    if (midBlocks && gamePlan) break;
+  }
+
+  if (!midBlocks && !gamePlan && !raw) return null;
+  return {
+    midBlocks,
+    gamePlan,
+    raw: midBlocks && gamePlan ? null : raw,
+    source: "CHANNEL",
+    capturedAt: new Date(),
+  };
+}
+
+function mergePlans(
+  dmPlan: TeamPlanRecord | undefined,
+  channelPlan: TeamPlanRecord | null
+): TeamPlanRecord | null {
+  if (!dmPlan && !channelPlan) return null;
+  if (channelPlan && channelPlan.midBlocks && channelPlan.gamePlan) {
+    return channelPlan;
+  }
+  if (channelPlan && (channelPlan.midBlocks || channelPlan.gamePlan)) {
+    const merged: TeamPlanRecord = {
+      midBlocks: channelPlan.midBlocks ?? dmPlan?.midBlocks ?? null,
+      gamePlan: channelPlan.gamePlan ?? dmPlan?.gamePlan ?? null,
+      raw: channelPlan.raw ?? dmPlan?.raw ?? null,
+      source: (dmPlan ? "MIXED" : "CHANNEL") as TeamPlanSource,
+      capturedAt: new Date(),
+    };
+    return merged;
+  }
+  if (dmPlan) {
+    return {
+      ...dmPlan,
+      source: (dmPlan.source === "MIXED" ? "MIXED" : "DM") as TeamPlanSource,
+      capturedAt: new Date(),
+    };
+  }
+  return channelPlan;
 }
 
 export async function assignTeamVCAfterPicking(

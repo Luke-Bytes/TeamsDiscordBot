@@ -48,6 +48,17 @@ export const EloUtil = {
   },
 
   getKFactor(elo: number) {
+    const maxK = kFactorRanges[800 as keyof typeof kFactorRanges];
+    const minK = kFactorRanges[1700 as keyof typeof kFactorRanges];
+    const base = 800;
+    const scale = 400;
+
+    if (scale > 0) {
+      const raw = minK + (maxK - minK) * Math.exp(-(elo - base) / scale);
+      const clamped = Math.min(Math.max(raw, minK), maxK);
+      return Math.round(clamped);
+    }
+
     const sortedKFactors = Object.keys(kFactorRanges)
       .map(Number)
       .sort((a, b) => b - a);
@@ -90,29 +101,102 @@ export const EloUtil = {
     player: PlayerInstance,
     isWin: boolean
   ): number {
+    return this.getEloChangeBreakdown(game, player, isWin).finalChange;
+  },
+
+  getEloChangeBreakdown(
+    game: GameInstance,
+    player: PlayerInstance,
+    isWin: boolean
+  ): {
+    kFactor: number;
+    expectedScore: number;
+    actualScore: number;
+    baseChange: number;
+    afterWinStreakChange: number;
+    winStreakMultiplier: number;
+    meanEloDifference: number;
+    underdogWeightingApplied: boolean;
+    underdogWeightFactor?: number;
+    finalChange: number;
+  } {
     const kFactor = this.getKFactor(player.elo);
     const expectedScore = this.getPlayerExpectedScore(game, player);
-    if (!expectedScore) return 0;
+    if (expectedScore === undefined) {
+      return {
+        kFactor,
+        expectedScore: 0,
+        actualScore: isWin ? 1 : 0,
+        baseChange: 0,
+        afterWinStreakChange: 0,
+        winStreakMultiplier: 1,
+        meanEloDifference: 0,
+        underdogWeightingApplied: false,
+        finalChange: 0,
+      };
+    }
 
     const actualScore = isWin ? 1 : 0;
-    let eloChange = Math.abs(kFactor * (actualScore - expectedScore));
-    eloChange = this.applyWinStreakBonus(player, eloChange, isWin);
+    const baseChange = Math.abs(kFactor * (actualScore - expectedScore));
+
+    let winStreakMultiplier = 1;
+    const afterWinStreakChange = this.applyWinStreakBonus(
+      player,
+      baseChange,
+      isWin
+    );
+    if (baseChange > 0) {
+      winStreakMultiplier = afterWinStreakChange / baseChange;
+    }
 
     const meanEloDifference = Math.abs(
       (game.blueMeanElo ?? 0) - (game.redMeanElo ?? 0)
     );
-    if (meanEloDifference < 25) {
-      const underdogWeightingFactor =
-        ConfigManager.getConfig().underdogMultiplier;
-      eloChange = this.applyUnderdogWeighting(
-        eloChange,
+
+    const underdogWeightingApplied = meanEloDifference >= 25;
+    let finalChange = afterWinStreakChange;
+    let underdogWeightFactor: number | undefined;
+    if (underdogWeightingApplied) {
+      underdogWeightFactor = ConfigManager.getConfig().underdogMultiplier;
+      finalChange = this.applyUnderdogWeighting(
+        finalChange,
         expectedScore,
-        underdogWeightingFactor,
+        underdogWeightFactor,
         isWin
+      );
+      console.log(
+        `Underdog weighting applied: ${afterWinStreakChange.toFixed(2)} -> ${finalChange.toFixed(2)} (factor ${underdogWeightFactor})`
       );
     }
 
-    return Number(eloChange.toFixed(1));
+    if (!isWin && expectedScore > 0.5) {
+      const teamMean =
+        game.getPlayersTeam(player) === "BLUE"
+          ? game.blueMeanElo
+          : game.redMeanElo;
+      if (teamMean !== undefined && player.elo > teamMean) {
+        const diff = player.elo - teamMean;
+        const penaltyMultiplier = 1 + diff * 0.005;
+        const beforePenalty = finalChange;
+        finalChange = finalChange * penaltyMultiplier;
+        console.log(
+          `Favoured loss high-elo penalty: ${beforePenalty.toFixed(2)} -> ${finalChange.toFixed(2)} (+${diff.toFixed(0)} Elo over team mean)`
+        );
+      }
+    }
+
+    return {
+      kFactor,
+      expectedScore,
+      actualScore,
+      baseChange,
+      afterWinStreakChange,
+      winStreakMultiplier,
+      meanEloDifference,
+      underdogWeightingApplied,
+      underdogWeightFactor,
+      finalChange: Number(finalChange.toFixed(1)),
+    };
   },
 
   getPlayerExpectedScore(
@@ -120,7 +204,28 @@ export const EloUtil = {
     player: PlayerInstance
   ): number | undefined {
     const team = game.getPlayersTeam(player);
-    return team === "BLUE" ? game.blueExpectedScore : game.redExpectedScore;
+    const teamExpected =
+      team === "BLUE" ? game.blueExpectedScore : game.redExpectedScore;
+    if (teamExpected === undefined) return undefined;
+
+    // Use per-player expected only for the favoured team to avoid
+    // over-penalizing underdog players.
+    if (teamExpected <= 0.5) return teamExpected;
+
+    const opponentMean = team === "BLUE" ? game.redMeanElo : game.blueMeanElo;
+    if (opponentMean === undefined) return teamExpected;
+
+    const perPlayerExpected = Number(
+      (1 / (1 + Math.pow(10, (opponentMean - player.elo) / 400))).toFixed(2)
+    );
+    const alpha = 0.35;
+    const blendedExpected = Number(
+      ((1 - alpha) * teamExpected + alpha * perPlayerExpected).toFixed(2)
+    );
+    console.log(
+      `Using blended expected score for ${player.latestIGN ?? player.playerId ?? "Unknown"}: ${blendedExpected} (team ${teamExpected.toFixed(2)}, player ${perPlayerExpected}, alpha ${alpha})`
+    );
+    return blendedExpected;
   },
 
   applyWinStreakBonus(
@@ -153,20 +258,15 @@ export const EloUtil = {
     weightFactor: number,
     isWin: boolean
   ): number {
-    if (expectedScore >= 0.4 && expectedScore <= 0.6) {
-      return eloChange;
-    }
-
-    const adjustment = (0.5 - expectedScore) * weightFactor;
+    const distance = Math.abs(0.5 - expectedScore);
     const role = expectedScore > 0.5 ? "favoured" : "underdog";
-    const difference = Math.abs(0.5 - expectedScore).toFixed(2);
+    const weight = 1 + distance * weightFactor;
 
     console.log(
-      `Player is ${role} with expected score of ${expectedScore.toFixed(2)} (${role === "favoured" ? "+" : "-"}${difference}).`
+      `Player is ${role} with expected score of ${expectedScore.toFixed(2)} (${role === "favoured" ? "+" : "-"}${distance.toFixed(2)}). Weight: ${weight.toFixed(2)}`
     );
 
-    return isWin
-      ? eloChange + eloChange * adjustment
-      : eloChange + eloChange * -adjustment;
+    void isWin;
+    return eloChange * weight;
   },
 };
