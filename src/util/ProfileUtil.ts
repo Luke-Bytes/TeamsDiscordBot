@@ -48,12 +48,33 @@ export type Playstyle =
   | "ADAPTABLE"
   | "INVIS_OPPORTUNIST";
 
+export type ProfileTitle =
+  | "THE_SUC"
+  | "DEPPIES_DEMON"
+  | "SKYLORD"
+  | "VOID_RUNNER"
+  | "WALL_WHISPERER"
+  | "MID_MAESTRO"
+  | "BUNKER_BARON"
+  | "GRIEF_GOBLIN";
+
 export const PRONOUNS_LABELS: Record<Pronouns, string> = {
   HE_HIM: "he/him",
   SHE_HER: "she/her",
   THEY_THEM: "they/them",
   ANY: "any",
   ASK: "ask",
+};
+
+export const TITLE_LABELS: Record<ProfileTitle, string> = {
+  THE_SUC: "The Suc",
+  DEPPIES_DEMON: "Deppies Demon",
+  SKYLORD: "Skylord",
+  VOID_RUNNER: "Void Runner",
+  WALL_WHISPERER: "Wall Whisperer",
+  MID_MAESTRO: "Mid Maestro",
+  BUNKER_BARON: "Bunker Baron",
+  GRIEF_GOBLIN: "Grief Goblin",
 };
 
 export const LANGUAGE_LABELS: Record<Language, string> = {
@@ -127,6 +148,7 @@ export const LANGUAGE_LIST = Object.keys(LANGUAGE_LABELS) as Language[];
 export const PRONOUNS_LIST = Object.keys(PRONOUNS_LABELS) as Pronouns[];
 export const REGION_LIST = Object.keys(REGION_LABELS) as Region[];
 export const RANK_LIST = Object.keys(RANK_LABELS) as PlayerRank[];
+export const TITLE_LIST = Object.keys(TITLE_LABELS) as ProfileTitle[];
 
 export function formatEnumList<T extends string>(
   values: T[] | null | undefined,

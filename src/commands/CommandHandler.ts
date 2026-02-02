@@ -196,6 +196,13 @@ export class CommandHandler {
         if (command && command.handleSelectMenu) {
           await command.handleSelectMenu(interaction);
         }
+      } else if (interaction.isAutocomplete()) {
+        const command = this.commands.find(
+          (cmd) => cmd.name === interaction.commandName
+        );
+        if (command && command.handleAutocomplete) {
+          await command.handleAutocomplete(interaction);
+        }
       } else if (interaction.isModalSubmit()) {
         const command = this.commands.find((command) =>
           (command.modalIds ?? []).some(

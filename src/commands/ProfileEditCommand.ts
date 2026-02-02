@@ -29,12 +29,15 @@ import {
   REGION_LIST,
   ROLE_LABELS,
   ROLE_LIST,
+  TITLE_LABELS,
+  TITLE_LIST,
   formatEnumList,
 } from "../util/ProfileUtil";
 import { escapeText } from "../util/Utils";
 
 type SectionKey =
   | "preferredName"
+  | "title"
   | "pronouns"
   | "languages"
   | "region"
@@ -102,6 +105,15 @@ export default class ProfileEditCommand implements Command {
     if (!player) {
       await interaction.reply({
         content: "No profile found yet — register first, then try again.",
+      });
+      return;
+    }
+
+    if (this.sessions.has(interaction.user.id)) {
+      await interaction.reply({
+        content:
+          "You already have an active profile session. Use the existing menu or press Finish to close it.",
+        ephemeral: true,
       });
       return;
     }
@@ -265,6 +277,10 @@ export default class ProfileEditCommand implements Command {
           .setLabel("Name")
           .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
+          .setCustomId("profile-edit:title")
+          .setLabel("Title")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
           .setCustomId("profile-edit:pronouns")
           .setLabel("Pronouns")
           .setStyle(ButtonStyle.Secondary),
@@ -357,6 +373,7 @@ export default class ProfileEditCommand implements Command {
   private addProfileFields(embed: EmbedBuilder, profile: unknown) {
     const data = profile as {
       preferredName?: string | null;
+      title?: keyof typeof TITLE_LABELS | null;
       pronouns?: keyof typeof PRONOUNS_LABELS | null;
       languages?: Array<keyof typeof LANGUAGE_LABELS>;
       region?: keyof typeof REGION_LABELS | null;
@@ -371,6 +388,13 @@ export default class ProfileEditCommand implements Command {
       embed.addFields({
         name: "Preferred Name",
         value: escapeText(data.preferredName),
+        inline: true,
+      });
+    }
+    if (data.title) {
+      embed.addFields({
+        name: "Title",
+        value: TITLE_LABELS[data.title],
         inline: true,
       });
     }
@@ -468,6 +492,13 @@ export default class ProfileEditCommand implements Command {
           )
           .setMaxValues(1);
         break;
+      case "title":
+        // TODO: populate unlocked titles per player.
+        select
+          .setPlaceholder("No titles available yet")
+          .setMaxValues(0)
+          .setDisabled(true);
+        break;
       case "languages":
         select
           .setPlaceholder("Select languages")
@@ -542,6 +573,9 @@ export default class ProfileEditCommand implements Command {
       case "preferredName":
         data.preferredName = values[0] ?? null;
         break;
+      case "title":
+        data.title = values[0] ?? null;
+        break;
       case "pronouns":
         data.pronouns = values[0] ?? null;
         break;
@@ -580,6 +614,9 @@ export default class ProfileEditCommand implements Command {
       case "preferredName":
         data.preferredName = null;
         break;
+      case "title":
+        data.title = null;
+        break;
       case "pronouns":
         data.pronouns = null;
         break;
@@ -616,6 +653,8 @@ export default class ProfileEditCommand implements Command {
     switch (section) {
       case "pronouns":
         return PRONOUNS_LABELS[value as keyof typeof PRONOUNS_LABELS] ?? value;
+      case "title":
+        return TITLE_LABELS[value as keyof typeof TITLE_LABELS] ?? value;
       case "languages":
         return LANGUAGE_LABELS[value as keyof typeof LANGUAGE_LABELS] ?? value;
       case "region":

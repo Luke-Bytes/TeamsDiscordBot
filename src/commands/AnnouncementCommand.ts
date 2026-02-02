@@ -10,7 +10,10 @@ import {
   SlashCommandSubcommandsOnlyBuilder,
   Guild,
   MessageFlags,
+  AutocompleteInteraction,
 } from "discord.js";
+import { readFileSync } from "fs";
+import path from "path";
 import { Command } from "../commands/CommandInterface.js";
 import { AnniClass, AnniMap } from "@prisma/client";
 import { prettifyName, randomEnum, formatTimestamp } from "../util/Utils.js";
@@ -41,6 +44,11 @@ export default class AnnouncementCommand implements Command {
 
   private announcementPreviewMessage?: Message;
   private announcementMessage?: Message;
+  private static readonly namesPath = path.resolve(
+    process.cwd(),
+    "organisers-hosts.json"
+  );
+  private static readonly maxAutoResults = 25;
   private initialBannedClasses: AnniClass[] = [];
 
   constructor() {
@@ -93,14 +101,16 @@ export default class AnnouncementCommand implements Command {
             .addStringOption((option) =>
               option
                 .setName("organiser")
-                .setDescription("Organiser Name")
+                .setDescription("Organiser name (select or type)")
                 .setRequired(true)
+                .setAutocomplete(true)
             )
             .addStringOption((option) =>
               option
                 .setName("host")
-                .setDescription("Host Name")
+                .setDescription("Host name (select or type)")
                 .setRequired(true)
+                .setAutocomplete(true)
             )
             .addStringOption((option) =>
               option
@@ -524,6 +534,50 @@ export default class AnnouncementCommand implements Command {
       if (this.announcementMessage && embed) {
         await this.announcementMessage.edit({ embeds: [embed] });
       }
+    }
+  }
+
+  public async handleAutocomplete(
+    interaction: AutocompleteInteraction
+  ): Promise<void> {
+    const focused = interaction.options.getFocused(true);
+    if (focused.name !== "organiser" && focused.name !== "host") {
+      await interaction.respond([]);
+      return;
+    }
+    const list =
+      focused.name === "organiser"
+        ? this.loadNames().organisers
+        : this.loadNames().hosts;
+    const query = String(focused.value ?? "").toLowerCase();
+    const filtered = list
+      .filter((entry) => entry.ign.toLowerCase().includes(query))
+      .slice(0, AnnouncementCommand.maxAutoResults)
+      .map((entry) => ({
+        name: entry.discordId
+          ? `${entry.ign} (ID: ${entry.discordId})`
+          : entry.ign,
+        value: entry.ign,
+      }));
+    await interaction.respond(filtered);
+  }
+
+  private loadNames(): {
+    organisers: Array<{ ign: string; discordId?: string }>;
+    hosts: Array<{ ign: string; discordId?: string }>;
+  } {
+    try {
+      const raw = readFileSync(AnnouncementCommand.namesPath, "utf8");
+      const parsed = JSON.parse(raw) as {
+        organisers?: Array<{ ign: string; discordId?: string }>;
+        hosts?: Array<{ ign: string; discordId?: string }>;
+      };
+      return {
+        organisers: parsed.organisers ?? [],
+        hosts: parsed.hosts ?? [],
+      };
+    } catch {
+      return { organisers: [], hosts: [] };
     }
   }
 

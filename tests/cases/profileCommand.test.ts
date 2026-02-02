@@ -189,3 +189,103 @@ test("/profilecreate clear removes section", async () => {
     (prismaClient as any).profile = origProfile;
   }
 });
+
+test("/profilecreate blocks duplicate session", async () => {
+  const edit = new ProfileEditCommand();
+  const origFind = (PrismaUtils as any).findPlayer;
+  const origProfile = (prismaClient as any).profile;
+  const cfg = ConfigManager.getConfig();
+
+  try {
+    (PrismaUtils as any).findPlayer = async (_id: string) => ({
+      id: "P5",
+      discordSnowflake: "U5",
+      latestIGN: "PlayerFive",
+    });
+    (prismaClient as any).profile = {
+      findUnique: async () => null,
+      upsert: async () => ({}),
+    };
+
+    const guild = new FakeGuild() as any;
+    const member = new FakeGuildMember("U5") as any;
+    guild.addMember(member);
+
+    const i1 = createChatInputInteraction("U5", {
+      guild,
+      channelId: cfg.channels.botCommands,
+    }) as any;
+    i1.inGuild = () => true;
+    i1.guild = guild;
+    i1.user.username = "UserFive";
+
+    const i2 = createChatInputInteraction("U5", {
+      guild,
+      channelId: cfg.channels.botCommands,
+    }) as any;
+    i2.inGuild = () => true;
+    i2.guild = guild;
+    i2.user.username = "UserFive";
+
+    await edit.execute(i1);
+    await edit.execute(i2);
+
+    const reply = i2.replies.find((r: any) => r.type === "reply");
+    assert(
+      !!reply?.payload?.ephemeral,
+      "Duplicate session reply should be ephemeral"
+    );
+  } finally {
+    (PrismaUtils as any).findPlayer = origFind;
+    (prismaClient as any).profile = origProfile;
+  }
+});
+
+test("/profilecreate titles are locked by default", async () => {
+  const edit = new ProfileEditCommand();
+  const origFind = (PrismaUtils as any).findPlayer;
+  const origProfile = (prismaClient as any).profile;
+  const cfg = ConfigManager.getConfig();
+
+  try {
+    (PrismaUtils as any).findPlayer = async (_id: string) => ({
+      id: "P6",
+      discordSnowflake: "U6",
+      latestIGN: "PlayerSix",
+    });
+    (prismaClient as any).profile = {
+      findUnique: async () => null,
+      upsert: async () => ({}),
+    };
+
+    const guild = new FakeGuild() as any;
+    const member = new FakeGuildMember("U6") as any;
+    guild.addMember(member);
+
+    const i = createChatInputInteraction("U6", {
+      guild,
+      channelId: cfg.channels.botCommands,
+    }) as any;
+    i.inGuild = () => true;
+    i.guild = guild;
+    i.user.username = "UserSix";
+
+    await edit.execute(i);
+
+    const buttonInteraction: any = {
+      customId: "profile-edit:title",
+      user: { id: "U6" },
+      update: async (payload: any) => {
+        buttonInteraction.payload = payload;
+        return {};
+      },
+    };
+    await edit.handleButtonPress!(buttonInteraction);
+
+    const menu = buttonInteraction.payload?.components?.[0]?.components?.[0];
+    assert(menu?.disabled === true, "Title select menu is disabled by default");
+  } finally {
+    (PrismaUtils as any).findPlayer = origFind;
+    (prismaClient as any).profile = origProfile;
+  }
+});

@@ -58,4 +58,13 @@ export class PrismaUtils {
 
     return punishmentsToUpdate.length;
   }
+
+  static async getPlayerTitle(identifier: string) {
+    const player = await PrismaUtils.findPlayer(identifier);
+    if (!player) return null;
+    const profile = await (prismaClient as unknown as { profile?: { findUnique: (args: { where: { playerId: string } }) => Promise<{ title?: string | null } | null> } }).profile?.findUnique({
+      where: { playerId: player.id },
+    });
+    return profile?.title ?? null;
+  }
 }

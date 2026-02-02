@@ -182,6 +182,7 @@ model Profile {
   player   Player @relation(fields: [playerId], references: [id])
 
   preferredName String?
+  title         ProfileTitle?
   pronouns      Pronouns?
   languages     Language[]
   region        Region?
@@ -195,6 +196,17 @@ model Profile {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+enum ProfileTitle {
+  THE_SUC
+  DEPPIES_DEMON
+  SKYLORD
+  VOID_RUNNER
+  WALL_WHISPERER
+  MID_MAESTRO
+  BUNKER_BARON
+  GRIEF_GOBLIN
 }
 
 enum Pronouns {

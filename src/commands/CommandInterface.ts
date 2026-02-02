@@ -10,6 +10,7 @@ import {
   SlashCommandSubcommandsOnlyBuilder,
   SlashCommandOptionsOnlyBuilder,
   ModalSubmitInteraction,
+  AutocompleteInteraction,
 } from "discord.js";
 
 export interface Command {
@@ -34,4 +35,5 @@ export interface Command {
   handleSelectMenu?(interaction: StringSelectMenuInteraction): Promise<void>;
   modalIds?: string[];
   handleModalSubmit?(interaction: ModalSubmitInteraction): Promise<void>;
+  handleAutocomplete?(interaction: AutocompleteInteraction): Promise<void>;
 }
