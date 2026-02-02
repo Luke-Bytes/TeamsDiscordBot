@@ -309,8 +309,13 @@ async function main() {
             winsB: 0,
           };
           record.meetings += 1;
-          if (game.winner === Team.RED) record.winsA += 1;
-          if (game.winner === Team.BLUE) record.winsB += 1;
+          if (game.winner === a.team) {
+            if (record.a === a.playerId) record.winsA += 1;
+            else record.winsB += 1;
+          } else if (game.winner === b.team) {
+            if (record.b === b.playerId) record.winsB += 1;
+            else record.winsA += 1;
+          }
           duoOpp.set(key, record);
         }
       }
