@@ -148,6 +148,7 @@ export const prismaClient = new PrismaClient({
             },
           map: settings.map ?? "DUELSTAL",
           modifiers: settings.modifiers ?? [],
+          delayedBan: settings.delayedBan ?? 0,
         };
 
         const allParticipants = await Promise.all(
@@ -237,12 +238,16 @@ export const prismaClient = new PrismaClient({
                 currentGame.MVPPlayerRed === playerInstance.ignUsed) ||
               (team === "BLUE" &&
                 currentGame.MVPPlayerBlue === playerInstance.ignUsed);
+            const votedForAMVP = currentGame.hasVotedMvp(
+              playerInstance.discordSnowflake
+            );
 
             return {
               ignUsed: playerInstance.ignUsed ?? "UnknownIGN",
               team,
               player: { connect: { id: playerRecord.id } },
               mvp,
+              votedForAMVP,
               captain: playerInstance.captain === true,
               draftSlotPlacement:
                 playerInstance.draftSlotPlacement ?? undefined,

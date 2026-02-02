@@ -31,11 +31,13 @@ export class GameInstance {
     nonSharedCaptainBannedClasses: Record<Team, $Enums.AnniClass[]>;
     map?: $Enums.AnniMap;
     modifiers: { category: string; name: string }[];
+    delayedBan: number;
   } = {
     organiserBannedClasses: [],
     sharedCaptainBannedClasses: [],
     nonSharedCaptainBannedClasses: { [Team.RED]: [], [Team.BLUE]: [] },
     modifiers: [],
+    delayedBan: 0,
   };
 
   public classBanMode: "shared" | "opponentOnly" | null = null;
@@ -115,6 +117,7 @@ export class GameInstance {
       nonSharedCaptainBannedClasses: { [Team.RED]: [], [Team.BLUE]: [] },
       map: undefined,
       modifiers: [],
+      delayedBan: 0,
     };
     this.classBanMode = null;
     this.teams = { RED: [], BLUE: [], UNDECIDED: [] };
@@ -562,6 +565,7 @@ export class GameInstance {
       nonSharedCaptainBannedClasses: { RED: ["SCOUT"], BLUE: ["NEPTUNE"] },
       map: "DUELSTAL",
       modifiers: [{ category: "Minerushing", name: "Always" }],
+      delayedBan: 0,
     };
     this.MVPPlayerBlue = "Immortal";
     this.MVPPlayerRed = "5trawHato";

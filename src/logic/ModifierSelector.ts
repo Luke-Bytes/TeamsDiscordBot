@@ -81,6 +81,7 @@ export class ModifierSelector {
   private static handleClassBans(name: string) {
     const game = GameInstance.getInstance();
     game.classBanMode = null;
+    game.settings.delayedBan = 0;
     const organiserBans = game.settings.organiserBannedClasses;
 
     switch (name) {
@@ -157,6 +158,24 @@ export class ModifierSelector {
       case "2 Captain Bans Each (Opponent Only, No Core)":
         game.classBanMode = "opponentOnly";
         game.setClassBanLimit(4);
+        break;
+
+      case "Delayed Ban (Phase 2)":
+        game.classBanMode = "shared";
+        game.settings.delayedBan = 2;
+        game.setClassBanLimit(2);
+        break;
+
+      case "Delayed Ban (Phase 3)":
+        game.classBanMode = "shared";
+        game.settings.delayedBan = 3;
+        game.setClassBanLimit(2);
+        break;
+
+      case "Delayed Ban (Phase 4)":
+        game.classBanMode = "shared";
+        game.settings.delayedBan = 4;
+        game.setClassBanLimit(2);
         break;
 
       default:

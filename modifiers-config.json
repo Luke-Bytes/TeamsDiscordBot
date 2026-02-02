@@ -12,7 +12,10 @@
         { "name": "1 Captain Ban Each (Shared)", "weight": 4 },
         { "name": "2 Captain Bans Each (Shared)", "weight": 1 },
         { "name": "1 Captain Ban Each (Opponent Only, No Core)", "weight": 1 },
-        { "name": "2 Captain Bans Each (Opponent Only, No Core)", "weight": 1 }
+        { "name": "2 Captain Bans Each (Opponent Only, No Core)", "weight": 1 },
+        { "name": "Delayed Ban (Phase 2)", "weight": 1 },
+        { "name": "Delayed Ban (Phase 3)", "weight": 1 },
+        { "name": "Delayed Ban (Phase 4)", "weight": 1 }
       ]
     },
     {
