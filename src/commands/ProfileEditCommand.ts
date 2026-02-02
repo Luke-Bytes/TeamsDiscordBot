@@ -290,13 +290,13 @@ export default class ProfileEditCommand implements Command {
         new ButtonBuilder()
           .setCustomId("profile-edit:region")
           .setLabel("Region")
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId("profile-edit:rank")
-          .setLabel("Rank")
           .setStyle(ButtonStyle.Secondary)
       ),
       new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId("profile-edit:rank")
+          .setLabel("Rank")
+          .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
           .setCustomId("profile-edit:preferredRoles")
           .setLabel("Preferred Roles")
@@ -312,7 +312,9 @@ export default class ProfileEditCommand implements Command {
         new ButtonBuilder()
           .setCustomId("profile-edit:playstyles")
           .setLabel("Playstyle")
-          .setStyle(ButtonStyle.Secondary),
+          .setStyle(ButtonStyle.Secondary)
+      ),
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
           .setCustomId("profile-cancel")
           .setLabel("Finish")
