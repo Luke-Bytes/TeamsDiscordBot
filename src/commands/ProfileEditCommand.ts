@@ -497,7 +497,12 @@ export default class ProfileEditCommand implements Command {
         // TODO: populate unlocked titles per player.
         select
           .setPlaceholder("No titles available yet")
-          .setMaxValues(0)
+          .addOptions({
+            label: "No titles available yet",
+            value: "locked",
+          })
+          .setMinValues(1)
+          .setMaxValues(1)
           .setDisabled(true);
         (select as unknown as { disabled?: boolean }).disabled = true;
         break;

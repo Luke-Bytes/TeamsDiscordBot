@@ -239,8 +239,7 @@ export class CommandHandler {
       ) {
         try {
           await interaction.reply({
-            content: "An error occurred while processing your request.",
-            flags: MessageFlags.Ephemeral,
+            content: "Oops, something has gone wrong! This is a bug.",
           });
         } catch (replyError) {
           console.error("Failed to send error reply:", replyError);
