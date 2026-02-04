@@ -19,6 +19,19 @@ type ValidationResult = {
 };
 
 export class MessageSafetyUtil {
+  public static validateUserInput(content: string): ValidationResult {
+    const trimmed = content.trim();
+    if (!trimmed) return { valid: true };
+    if (this.containsUnsafeLanguage(trimmed)) {
+      return {
+        valid: false,
+        feedback:
+          "Please remove slurs or mass mentions and try again.",
+      };
+    }
+    return { valid: true };
+  }
+
   public static validateCaptainPlanMessage(
     content: string,
     hasAttachment: boolean

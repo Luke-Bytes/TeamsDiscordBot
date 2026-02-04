@@ -1,4 +1,4 @@
-import { REST, Routes, Interaction, MessageFlags } from "discord.js";
+import { REST, Routes, Interaction } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import "dotenv/config";
 import { ConfigManager } from "../ConfigManager";
@@ -43,6 +43,7 @@ import WikiCommand from "../commands/WikiCommand";
 import ProfileCommand from "../commands/ProfileCommand";
 import ProfileEditCommand from "../commands/ProfileEditCommand";
 import CaptainPlanDMManager from "../logic/CaptainPlanDMManager";
+import { InteractionGuard } from "../util/InteractionGuard";
 
 export class CommandHandler {
   commands: Command[] = [];
@@ -89,6 +90,8 @@ export class CommandHandler {
   wikiCommand = new WikiCommand();
   profileCommand = new ProfileCommand();
   profileEditCommand = new ProfileEditCommand();
+
+  private readonly interactionGuard = new InteractionGuard();
 
   public loadCommands() {
     this.commands = [
@@ -137,6 +140,12 @@ export class CommandHandler {
 
   public async handleInteraction(interaction: Interaction) {
     try {
+      if (!(await this.interactionGuard.checkRateLimit(interaction))) {
+        return;
+      }
+      if (!(await this.interactionGuard.checkInputSafety(interaction))) {
+        return;
+      }
       if (interaction.isChatInputCommand()) {
         const chatInteraction = interaction;
         const command = this.commands.find(

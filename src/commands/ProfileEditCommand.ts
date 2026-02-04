@@ -33,6 +33,7 @@ import {
   formatEnumList,
 } from "../util/ProfileUtil";
 import { escapeText } from "../util/Utils";
+import { MessageSafetyUtil } from "../util/MessageSafetyUtil";
 
 type SectionKey =
   | "preferredName"
@@ -205,6 +206,7 @@ export default class ProfileEditCommand implements Command {
     if (!session) {
       await interaction.reply({
         content: "This session expired — run /profilecreate to continue.",
+        ephemeral: true
       });
       return;
     }
@@ -236,6 +238,16 @@ export default class ProfileEditCommand implements Command {
     if (!value) {
       await interaction.reply({
         content: "Preferred name can't be empty.",
+      });
+      return;
+    }
+    const validation = MessageSafetyUtil.validateUserInput(value);
+    if (!validation.valid) {
+      await interaction.reply({
+        content:
+          validation.feedback ??
+          "Please remove any swears or slurs and try again.",
+        ephemeral: false,
       });
       return;
     }

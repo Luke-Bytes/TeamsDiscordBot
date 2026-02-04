@@ -90,7 +90,8 @@ function calcNewEloForPlayer(
   gameContext: GameInstance,
   isDoubleElo: boolean,
   mvp: boolean,
-  captain: boolean
+  captain: boolean,
+  votedForAMVP?: boolean | null
 ): number {
   const config = ConfigManager.getConfig();
   const isWin = team === winner;
@@ -111,11 +112,10 @@ function calcNewEloForPlayer(
   else newElo -= delta;
 
   if (mvp) {
-    let m = config.mvpBonus;
-    if (isDoubleElo) m *= 2;
-    newElo += m;
+    newElo += config.mvpBonus;
   }
   if (captain) newElo += config.captainBonus;
+  if (votedForAMVP) newElo += 1;
 
   return Math.trunc(newElo);
 }
@@ -188,7 +188,8 @@ async function main() {
         gameContext,
         isDouble,
         gp.mvp,
-        gp.captain
+        gp.captain,
+        gp.votedForAMVP
       );
       after.push({ playerId: gp.playerId, elo: newElo });
     }

@@ -52,10 +52,7 @@ export class Elo {
       (playerTeam === "BLUE" && game.MVPPlayerBlue === player.ignUsed) ||
       (playerTeam === "RED" && game.MVPPlayerRed === player.ignUsed)
     ) {
-      let mvpBonus = config.mvpBonus;
-      if (game.isDoubleElo) {
-        mvpBonus = mvpBonus * 2;
-      }
+      const mvpBonus = config.mvpBonus;
       currentElo += mvpBonus;
       console.log(`MVP bonus applied to ${player.ignUsed}: +${mvpBonus}`);
     }
