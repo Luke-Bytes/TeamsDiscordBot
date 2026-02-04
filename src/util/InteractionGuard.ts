@@ -1,6 +1,7 @@
 import {
   Interaction,
   ApplicationCommandOptionType,
+  GuildMember,
 } from "discord.js";
 import { PermissionsUtil } from "./PermissionsUtil";
 import { MessageSafetyUtil } from "./MessageSafetyUtil";
@@ -26,9 +27,9 @@ export class InteractionGuard {
   public async checkRateLimit(interaction: Interaction): Promise<boolean> {
     if (!("user" in interaction)) return true;
     const userId = interaction.user.id;
-    if (interaction.inGuild() && interaction.member) {
+    if (interaction.inGuild() && interaction.member instanceof GuildMember) {
       const member = interaction.member;
-      if (PermissionsUtil.hasRole(member as any, "organiserRole")) {
+      if (PermissionsUtil.hasRole(member, "organiserRole")) {
         return true;
       }
     }
@@ -111,7 +112,12 @@ export class InteractionGuard {
   public async checkInputSafety(interaction: Interaction): Promise<boolean> {
     if (!interaction.isChatInputCommand()) return true;
     const unsafeInputs: string[] = [];
-    const collectStrings = (opts: ReadonlyArray<any>) => {
+    type OptionLike = {
+      type: ApplicationCommandOptionType;
+      value?: unknown;
+      options?: ReadonlyArray<OptionLike>;
+    };
+    const collectStrings = (opts: ReadonlyArray<OptionLike>) => {
       for (const opt of opts) {
         if (
           opt.type === ApplicationCommandOptionType.Subcommand ||

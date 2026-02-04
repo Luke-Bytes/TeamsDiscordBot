@@ -25,8 +25,7 @@ export class MessageSafetyUtil {
     if (this.containsUnsafeLanguage(trimmed)) {
       return {
         valid: false,
-        feedback:
-          "Please remove slurs or mass mentions and try again.",
+        feedback: "Please remove slurs or mass mentions and try again.",
       };
     }
     return { valid: true };

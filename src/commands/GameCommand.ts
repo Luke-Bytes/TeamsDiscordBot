@@ -302,14 +302,17 @@ async function extractLatestPlanFromChannel(
   let midBlocks: string | null = null;
   let gamePlan: string | null = null;
   let raw: string | null = null;
+  let capturedAt: Date | null = null;
 
   for (const message of messages) {
+    if (message.author?.bot) continue;
     const parsed = parsePlanText(message.content ?? "");
     if (parsed.confidence === "none") continue;
 
     if (!midBlocks && parsed.midBlocks) midBlocks = parsed.midBlocks;
     if (!gamePlan && parsed.gamePlan) gamePlan = parsed.gamePlan;
     if (!raw) raw = parsed.raw ?? message.content ?? null;
+    if (!capturedAt) capturedAt = message.createdAt ?? new Date();
 
     if (midBlocks && gamePlan) break;
   }
@@ -320,7 +323,7 @@ async function extractLatestPlanFromChannel(
     gamePlan,
     raw: midBlocks && gamePlan ? null : raw,
     source: "CHANNEL",
-    capturedAt: new Date(),
+    capturedAt: capturedAt ?? new Date(),
   };
 }
 
@@ -329,6 +332,17 @@ function mergePlans(
   channelPlan: TeamPlanRecord | null
 ): TeamPlanRecord | null {
   if (!dmPlan && !channelPlan) return null;
+  if (dmPlan && channelPlan) {
+    const channelIsNewer =
+      channelPlan.capturedAt.getTime() > dmPlan.capturedAt.getTime();
+    if (!channelIsNewer) {
+      return {
+        ...dmPlan,
+        source: (dmPlan.source === "MIXED" ? "MIXED" : "DM") as TeamPlanSource,
+        capturedAt: dmPlan.capturedAt,
+      };
+    }
+  }
   if (channelPlan && channelPlan.midBlocks && channelPlan.gamePlan) {
     return channelPlan;
   }

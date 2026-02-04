@@ -37,8 +37,14 @@ test("Rate limit escalates cooldown duration on repeated violations", async () =
 
   await withMockedNow(
     [
-      0, 3000, 6000, 9000, // violation 1
-      12000, 15000, 18000, 21000, // violation 2
+      0,
+      3000,
+      6000,
+      9000, // violation 1
+      12000,
+      15000,
+      18000,
+      21000, // violation 2
     ],
     async () => {
       for (let n = 0; n < 4; n += 1) {

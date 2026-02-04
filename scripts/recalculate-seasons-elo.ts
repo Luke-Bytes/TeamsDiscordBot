@@ -20,6 +20,9 @@ type PlayerState = {
   loseStreak: number;
   biggestWinStreak: number;
   biggestLosingStreak: number;
+  captainBonusCount: number;
+  mvpBonusCount: number;
+  mvpVoteBonusCount: number;
 };
 
 type EloPlayer = Pick<
@@ -151,6 +154,9 @@ async function main() {
           loseStreak: 0,
           biggestWinStreak: 0,
           biggestLosingStreak: 0,
+          captainBonusCount: 0,
+          mvpBonusCount: 0,
+          mvpVoteBonusCount: 0,
         });
       }
     }
@@ -199,6 +205,9 @@ async function main() {
       const ps = state.get(gp.playerId)!;
       const isWin = gp.team === g.winner;
       ps.elo = after.find((a) => a.playerId === gp.playerId)!.elo;
+      if (gp.captain) ps.captainBonusCount += 1;
+      if (gp.mvp) ps.mvpBonusCount += 1;
+      if (gp.votedForAMVP) ps.mvpVoteBonusCount += 1;
       if (isWin) {
         ps.wins += 1;
         ps.winStreak += 1;
@@ -225,7 +234,7 @@ async function main() {
   console.log("\n[PLAN] Final PlayerStats:");
   for (const [playerId, ps] of state) {
     console.log(
-      `  - ${playerId} { elo:${ps.elo}, W:${ps.wins}, L:${ps.losses}, winStreak:${ps.winStreak}, loseStreak:${ps.loseStreak}, maxWin:${ps.biggestWinStreak}, maxLose:${ps.biggestLosingStreak} }`
+      `  - ${playerId} { elo:${ps.elo}, W:${ps.wins}, L:${ps.losses}, winStreak:${ps.winStreak}, loseStreak:${ps.loseStreak}, maxWin:${ps.biggestWinStreak}, maxLose:${ps.biggestLosingStreak}, captainBonus:${ps.captainBonusCount}, mvpBonus:${ps.mvpBonusCount}, mvpVoteBonus:${ps.mvpVoteBonusCount} }`
     );
   }
 

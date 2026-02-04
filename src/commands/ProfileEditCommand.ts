@@ -139,6 +139,7 @@ export default class ProfileEditCommand implements Command {
     if (!session) {
       await interaction.reply({
         content: "This profile session has expired. Run /profilecreate again.",
+        ephemeral: true,
       });
       return;
     }
@@ -206,7 +207,7 @@ export default class ProfileEditCommand implements Command {
     if (!session) {
       await interaction.reply({
         content: "This session expired — run /profilecreate to continue.",
-        ephemeral: true
+        ephemeral: true,
       });
       return;
     }
