@@ -115,7 +115,6 @@ export default class WinnerCommand implements Command {
       await interaction.reply({
         embeds: [embed],
         components: [row],
-        flags: MessageFlags.Ephemeral,
       });
       const message = await interaction.fetchReply();
       this.pendingConfirmations.set(message.id, {

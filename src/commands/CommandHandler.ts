@@ -42,6 +42,8 @@ import WebsiteCommand from "../commands/WebsiteCommand";
 import WikiCommand from "../commands/WikiCommand";
 import ProfileCommand from "../commands/ProfileCommand";
 import ProfileEditCommand from "../commands/ProfileEditCommand";
+import TitlesCommand from "../commands/TitlesCommand";
+import TitleCommand from "../commands/TitleCommand";
 import CaptainPlanDMManager from "../logic/CaptainPlanDMManager";
 import { InteractionGuard } from "../util/InteractionGuard";
 
@@ -90,6 +92,8 @@ export class CommandHandler {
   wikiCommand = new WikiCommand();
   profileCommand = new ProfileCommand();
   profileEditCommand = new ProfileEditCommand();
+  titlesCommand = new TitlesCommand();
+  titleCommand = new TitleCommand();
 
   private readonly interactionGuard = new InteractionGuard();
 
@@ -135,6 +139,8 @@ export class CommandHandler {
       this.wikiCommand,
       this.profileCommand,
       this.profileEditCommand,
+      this.titlesCommand,
+      this.titleCommand,
     ];
   }
 

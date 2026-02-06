@@ -27,8 +27,8 @@ export class InteractionGuard {
   public async checkRateLimit(interaction: Interaction): Promise<boolean> {
     if (!("user" in interaction)) return true;
     const userId = interaction.user.id;
-    if (interaction.inGuild() && interaction.member instanceof GuildMember) {
-      const member = interaction.member;
+    if (interaction.inGuild?.()) {
+      const member = interaction.member as GuildMember | undefined;
       if (PermissionsUtil.hasRole(member, "organiserRole")) {
         return true;
       }
@@ -52,7 +52,7 @@ export class InteractionGuard {
       );
       await this.replyRateLimit(
         interaction,
-        `You're on cooldown. Please wait ${Math.ceil(
+        `You are sending commands too fast! Please wait ${Math.ceil(
           (state.cooldownUntil - now) / 1000
         )}s.`
       );
@@ -95,7 +95,7 @@ export class InteractionGuard {
         );
         await this.replyRateLimit(
           interaction,
-          `You're on cooldown. Please wait ${Math.ceil(
+          `You are sending commands too fast! Please wait ${Math.ceil(
             (state.cooldownUntil - now) / 1000
           )}s.`
         );
@@ -110,7 +110,7 @@ export class InteractionGuard {
   }
 
   public async checkInputSafety(interaction: Interaction): Promise<boolean> {
-    if (!interaction.isChatInputCommand()) return true;
+    if (!interaction.isChatInputCommand?.()) return true;
     const unsafeInputs: string[] = [];
     type OptionLike = {
       type: ApplicationCommandOptionType;
@@ -134,7 +134,7 @@ export class InteractionGuard {
         }
       }
     };
-    collectStrings(interaction.options.data);
+    collectStrings(interaction.options?.data ?? []);
     for (const input of unsafeInputs) {
       const validation = MessageSafetyUtil.validateUserInput(input);
       if (!validation.valid) {
@@ -145,7 +145,7 @@ export class InteractionGuard {
           content:
             validation.feedback ??
             "Please remove slurs or mass mentions and try again.",
-          ephemeral: true,
+          ephemeral: false,
         });
         return false;
       }
@@ -157,7 +157,7 @@ export class InteractionGuard {
     interaction: Interaction,
     message: string
   ): Promise<void> {
-    if (interaction.isAutocomplete()) {
+    if (interaction.isAutocomplete?.()) {
       try {
         await interaction.respond([]);
       } catch {
@@ -175,15 +175,15 @@ export class InteractionGuard {
   }
 
   private getInteractionKey(interaction: Interaction): string | null {
-    if (interaction.isChatInputCommand()) return interaction.commandName;
-    if (interaction.isMessageContextMenuCommand())
+    if (interaction.isChatInputCommand?.()) return interaction.commandName;
+    if (interaction.isMessageContextMenuCommand?.())
       return interaction.commandName;
-    if (interaction.isUserContextMenuCommand()) return interaction.commandName;
-    if (interaction.isAutocomplete()) return interaction.commandName;
-    if (interaction.isButton()) return `button:${interaction.customId}`;
-    if (interaction.isStringSelectMenu())
+    if (interaction.isUserContextMenuCommand?.()) return interaction.commandName;
+    if (interaction.isAutocomplete?.()) return interaction.commandName;
+    if (interaction.isButton?.()) return `button:${interaction.customId}`;
+    if (interaction.isStringSelectMenu?.())
       return `select:${interaction.customId}`;
-    if (interaction.isModalSubmit()) return `modal:${interaction.customId}`;
+    if (interaction.isModalSubmit?.()) return `modal:${interaction.customId}`;
     return null;
   }
 }

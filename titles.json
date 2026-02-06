@@ -1,0 +1,17 @@
+[
+  {
+    "id": "CHAMPION",
+    "label": "Champion",
+    "reason": "Come 1st in a season"
+  },
+  {
+    "id": "ACE",
+    "label": "Ace",
+    "reason": "Come 2nd or higher in a season"
+  },
+  {
+    "id": "ELITE",
+    "label": "Elite",
+    "reason": "Come 3rd or higher in a season"
+  }
+]

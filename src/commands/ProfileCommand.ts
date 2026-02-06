@@ -21,7 +21,9 @@ import {
   Language,
   Role,
   Playstyle,
+  formatTitleLabel,
 } from "../util/ProfileUtil";
+import { TitleStore } from "../util/TitleStore";
 
 export default class ProfileCommand implements Command {
   public name = "profile";
@@ -84,6 +86,7 @@ export default class ProfileCommand implements Command {
 
     const data = profile as {
       preferredName?: string | null;
+      title?: string | null;
       pronouns?: Pronouns | null;
       languages?: Language[];
       region?: Region | null;
@@ -100,6 +103,17 @@ export default class ProfileCommand implements Command {
         value: escapeText(data.preferredName),
         inline: true,
       });
+    }
+
+    if (data?.title) {
+      const titleLabel = formatTitleLabel(data.title, TitleStore.loadTitles());
+      if (titleLabel) {
+        embed.addFields({
+          name: "Title",
+          value: titleLabel,
+          inline: true,
+        });
+      }
     }
 
     if (data?.pronouns) {

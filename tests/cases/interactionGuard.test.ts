@@ -21,6 +21,9 @@ function withMockedNow(times: number[], fn: () => void | Promise<void>) {
 test("Rate limit blocks 3 repeated uses of same command in 10s", async () => {
   const guard = new InteractionGuard();
   const i = createChatInputInteraction("U1");
+  (i as any).inGuild = () => false;
+  (i as any).isChatInputCommand = () => true;
+  (i as any).commandName = "test";
 
   await withMockedNow([0, 3000, 6000, 9000], async () => {
     assert(await guard.checkRateLimit(i), "First allowed");
@@ -34,6 +37,9 @@ test("Rate limit blocks 3 repeated uses of same command in 10s", async () => {
 test("Rate limit escalates cooldown duration on repeated violations", async () => {
   const guard = new InteractionGuard();
   const i = createChatInputInteraction("U2");
+  (i as any).inGuild = () => false;
+  (i as any).isChatInputCommand = () => true;
+  (i as any).commandName = "test";
 
   await withMockedNow(
     [
@@ -74,6 +80,7 @@ test("Organiser is exempt from rate limiting", async () => {
     member: member as any,
   }) as any;
   i.inGuild = () => true;
+  i.isChatInputCommand = () => true;
 
   await withMockedNow([0, 100, 200, 300], async () => {
     assert(await guard.checkRateLimit(i), "Organiser allowed");
@@ -86,6 +93,7 @@ test("Input filter blocks unsafe string options", async () => {
   const guard = new InteractionGuard();
   const i = createChatInputInteraction("U3") as any;
   i.isChatInputCommand = () => true;
+  i.inGuild = () => false;
   i.options = {
     data: [
       {
@@ -106,6 +114,7 @@ test("Input filter allows clean string options", async () => {
   const guard = new InteractionGuard();
   const i = createChatInputInteraction("U4") as any;
   i.isChatInputCommand = () => true;
+  i.inGuild = () => false;
   i.options = {
     data: [
       {
@@ -125,6 +134,7 @@ test("Rate limit blocks too many unique commands in 15s", async () => {
   const makeInteraction = (name: string) => {
     const i = createChatInputInteraction("U5") as any;
     i.isChatInputCommand = () => true;
+    i.inGuild = () => false;
     i.commandName = name;
     return i;
   };

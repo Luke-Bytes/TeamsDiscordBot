@@ -23,6 +23,8 @@ const MANUAL_OVERRIDES: Record<string, HelpCategory> = {
   wiki: "user",
   profile: "user",
   profilecreate: "user",
+  titles: "user",
+  title: "organiser",
 };
 
 const ORGANISER_HINTS = [

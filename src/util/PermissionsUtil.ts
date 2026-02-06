@@ -24,7 +24,7 @@ export class PermissionsUtil {
     member: GuildMember | undefined,
     roleKeyOrId: keyof Config["roles"] | string
   ): boolean {
-    if (!member) return false;
+    if (!member?.roles?.cache) return false;
     const roleId =
       this.config.roles[roleKeyOrId as keyof Config["roles"]] ?? roleKeyOrId;
     return member.roles.cache.has(roleId);

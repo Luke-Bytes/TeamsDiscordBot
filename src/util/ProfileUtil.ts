@@ -48,33 +48,12 @@ export type Playstyle =
   | "ADAPTABLE"
   | "INVIS_OPPORTUNIST";
 
-export type ProfileTitle =
-  | "THE_SUC"
-  | "DEPPIES_DEMON"
-  | "SKYLORD"
-  | "VOID_RUNNER"
-  | "WALL_WHISPERER"
-  | "MID_MAESTRO"
-  | "BUNKER_BARON"
-  | "GRIEF_GOBLIN";
-
 export const PRONOUNS_LABELS: Record<Pronouns, string> = {
   HE_HIM: "he/him",
   SHE_HER: "she/her",
   THEY_THEM: "they/them",
   ANY: "any",
   ASK: "ask",
-};
-
-export const TITLE_LABELS: Record<ProfileTitle, string> = {
-  THE_SUC: "The Suc",
-  DEPPIES_DEMON: "Deppies Demon",
-  SKYLORD: "Skylord",
-  VOID_RUNNER: "Void Runner",
-  WALL_WHISPERER: "Wall Whisperer",
-  MID_MAESTRO: "Mid Maestro",
-  BUNKER_BARON: "Bunker Baron",
-  GRIEF_GOBLIN: "Grief Goblin",
 };
 
 export const LANGUAGE_LABELS: Record<Language, string> = {
@@ -107,6 +86,31 @@ export const RANK_LABELS: Record<PlayerRank, string> = {
   GRANDMASTER_III: "Grandmaster III",
   ANNIHILATOR: "Annihilator",
 };
+
+export type TitleDefinition = {
+  id: string;
+  label: string;
+  reason?: string;
+};
+
+export function formatTitleLabel(
+  titleId: string | null | undefined,
+  titles: TitleDefinition[]
+): string | null {
+  if (!titleId) return null;
+  const found = titles.find((t) => t.id === titleId);
+  return found?.label ?? titleId;
+}
+
+export function formatTitleReason(title: TitleDefinition): string {
+  return title.reason?.trim() ? title.reason : "???";
+}
+
+export function normalizeTitleIds(values: string[]): string[] {
+  return values
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0 && v !== "locked");
+}
 
 export const ROLE_LABELS: Record<Role, string> = {
   RUSHER: "Rusher",
@@ -148,8 +152,6 @@ export const LANGUAGE_LIST = Object.keys(LANGUAGE_LABELS) as Language[];
 export const PRONOUNS_LIST = Object.keys(PRONOUNS_LABELS) as Pronouns[];
 export const REGION_LIST = Object.keys(REGION_LABELS) as Region[];
 export const RANK_LIST = Object.keys(RANK_LABELS) as PlayerRank[];
-export const TITLE_LIST = Object.keys(TITLE_LABELS) as ProfileTitle[];
-
 export function formatEnumList<T extends string>(
   values: T[] | null | undefined,
   labels: Record<T, string>

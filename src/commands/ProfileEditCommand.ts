@@ -29,11 +29,13 @@ import {
   REGION_LIST,
   ROLE_LABELS,
   ROLE_LIST,
-  TITLE_LABELS,
+  formatTitleLabel,
+  normalizeTitleIds,
   formatEnumList,
 } from "../util/ProfileUtil";
 import { escapeText } from "../util/Utils";
 import { MessageSafetyUtil } from "../util/MessageSafetyUtil";
+import { TitleStore } from "../util/TitleStore";
 
 type SectionKey =
   | "preferredName"
@@ -387,7 +389,7 @@ export default class ProfileEditCommand implements Command {
   private addProfileFields(embed: EmbedBuilder, profile: unknown) {
     const data = profile as {
       preferredName?: string | null;
-      title?: keyof typeof TITLE_LABELS | null;
+      title?: string | null;
       pronouns?: keyof typeof PRONOUNS_LABELS | null;
       languages?: Array<keyof typeof LANGUAGE_LABELS>;
       region?: keyof typeof REGION_LABELS | null;
@@ -396,6 +398,7 @@ export default class ProfileEditCommand implements Command {
       proficientAtRoles?: Array<keyof typeof ROLE_LABELS>;
       improveRoles?: Array<keyof typeof ROLE_LABELS>;
       playstyles?: Array<keyof typeof PLAYSTYLE_LABELS>;
+      unlockedTitles?: string[];
     } | null;
     if (!data) return;
     if (data.preferredName) {
@@ -406,9 +409,14 @@ export default class ProfileEditCommand implements Command {
       });
     }
     if (data.title) {
+      const allowed = normalizeTitleIds(data.unlockedTitles ?? []);
+      const titles = TitleStore.loadTitles().filter((t) =>
+        allowed.includes(t.id)
+      );
+      const titleLabel = formatTitleLabel(data.title, titles);
       embed.addFields({
         name: "Title",
-        value: TITLE_LABELS[data.title],
+        value: titleLabel ?? data.title,
         inline: true,
       });
     }
@@ -473,7 +481,7 @@ export default class ProfileEditCommand implements Command {
   private buildSelectMenu(
     section: SectionKey,
     session: Session,
-    _profile: unknown
+    profile: unknown
   ): ActionRowBuilder<StringSelectMenuBuilder> {
     const select = new StringSelectMenuBuilder()
       .setCustomId(`profile-select:${section}`)
@@ -507,17 +515,34 @@ export default class ProfileEditCommand implements Command {
           .setMaxValues(1);
         break;
       case "title":
-        // TODO: populate unlocked titles per player.
-        select
-          .setPlaceholder("No titles available yet")
-          .addOptions({
-            label: "No titles available yet",
-            value: "locked",
-          })
-          .setMinValues(1)
-          .setMaxValues(1)
-          .setDisabled(true);
-        (select as unknown as { disabled?: boolean }).disabled = true;
+        {
+          const data = profile as { unlockedTitles?: string[] } | null;
+          const unlocked = normalizeTitleIds(data?.unlockedTitles ?? []);
+          const titles = TitleStore.loadTitles().filter((t) =>
+            unlocked.includes(t.id)
+          );
+          const titleOptions =
+            titles.length > 0
+              ? titles.map((t) => ({ label: t.label, value: t.id }))
+              : unlocked.map((id) => ({ label: id, value: id }));
+          if (!titles.length) {
+            select
+              .setPlaceholder("No titles available yet")
+              .addOptions({
+                label: "No titles available yet",
+                value: "locked",
+              })
+              .setMinValues(1)
+              .setMaxValues(1)
+              .setDisabled(true);
+            (select as unknown as { disabled?: boolean }).disabled = true;
+          } else {
+            select
+              .setPlaceholder("Select a title")
+              .addOptions(titleOptions)
+              .setMaxValues(1);
+          }
+        }
         break;
       case "languages":
         select
@@ -593,9 +618,11 @@ export default class ProfileEditCommand implements Command {
       case "preferredName":
         data.preferredName = values[0] ?? null;
         break;
-      case "title":
-        data.title = values[0] ?? null;
+      case "title": {
+        const filtered = normalizeTitleIds(values);
+        data.title = filtered[0] ?? null;
         break;
+      }
       case "pronouns":
         data.pronouns = values[0] ?? null;
         break;
@@ -674,7 +701,7 @@ export default class ProfileEditCommand implements Command {
       case "pronouns":
         return PRONOUNS_LABELS[value as keyof typeof PRONOUNS_LABELS] ?? value;
       case "title":
-        return TITLE_LABELS[value as keyof typeof TITLE_LABELS] ?? value;
+        return formatTitleLabel(value, TitleStore.loadTitles()) ?? value;
       case "languages":
         return LANGUAGE_LABELS[value as keyof typeof LANGUAGE_LABELS] ?? value;
       case "region":
