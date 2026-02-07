@@ -145,6 +145,19 @@ test("/scripts titles-update awards earned titles", async () => {
     i.inGuild = () => true;
     await cmd.execute(i);
 
+    const reply = i.replies.find((r: any) => r.type === "reply");
+    const messageId =
+      reply?.payload?.id ?? reply?.payload?.message?.id ?? "msg-1";
+    const button = {
+      customId: "scripts-confirm:titles-update",
+      message: { id: messageId },
+      user: { id: "ORG" },
+      update: async (_payload: any) => ({}),
+      editReply: async (_payload: any) => ({}),
+      reply: async (_payload: any) => ({}),
+    } as any;
+    await cmd.handleButtonPress!(button);
+
     assert(updated.P1?.includes("CHAMPION"), "Champion awarded for #1 season");
     assert(updated.P1?.includes("PARAGON"), "Paragon awarded for 10 MVPs");
   } finally {

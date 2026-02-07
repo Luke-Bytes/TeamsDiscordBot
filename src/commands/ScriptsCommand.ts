@@ -1,8 +1,18 @@
-import { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import {
+  ChatInputCommandInteraction,
+  SlashCommandBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ButtonInteraction,
+  EmbedBuilder,
+} from "discord.js";
 import { Command } from "./CommandInterface";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { TitleStore } from "../util/TitleStore";
+import { PrismaUtils } from "../util/PrismaUtils";
 import { prismaClient } from "../database/prismaClient";
+import { DiscordUtil } from "../util/DiscordUtil";
 
 type ProfileModel = {
   findUnique: (args: { where: { playerId: string } }) => Promise<unknown>;
@@ -18,11 +28,17 @@ function getProfileModel(): ProfileModel | undefined {
 }
 
 type AwardCounts = Record<string, number>;
+type TitlesUpdateSnapshot = {
+  awardsByPlayer: Map<string, Set<string>>;
+  awardCounts: AwardCounts;
+  ignByPlayerId: Map<string, string>;
+  summary: string;
+};
 
 export default class ScriptsCommand implements Command {
   name = "scripts";
   description = "Run organiser scripts";
-  buttonIds: string[] = [];
+  buttonIds: string[] = ["scripts-confirm", "scripts-cancel"];
   data = new SlashCommandBuilder()
     .setName(this.name)
     .setDescription(this.description)
@@ -32,29 +48,114 @@ export default class ScriptsCommand implements Command {
         .setDescription("Award titles based on lifetime stats")
     );
 
+  private readonly pendingByMessage = new Map<
+    string,
+    {
+      userId: string;
+      script: "titles-update";
+      snapshot: TitlesUpdateSnapshot;
+    }
+  >();
+  private readonly pendingByUser = new Map<
+    string,
+    { script: "titles-update"; snapshot: TitlesUpdateSnapshot }
+  >();
+
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const isAuthorized = await PermissionsUtil.isUserAuthorised(interaction);
     if (!isAuthorized) return;
 
     const sub = interaction.options.getSubcommand();
     if (sub === "titles-update") {
-      await interaction.reply({
-        content: "Running titles update...",
+      const snapshot = await this.runTitlesUpdate({ dryRun: true });
+      const embed = new EmbedBuilder()
+        .setTitle("Confirm Titles Update")
+        .setDescription(snapshot.summary);
+      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId("scripts-confirm:titles-update")
+          .setLabel("Confirm")
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId("scripts-cancel")
+          .setLabel("Cancel")
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+      const message = await DiscordUtil.replyWithMessage(interaction, {
+        embeds: [embed],
+        components: [row],
       });
-      const summary = await this.runTitlesUpdate();
-      await interaction.editReply({
-        content: summary,
+      if (message?.id) {
+        this.pendingByMessage.set(message.id, {
+          userId: interaction.user.id,
+          script: "titles-update",
+          snapshot,
+        });
+      }
+      this.pendingByUser.set(interaction.user.id, {
+        script: "titles-update",
+        snapshot,
       });
       return;
     }
 
     await interaction.reply({
       content: "Unknown script.",
-      flags: 64,
     });
   }
 
-  private async runTitlesUpdate(): Promise<string> {
+  async handleButtonPress(interaction: ButtonInteraction): Promise<void> {
+    const pending =
+      this.pendingByMessage.get(interaction.message.id) ??
+      (this.pendingByUser.get(interaction.user.id)
+        ? {
+            userId: interaction.user.id,
+            script: this.pendingByUser.get(interaction.user.id)!.script,
+            snapshot: this.pendingByUser.get(interaction.user.id)!.snapshot,
+          }
+        : undefined);
+    if (!pending) {
+      await interaction.reply({
+        content: "This confirmation has expired.",
+      });
+      return;
+    }
+    if (interaction.user.id !== pending.userId) {
+      await interaction.reply({
+        content: "Only the user who requested this can confirm.",
+      });
+      return;
+    }
+
+    if (interaction.customId.startsWith("scripts-cancel")) {
+      this.pendingByMessage.delete(interaction.message.id);
+      this.pendingByUser.delete(interaction.user.id);
+      await interaction.update({
+        content: "Script cancelled.",
+        embeds: [],
+        components: [],
+      });
+      return;
+    }
+
+    if (interaction.customId === "scripts-confirm:titles-update") {
+      await interaction.update({
+        content: "Running titles update...",
+        embeds: [],
+        components: [],
+      });
+      const summary = await this.applyTitlesUpdate(pending.snapshot);
+      await interaction.editReply({ content: summary });
+      this.pendingByMessage.delete(interaction.message.id);
+      this.pendingByUser.delete(interaction.user.id);
+      return;
+    }
+  }
+
+  private async runTitlesUpdate(_opts: {
+    dryRun: boolean;
+  }): Promise<TitlesUpdateSnapshot> {
     const available = new Set(TitleStore.loadTitles().map((t) => t.id));
     const awardsByPlayer = new Map<string, Set<string>>();
     const awardCounts: AwardCounts = {};
@@ -95,7 +196,7 @@ export default class ScriptsCommand implements Command {
 
     const captainParticipations = await prismaClient.gameParticipation.findMany(
       {
-        where: { captain: true },
+        where: { captain: true, team: { in: ["RED", "BLUE"] } },
         select: {
           playerId: true,
           team: true,
@@ -117,19 +218,23 @@ export default class ScriptsCommand implements Command {
       select: { id: true, latestIGN: true },
     });
     const playerByIgn = new Map<string, string>();
+    const ignByPlayerId = new Map<string, string>();
     for (const player of players) {
       if (player.latestIGN) {
         playerByIgn.set(player.latestIGN.toLowerCase(), player.id);
+        ignByPlayerId.set(player.id, player.latestIGN);
       }
     }
 
     const hostCounts = new Map<string, number>();
-    const games = await prismaClient.game.findMany({
-      select: { organiser: true, host: true },
-    });
+    const games = await PrismaUtils.safeFindGamesForHostOrganiserCounts();
     for (const game of games) {
-      const organiserId = playerByIgn.get(game.organiser.toLowerCase());
-      const hostId = playerByIgn.get(game.host.toLowerCase());
+      const organiserId = game.organiser
+        ? playerByIgn.get(game.organiser.toLowerCase())
+        : undefined;
+      const hostId = game.host
+        ? playerByIgn.get(game.host.toLowerCase())
+        : undefined;
       if (organiserId) {
         hostCounts.set(organiserId, (hostCounts.get(organiserId) ?? 0) + 1);
       }
@@ -172,10 +277,38 @@ export default class ScriptsCommand implements Command {
       if (count >= 100) ensureAward(playerId, "OVERSEER");
     }
 
+    const snapshot: TitlesUpdateSnapshot = {
+      awardsByPlayer,
+      awardCounts,
+      ignByPlayerId,
+      summary: "",
+    };
+
+    const awardSummary = Object.entries(awardCounts)
+      .map(([id, count]) => `${id}: ${count}`)
+      .join(", ");
+
+    snapshot.summary = `Titles update preview.\nPlayers to update: ${awardsByPlayer.size}.\nAwards: ${
+      awardSummary || "none"
+    }.`;
+    for (const [playerId, awards] of awardsByPlayer) {
+      const ign = ignByPlayerId.get(playerId) ?? "Unknown";
+      console.log(
+        `[TitlesPreview] playerId=${playerId} ign=${ign} earned=${Array.from(
+          awards
+        ).join(", ")}`
+      );
+    }
+    return snapshot;
+  }
+
+  private async applyTitlesUpdate(
+    snapshot: TitlesUpdateSnapshot
+  ): Promise<string> {
     const profileModel = getProfileModel();
     let updatedPlayers = 0;
     if (profileModel) {
-      for (const [playerId, awards] of awardsByPlayer) {
+      for (const [playerId, awards] of snapshot.awardsByPlayer) {
         const existing = await profileModel.findUnique({
           where: { playerId },
         });
@@ -190,19 +323,20 @@ export default class ScriptsCommand implements Command {
           create: { playerId, unlockedTitles: Array.from(merged) },
         });
         if (newlyEarned.length) {
+          const ign = snapshot.ignByPlayerId.get(playerId) ?? "Unknown";
           console.log(
-            `[TitlesUpdate] playerId=${playerId} earned=${newlyEarned.join(", ")}`
+            `[TitlesUpdate] playerId=${playerId} ign=${ign} earned=${newlyEarned.join(", ")}`
           );
         }
         updatedPlayers += 1;
       }
     }
 
-    const awardSummary = Object.entries(awardCounts)
+    const awardSummary = Object.entries(snapshot.awardCounts)
       .map(([id, count]) => `${id}: ${count}`)
       .join(", ");
 
-    return `Titles update complete. Players updated: ${updatedPlayers}. Awards: ${
+    return `Titles update complete.\nPlayers updated: ${updatedPlayers}.\nAwards: ${
       awardSummary || "none"
     }.`;
   }
