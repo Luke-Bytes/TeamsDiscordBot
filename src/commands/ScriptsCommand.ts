@@ -269,6 +269,7 @@ export default class ScriptsCommand implements Command {
     }
 
     const seasons = await prismaClient.season.findMany({
+      where: { isActive: false },
       select: { id: true, number: true },
       orderBy: { number: "asc" },
     });
