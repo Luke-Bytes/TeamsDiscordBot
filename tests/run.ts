@@ -13,6 +13,9 @@ import "./cases/profileCommand.test";
 import "./cases/titleCommands.test";
 import "./cases/interactionGuard.test";
 import "./cases/discordUtilMoveToVC.test";
+import "./cases/unregisterRoleCleanup.test";
+import "./cases/playerRemoveRoleCleanup.test";
+import "./cases/autoCaptainCleanup.test";
 import "./critical/mvpCritical.test";
 import "./critical/classbanCritical.test";
 import "./critical/captainNominateCritical.test";
@@ -30,6 +33,7 @@ import "./critical/sharedBansDefault.test";
 import "./critical/classBanModes.test";
 import "./cases/ignsCommand.test";
 import "./cases/timestampChoices.test";
+import "./cases/punishExpungeCommand.test";
 import { runAll } from "./framework/test";
 
 runAll();

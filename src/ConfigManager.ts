@@ -13,6 +13,7 @@ export type Config = {
     organiserRole: string;
     clanLeaderRole: string;
     spectatorRole: string;
+    gameNotify: string;
   };
   channels: {
     registration: string;

@@ -115,9 +115,15 @@ export class AutoCaptainSelector {
     if (res.oldCaptain) {
       await guild.members
         .fetch(res.oldCaptain)
-        .then((oldM) =>
-          oldM.roles.remove(PermissionsUtil.config.roles.captainRole)
-        )
+        .then(async (oldM) => {
+          const roles = PermissionsUtil.config.roles;
+          const roleIds = [
+            roles.captainRole,
+            roles.redTeamRole,
+            roles.blueTeamRole,
+          ].filter(Boolean);
+          await Promise.allSettled(roleIds.map((id) => oldM.roles.remove(id)));
+        })
         .catch(() => undefined);
     }
 

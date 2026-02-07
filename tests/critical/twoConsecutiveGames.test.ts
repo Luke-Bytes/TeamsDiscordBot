@@ -179,7 +179,7 @@ async function runOneGame(params: {
   await announcementCmd.execute(announceInteraction);
 
   const confirmInteraction: any = {
-    customId: "announcement-confirm",
+    customId: "announcement-confirm-noping",
     guild,
     user: { id: organiser.id },
     deferReply: async () => {},

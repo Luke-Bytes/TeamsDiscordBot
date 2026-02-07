@@ -34,7 +34,8 @@ export default class AnnouncementCommand implements Command {
   public name: string = "announce";
   public description: string = "Create a game announcement";
   public buttonIds: string[] = [
-    "announcement-confirm",
+    "announcement-confirm-ping",
+    "announcement-confirm-noping",
     "announcement-cancel",
     "announcement-edit-time",
     "announcement-edit-map",
@@ -91,12 +92,14 @@ export default class AnnouncementCommand implements Command {
                   "Banned classes separated by a comma, or 'none' for none."
                 )
                 .setRequired(true)
+                .setAutocomplete(true)
             )
             .addStringOption((option) =>
               option
                 .setName("map")
                 .setDescription("Map? (poll <maps>/random/<map>)")
                 .setRequired(true)
+                .setAutocomplete(true)
             )
             .addStringOption((option) =>
               option
@@ -391,13 +394,21 @@ export default class AnnouncementCommand implements Command {
     }
   }
 
-  private async handleAnnouncementConfirm(guild: Guild) {
+  private async handleAnnouncementConfirm(guild: Guild, ping: boolean) {
     const embed = this.createGameAnnouncementEmbed(false).embeds?.[0];
     if (!Channels.announcements.isSendable()) return;
 
     this.announcementMessage = await Channels.announcements.send({
       embeds: [embed],
     });
+
+    const notifyRoleId = ConfigManager.getConfig().roles.gameNotify;
+    if (ping && notifyRoleId) {
+      await Channels.announcements.send({
+        content: `<@&${notifyRoleId}> Game Announced ⬆️`,
+        allowedMentions: { roles: [notifyRoleId] },
+      });
+    }
 
     if (Channels.registration.isTextBased()) {
       await Channels.registration.send(
@@ -431,9 +442,15 @@ export default class AnnouncementCommand implements Command {
   }
 
   private getEditComponents(isConfirmed: boolean) {
-    const confirmButton = new ButtonBuilder()
-      .setCustomId("announcement-confirm")
-      .setLabel("✅ Confirm and Send")
+    const confirmPingButton = new ButtonBuilder()
+      .setCustomId("announcement-confirm-ping")
+      .setLabel("✅ Confirm & Send (Ping)")
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(isConfirmed);
+
+    const confirmNoPingButton = new ButtonBuilder()
+      .setCustomId("announcement-confirm-noping")
+      .setLabel("✅ Confirm & Send (No ping)")
       .setStyle(ButtonStyle.Success)
       .setDisabled(isConfirmed);
 
@@ -463,7 +480,8 @@ export default class AnnouncementCommand implements Command {
       .setStyle(ButtonStyle.Secondary);
 
     const firstRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      confirmButton,
+      confirmPingButton,
+      confirmNoPingButton,
       cancelButton
     );
 
@@ -490,9 +508,17 @@ export default class AnnouncementCommand implements Command {
         await interaction.editReply("Cancelled announcement.");
         break;
 
-      case "announcement-confirm":
+      case "announcement-confirm-ping":
         if (!isConfirmed) {
-          await this.handleAnnouncementConfirm(interaction.guild!);
+          await this.handleAnnouncementConfirm(interaction.guild!, true);
+          await interaction.editReply("Announcement sent with ping!");
+        } else {
+          await interaction.editReply("The announcement is already confirmed.");
+        }
+        break;
+      case "announcement-confirm-noping":
+        if (!isConfirmed) {
+          await this.handleAnnouncementConfirm(interaction.guild!, false);
           await interaction.editReply("Announcement sent!");
         } else {
           await interaction.editReply("The announcement is already confirmed.");
@@ -541,25 +567,57 @@ export default class AnnouncementCommand implements Command {
     interaction: AutocompleteInteraction
   ): Promise<void> {
     const focused = interaction.options.getFocused(true);
-    if (focused.name !== "organiser" && focused.name !== "host") {
+    if (
+      focused.name !== "organiser" &&
+      focused.name !== "host" &&
+      focused.name !== "banned_classes" &&
+      focused.name !== "map"
+    ) {
       await interaction.respond([]);
       return;
     }
-    const list =
-      focused.name === "organiser"
-        ? this.loadNames().organisers
-        : this.loadNames().hosts;
     const query = String(focused.value ?? "").toLowerCase();
-    const filtered = list
-      .filter((entry) => entry.ign.toLowerCase().includes(query))
-      .slice(0, AnnouncementCommand.maxAutoResults)
-      .map((entry) => ({
-        name: entry.discordId
-          ? `${entry.ign} (ID: ${entry.discordId})`
-          : entry.ign,
-        value: entry.ign,
-      }));
-    await interaction.respond(filtered);
+    if (focused.name === "organiser" || focused.name === "host") {
+      const list =
+        focused.name === "organiser"
+          ? this.loadNames().organisers
+          : this.loadNames().hosts;
+      const filtered = list
+        .filter((entry) => entry.ign.toLowerCase().includes(query))
+        .slice(0, AnnouncementCommand.maxAutoResults)
+        .map((entry) => ({
+          name: entry.ign,
+          value: entry.ign,
+        }));
+      await interaction.respond(filtered);
+      return;
+    }
+
+    if (focused.name === "banned_classes") {
+      const entries = ["none", ...Object.values(AnniClass).map((c) => c)];
+      const filtered = entries
+        .filter((entry) => entry.toLowerCase().includes(query))
+        .slice(0, AnnouncementCommand.maxAutoResults)
+        .map((entry) => ({ name: entry, value: entry }));
+      await interaction.respond(filtered);
+      return;
+    }
+
+    if (focused.name === "map") {
+      const entries = [
+        "random",
+        ...Object.values(AnniMap).map((m) => m.toLowerCase()),
+      ];
+      const filtered = entries
+        .filter((entry) => entry.toLowerCase().includes(query))
+        .slice(0, AnnouncementCommand.maxAutoResults)
+        .map((entry) => ({
+          name: entry.charAt(0).toUpperCase() + entry.slice(1),
+          value: entry,
+        }));
+      await interaction.respond(filtered);
+      return;
+    }
   }
 
   private loadNames(): {
@@ -679,9 +737,14 @@ export default class AnnouncementCommand implements Command {
     }
     embed.setTimestamp();
 
-    const confirmButton = new ButtonBuilder()
-      .setCustomId("announcement-confirm")
-      .setLabel("✅ Confirm and Send")
+    const confirmPingButton = new ButtonBuilder()
+      .setCustomId("announcement-confirm-ping")
+      .setLabel("✅ Confirm & Send (Ping)")
+      .setStyle(ButtonStyle.Success);
+
+    const confirmNoPingButton = new ButtonBuilder()
+      .setCustomId("announcement-confirm-noping")
+      .setLabel("✅ Confirm & Send (No ping)")
       .setStyle(ButtonStyle.Success);
 
     const cancelButton = new ButtonBuilder()
@@ -710,7 +773,8 @@ export default class AnnouncementCommand implements Command {
       .setStyle(ButtonStyle.Secondary);
 
     const firstRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      confirmButton,
+      confirmPingButton,
+      confirmNoPingButton,
       cancelButton
     );
 

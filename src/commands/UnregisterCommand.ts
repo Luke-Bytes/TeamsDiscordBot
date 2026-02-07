@@ -9,6 +9,8 @@ import { CurrentGameManager } from "../logic/CurrentGameManager.js";
 import { Team } from "@prisma/client";
 import TeamCommand from "../commands/TeamCommand";
 import { DraftTeamPickingSession } from "../logic/teams/DraftTeamPickingSession";
+import { ConfigManager } from "../ConfigManager";
+import { DiscordUtil } from "../util/DiscordUtil";
 
 export default class UnregisterCommand implements Command {
   public data: SlashCommandBuilder;
@@ -120,6 +122,21 @@ export default class UnregisterCommand implements Command {
       );
 
     if (!result?.error) {
+      const member = await interaction.guild?.members
+        .fetch(discordUserId)
+        .catch(() => null);
+      if (member) {
+        const roles = ConfigManager.getConfig().roles;
+        const roleIds = [
+          roles.captainRole,
+          roles.redTeamRole,
+          roles.blueTeamRole,
+        ].filter(Boolean);
+        for (const roleId of roleIds) {
+          await DiscordUtil.removeRole(member, roleId);
+        }
+      }
+
       const session = this.teamCommand.teamPickingSession;
       if (session instanceof DraftTeamPickingSession) {
         await session.handleUnregister(discordUserId);

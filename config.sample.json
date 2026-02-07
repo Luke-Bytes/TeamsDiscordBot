@@ -9,7 +9,8 @@
     "captainRole": "",
     "organiserRole": "",
     "clanLeaderRole": "",
-    "spectatorRole": ""
+    "spectatorRole": "",
+    "gameNotify": ""
   },
   "channels": {
     "registration": "",

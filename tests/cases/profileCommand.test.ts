@@ -1,3 +1,4 @@
+import { MessageFlags } from "discord.js";
 import { test } from "../framework/test";
 import { assert } from "../framework/assert";
 import ProfileCommand from "../../src/commands/ProfileCommand";
@@ -232,7 +233,7 @@ test("/profilecreate blocks duplicate session", async () => {
 
     const reply = i2.replies.find((r: any) => r.type === "reply");
     assert(
-      !!reply?.payload?.ephemeral,
+      reply?.payload?.flags === MessageFlags.Ephemeral,
       "Duplicate session reply should be ephemeral"
     );
   } finally {

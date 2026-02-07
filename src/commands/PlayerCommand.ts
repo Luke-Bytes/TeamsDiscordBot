@@ -2,6 +2,7 @@ import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
   GuildMember,
+  Guild,
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { Team } from "@prisma/client";
@@ -14,6 +15,8 @@ import CaptainPlanDMManager, {
 import { GameInstance } from "../database/GameInstance";
 import { PlayerInstance } from "../database/PlayerInstance";
 import { escapeText } from "../util/Utils";
+import { ConfigManager } from "../ConfigManager";
+import { DiscordUtil } from "../util/DiscordUtil";
 
 type ExtendedTeam = Team | "UNDECIDED";
 
@@ -141,7 +144,11 @@ export default class PlayerCommand implements Command {
               playerInputs.map(async (token) => {
                 const match = await PrismaUtils.findPlayer(token);
                 const name = match?.latestIGN ?? token;
-                return { name, safeName: escapeText(name) };
+                return {
+                  name,
+                  safeName: escapeText(name),
+                  discordSnowflake: match?.discordSnowflake ?? null,
+                };
               })
             )
           : [];
@@ -280,6 +287,12 @@ export default class PlayerCommand implements Command {
             );
             if (success) {
               removed.push(player.safeName);
+              if (player.discordSnowflake) {
+                await this.removeTeamRoles(
+                  interaction.guild!,
+                  player.discordSnowflake
+                );
+              }
             } else {
               failed.push(player.safeName);
             }
@@ -347,6 +360,25 @@ export default class PlayerCommand implements Command {
       id: player.discordSnowflake,
       ign: player.ignUsed ?? player.latestIGN ?? "Unknown",
     };
+  }
+
+  private async removeTeamRoles(
+    guild: Guild,
+    discordSnowflake: string
+  ): Promise<void> {
+    const member = await guild.members
+      .fetch(discordSnowflake)
+      .catch(() => null);
+    if (!member) return;
+    const roles = ConfigManager.getConfig().roles;
+    const roleIds = [
+      roles.captainRole,
+      roles.redTeamRole,
+      roles.blueTeamRole,
+    ].filter(Boolean);
+    for (const roleId of roleIds) {
+      await DiscordUtil.removeRole(member, roleId);
+    }
   }
 
   private diffNewMembers(
