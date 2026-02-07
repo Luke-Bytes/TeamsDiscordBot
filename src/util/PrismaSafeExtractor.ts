@@ -1,6 +1,8 @@
 import { prismaClient } from "../database/prismaClient";
 
-type MongoBatchResult = { cursor?: { firstBatch?: unknown[] } };
+type MongoBatchResult = {
+  cursor?: { firstBatch?: unknown[]; id?: unknown; ns?: string };
+};
 
 export class PrismaSafeExtractor {
   static async runCommandRawSafe<T>(
@@ -10,11 +12,23 @@ export class PrismaSafeExtractor {
     fallback: T[]
   ): Promise<T[]> {
     try {
-      const result = (await prismaClient.$runCommandRaw(
+      const initial = (await prismaClient.$runCommandRaw(
         command
       )) as MongoBatchResult;
-      const batch = result.cursor?.firstBatch ?? [];
-      return batch
+      const items: unknown[] = [...(initial.cursor?.firstBatch ?? [])];
+      const collection = (command as { find?: string }).find;
+      let cursorId = initial.cursor?.id;
+      while (cursorId && collection) {
+        const getMoreResult = (await prismaClient.$runCommandRaw({
+          getMore: cursorId,
+          collection,
+        })) as MongoBatchResult;
+        const batch = getMoreResult.cursor?.firstBatch ?? [];
+        items.push(...batch);
+        cursorId = getMoreResult.cursor?.id;
+      }
+
+      return items
         .map((row) => mapRow(row))
         .filter((row): row is T => row !== null);
     } catch (error) {
