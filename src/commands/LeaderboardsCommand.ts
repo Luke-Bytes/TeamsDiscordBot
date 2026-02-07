@@ -13,6 +13,7 @@ import { Command } from "./CommandInterface";
 import { EloUtil } from "../util/EloUtil";
 import { prismaClient } from "../database/prismaClient";
 import { Channels } from "../Channels";
+import { DiscordUtil } from "../util/DiscordUtil";
 import { escapeText } from "../util/Utils";
 
 export default class LeaderboardsCommand implements Command {
@@ -200,13 +201,14 @@ export default class LeaderboardsCommand implements Command {
       );
       const buttons = this.generateButtons(userState.currentPage, totalPages);
 
-      const leaderboardMessage = await interaction.reply({
-        embeds: [embed],
-        components: [buttons],
-        fetchReply: true,
-      });
-
-      userState.messageId = leaderboardMessage.id;
+      const leaderboardMessage = await DiscordUtil.replyWithMessage(
+        interaction,
+        {
+          embeds: [embed],
+          components: [buttons],
+        }
+      );
+      userState.messageId = leaderboardMessage?.id;
 
       if (interaction.channelId !== botCommandsChannelId) {
         setTimeout(

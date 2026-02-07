@@ -37,7 +37,6 @@ test("WinnerCommand /winner set replies with confirmation embed", async () => {
     subcommand: "set",
     strings: { team: "RED" },
   }) as any;
-  interaction.fetchReply = async () => ({ id: "msg-1" });
 
   try {
     await cmd.execute(interaction as any);
@@ -93,12 +92,11 @@ test("WinnerCommand confirmation button sets winner", async () => {
     subcommand: "set",
     strings: { team: "RED" },
   }) as any;
-  interaction.fetchReply = async () => ({ id: "msg-2" });
 
   const updates: any[] = [];
   const buttonInteraction: any = {
     customId: "winner_confirm_yes",
-    message: { id: "msg-2" },
+    message: { id: "msg-1" },
     user: { id: "u7" },
     update: async (payload: any) => {
       updates.push(payload);

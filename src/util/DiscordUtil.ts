@@ -4,9 +4,11 @@ import {
   CommandInteraction,
   Guild,
   GuildMember,
+  InteractionReplyOptions,
   InteractionEditReplyOptions,
   Message,
   MessagePayload,
+  RepliableInteraction,
   Snowflake,
   TextChannel,
 } from "discord.js";
@@ -32,6 +34,25 @@ export class DiscordUtil {
       ...(ephemeral ? { ephemeral: true } : {}),
     };
     await interaction.reply(options);
+  }
+
+  static async replyWithMessage(
+    interaction: RepliableInteraction,
+    options: string | MessagePayload | InteractionReplyOptions
+  ): Promise<Message | null> {
+    if (options instanceof MessagePayload) {
+      await interaction.reply(options);
+      return null;
+    }
+
+    const replyOptions: InteractionReplyOptions =
+      typeof options === "string" ? { content: options } : options;
+    const response = await interaction.reply({
+      ...replyOptions,
+      withResponse: true,
+    });
+
+    return response.resource?.message ?? null;
   }
 
   static async editReply(

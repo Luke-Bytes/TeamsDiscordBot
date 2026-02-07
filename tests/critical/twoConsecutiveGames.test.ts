@@ -367,11 +367,10 @@ async function runOneGame(params: {
     strings: { team: "BLUE" },
     subcommand: "set",
   });
-  winnerInteraction.fetchReply = async () => ({ id: "winner-msg" }) as any;
   await winnerCmd.execute(winnerInteraction);
   await winnerCmd.handleButtonPress({
     customId: "winner_confirm_yes",
-    message: { id: "winner-msg" },
+    message: { id: "msg-1" },
     user: { id: organiser.id },
     update: async (_payload: any) => {},
     reply: async (_payload: any) => {},

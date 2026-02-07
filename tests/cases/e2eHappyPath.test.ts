@@ -343,11 +343,10 @@ test("E2E happy path: announce -> register -> nominate -> set captains -> random
     strings: { team: "BLUE" },
     subcommand: "set",
   });
-  win.fetchReply = async () => ({ id: "winner-msg" }) as any;
   await winnerCmd.execute(win);
   await winnerCmd.handleButtonPress({
     customId: "winner_confirm_yes",
-    message: { id: "winner-msg" },
+    message: { id: "msg-1" },
     user: { id: organiser.id },
     update: async (_payload: any) => {},
     reply: async (_payload: any) => {},

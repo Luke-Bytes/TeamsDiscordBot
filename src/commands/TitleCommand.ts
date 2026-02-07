@@ -57,7 +57,10 @@ export default class TitleCommand implements Command {
   public async execute(interaction: ChatInputCommandInteraction) {
     if (
       !interaction.inGuild?.() ||
-      !PermissionsUtil.hasRole(interaction.member as GuildMember, "organiserRole")
+      !PermissionsUtil.hasRole(
+        interaction.member as GuildMember,
+        "organiserRole"
+      )
     ) {
       await interaction.reply({
         content: "You do not have permission to manage titles.",

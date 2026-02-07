@@ -178,7 +178,8 @@ export class InteractionGuard {
     if (interaction.isChatInputCommand?.()) return interaction.commandName;
     if (interaction.isMessageContextMenuCommand?.())
       return interaction.commandName;
-    if (interaction.isUserContextMenuCommand?.()) return interaction.commandName;
+    if (interaction.isUserContextMenuCommand?.())
+      return interaction.commandName;
     if (interaction.isAutocomplete?.()) return interaction.commandName;
     if (interaction.isButton?.()) return `button:${interaction.customId}`;
     if (interaction.isStringSelectMenu?.())

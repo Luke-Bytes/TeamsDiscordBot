@@ -93,14 +93,15 @@ export function createChatInputInteraction(
     reply: (async (payload?: any) => {
       replies.push({ type: "reply", payload });
       interaction.replied = true;
+      if (payload?.withResponse) {
+        const messageId = `msg-${replies.length}`;
+        return { resource: { message: { id: messageId } } } as any;
+      }
       return {} as any;
     }) as any,
     editReply: (async (payload?: any) => {
       replies.push({ type: "editReply", payload });
       return {} as any;
-    }) as any,
-    fetchReply: (async () => {
-      return { id: `msg-${replies.length}` } as any;
     }) as any,
     deleteReply: (async () => {
       replies.push({ type: "deleteReply" });

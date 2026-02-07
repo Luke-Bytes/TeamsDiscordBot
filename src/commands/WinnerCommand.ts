@@ -11,6 +11,7 @@ import {
 import { Command } from "./CommandInterface";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { PermissionsUtil } from "../util/PermissionsUtil";
+import { DiscordUtil } from "../util/DiscordUtil";
 import { escapeText } from "../util/Utils";
 
 export default class WinnerCommand implements Command {
@@ -112,11 +113,14 @@ export default class WinnerCommand implements Command {
           .setStyle(ButtonStyle.Danger)
       );
 
-      await interaction.reply({
+      const message = await DiscordUtil.replyWithMessage(interaction, {
         embeds: [embed],
         components: [row],
       });
-      const message = await interaction.fetchReply();
+      if (!message) {
+        console.error("Failed to capture winner confirmation message.");
+        return;
+      }
       this.pendingConfirmations.set(message.id, {
         userId: interaction.user.id,
         team: team as "RED" | "BLUE",

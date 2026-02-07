@@ -27,8 +27,12 @@ test("Winner confirmation rejects other users", async () => {
   const interaction: any = {
     user: { id: "u1" },
     options: { getString: () => "RED" },
-    reply: async () => {},
-    fetchReply: async () => ({ id: "msg-1" }),
+    reply: async (payload?: any) => {
+      if (payload?.withResponse) {
+        return { resource: { message: { id: "msg-1" } } };
+      }
+      return {};
+    },
   };
 
   const replies: any[] = [];
