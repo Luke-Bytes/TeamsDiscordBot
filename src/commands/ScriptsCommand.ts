@@ -197,7 +197,12 @@ export default class ScriptsCommand implements Command {
     const captainParticipations =
       await PrismaUtils.safeFindCaptainParticipations();
     const captainWinCounts = new Map<string, number>();
+    const captainGameCounts = new Map<string, number>();
     for (const row of captainParticipations) {
+      captainGameCounts.set(
+        row.playerId,
+        (captainGameCounts.get(row.playerId) ?? 0) + 1
+      );
       if (row.winner && row.team && row.winner === row.team) {
         captainWinCounts.set(
           row.playerId,
@@ -240,14 +245,14 @@ export default class ScriptsCommand implements Command {
     const debugPlayerIds = new Set<string>();
     for (const id of lifetimeStats.keys()) debugPlayerIds.add(id);
     for (const id of mvpCounts.keys()) debugPlayerIds.add(id);
-    for (const id of captainWinCounts.keys()) debugPlayerIds.add(id);
+    for (const id of captainGameCounts.keys()) debugPlayerIds.add(id);
     for (const id of hostCounts.keys()) debugPlayerIds.add(id);
     for (const playerId of debugPlayerIds) {
       const ign = ignByPlayerId.get(playerId) ?? "Unknown";
       const life = lifetimeStats.get(playerId) ?? { wins: 0, losses: 0 };
       const gamesPlayed = life.wins + life.losses;
       console.log(
-        `[TitlesDebug] playerId=${playerId} ign=${ign} wins=${life.wins} losses=${life.losses} games=${gamesPlayed} mvp=${mvpCounts.get(playerId) ?? 0} captainWins=${captainWinCounts.get(playerId) ?? 0} hostOrOrganiser=${hostCounts.get(playerId) ?? 0}`
+        `[TitlesDebug] playerId=${playerId} ign=${ign} wins=${life.wins} losses=${life.losses} games=${gamesPlayed} mvp=${mvpCounts.get(playerId) ?? 0} captainGames=${captainGameCounts.get(playerId) ?? 0} captainWins=${captainWinCounts.get(playerId) ?? 0} hostOrOrganiser=${hostCounts.get(playerId) ?? 0}`
       );
     }
 

@@ -48,6 +48,36 @@ export class PrismaSafeExtractor {
   static async safeFindCaptainParticipations(): Promise<
     Array<{ playerId: string; team: string | null; winner: string | null }>
   > {
+    const normalizeId = (value: unknown): string | null => {
+      if (typeof value === "string") return value;
+      if (typeof value === "object" && value !== null) {
+        const record = value as Record<string, unknown>;
+        const oid = record.$oid;
+        if (typeof oid === "string") return oid;
+        const toHex = record.toHexString;
+        if (typeof toHex === "function") {
+          try {
+            const hex = toHex.call(value);
+            if (typeof hex === "string") return hex;
+          } catch (error) {
+            void error;
+          }
+        }
+        const toStr = record.toString;
+        if (typeof toStr === "function") {
+          try {
+            const str = toStr.call(value);
+            if (typeof str === "string" && str !== "[object Object]") {
+              return str;
+            }
+          } catch (error) {
+            void error;
+          }
+        }
+      }
+      return null;
+    };
+
     const participations = await this.runCommandRawSafe(
       "safeFindCaptainParticipations",
       {
@@ -81,7 +111,7 @@ export class PrismaSafeExtractor {
       (row) => {
         if (typeof row !== "object" || row === null) return null;
         const record = row as Record<string, unknown>;
-        const id = typeof record._id === "string" ? record._id : null;
+        const id = normalizeId(record._id);
         const winner = typeof record.winner === "string" ? record.winner : null;
         if (!id) return null;
         return { id, winner };
