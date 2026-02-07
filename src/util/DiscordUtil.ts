@@ -93,15 +93,14 @@ export class DiscordUtil {
   static async moveToVC(
     guild: Guild,
     vcId: string,
-    roleId: string,
+    _roleId: string,
     discordSnowflake: Snowflake,
     cachedMember?: GuildMember
   ): Promise<void> {
     const voiceChannel = guild.channels.cache.get(vcId);
-    const role = guild.roles.cache.get(roleId);
 
-    if (!voiceChannel || !role || !voiceChannel.isVoiceBased()) {
-      console.error(`Invalid setup for VC: ${vcId} or Role: ${roleId}`);
+    if (!voiceChannel || !voiceChannel.isVoiceBased()) {
+      console.error(`Invalid setup for VC: ${vcId}`);
       return;
     }
 
@@ -114,10 +113,14 @@ export class DiscordUtil {
         return;
       }
 
-      if (
-        !member.roles.cache.has(roleId) ||
-        member.voice.channel?.id === vcId
-      ) {
+      if (!member.voice?.channelId) {
+        console.log(
+          `Skipping move for ${member.user.tag}: not connected to voice.`
+        );
+        return;
+      }
+
+      if (member.voice.channel?.id === vcId) {
         return;
       }
 

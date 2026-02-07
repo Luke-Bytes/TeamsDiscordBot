@@ -20,6 +20,7 @@ import {
   TeamPlanSource,
 } from "../util/PlanUtil";
 import CaptainPlanDMManager from "../logic/CaptainPlanDMManager";
+import { setTimeout as delay } from "timers/promises";
 
 export default class GameCommand implements Command {
   data = new SlashCommandBuilder()
@@ -376,6 +377,8 @@ export async function assignTeamVCAfterPicking(
 
   const gameInstance = GameInstance.getInstance();
   const cache = memberCache ?? new Map<string, GuildMember>();
+  const BATCH_SIZE = 5;
+  const DELAY_MS = 250;
 
   const moveTeam = async (
     team: "RED" | "BLUE",
@@ -383,20 +386,28 @@ export async function assignTeamVCAfterPicking(
     roleId: string
   ) => {
     const players = gameInstance.getPlayersOfTeam(team);
-    for (const player of players) {
-      const member = await getCachedMember(
-        guild,
-        cache,
-        player.discordSnowflake
+    for (let i = 0; i < players.length; i += BATCH_SIZE) {
+      const batch = players.slice(i, i + BATCH_SIZE);
+      await Promise.allSettled(
+        batch.map(async (player) => {
+          const member = await getCachedMember(
+            guild,
+            cache,
+            player.discordSnowflake
+          );
+          if (!member) return;
+          await DiscordUtil.moveToVC(
+            guild,
+            vcId,
+            roleId,
+            player.discordSnowflake,
+            member
+          );
+        })
       );
-      if (!member) continue;
-      await DiscordUtil.moveToVC(
-        guild,
-        vcId,
-        roleId,
-        player.discordSnowflake,
-        member
-      );
+      if (i + BATCH_SIZE < players.length) {
+        await delay(DELAY_MS);
+      }
     }
   };
 
@@ -458,21 +469,32 @@ export async function movePlayersToTeamPickingAfterGameEnd(guild: Guild) {
   try {
     const config = ConfigManager.getConfig();
     const teamPickingVCId = config.channels.teamPickingVC;
+    const BATCH_SIZE = 5;
+    const DELAY_MS = 250;
 
     const moveMembers = async (vcId: string) => {
       const voiceChannel = guild.channels.cache.get(vcId);
       if (voiceChannel && voiceChannel.isVoiceBased()) {
-        for (const [, member] of voiceChannel.members) {
-          try {
-            await member.voice.setChannel(teamPickingVCId);
-            console.log(
-              `Moved ${member.user.tag} from ${voiceChannel.name} to Team Picking VC`
-            );
-          } catch (error) {
-            console.error(
-              `Failed to move ${member.user.tag} from ${voiceChannel.name}: `,
-              error
-            );
+        const members = Array.from(voiceChannel.members.values());
+        for (let i = 0; i < members.length; i += BATCH_SIZE) {
+          const batch = members.slice(i, i + BATCH_SIZE);
+          await Promise.allSettled(
+            batch.map(async (member) => {
+              try {
+                await member.voice.setChannel(teamPickingVCId);
+                console.log(
+                  `Moved ${member.user.tag} from ${voiceChannel.name} to Team Picking VC`
+                );
+              } catch (error) {
+                console.error(
+                  `Failed to move ${member.user.tag} from ${voiceChannel.name}: `,
+                  error
+                );
+              }
+            })
+          );
+          if (i + BATCH_SIZE < members.length) {
+            await delay(DELAY_MS);
           }
         }
       }
