@@ -1,5 +1,6 @@
 #!/usr/bin/env ts-node
 import { prismaClient } from "../src/database/prismaClient";
+import { PrismaSafeExtractor } from "../src/util/PrismaSafeExtractor";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 
@@ -53,9 +54,24 @@ async function run() {
   const aliasSet = new Set(args.aliases.map(normalize));
   const target = args.target.trim();
 
-  const games = await prismaClient.game.findMany({
-    select: { id: true, organiser: true, host: true },
-  });
+  const games = await PrismaSafeExtractor.runCommandRawSafe(
+    "normalize-host-organiser",
+    {
+      find: "Game",
+      projection: { id: 1, organiser: 1, host: 1, _id: 0 },
+    },
+    (row) => {
+      if (typeof row !== "object" || row === null) return null;
+      const record = row as Record<string, unknown>;
+      const id = typeof record.id === "string" ? record.id : null;
+      const organiser =
+        typeof record.organiser === "string" ? record.organiser : null;
+      const host = typeof record.host === "string" ? record.host : null;
+      if (!id) return null;
+      return { id, organiser, host };
+    },
+    []
+  );
 
   const updates: Record<FieldKey, string[]> = {
     organiser: [],
