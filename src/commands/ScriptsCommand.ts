@@ -194,19 +194,11 @@ export default class ScriptsCommand implements Command {
       mvpCounts.set(row.playerId, (mvpCounts.get(row.playerId) ?? 0) + 1);
     }
 
-    const captainParticipations = await prismaClient.gameParticipation.findMany(
-      {
-        where: { captain: true, team: { in: ["RED", "BLUE"] } },
-        select: {
-          playerId: true,
-          team: true,
-          game: { select: { winner: true } },
-        },
-      }
-    );
+    const captainParticipations =
+      await PrismaUtils.safeFindCaptainParticipations();
     const captainWinCounts = new Map<string, number>();
     for (const row of captainParticipations) {
-      if (row.game?.winner === row.team) {
+      if (row.winner && row.team && row.winner === row.team) {
         captainWinCounts.set(
           row.playerId,
           (captainWinCounts.get(row.playerId) ?? 0) + 1
