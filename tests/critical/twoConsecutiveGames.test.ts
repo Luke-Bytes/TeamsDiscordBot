@@ -24,6 +24,7 @@ import RestartCommand from "../../src/commands/RestartCommand";
 import CaptainPlanDMManager from "../../src/logic/CaptainPlanDMManager";
 import AnnouncementCommand from "../../src/commands/AnnouncementCommand";
 import MVPCommand from "../../src/commands/MVPCommand";
+import { withImmediateTimers } from "../framework/timers";
 
 function makeRoleManagerLike(obj: any) {
   try {
@@ -36,6 +37,9 @@ function makeRoleManagerLike(obj: any) {
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
+
+const fastTest = (name: string, fn: () => Promise<void> | void): void =>
+  test(name, () => withImmediateTimers(fn));
 
 function stubPrismaAndMojang() {
   const nameToUUID = new Map<string, string>();
@@ -389,191 +393,201 @@ async function runOneGame(params: {
   (game as any).addPlayerByDiscordId = origAdd;
 }
 
-test("Two consecutive games: cleanup prevents stale state and scheduled tasks leaking", async () => {
-  const config = ConfigManager.getConfig();
-  const organiserRole = config.roles.organiserRole || "organiser";
+fastTest(
+  "Two consecutive games: cleanup prevents stale state and scheduled tasks leaking",
+  async () => {
+    const config = ConfigManager.getConfig();
+    const organiserRole = config.roles.organiserRole || "organiser";
 
-  // Prevent real restarts from shutting down the test runner.
-  const origRestart = RestartCommand.prototype.restartBot;
-  RestartCommand.prototype.restartBot = () => {};
+    // Prevent real restarts from shutting down the test runner.
+    const origRestart = RestartCommand.prototype.restartBot;
+    RestartCommand.prototype.restartBot = () => {};
 
-  const origSetTimeout = global.setTimeout;
+    const origSetTimeout = global.setTimeout;
 
-  // Stub side effects: messages/VC/roles, feeds, DB, and Mojang.
-  const sent: any[] = [];
-  const origSend = DiscordUtil.sendMessage;
-  const origClean = (DiscordUtil as any).cleanUpAllChannelMessages;
-  const origMoveToVC = (DiscordUtil as any).moveToVC;
-  const origAssignRole = (DiscordUtil as any).assignRole;
-  const origBatchRem = (DiscordUtil as any).batchRemoveRoleFromMembers;
-  const origBatchMove = (DiscordUtil as any).batchMoveMembersToChannel;
+    // Stub side effects: messages/VC/roles, feeds, DB, and Mojang.
+    const sent: any[] = [];
+    const origSend = DiscordUtil.sendMessage;
+    const origClean = (DiscordUtil as any).cleanUpAllChannelMessages;
+    const origMoveToVC = (DiscordUtil as any).moveToVC;
+    const origAssignRole = (DiscordUtil as any).assignRole;
+    const origBatchRem = (DiscordUtil as any).batchRemoveRoleFromMembers;
+    const origBatchMove = (DiscordUtil as any).batchMoveMembersToChannel;
 
-  (DiscordUtil as any).sendMessage = async (_ch: any, content: any) => {
-    sent.push(content);
-  };
-  (DiscordUtil as any).cleanUpAllChannelMessages = async () => {};
-  (DiscordUtil as any).moveToVC = async () => {};
-  (DiscordUtil as any).assignRole = async () => {};
-  (DiscordUtil as any).batchRemoveRoleFromMembers = async () => {};
-  (DiscordUtil as any).batchMoveMembersToChannel = async () => {};
+    (DiscordUtil as any).sendMessage = async (_ch: any, content: any) => {
+      sent.push(content);
+    };
+    (DiscordUtil as any).cleanUpAllChannelMessages = async () => {};
+    (DiscordUtil as any).moveToVC = async () => {};
+    (DiscordUtil as any).assignRole = async () => {};
+    (DiscordUtil as any).batchRemoveRoleFromMembers = async () => {};
+    (DiscordUtil as any).batchMoveMembersToChannel = async () => {};
 
-  const makeSendableChannel = (id: string) => ({
-    id,
-    isSendable: () => true,
-    isTextBased: () => true,
-    send: async (_payload: any) => ({
-      id: `msg-${Math.random()}`,
-      delete: async () => {},
-      edit: async () => {},
-      fetch: async () => ({ poll: null }),
-      embeds: [],
-      poll: null,
-    }),
-    messages: {
-      fetch: async () => null,
-    },
-  });
-
-  (Channels as any).announcements = makeSendableChannel(
-    config.channels.announcements
-  );
-  (Channels as any).registration = makeSendableChannel(
-    config.channels.registration
-  );
-  (Channels as any).gameFeed = {
-    id: config.channels.gameFeed,
-    isSendable: () => true,
-    send: async (_: any) => ({
-      id: `msg-${Math.random()}`,
-      delete: async () => {},
-      edit: async () => {},
-      embeds: [],
-    }),
-    messages: {
-      fetch: async () => null,
-    },
-  } as any;
-
-  stubPrismaAndMojang();
-
-  // Setup a fake guild with organiser + 10 players.
-  const guild = new FakeGuild() as any;
-  const organiser = new FakeGuildMember("org");
-  await organiser.roles.add(organiserRole);
-  makeRoleManagerLike(organiser.roles);
-  guild.addMember(organiser);
-
-  const players: FakeGuildMember[] = [];
-  const playerNames: string[] = [];
-  for (let i = 1; i <= 10; i++) {
-    const id = `p${i}`;
-    const ign = `G${i}`;
-    const member = new FakeGuildMember(id);
-    guild.addMember(member);
-    players.push(member);
-    playerNames.push(ign);
-  }
-
-  // Also create a captain plan DM session and ensure reset clears it.
-  const dmManager = new CaptainPlanDMManager();
-  await dmManager.startForCaptain({
-    client: {
-      users: {
-        fetch: async () =>
-          ({
-            id: "cap-dm",
-            bot: false,
-            send: async () => ({ edit: async () => {} }),
-          }) as any,
+    const makeSendableChannel = (id: string) => ({
+      id,
+      isSendable: () => true,
+      isTextBased: () => true,
+      send: async (_payload: any) => ({
+        id: `msg-${Math.random()}`,
+        delete: async () => {},
+        edit: async () => {},
+        fetch: async () => ({ poll: null }),
+        embeds: [],
+        poll: null,
+      }),
+      messages: {
+        fetch: async () => null,
       },
-    } as any,
-    captainId: "cap-dm",
-    team: "RED",
-    teamList: "A\nB",
-    members: [
-      { id: "cap-dm", ign: "A" },
-      { id: "p1", ign: "B" },
-    ],
-  });
-  assert(
-    dmManager.hasPendingSession("cap-dm"),
-    "sanity: DM session should be pending before reset"
-  );
+    });
 
-  // Leak simulation: a scheduled task that would mutate the next game's map if not canceled.
-  let leakedTaskFired = false;
-  Scheduler.schedule(
-    "mapVote",
-    () => {
-      leakedTaskFired = true;
-      CurrentGameManager.getCurrentGame().settings.map = "AFTERMATH1V1" as any;
-    },
-    new Date(Date.now() + 150)
-  );
+    (Channels as any).announcements = makeSendableChannel(
+      config.channels.announcements
+    );
+    (Channels as any).registration = makeSendableChannel(
+      config.channels.registration
+    );
+    (Channels as any).gameFeed = {
+      id: config.channels.gameFeed,
+      isSendable: () => true,
+      send: async (_: any) => ({
+        id: `msg-${Math.random()}`,
+        delete: async () => {},
+        edit: async () => {},
+        embeds: [],
+      }),
+      messages: {
+        fetch: async () => null,
+      },
+    } as any;
 
-  // Game 1
-  await runOneGame({
-    gameNumber: 1,
-    guild,
-    organiser,
-    players,
-    playerNames,
-    pollMaps: "DUELSTAL, ANDORRA1V1",
-    bannedClasses: "acrobat",
-    classBan: { redCaptainBan: "scout", blueCaptainBan: "transporter" },
-  });
+    stubPrismaAndMojang();
 
-  // Wait long enough that the leaked Scheduler task would have fired if not canceled.
-  await sleep(250);
-  assert(
-    leakedTaskFired === false,
-    "scheduled task should not fire after reset"
-  );
+    // Setup a fake guild with organiser + 10 players.
+    const guild = new FakeGuild() as any;
+    const organiser = new FakeGuildMember("org");
+    await organiser.roles.add(organiserRole);
+    makeRoleManagerLike(organiser.roles);
+    guild.addMember(organiser);
 
-  // Verify game state is reset between games.
-  const afterFirst = CurrentGameManager.getCurrentGame();
-  assert(afterFirst.getPlayers().length === 0, "players cleared after game 1");
-  assert(afterFirst.announced === false, "announced reset after game 1");
-  assert(
-    afterFirst.isFinished === undefined,
-    "isFinished cleared after game 1"
-  );
-  assert(
-    afterFirst.settings.organiserBannedClasses.length === 0,
-    "banned classes cleared after game 1"
-  );
-  assert(
-    afterFirst.settings.modifiers.length === 0,
-    "modifiers cleared after game 1"
-  );
-  assert(
-    dmManager.hasPendingSession("cap-dm") === false,
-    "captain DM sessions cleared after reset"
-  );
+    const players: FakeGuildMember[] = [];
+    const playerNames: string[] = [];
+    for (let i = 1; i <= 10; i++) {
+      const id = `p${i}`;
+      const ign = `G${i}`;
+      const member = new FakeGuildMember(id);
+      guild.addMember(member);
+      players.push(member);
+      playerNames.push(ign);
+    }
 
-  // Game 2 (different announced map and bans) should behave like a fresh process.
-  await runOneGame({
-    gameNumber: 2,
-    guild,
-    organiser,
-    players,
-    playerNames,
-    pollMaps: "AFTERMATH1V1, ANDORRA1V1",
-    bannedClasses: "berserker",
-    classBan: { redCaptainBan: "acrobat", blueCaptainBan: "berserker" },
-  });
+    // Also create a captain plan DM session and ensure reset clears it.
+    const dmManager = new CaptainPlanDMManager();
+    await dmManager.startForCaptain({
+      client: {
+        users: {
+          fetch: async () =>
+            ({
+              id: "cap-dm",
+              bot: false,
+              send: async () => ({ edit: async () => {} }),
+            }) as any,
+        },
+      } as any,
+      captainId: "cap-dm",
+      team: "RED",
+      teamList: "A\nB",
+      members: [
+        { id: "cap-dm", ign: "A" },
+        { id: "p1", ign: "B" },
+      ],
+    });
+    assert(
+      dmManager.hasPendingSession("cap-dm"),
+      "sanity: DM session should be pending before reset"
+    );
 
-  const afterSecond = CurrentGameManager.getCurrentGame();
-  assert(afterSecond.getPlayers().length === 0, "players cleared after game 2");
-  assert(afterSecond.settings.map === undefined, "map cleared after game 2");
+    // Leak simulation: a scheduled task that would mutate the next game's map if not canceled.
+    let leakedTaskFired = false;
+    Scheduler.schedule(
+      "mapVote",
+      () => {
+        leakedTaskFired = true;
+        CurrentGameManager.getCurrentGame().settings.map =
+          "AFTERMATH1V1" as any;
+      },
+      new Date(Date.now() + 150)
+    );
 
-  // Cleanup patches
-  RestartCommand.prototype.restartBot = origRestart;
-  (global as any).setTimeout = origSetTimeout as any;
-  (DiscordUtil as any).sendMessage = origSend;
-  (DiscordUtil as any).cleanUpAllChannelMessages = origClean;
-  (DiscordUtil as any).moveToVC = origMoveToVC;
-  (DiscordUtil as any).assignRole = origAssignRole;
-  (DiscordUtil as any).batchRemoveRoleFromMembers = origBatchRem;
-  (DiscordUtil as any).batchMoveMembersToChannel = origBatchMove;
-});
+    // Game 1
+    await runOneGame({
+      gameNumber: 1,
+      guild,
+      organiser,
+      players,
+      playerNames,
+      pollMaps: "DUELSTAL, ANDORRA1V1",
+      bannedClasses: "acrobat",
+      classBan: { redCaptainBan: "scout", blueCaptainBan: "transporter" },
+    });
+
+    // Wait long enough that the leaked Scheduler task would have fired if not canceled.
+    await sleep(250);
+    assert(
+      leakedTaskFired === false,
+      "scheduled task should not fire after reset"
+    );
+
+    // Verify game state is reset between games.
+    const afterFirst = CurrentGameManager.getCurrentGame();
+    assert(
+      afterFirst.getPlayers().length === 0,
+      "players cleared after game 1"
+    );
+    assert(afterFirst.announced === false, "announced reset after game 1");
+    assert(
+      afterFirst.isFinished === undefined,
+      "isFinished cleared after game 1"
+    );
+    assert(
+      afterFirst.settings.organiserBannedClasses.length === 0,
+      "banned classes cleared after game 1"
+    );
+    assert(
+      afterFirst.settings.modifiers.length === 0,
+      "modifiers cleared after game 1"
+    );
+    assert(
+      dmManager.hasPendingSession("cap-dm") === false,
+      "captain DM sessions cleared after reset"
+    );
+
+    // Game 2 (different announced map and bans) should behave like a fresh process.
+    await runOneGame({
+      gameNumber: 2,
+      guild,
+      organiser,
+      players,
+      playerNames,
+      pollMaps: "AFTERMATH1V1, ANDORRA1V1",
+      bannedClasses: "berserker",
+      classBan: { redCaptainBan: "acrobat", blueCaptainBan: "berserker" },
+    });
+
+    const afterSecond = CurrentGameManager.getCurrentGame();
+    assert(
+      afterSecond.getPlayers().length === 0,
+      "players cleared after game 2"
+    );
+    assert(afterSecond.settings.map === undefined, "map cleared after game 2");
+
+    // Cleanup patches
+    RestartCommand.prototype.restartBot = origRestart;
+    (global as any).setTimeout = origSetTimeout as any;
+    (DiscordUtil as any).sendMessage = origSend;
+    (DiscordUtil as any).cleanUpAllChannelMessages = origClean;
+    (DiscordUtil as any).moveToVC = origMoveToVC;
+    (DiscordUtil as any).assignRole = origAssignRole;
+    (DiscordUtil as any).batchRemoveRoleFromMembers = origBatchRem;
+    (DiscordUtil as any).batchMoveMembersToChannel = origBatchMove;
+  }
+);

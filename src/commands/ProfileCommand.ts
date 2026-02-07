@@ -1,6 +1,7 @@
 import {
   ChatInputCommandInteraction,
   EmbedBuilder,
+  MessageFlags,
   SlashCommandBuilder,
 } from "discord.js";
 import { Command } from "./CommandInterface";
@@ -51,7 +52,7 @@ export default class ProfileCommand implements Command {
     if (!player) {
       await interaction.reply({
         content: "No player found for that input.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }

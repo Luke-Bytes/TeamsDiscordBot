@@ -5,6 +5,7 @@ import {
   ButtonStyle,
   ChatInputCommandInteraction,
   EmbedBuilder,
+  MessageFlags,
   ModalBuilder,
   SlashCommandBuilder,
   StringSelectMenuBuilder,
@@ -115,7 +116,7 @@ export default class ProfileEditCommand implements Command {
       await interaction.reply({
         content:
           "You already have an active profile session. Use the existing menu or press Finish to close it.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -141,7 +142,7 @@ export default class ProfileEditCommand implements Command {
     if (!session) {
       await interaction.reply({
         content: "This profile session has expired. Run /profilecreate again.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -209,7 +210,7 @@ export default class ProfileEditCommand implements Command {
     if (!session) {
       await interaction.reply({
         content: "This session expired — run /profilecreate to continue.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -250,7 +251,6 @@ export default class ProfileEditCommand implements Command {
         content:
           validation.feedback ??
           "Please remove any swears or slurs and try again.",
-        ephemeral: false,
       });
       return;
     }

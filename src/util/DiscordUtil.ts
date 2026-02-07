@@ -4,6 +4,7 @@ import {
   CommandInteraction,
   Guild,
   GuildMember,
+  MessageFlags,
   InteractionReplyOptions,
   InteractionEditReplyOptions,
   Message,
@@ -27,11 +28,11 @@ export class DiscordUtil {
   static async reply(
     interaction: CommandInteraction,
     content: string,
-    ephemeral = true
+    ephemeral = false
   ): Promise<void> {
-    const options = {
+    const options: InteractionReplyOptions = {
       content,
-      ...(ephemeral ? { ephemeral: true } : {}),
+      ...(ephemeral ? { flags: MessageFlags.Ephemeral } : {}),
     };
     await interaction.reply(options);
   }

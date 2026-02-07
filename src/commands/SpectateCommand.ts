@@ -5,6 +5,7 @@ import {
   ButtonStyle,
   ChatInputCommandInteraction,
   GuildMember,
+  MessageFlags,
   SlashCommandBuilder,
 } from "discord.js";
 import { Command } from "./CommandInterface";
@@ -260,7 +261,7 @@ export default class SpectateCommand implements Command {
     if (!pending) {
       await interaction.reply({
         content: "This spectate request has expired.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -269,7 +270,7 @@ export default class SpectateCommand implements Command {
     if (!guild) {
       await interaction.reply({
         content: "This action must be run in a server.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -277,7 +278,7 @@ export default class SpectateCommand implements Command {
     if (interaction.user.id !== pending.targetId) {
       await interaction.reply({
         content: "Only the requested captain/clan leader can accept.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -293,7 +294,7 @@ export default class SpectateCommand implements Command {
     if (!pending) {
       await interaction.reply({
         content: "This spectate request has expired.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -301,7 +302,7 @@ export default class SpectateCommand implements Command {
     if (interaction.user.id !== pending.targetId) {
       await interaction.reply({
         content: "Only the requested captain/clan leader can deny.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -309,7 +310,7 @@ export default class SpectateCommand implements Command {
     this.pendingRequests.delete(requestId);
     await interaction.reply({
       content: "Spectate request denied.",
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
 
@@ -324,7 +325,7 @@ export default class SpectateCommand implements Command {
     if (!targetMember || !this.isCaptainOrClanLeader(targetMember)) {
       await interaction.reply({
         content: "Captain/clan leader is not available anymore.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       this.pendingRequests.delete(pending.requestId);
       return;
@@ -335,7 +336,7 @@ export default class SpectateCommand implements Command {
       await interaction.reply({
         content:
           "You must be in a voice channel to allow spectating for your channel.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -346,7 +347,7 @@ export default class SpectateCommand implements Command {
     if (!requesterMember) {
       await interaction.reply({
         content: "Requester no longer exists in this server.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       this.pendingRequests.delete(pending.requestId);
       return;
@@ -356,7 +357,7 @@ export default class SpectateCommand implements Command {
       await interaction.reply({
         content:
           "Requester must join any voice channel and run `/spectate rejoin`.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -376,7 +377,7 @@ export default class SpectateCommand implements Command {
 
     await interaction.reply({
       content: "Spectate request accepted and user moved.",
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
 

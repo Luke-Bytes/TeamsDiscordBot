@@ -1,3 +1,4 @@
+import { MessageFlags } from "discord.js";
 import { test } from "../framework/test";
 import { assert } from "../framework/assert";
 import TitlesCommand from "../../src/commands/TitlesCommand";
@@ -50,7 +51,10 @@ test("/title rejects non-organiser", async () => {
   i.member = {} as any;
   await cmd.execute(i);
   const reply = i.replies.find((r: any) => r.type === "reply");
-  assert(reply?.payload?.ephemeral === true, "Non-organiser blocked");
+  assert(
+    reply?.payload?.flags === MessageFlags.Ephemeral,
+    "Non-organiser blocked"
+  );
 });
 
 test("/title add/remove updates unlocked titles", async () => {

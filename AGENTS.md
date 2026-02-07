@@ -185,6 +185,7 @@
   - `isUserAuthorised(interaction)`: Ensures organiser role and guild context; replies with errors and returns boolean.
 - `src/util/DiscordUtil.ts`:
   - `reply(interaction, content, ephemeral)`, `editReply(interaction, content)`: Safe interaction responses.
+  - `replyWithMessage(interaction, options)`: Replies using `withResponse` and returns the created message when available (no deprecated `fetchReply`).
   - `assignRole(member, roleId)`, `removeRole(member, roleId)`: Role management with logging and error handling.
   - `moveToVC(guild, vcId, roleId, snowflake)`: Moves a single member to a VC if they have the specified role.
   - `sendMessage(channelKey, content)`: Sends to a configured text channel (via `Channels`).
@@ -222,6 +223,11 @@
   - Implement `Command` interface; keep `data` definition close to the command logic.
   - Use `PermissionsUtil` for channel and role enforcement, `DiscordUtil` for replies/edits/role moves, and `Channels` for pre-fetched channel references.
   - Escape all user-visible identifiers with `escapeText` (usernames, IGNs) to avoid Markdown mishaps. Do not escape internally used values.
+
+- Deprecations to Avoid
+
+  - Do not use `fetchReply` on interaction reply options; use `DiscordUtil.replyWithMessage(...)` with `withResponse` instead.
+  - Do not use `ephemeral` in interaction reply options; use `flags: MessageFlags.Ephemeral`.
 
 - Testing
   - Use the in-repo runner (`npm run tests`). Tests stub Prisma and external APIs; no network.

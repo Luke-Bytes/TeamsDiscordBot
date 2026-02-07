@@ -2,6 +2,7 @@ import {
   Interaction,
   ApplicationCommandOptionType,
   GuildMember,
+  MessageFlags,
 } from "discord.js";
 import { PermissionsUtil } from "./PermissionsUtil";
 import { MessageSafetyUtil } from "./MessageSafetyUtil";
@@ -145,7 +146,6 @@ export class InteractionGuard {
           content:
             validation.feedback ??
             "Please remove slurs or mass mentions and try again.",
-          ephemeral: false,
         });
         return false;
       }
@@ -168,7 +168,10 @@ export class InteractionGuard {
     if (!interaction.isRepliable()) return;
     if (interaction.replied || interaction.deferred) return;
     try {
-      await interaction.reply({ content: message, ephemeral: true });
+      await interaction.reply({
+        content: message,
+        flags: MessageFlags.Ephemeral,
+      });
     } catch {
       // ignore rate-limit reply failures
     }

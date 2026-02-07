@@ -59,9 +59,10 @@ export default class IgnsCommand implements Command {
         "No Minecraft accounts are registered for this user."
       );
     } else {
-      const lines = accounts.map(
-        (acc, idx) => `${idx + 1}. ${escapeText(acc)}`
-      );
+      const lines = accounts
+        .slice()
+        .reverse()
+        .map((acc, idx) => `${idx + 1}. ${escapeText(acc)}`);
       const value = lines.join("\n");
       embed.addFields({ name: "Accounts", value, inline: false });
     }

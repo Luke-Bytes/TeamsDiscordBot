@@ -6,6 +6,7 @@ import {
   ChatInputCommandInteraction,
   EmbedBuilder,
   GuildMember,
+  MessageFlags,
   SlashCommandBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuInteraction,
@@ -64,7 +65,7 @@ export default class TitleCommand implements Command {
     ) {
       await interaction.reply({
         content: "You do not have permission to manage titles.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -75,7 +76,7 @@ export default class TitleCommand implements Command {
     if (!player) {
       await interaction.reply({
         content: "No player found for that input.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -136,7 +137,7 @@ export default class TitleCommand implements Command {
     if (!session) {
       await this.safeReply(interaction, {
         content: "This session has expired. Run /title again.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -175,7 +176,7 @@ export default class TitleCommand implements Command {
       if (!unlocked.length) {
         await this.safeReply(interaction, {
           content: "This player has no titles to remove.",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -202,7 +203,7 @@ export default class TitleCommand implements Command {
     if (!session) {
       await this.safeReply(interaction, {
         content: "This session has expired. Run /title again.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -257,7 +258,10 @@ export default class TitleCommand implements Command {
 
   private async safeReply(
     interaction: ButtonInteraction | StringSelectMenuInteraction,
-    payload: { content: string; ephemeral?: boolean }
+    payload: {
+      content: string;
+      flags?: import("discord.js").InteractionReplyOptions["flags"];
+    }
   ) {
     const canReply =
       typeof interaction.isRepliable === "function"

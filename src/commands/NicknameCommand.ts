@@ -1,4 +1,8 @@
-import { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import {
+  ChatInputCommandInteraction,
+  MessageFlags,
+  SlashCommandBuilder,
+} from "discord.js";
 import { Command } from "./CommandInterface";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { PermissionsUtil } from "../util/PermissionsUtil";
@@ -53,7 +57,7 @@ export default class NicknameCommand implements Command {
       return;
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const targetMember = await interaction.guild.members
       .fetch(targetUser.id)
@@ -67,9 +71,11 @@ export default class NicknameCommand implements Command {
     if (action === "clear") {
       try {
         await targetMember.setNickname(null);
-        await interaction.editReply(
-          `Cleared nickname for ${escapeText(targetUser.tag)}.`
-        );
+        const tag =
+          (targetUser as { tag?: string; username?: string }).tag ??
+          targetUser.username ??
+          targetUser.id;
+        await interaction.editReply(`Cleared nickname for ${escapeText(tag)}.`);
       } catch (error) {
         console.error("Failed to clear nickname:", error);
         await interaction.editReply(
@@ -90,8 +96,12 @@ export default class NicknameCommand implements Command {
     const safeIgn = escapeText(player.latestIGN);
     try {
       await targetMember.setNickname(player.latestIGN);
+      const tag =
+        (targetUser as { tag?: string; username?: string }).tag ??
+        targetUser.username ??
+        targetUser.id;
       await interaction.editReply(
-        `Set nickname for ${escapeText(targetUser.tag)} to **${safeIgn}**.`
+        `Set nickname for ${escapeText(tag)} to **${safeIgn}**.`
       );
     } catch (error) {
       console.error("Failed to set nickname:", error);

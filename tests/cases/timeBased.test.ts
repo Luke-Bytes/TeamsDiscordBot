@@ -13,6 +13,9 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+const fastTest = (name: string, fn: () => Promise<void> | void): void =>
+  test(name, () => withImmediateTimers(fn));
+
 function mkPlayer(id: string, ign: string, captain = false) {
   return {
     discordSnowflake: id,
@@ -58,7 +61,7 @@ function stubTeamPickingChannel(
   } as any;
 }
 
-test("Captain 20m reminder posts to game-feed", async () => {
+fastTest("Captain 20m reminder posts to game-feed", async () => {
   const game = CurrentGameManager.getCurrentGame();
   game.reset();
   const base = Date.now();
@@ -105,296 +108,315 @@ test("Captain 20m reminder posts to game-feed", async () => {
   }
 });
 
-test("Captain 20m reminder does not post when both captains already set", async () => {
-  const game = CurrentGameManager.getCurrentGame();
-  game.reset();
-  const base = Date.now();
-  game.startTime = new Date(base + 20 * 60 * 1000 + 10);
+fastTest(
+  "Captain 20m reminder does not post when both captains already set",
+  async () => {
+    const game = CurrentGameManager.getCurrentGame();
+    game.reset();
+    const base = Date.now();
+    game.startTime = new Date(base + 20 * 60 * 1000 + 10);
 
-  const redCap = {
-    discordSnowflake: "R-CAP",
-    ignUsed: "RedCap",
-    elo: 1000,
-    captain: true,
-  } as any;
-  const blueCap = {
-    discordSnowflake: "B-CAP",
-    ignUsed: "BlueCap",
-    elo: 1000,
-    captain: true,
-  } as any;
-  (game as any).teams = { RED: [redCap], BLUE: [blueCap], UNDECIDED: [] };
+    const redCap = {
+      discordSnowflake: "R-CAP",
+      ignUsed: "RedCap",
+      elo: 1000,
+      captain: true,
+    } as any;
+    const blueCap = {
+      discordSnowflake: "B-CAP",
+      ignUsed: "BlueCap",
+      elo: 1000,
+      captain: true,
+    } as any;
+    (game as any).teams = { RED: [redCap], BLUE: [blueCap], UNDECIDED: [] };
 
-  const sent: any[] = [];
-  const origSend = DiscordUtil.sendMessage;
-  (DiscordUtil as any).sendMessage = async (
-    channelKey: string,
-    content: any
-  ) => {
-    sent.push({ channelKey, content });
-  };
+    const sent: any[] = [];
+    const origSend = DiscordUtil.sendMessage;
+    (DiscordUtil as any).sendMessage = async (
+      channelKey: string,
+      content: any
+    ) => {
+      sent.push({ channelKey, content });
+    };
 
-  const guild = new FakeGuild() as any;
-  const origNow = Date.now;
-  (Date as any).now = () => base;
-  try {
-    await withImmediateTimers(async () => {
-      CurrentGameManager.scheduleCaptainTimers(guild);
-      for (let i = 0; i < 5; i++) {
+    const guild = new FakeGuild() as any;
+    const origNow = Date.now;
+    (Date as any).now = () => base;
+    try {
+      await withImmediateTimers(async () => {
+        CurrentGameManager.scheduleCaptainTimers(guild);
+        for (let i = 0; i < 5; i++) {
+          await new Promise((r) => setImmediate(r));
+        }
+      });
+      const reminder = sent.find(
+        (s) =>
+          s.channelKey === "gameFeed" &&
+          /Captains are still needed/i.test(String(s.content))
+      );
+      assert(!reminder, "Should not send 20m captains reminder when both set");
+    } finally {
+      (DiscordUtil as any).sendMessage = origSend;
+      (Date as any).now = origNow;
+    }
+  }
+);
+
+fastTest(
+  "Captain 15m enforcement auto-selects two captains and announces",
+  async () => {
+    const base = Date.now();
+    const game = CurrentGameManager.getCurrentGame();
+    game.reset();
+    // Registered players with ELO and presences
+    const guild = new FakeGuild() as any;
+    const p1 = new FakeGuildMember("u1050") as any;
+    (p1 as any).presence = { status: "online" };
+    const p2 = new FakeGuildMember("u1060") as any;
+    (p2 as any).presence = { status: "idle" };
+    const p3 = new FakeGuildMember("u1070") as any;
+    (p3 as any).presence = { status: "dnd" };
+    guild.addMember(p1);
+    guild.addMember(p2);
+    guild.addMember(p3);
+    (game as any).teams = {
+      RED: [],
+      BLUE: [],
+      UNDECIDED: [
+        { discordSnowflake: "u1050", ignUsed: "P1050", elo: 1050 },
+        { discordSnowflake: "u1060", ignUsed: "P1060", elo: 1060 },
+        { discordSnowflake: "u1070", ignUsed: "P1070", elo: 1070 },
+      ],
+    };
+
+    const sent: any[] = [];
+    const origSend = DiscordUtil.sendMessage;
+    (DiscordUtil as any).sendMessage = async (
+      channelKey: string,
+      content: any
+    ) => {
+      sent.push({ channelKey, content });
+    };
+    // Ensure captain role operations don't throw
+    const origAssignRole = (DiscordUtil as any).assignRole;
+    (DiscordUtil as any).assignRole = async () => {};
+
+    // Make selection deterministic
+    const origRand = Math.random;
+    Math.random = () => 0; // pick first eligible as first
+
+    const origNow = Date.now;
+    game.startTime = new Date(base + 15 * 60 * 1000 + 10);
+    (Date as any).now = () => base;
+    try {
+      await withImmediateTimers(async () => {
+        CurrentGameManager.scheduleCaptainTimers(guild);
         await new Promise((r) => setImmediate(r));
-      }
-    });
-    const reminder = sent.find(
-      (s) =>
-        s.channelKey === "gameFeed" &&
-        /Captains are still needed/i.test(String(s.content))
-    );
-    assert(!reminder, "Should not send 20m captains reminder when both set");
-  } finally {
-    (DiscordUtil as any).sendMessage = origSend;
-    (Date as any).now = origNow;
+      });
+      const blueCap = game.getCaptainOfTeam("BLUE");
+      const redCap = game.getCaptainOfTeam("RED");
+      assert(!!blueCap && !!redCap, "Two captains should be auto-selected");
+      assert(
+        blueCap!.ignUsed === "P1050",
+        "First captain should be P1050 (BLUE)"
+      );
+      assert(
+        redCap!.ignUsed === "P1060",
+        "Second captain should be P1060 (RED)"
+      );
+      const announce = sent.find(
+        (s) =>
+          s.channelKey === "gameFeed" &&
+          /auto-selected/i.test(String(s.content))
+      );
+      assert(!!announce, "Should announce auto-selected captains to gameFeed");
+    } finally {
+      (DiscordUtil as any).sendMessage = origSend;
+      (DiscordUtil as any).assignRole = origAssignRole;
+      Math.random = origRand;
+      (Date as any).now = origNow;
+    }
   }
-});
+);
 
-test("Captain 15m enforcement auto-selects two captains and announces", async () => {
-  const base = Date.now();
-  const game = CurrentGameManager.getCurrentGame();
-  game.reset();
-  // Registered players with ELO and presences
-  const guild = new FakeGuild() as any;
-  const p1 = new FakeGuildMember("u1050") as any;
-  (p1 as any).presence = { status: "online" };
-  const p2 = new FakeGuildMember("u1060") as any;
-  (p2 as any).presence = { status: "idle" };
-  const p3 = new FakeGuildMember("u1070") as any;
-  (p3 as any).presence = { status: "dnd" };
-  guild.addMember(p1);
-  guild.addMember(p2);
-  guild.addMember(p3);
-  (game as any).teams = {
-    RED: [],
-    BLUE: [],
-    UNDECIDED: [
-      { discordSnowflake: "u1050", ignUsed: "P1050", elo: 1050 },
-      { discordSnowflake: "u1060", ignUsed: "P1060", elo: 1060 },
-      { discordSnowflake: "u1070", ignUsed: "P1070", elo: 1070 },
-    ],
-  };
+fastTest(
+  "Captain 15m enforcement auto-starts draft when captains already set and even",
+  async () => {
+    const base = Date.now();
+    const game = CurrentGameManager.getCurrentGame();
+    game.reset();
 
-  const sent: any[] = [];
-  const origSend = DiscordUtil.sendMessage;
-  (DiscordUtil as any).sendMessage = async (
-    channelKey: string,
-    content: any
-  ) => {
-    sent.push({ channelKey, content });
-  };
-  // Ensure captain role operations don't throw
-  const origAssignRole = (DiscordUtil as any).assignRole;
-  (DiscordUtil as any).assignRole = async () => {};
+    const redCap = {
+      discordSnowflake: "R-CAP",
+      ignUsed: "RedCap",
+      elo: 1100,
+      captain: true,
+    } as any;
+    const blueCap = {
+      discordSnowflake: "B-CAP",
+      ignUsed: "BlueCap",
+      elo: 1120,
+      captain: true,
+    } as any;
+    (game as any).teams = {
+      RED: [redCap],
+      BLUE: [blueCap],
+      UNDECIDED: [
+        mkPlayer("U1", "UndecidedOne"),
+        mkPlayer("U2", "UndecidedTwo"),
+      ],
+    };
 
-  // Make selection deterministic
-  const origRand = Math.random;
-  Math.random = () => 0; // pick first eligible as first
+    const sent: any[] = [];
+    const origSend = DiscordUtil.sendMessage;
+    (DiscordUtil as any).sendMessage = async (
+      channelKey: string,
+      content: any
+    ) => {
+      sent.push({ channelKey, content });
+    };
 
-  const origNow = Date.now;
-  game.startTime = new Date(base + 15 * 60 * 1000 + 10);
-  (Date as any).now = () => base;
-  try {
-    await withImmediateTimers(async () => {
-      CurrentGameManager.scheduleCaptainTimers(guild);
-      await new Promise((r) => setImmediate(r));
-    });
-    const blueCap = game.getCaptainOfTeam("BLUE");
-    const redCap = game.getCaptainOfTeam("RED");
-    assert(!!blueCap && !!redCap, "Two captains should be auto-selected");
-    assert(
-      blueCap!.ignUsed === "P1050",
-      "First captain should be P1050 (BLUE)"
-    );
-    assert(redCap!.ignUsed === "P1060", "Second captain should be P1060 (RED)");
-    const announce = sent.find(
-      (s) =>
-        s.channelKey === "gameFeed" && /auto-selected/i.test(String(s.content))
-    );
-    assert(!!announce, "Should announce auto-selected captains to gameFeed");
-  } finally {
-    (DiscordUtil as any).sendMessage = origSend;
-    (DiscordUtil as any).assignRole = origAssignRole;
-    Math.random = origRand;
-    (Date as any).now = origNow;
-  }
-});
+    const guild = new FakeGuild() as any;
+    const origNow = Date.now;
+    game.startTime = new Date(base + 15 * 60 * 1000 + 10);
+    (Date as any).now = () => base;
 
-test("Captain 15m enforcement auto-starts draft when captains already set and even", async () => {
-  const base = Date.now();
-  const game = CurrentGameManager.getCurrentGame();
-  game.reset();
+    const teamCommand = new TeamCommand();
+    const origInit = DraftTeamPickingSession.prototype.initialize;
+    let initCalled = false;
+    DraftTeamPickingSession.prototype.initialize = async function (_i: any) {
+      initCalled = true;
+      this.state = "inProgress";
+    };
 
-  const redCap = {
-    discordSnowflake: "R-CAP",
-    ignUsed: "RedCap",
-    elo: 1100,
-    captain: true,
-  } as any;
-  const blueCap = {
-    discordSnowflake: "B-CAP",
-    ignUsed: "BlueCap",
-    elo: 1120,
-    captain: true,
-  } as any;
-  (game as any).teams = {
-    RED: [redCap],
-    BLUE: [blueCap],
-    UNDECIDED: [mkPlayer("U1", "UndecidedOne"), mkPlayer("U2", "UndecidedTwo")],
-  };
+    const originalChannel = Channels.teamPicking;
+    Channels.teamPicking = stubTeamPickingChannel([], []);
+    const originalRegistration = (Channels as any).registration;
+    (Channels as any).registration = stubTeamPickingChannel([], []);
 
-  const sent: any[] = [];
-  const origSend = DiscordUtil.sendMessage;
-  (DiscordUtil as any).sendMessage = async (
-    channelKey: string,
-    content: any
-  ) => {
-    sent.push({ channelKey, content });
-  };
-
-  const guild = new FakeGuild() as any;
-  const origNow = Date.now;
-  game.startTime = new Date(base + 15 * 60 * 1000 + 10);
-  (Date as any).now = () => base;
-
-  const teamCommand = new TeamCommand();
-  const origInit = DraftTeamPickingSession.prototype.initialize;
-  let initCalled = false;
-  DraftTeamPickingSession.prototype.initialize = async function (_i: any) {
-    initCalled = true;
-    this.state = "inProgress";
-  };
-
-  const originalChannel = Channels.teamPicking;
-  Channels.teamPicking = stubTeamPickingChannel([], []);
-  const originalRegistration = (Channels as any).registration;
-  (Channels as any).registration = stubTeamPickingChannel([], []);
-
-  try {
-    await withImmediateTimers(async () => {
-      CurrentGameManager.scheduleCaptainTimers(guild);
-      await new Promise((r) => setImmediate(r));
-    });
-    assert(initCalled, "Draft session should initialize at 15m");
-    assert(
-      teamCommand.teamPickingSession instanceof DraftTeamPickingSession,
-      "TeamCommand should hold the draft session"
-    );
-    const waitNotice = sent.find(
-      (s) =>
-        s.channelKey === "registration" &&
-        /waiting 1 minute/i.test(String(s.content))
-    );
-    assert(!waitNotice, "Even count should not trigger wait notice");
-  } finally {
-    (DiscordUtil as any).sendMessage = origSend;
-    DraftTeamPickingSession.prototype.initialize = origInit;
-    Channels.teamPicking = originalChannel;
-    (Channels as any).registration = originalRegistration;
-    (Date as any).now = origNow;
-    TeamCommand.instance = undefined;
-  }
-});
-
-test("Captain 15m enforcement waits on odd players then removes last register", async () => {
-  const base = Date.now();
-  const game = CurrentGameManager.getCurrentGame();
-  game.reset();
-
-  const redCap = {
-    discordSnowflake: "R-CAP",
-    ignUsed: "RedCap",
-    elo: 1100,
-    captain: true,
-  } as any;
-  const blueCap = {
-    discordSnowflake: "B-CAP",
-    ignUsed: "BlueCap",
-    elo: 1120,
-    captain: true,
-  } as any;
-  (game as any).teams = {
-    RED: [redCap],
-    BLUE: [blueCap],
-    UNDECIDED: [mkPlayer("U1", "UndecidedOne")],
-  };
-  game.lastRegisteredSnowflake = "U1";
-
-  const sent: any[] = [];
-  const origSend = DiscordUtil.sendMessage;
-  (DiscordUtil as any).sendMessage = async (
-    channelKey: string,
-    content: any
-  ) => {
-    sent.push({ channelKey, content });
-  };
-
-  const guild = new FakeGuild() as any;
-  const origNow = Date.now;
-  game.startTime = new Date(base + 15 * 60 * 1000 + 10);
-  (Date as any).now = () => base;
-
-  new TeamCommand();
-  const origInit = DraftTeamPickingSession.prototype.initialize;
-  let initCalled = false;
-  DraftTeamPickingSession.prototype.initialize = async function (_i: any) {
-    initCalled = true;
-    this.state = "inProgress";
-  };
-
-  const originalChannel = Channels.teamPicking;
-  Channels.teamPicking = stubTeamPickingChannel([], []);
-  const originalRegistration = (Channels as any).registration;
-  (Channels as any).registration = stubTeamPickingChannel([], []);
-
-  try {
-    await withImmediateTimers(async () => {
-      CurrentGameManager.scheduleCaptainTimers(guild);
-      let removalSeen = false;
-      for (let i = 0; i < 10; i++) {
+    try {
+      await withImmediateTimers(async () => {
+        CurrentGameManager.scheduleCaptainTimers(guild);
         await new Promise((r) => setImmediate(r));
-        removalSeen = sent.some(
-          (s) =>
-            s.channelKey === "registration" &&
-            /has been removed/i.test(String(s.content))
-        );
-        if (removalSeen) break;
-      }
-    });
-    const waitNotice = sent.find(
-      (s) =>
-        s.channelKey === "registration" &&
-        /waiting 1 minute/i.test(String(s.content))
-    );
-    const removalNotice = sent.find(
-      (s) =>
-        s.channelKey === "registration" &&
-        /has been removed/i.test(String(s.content))
-    );
-    assert(!!waitNotice, "Odd count should trigger wait notice");
-    assert(!!removalNotice, "Should announce auto-removal after wait");
-    assert(initCalled, "Draft session should start after removal");
-    assert(
-      game.getPlayers().every((p: any) => p.discordSnowflake !== "U1"),
-      "Last registered player should be removed"
-    );
-  } finally {
-    (DiscordUtil as any).sendMessage = origSend;
-    DraftTeamPickingSession.prototype.initialize = origInit;
-    Channels.teamPicking = originalChannel;
-    (Channels as any).registration = originalRegistration;
-    (Date as any).now = origNow;
-    TeamCommand.instance = undefined;
+      });
+      assert(initCalled, "Draft session should initialize at 15m");
+      assert(
+        teamCommand.teamPickingSession instanceof DraftTeamPickingSession,
+        "TeamCommand should hold the draft session"
+      );
+      const waitNotice = sent.find(
+        (s) =>
+          s.channelKey === "registration" &&
+          /waiting 1 minute/i.test(String(s.content))
+      );
+      assert(!waitNotice, "Even count should not trigger wait notice");
+    } finally {
+      (DiscordUtil as any).sendMessage = origSend;
+      DraftTeamPickingSession.prototype.initialize = origInit;
+      Channels.teamPicking = originalChannel;
+      (Channels as any).registration = originalRegistration;
+      (Date as any).now = origNow;
+      TeamCommand.instance = undefined;
+    }
   }
-});
+);
 
-test("Class-ban 1m reminders and deadline summary", async () => {
+fastTest(
+  "Captain 15m enforcement waits on odd players then removes last register",
+  async () => {
+    const base = Date.now();
+    const game = CurrentGameManager.getCurrentGame();
+    game.reset();
+
+    const redCap = {
+      discordSnowflake: "R-CAP",
+      ignUsed: "RedCap",
+      elo: 1100,
+      captain: true,
+    } as any;
+    const blueCap = {
+      discordSnowflake: "B-CAP",
+      ignUsed: "BlueCap",
+      elo: 1120,
+      captain: true,
+    } as any;
+    (game as any).teams = {
+      RED: [redCap],
+      BLUE: [blueCap],
+      UNDECIDED: [mkPlayer("U1", "UndecidedOne")],
+    };
+    game.lastRegisteredSnowflake = "U1";
+
+    const sent: any[] = [];
+    const origSend = DiscordUtil.sendMessage;
+    (DiscordUtil as any).sendMessage = async (
+      channelKey: string,
+      content: any
+    ) => {
+      sent.push({ channelKey, content });
+    };
+
+    const guild = new FakeGuild() as any;
+    const origNow = Date.now;
+    game.startTime = new Date(base + 15 * 60 * 1000 + 10);
+    (Date as any).now = () => base;
+
+    new TeamCommand();
+    const origInit = DraftTeamPickingSession.prototype.initialize;
+    let initCalled = false;
+    DraftTeamPickingSession.prototype.initialize = async function (_i: any) {
+      initCalled = true;
+      this.state = "inProgress";
+    };
+
+    const originalChannel = Channels.teamPicking;
+    Channels.teamPicking = stubTeamPickingChannel([], []);
+    const originalRegistration = (Channels as any).registration;
+    (Channels as any).registration = stubTeamPickingChannel([], []);
+
+    try {
+      await withImmediateTimers(async () => {
+        CurrentGameManager.scheduleCaptainTimers(guild);
+        let removalSeen = false;
+        for (let i = 0; i < 10; i++) {
+          await new Promise((r) => setImmediate(r));
+          removalSeen = sent.some(
+            (s) =>
+              s.channelKey === "registration" &&
+              /has been removed/i.test(String(s.content))
+          );
+          if (removalSeen) break;
+        }
+      });
+      const waitNotice = sent.find(
+        (s) =>
+          s.channelKey === "registration" &&
+          /waiting 1 minute/i.test(String(s.content))
+      );
+      const removalNotice = sent.find(
+        (s) =>
+          s.channelKey === "registration" &&
+          /has been removed/i.test(String(s.content))
+      );
+      assert(!!waitNotice, "Odd count should trigger wait notice");
+      assert(!!removalNotice, "Should announce auto-removal after wait");
+      assert(initCalled, "Draft session should start after removal");
+      assert(
+        game.getPlayers().every((p: any) => p.discordSnowflake !== "U1"),
+        "Last registered player should be removed"
+      );
+    } finally {
+      (DiscordUtil as any).sendMessage = origSend;
+      DraftTeamPickingSession.prototype.initialize = origInit;
+      Channels.teamPicking = originalChannel;
+      (Channels as any).registration = originalRegistration;
+      (Date as any).now = origNow;
+      TeamCommand.instance = undefined;
+    }
+  }
+);
+
+fastTest("Class-ban 1m reminders and deadline summary", async () => {
   const base = Date.now();
   const game = CurrentGameManager.getCurrentGame();
   game.reset();
@@ -478,74 +500,77 @@ test("Class-ban 1m reminders and deadline summary", async () => {
   }
 });
 
-test("Draft auto-pick fires after timeout using the eligible pool", async () => {
-  const session = new DraftTeamPickingSession();
-  (session as any).embedMessage = { edit: async () => {} };
-  session.redCaptain = {
-    discordSnowflake: "capR",
-    captain: true,
-  } as any;
-  session.blueCaptain = {
-    discordSnowflake: "capB",
-    captain: true,
-  } as any;
-  session.proposedTeams.RED = [];
-  session.proposedTeams.BLUE = [];
-  session.proposedTeams.UNDECIDED = [
-    { discordSnowflake: "p1", ignUsed: "Alpha" } as any,
-    { discordSnowflake: "p2", ignUsed: "Bravo" } as any,
-    { discordSnowflake: "p3", ignUsed: "Charlie" } as any,
-  ];
-  session.turn = "RED";
+fastTest(
+  "Draft auto-pick fires after timeout using the eligible pool",
+  async () => {
+    const session = new DraftTeamPickingSession();
+    (session as any).embedMessage = { edit: async () => {} };
+    session.redCaptain = {
+      discordSnowflake: "capR",
+      captain: true,
+    } as any;
+    session.blueCaptain = {
+      discordSnowflake: "capB",
+      captain: true,
+    } as any;
+    session.proposedTeams.RED = [];
+    session.proposedTeams.BLUE = [];
+    session.proposedTeams.UNDECIDED = [
+      { discordSnowflake: "p1", ignUsed: "Alpha" } as any,
+      { discordSnowflake: "p2", ignUsed: "Bravo" } as any,
+      { discordSnowflake: "p3", ignUsed: "Charlie" } as any,
+    ];
+    session.turn = "RED";
 
-  const sentMessages: string[] = [];
-  const dmMessages: string[] = [];
-  const originalChannel = Channels.teamPicking;
-  Channels.teamPicking = stubTeamPickingChannel(sentMessages, dmMessages);
+    const sentMessages: string[] = [];
+    const dmMessages: string[] = [];
+    const originalChannel = Channels.teamPicking;
+    Channels.teamPicking = stubTeamPickingChannel(sentMessages, dmMessages);
 
-  const originalSendTurnMessage = (session as any).sendTurnMessage;
-  (session as any).sendTurnMessage = async () => {};
+    const originalSendTurnMessage = (session as any).sendTurnMessage;
+    (session as any).sendTurnMessage = async () => {};
 
-  const originalRandom = Math.random;
-  Math.random = () => 0; // deterministically pick p1
+    const originalRandom = Math.random;
+    Math.random = () => 0; // deterministically pick p1
 
-  try {
-    await withImmediateTimers(async () => {
-      (session as any).startTurnTimer();
-      await new Promise((resolve) => setImmediate(resolve));
-    });
-    assert(
-      session.proposedTeams.RED.some(
-        (p: PlayerInstance) => p.discordSnowflake === "p1"
-      ),
-      "Auto pick should move the randomly selected player to the current team"
-    );
-    assert(
-      !session.proposedTeams.UNDECIDED.some(
-        (p: PlayerInstance) => p.discordSnowflake === "p1"
-      ),
-      "Auto-picked player must be removed from the undecided pool"
-    );
-    assert(
-      sentMessages.some((msg) => /auto-picked/i.test(msg)),
-      "Channel should announce the auto-pick"
-    );
-    assert(
-      dmMessages.length === 1,
-      "Opening pick should DM the captain with the one-minute reminder"
-    );
-  } finally {
-    Math.random = originalRandom;
-    Channels.teamPicking = originalChannel;
-    if (originalSendTurnMessage) {
-      (session as any).sendTurnMessage = originalSendTurnMessage;
-    } else {
-      delete (session as any).sendTurnMessage;
+    try {
+      await withImmediateTimers(async () => {
+        (session as any).startTurnTimer();
+        await new Promise((resolve) => setImmediate(resolve));
+      });
+      assert(
+        session.proposedTeams.RED.some(
+          (p: PlayerInstance) => p.discordSnowflake === "p1"
+        ),
+        "Auto pick should move the randomly selected player to the current team"
+      );
+      assert(
+        !session.proposedTeams.UNDECIDED.some(
+          (p: PlayerInstance) => p.discordSnowflake === "p1"
+        ),
+        "Auto-picked player must be removed from the undecided pool"
+      );
+      assert(
+        sentMessages.some((msg) => /auto-picked/i.test(msg)),
+        "Channel should announce the auto-pick"
+      );
+      assert(
+        dmMessages.length === 1,
+        "Opening pick should DM the captain with the one-minute reminder"
+      );
+    } finally {
+      Math.random = originalRandom;
+      Channels.teamPicking = originalChannel;
+      if (originalSendTurnMessage) {
+        (session as any).sendTurnMessage = originalSendTurnMessage;
+      } else {
+        delete (session as any).sendTurnMessage;
+      }
     }
   }
-});
+);
 
-test("Draft cancel clears any pending auto-pick timers", async () => {
+fastTest("Draft cancel clears any pending auto-pick timers", async () => {
   const session = new DraftTeamPickingSession();
   (session as any).embedMessage = { delete: async () => {} };
   const sentMessages: string[] = [];
@@ -578,58 +603,61 @@ test("Draft cancel clears any pending auto-pick timers", async () => {
   }
 });
 
-test("Draft timers skip DM after the opening pick but still warn the channel", async () => {
-  const session = new DraftTeamPickingSession();
-  (session as any).embedMessage = { edit: async () => {} };
-  session.redCaptain = {
-    discordSnowflake: "capR",
-    captain: true,
-  } as any;
-  session.blueCaptain = {
-    discordSnowflake: "capB",
-    captain: true,
-  } as any;
-  session.proposedTeams.RED = [];
-  session.proposedTeams.BLUE = [];
-  session.proposedTeams.UNDECIDED = [
-    { discordSnowflake: "p1", ignUsed: "Alpha" } as any,
-    { discordSnowflake: "p2", ignUsed: "Bravo" } as any,
-    { discordSnowflake: "p3", ignUsed: "Charlie" } as any,
-  ];
-  session.turn = "RED";
-  (session as any).pickCounts.RED = 1; // already made opening pick
+fastTest(
+  "Draft timers skip DM after the opening pick but still warn the channel",
+  async () => {
+    const session = new DraftTeamPickingSession();
+    (session as any).embedMessage = { edit: async () => {} };
+    session.redCaptain = {
+      discordSnowflake: "capR",
+      captain: true,
+    } as any;
+    session.blueCaptain = {
+      discordSnowflake: "capB",
+      captain: true,
+    } as any;
+    session.proposedTeams.RED = [];
+    session.proposedTeams.BLUE = [];
+    session.proposedTeams.UNDECIDED = [
+      { discordSnowflake: "p1", ignUsed: "Alpha" } as any,
+      { discordSnowflake: "p2", ignUsed: "Bravo" } as any,
+      { discordSnowflake: "p3", ignUsed: "Charlie" } as any,
+    ];
+    session.turn = "RED";
+    (session as any).pickCounts.RED = 1; // already made opening pick
 
-  const sentMessages: string[] = [];
-  const dmMessages: string[] = [];
-  const originalChannel = Channels.teamPicking;
-  Channels.teamPicking = stubTeamPickingChannel(sentMessages, dmMessages);
+    const sentMessages: string[] = [];
+    const dmMessages: string[] = [];
+    const originalChannel = Channels.teamPicking;
+    Channels.teamPicking = stubTeamPickingChannel(sentMessages, dmMessages);
 
-  const originalSendTurnMessage = (session as any).sendTurnMessage;
-  (session as any).sendTurnMessage = async () => {};
+    const originalSendTurnMessage = (session as any).sendTurnMessage;
+    (session as any).sendTurnMessage = async () => {};
 
-  const originalRandom = Math.random;
-  Math.random = () => 0;
+    const originalRandom = Math.random;
+    Math.random = () => 0;
 
-  try {
-    await withImmediateTimers(async () => {
-      (session as any).startTurnTimer();
-      await new Promise((resolve) => setImmediate(resolve));
-    });
-    assert(
-      dmMessages.length === 0,
-      "Subsequent picks should not DM the captain"
-    );
-    assert(
-      sentMessages.some((msg) => /15 seconds/i.test(msg)),
-      "The turn warning should mention the 15 second threshold"
-    );
-  } finally {
-    Math.random = originalRandom;
-    Channels.teamPicking = originalChannel;
-    if (originalSendTurnMessage) {
-      (session as any).sendTurnMessage = originalSendTurnMessage;
-    } else {
-      delete (session as any).sendTurnMessage;
+    try {
+      await withImmediateTimers(async () => {
+        (session as any).startTurnTimer();
+        await new Promise((resolve) => setImmediate(resolve));
+      });
+      assert(
+        dmMessages.length === 0,
+        "Subsequent picks should not DM the captain"
+      );
+      assert(
+        sentMessages.some((msg) => /15 seconds/i.test(msg)),
+        "The turn warning should mention the 15 second threshold"
+      );
+    } finally {
+      Math.random = originalRandom;
+      Channels.teamPicking = originalChannel;
+      if (originalSendTurnMessage) {
+        (session as any).sendTurnMessage = originalSendTurnMessage;
+      } else {
+        delete (session as any).sendTurnMessage;
+      }
     }
   }
-});
+);
