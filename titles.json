@@ -27,6 +27,11 @@
   {
     "id": "UNYIELDING",
     "label": "Unyielding",
+    "reason": "Win 25+ games (lifetime)"
+  },
+  {
+    "id": "CARRY",
+    "label": "Carry",
     "reason": "Win 50+ games (lifetime)"
   },
   {

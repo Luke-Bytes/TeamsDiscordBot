@@ -30,7 +30,6 @@ export class PrismaSafeExtractor {
       "safeFindGamesForHostOrganiserCounts",
       {
         find: "Game",
-        filter: { organiser: { $ne: null }, host: { $ne: null } },
         projection: { organiser: 1, host: 1, _id: 0 },
       },
       (row) => {

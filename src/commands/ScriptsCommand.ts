@@ -221,18 +221,34 @@ export default class ScriptsCommand implements Command {
     const hostCounts = new Map<string, number>();
     const games = await PrismaUtils.safeFindGamesForHostOrganiserCounts();
     for (const game of games) {
-      const organiserId = game.organiser
-        ? playerByIgn.get(game.organiser.toLowerCase())
+      const organiserKey = game.organiser
+        ? game.organiser.trim().toLowerCase()
+        : null;
+      const hostKey = game.host ? game.host.trim().toLowerCase() : null;
+      const organiserId = organiserKey
+        ? playerByIgn.get(organiserKey)
         : undefined;
-      const hostId = game.host
-        ? playerByIgn.get(game.host.toLowerCase())
-        : undefined;
+      const hostId = hostKey ? playerByIgn.get(hostKey) : undefined;
       if (organiserId) {
         hostCounts.set(organiserId, (hostCounts.get(organiserId) ?? 0) + 1);
       }
       if (hostId) {
         hostCounts.set(hostId, (hostCounts.get(hostId) ?? 0) + 1);
       }
+    }
+
+    const debugPlayerIds = new Set<string>();
+    for (const id of lifetimeStats.keys()) debugPlayerIds.add(id);
+    for (const id of mvpCounts.keys()) debugPlayerIds.add(id);
+    for (const id of captainWinCounts.keys()) debugPlayerIds.add(id);
+    for (const id of hostCounts.keys()) debugPlayerIds.add(id);
+    for (const playerId of debugPlayerIds) {
+      const ign = ignByPlayerId.get(playerId) ?? "Unknown";
+      const life = lifetimeStats.get(playerId) ?? { wins: 0, losses: 0 };
+      const gamesPlayed = life.wins + life.losses;
+      console.log(
+        `[TitlesDebug] playerId=${playerId} ign=${ign} wins=${life.wins} losses=${life.losses} games=${gamesPlayed} mvp=${mvpCounts.get(playerId) ?? 0} captainWins=${captainWinCounts.get(playerId) ?? 0} hostOrOrganiser=${hostCounts.get(playerId) ?? 0}`
+      );
     }
 
     const seasons = await prismaClient.season.findMany({
@@ -253,8 +269,9 @@ export default class ScriptsCommand implements Command {
 
     for (const [playerId, stats] of lifetimeStats) {
       const gamesPlayed = stats.wins + stats.losses;
-      if (stats.wins >= 200) ensureAward(playerId, "WARFORGED");
-      if (gamesPlayed >= 250) ensureAward(playerId, "VETERAN");
+      if (stats.wins >= 25) ensureAward(playerId, "UNYIELDING");
+      if (stats.wins >= 50) ensureAward(playerId, "CARRY");
+      if (gamesPlayed >= 100) ensureAward(playerId, "VETERAN");
     }
 
     for (const [playerId, count] of mvpCounts) {
@@ -266,7 +283,7 @@ export default class ScriptsCommand implements Command {
     }
 
     for (const [playerId, count] of hostCounts) {
-      if (count >= 100) ensureAward(playerId, "OVERSEER");
+      if (count >= 25) ensureAward(playerId, "OVERSEER");
     }
 
     const snapshot: TitlesUpdateSnapshot = {
