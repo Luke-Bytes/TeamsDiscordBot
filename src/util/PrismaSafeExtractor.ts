@@ -1,7 +1,7 @@
 import { prismaClient } from "../database/prismaClient";
 
 type MongoBatchResult = {
-  cursor?: { firstBatch?: unknown[]; id?: unknown; ns?: string };
+  cursor?: { firstBatch?: unknown[] };
 };
 
 export class PrismaSafeExtractor {
@@ -12,21 +12,19 @@ export class PrismaSafeExtractor {
     fallback: T[]
   ): Promise<T[]> {
     try {
-      const initial = (await prismaClient.$runCommandRaw(
-        command
+      const base = command as {
+        find?: string;
+        batchSize?: number;
+        singleBatch?: boolean;
+      };
+      const enriched =
+        base.find && !base.singleBatch
+          ? { ...base, batchSize: base.batchSize ?? 10000, singleBatch: true }
+          : base;
+      const result = (await prismaClient.$runCommandRaw(
+        enriched
       )) as MongoBatchResult;
-      const items: unknown[] = [...(initial.cursor?.firstBatch ?? [])];
-      const collection = (command as { find?: string }).find;
-      let cursorId = initial.cursor?.id;
-      while (cursorId && collection) {
-        const getMoreResult = (await prismaClient.$runCommandRaw({
-          getMore: cursorId,
-          collection,
-        })) as MongoBatchResult;
-        const batch = getMoreResult.cursor?.firstBatch ?? [];
-        items.push(...batch);
-        cursorId = getMoreResult.cursor?.id;
-      }
+      const items: unknown[] = [...(result.cursor?.firstBatch ?? [])];
 
       return items
         .map((row) => mapRow(row))
