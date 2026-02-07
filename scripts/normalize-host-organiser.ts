@@ -30,7 +30,7 @@ const parseArgs = (): Args => {
 
   if (!target || !aliasesRaw) {
     throw new Error(
-      "Usage: --field organiser|host|both --target \"Name\" --aliases \"a,b,c\""
+      'Usage: --field organiser|host|both --target "Name" --aliases "a,b,c"'
     );
   }
 
@@ -54,16 +54,47 @@ async function run() {
   const aliasSet = new Set(args.aliases.map(normalize));
   const target = args.target.trim();
 
+  const normalizeId = (value: unknown): string | null => {
+    if (typeof value === "string") return value;
+    if (typeof value === "object" && value !== null) {
+      const record = value as Record<string, unknown>;
+      const oid = record.$oid;
+      if (typeof oid === "string") return oid;
+      const toHex = record.toHexString;
+      if (typeof toHex === "function") {
+        try {
+          const hex = toHex.call(value);
+          if (typeof hex === "string") return hex;
+        } catch (error) {
+          void error;
+        }
+      }
+      const toStr = record.toString;
+      if (typeof toStr === "function") {
+        try {
+          const str = toStr.call(value);
+          if (typeof str === "string" && str !== "[object Object]") {
+            return str;
+          }
+        } catch (error) {
+          void error;
+        }
+      }
+    }
+    return null;
+  };
+
   const games = await PrismaSafeExtractor.runCommandRawSafe(
     "normalize-host-organiser",
     {
       find: "Game",
-      projection: { id: 1, organiser: 1, host: 1, _id: 0 },
+      projection: { id: 1, organiser: 1, host: 1, _id: 1 },
     },
     (row) => {
       if (typeof row !== "object" || row === null) return null;
       const record = row as Record<string, unknown>;
-      const id = typeof record.id === "string" ? record.id : null;
+      const id =
+        typeof record.id === "string" ? record.id : normalizeId(record._id);
       const organiser =
         typeof record.organiser === "string" ? record.organiser : null;
       const host = typeof record.host === "string" ? record.host : null;
