@@ -91,17 +91,13 @@ export default class ProfileEditCommand implements Command {
   public async execute(
     interaction: ChatInputCommandInteraction
   ): Promise<void> {
-    if (!interaction.inGuild() || !interaction.guild) {
-      await interaction.reply({
-        content: "Profiles can only be edited inside the server.",
-      });
-      return;
-    }
-    if (!PermissionsUtil.isChannel(interaction, "botCommands")) {
-      await interaction.reply({
-        content: "Please use this in the bot commands channel.",
-      });
-      return;
+    if (interaction.inGuild()) {
+      if (!PermissionsUtil.isChannel(interaction, "botCommands")) {
+        await interaction.reply({
+          content: "Please use this in the bot commands channel.",
+        });
+        return;
+      }
     }
 
     const player = await PrismaUtils.findPlayer(interaction.user.id);

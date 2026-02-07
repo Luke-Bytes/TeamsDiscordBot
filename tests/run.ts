@@ -11,6 +11,7 @@ import "./cases/spectateCommand.test";
 import "./cases/websiteCommand.test";
 import "./cases/profileCommand.test";
 import "./cases/titleCommands.test";
+import "./cases/titleIntegration.test";
 import "./cases/interactionGuard.test";
 import "./cases/discordUtilMoveToVC.test";
 import "./cases/unregisterRoleCleanup.test";

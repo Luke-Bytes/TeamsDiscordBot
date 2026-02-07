@@ -19,6 +19,7 @@ import { Team } from "@prisma/client";
 import { ConfigManager } from "../../ConfigManager";
 import { EloUtil } from "../../util/EloUtil";
 import { escapeText } from "../../util/Utils";
+import { PrismaUtils } from "../../util/PrismaUtils";
 
 export class DraftTeamPickingSession extends TeamPickingSession {
   state: TeamPickingSessionState = "inProgress";
@@ -375,11 +376,15 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     await this.embedMessage?.edit(this.createDraftEmbed(false));
 
     const safeName = escapeText(player.ignUsed ?? "Unknown Player");
+    const displayName = await PrismaUtils.getDisplayNameWithTitle(
+      player.playerId,
+      safeName
+    );
     if (teamPickingChannel.isSendable()) {
       await teamPickingChannel.send(
         source === "manual"
-          ? `Player ${safeName} registered for **${pickingTeam}** team.`
-          : `Time expired - Auto-picked ${safeName} for **${pickingTeam}** team.`
+          ? `Player ${displayName} registered for **${pickingTeam}** team.`
+          : `Time expired - Auto-picked ${displayName} for **${pickingTeam}** team.`
       );
     }
 
@@ -394,8 +399,12 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       await this.embedMessage?.edit(this.createDraftEmbed(false));
       if (teamPickingChannel.isSendable()) {
         const safeLast = escapeText(lastPlayer.ignUsed ?? "Unknown Player");
+        const displayLast = await PrismaUtils.getDisplayNameWithTitle(
+          lastPlayer.playerId,
+          safeLast
+        );
         await teamPickingChannel.send(
-          `Player ${safeLast} was automatically assigned to **${otherTeam}** team.`
+          `Player ${displayLast} was automatically assigned to **${otherTeam}** team.`
         );
       }
     }

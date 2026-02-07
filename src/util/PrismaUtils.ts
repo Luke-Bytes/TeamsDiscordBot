@@ -1,4 +1,7 @@
 import { prismaClient } from "../database/prismaClient";
+import { TitleStore } from "./TitleStore";
+import { formatTitleLabel, normalizeTitleIds } from "./ProfileUtil";
+import { escapeText } from "./Utils";
 
 export class PrismaUtils {
   static async findPlayer(identifier: string) {
@@ -74,5 +77,34 @@ export class PrismaUtils {
       where: { playerId: player.id },
     });
     return profile?.title ?? null;
+  }
+
+  static async getDisplayNameWithTitle(
+    playerId: string,
+    baseName: string
+  ): Promise<string> {
+    if (!playerId) return baseName;
+    const profile = await (
+      prismaClient as unknown as {
+        profile?: {
+          findUnique: (args: { where: { playerId: string } }) => Promise<{
+            title?: string | null;
+            unlockedTitles?: string[];
+          } | null>;
+        };
+      }
+    ).profile?.findUnique({
+      where: { playerId },
+    });
+    const unlocked = normalizeTitleIds(profile?.unlockedTitles ?? []);
+    if (!profile?.title || !unlocked.includes(profile.title)) {
+      return baseName;
+    }
+    const titles = TitleStore.loadTitles().filter((t) =>
+      unlocked.includes(t.id)
+    );
+    const titleLabel = formatTitleLabel(profile.title, titles);
+    if (!titleLabel) return baseName;
+    return `${baseName} the ${escapeText(titleLabel)}`;
   }
 }

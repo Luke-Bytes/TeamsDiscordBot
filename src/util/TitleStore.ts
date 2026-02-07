@@ -8,8 +8,10 @@ export type TitleDefinitionWithReason = TitleDefinition & {
 
 export class TitleStore {
   private static cache: TitleDefinition[] | null = null;
+  private static overrideTitles: TitleDefinition[] | null = null;
 
   public static loadTitles(): TitleDefinition[] {
+    if (this.overrideTitles) return this.overrideTitles;
     if (this.cache) return this.cache;
     try {
       const raw = fs.readFileSync(
@@ -26,6 +28,14 @@ export class TitleStore {
 
   public static clearCache(): void {
     this.cache = null;
+  }
+
+  public static setOverride(titles: TitleDefinition[] | null): void {
+    this.overrideTitles = titles;
+  }
+
+  public static clearOverride(): void {
+    this.overrideTitles = null;
   }
 
   public static getTitlesWithReasons(): TitleDefinitionWithReason[] {

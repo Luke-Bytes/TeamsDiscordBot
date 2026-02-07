@@ -14,6 +14,8 @@ import { addTeamsGameFeed } from "../logic/gameFeed/TeamsGameFeed";
 import { Elo } from "../logic/Elo";
 import { ModifierSelector } from "../logic/ModifierSelector";
 import { TeamPlanRecord } from "../util/PlanUtil";
+import { PrismaUtils } from "../util/PrismaUtils";
+import { escapeText } from "../util/Utils";
 
 // wrapper class for Game
 export class GameInstance {
@@ -970,12 +972,14 @@ export class GameInstance {
 
   public async countMVPVotes() {
     console.log("Starting to count MVP votes now...");
-    this.MVPPlayerRed = await this.determineTeamMVP("RED");
+    const redPlayer = await this.determineTeamMVP("RED");
+    this.MVPPlayerRed = redPlayer?.ignUsed ?? "";
     console.log("Determined red team MVP.");
-    this.MVPPlayerBlue = await this.determineTeamMVP("BLUE");
+    const bluePlayer = await this.determineTeamMVP("BLUE");
+    this.MVPPlayerBlue = bluePlayer?.ignUsed ?? "";
     console.log("Determined blue team MVP.");
-    const redMVP = this.MVPPlayerRed ?? "no body";
-    const blueMVP = this.MVPPlayerBlue ?? "no body";
+    const redMVP = await this.formatMvpDisplay(redPlayer);
+    const blueMVP = await this.formatMvpDisplay(bluePlayer);
     console.log("Sending MVPees announcement");
     await DiscordUtil.sendMessage("gameFeed", "\u200b");
 
@@ -984,12 +988,12 @@ export class GameInstance {
     await DiscordUtil.sendMessage("gameFeed", "\u200b");
   }
 
-  private async determineTeamMVP(team: Team): Promise<string> {
+  private async determineTeamMVP(team: Team): Promise<PlayerInstance | null> {
     console.log("Determining MVP for", team);
     const teamVotes = this.mvpVotes[team];
     const entries = Object.entries(teamVotes);
 
-    if (entries.length === 0) return "";
+    if (entries.length === 0) return null;
 
     console.log("Finding the maximum votes...");
     const maxVotes = Math.max(...entries.map(([, votes]) => votes));
@@ -1018,7 +1022,15 @@ export class GameInstance {
       (p) => p.discordSnowflake === selectedPlayerId
     );
 
-    return player?.ignUsed ?? "";
+    return player ?? null;
+  }
+
+  private async formatMvpDisplay(
+    player: PlayerInstance | null
+  ): Promise<string> {
+    if (!player) return "no body";
+    const baseName = escapeText(player.ignUsed ?? "Unknown Player");
+    return PrismaUtils.getDisplayNameWithTitle(player.playerId, baseName);
   }
 
   public changeHowTeamsDecided(

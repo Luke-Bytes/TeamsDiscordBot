@@ -14,6 +14,7 @@ import { PermissionsUtil } from "../util/PermissionsUtil";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { Team } from "@prisma/client";
 import { escapeText } from "../util/Utils";
+import { PrismaUtils } from "../util/PrismaUtils";
 
 export default class CaptainNominateCommand implements Command {
   data = new SlashCommandBuilder()
@@ -62,8 +63,18 @@ export default class CaptainNominateCommand implements Command {
         .setLabel("Set Captain")
     );
 
+    const nominatedPlayer = game
+      .getPlayers()
+      .find((p) => p.discordSnowflake === user.id);
+    const displayName = nominatedPlayer
+      ? await PrismaUtils.getDisplayNameWithTitle(
+          nominatedPlayer.playerId,
+          `<@${nominatedPlayer.discordSnowflake}>`
+        )
+      : `<@${user.id}>`;
+
     await DiscordUtil.sendMessage("gameFeed", {
-      content: `<@${user.id}> has nominated themselves to be a captain!`,
+      content: `${displayName} has nominated themselves to be a captain!`,
       components: [row],
     });
     await interaction.reply({

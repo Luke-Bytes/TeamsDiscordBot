@@ -61,17 +61,33 @@ test("/profilecreate denied outside bot commands channel", async () => {
   );
 });
 
-test("/profilecreate denied in DMs", async () => {
+test("/profilecreate allowed in DMs", async () => {
   const cmd = new ProfileEditCommand();
   const i = createChatInputInteraction("U2") as any;
   i.inGuild = () => false;
   i.guild = null;
+  const origFind = (PrismaUtils as any).findPlayer;
+  const origProfile = (prismaClient as any).profile;
+  try {
+    (PrismaUtils as any).findPlayer = async (_id: string) => ({
+      id: "P2",
+      discordSnowflake: "U2",
+      latestIGN: "UserTwo",
+    });
+    (prismaClient as any).profile = {
+      findUnique: async () => ({}),
+      upsert: async () => ({}),
+    };
   await cmd.execute(i);
   const reply = i.replies.find((r: any) => r.type === "reply");
   assert(
-    !!reply && /server/i.test(String(reply.payload?.content)),
-    "Blocked in DMs"
+    !!reply && reply.payload?.embeds,
+    "Allowed in DMs"
   );
+  } finally {
+    (PrismaUtils as any).findPlayer = origFind;
+    (prismaClient as any).profile = origProfile;
+  }
 });
 
 test("/profilecreate saves a section and /profile shows it", async () => {

@@ -118,7 +118,7 @@ export default class CaptainCommand implements Command {
 
     if (!resolvedPlayer) {
       await interaction.reply({
-        content: "Error: Player not found. Have they registered?",
+        content: "No player found with that name. Have they registered?",
         flags: MessageFlags.Ephemeral,
       });
       return;

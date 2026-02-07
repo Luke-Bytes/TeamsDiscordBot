@@ -1,6 +1,42 @@
 [
   {
     "id": "CHAMPION",
-    "label": "Champion"
+    "label": "Champion",
+    "reason": "Come 1st in a season"
+  },
+  {
+    "id": "ACE",
+    "label": "Ace",
+    "reason": "Come 2nd or higher in a season"
+  },
+  {
+    "id": "ELITE",
+    "label": "Elite",
+    "reason": "Come 3rd or higher in a season"
+  },
+  {
+    "id": "PARAGON",
+    "label": "Paragon",
+    "reason": "Be MVP 10+ times (lifetime)"
+  },
+  {
+    "id": "COMMODORE",
+    "label": "Commodore",
+    "reason": "Win 10+ games as captain (lifetime)"
+  },
+  {
+    "id": "UNYIELDING",
+    "label": "Unyielding",
+    "reason": "Win 50+ games (lifetime)"
+  },
+  {
+    "id": "VETERAN",
+    "label": "Veteran",
+    "reason": "Play 100+ games (lifetime)"
+  },
+  {
+    "id": "OVERSEER",
+    "label": "Overseer",
+    "reason": "Host or organise 25+ games (lifetime)"
   }
 ]

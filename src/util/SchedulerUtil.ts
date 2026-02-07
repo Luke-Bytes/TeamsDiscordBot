@@ -10,6 +10,12 @@ export class Scheduler {
     const delay = targetTime.getTime() - now.getTime();
 
     if (delay > 0) {
+      const existing = this.tasks.get(id);
+      if (existing) {
+        clearTimeout(existing);
+        this.tasks.delete(id);
+        console.info(`[INFO] Task '${id}' replaced; previous task canceled.`);
+      }
       console.info(
         `Scheduling task '${id}' to run in ${delay / 1000}s at ${targetTime.toISOString()}`
       );

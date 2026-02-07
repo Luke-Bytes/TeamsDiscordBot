@@ -13,16 +13,10 @@ import {
   FakeGuild,
   FakeGuildMember,
 } from "../framework/mocks";
-import fs from "fs";
-import path from "path";
-
-const titlesPath = path.resolve(process.cwd(), "titles.json");
-
 function writeTitles(
   titles: Array<{ id: string; label: string; reason?: string }>
 ) {
-  fs.writeFileSync(titlesPath, JSON.stringify(titles, null, 2), "utf8");
-  TitleStore.clearCache();
+  TitleStore.setOverride(titles);
 }
 
 test("/titles lists titles and defaults reason to ???", async () => {
@@ -137,6 +131,7 @@ test("/title add/remove updates unlocked titles", async () => {
   } finally {
     (PrismaUtils as any).findPlayer = origFind;
     (prismaClient as any).profile = origProfile;
+    TitleStore.clearOverride();
   }
 });
 
@@ -218,5 +213,22 @@ test("/profilecreate shows unlocked titles in selector", async () => {
   } finally {
     (PrismaUtils as any).findPlayer = origFind;
     (prismaClient as any).profile = origProfile;
+    TitleStore.clearOverride();
+  }
+});
+
+test("/titles uses mocked title list without touching disk", async () => {
+  writeTitles([{ id: "ACE", label: "Ace" }]);
+  try {
+    const cmd = new TitlesCommand();
+    const i = createChatInputInteraction("U9") as any;
+    await cmd.execute(i);
+    const reply = i.replies.find((r: any) => r.type === "reply");
+    const embed = reply?.payload?.embeds?.[0];
+    const fields = embed?.fields ?? embed?.data?.fields ?? [];
+    assert(fields.length === 1, "Uses mocked titles");
+    assert(fields[0].name === "Ace", "Mocked title rendered");
+  } finally {
+    TitleStore.clearOverride();
   }
 });

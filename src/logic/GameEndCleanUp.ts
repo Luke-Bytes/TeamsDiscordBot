@@ -8,8 +8,11 @@ import { LeaderBoardFeed } from "../logic/gameFeed/LeaderBoardFeed";
 import { Channels } from "../Channels";
 import RestartCommand from "../commands/RestartCommand";
 import TeamCommand from "../commands/TeamCommand";
+import { Scheduler } from "../util/SchedulerUtil";
 
 export async function cleanUpAfterGame(guild: Guild) {
+  Scheduler.cancel("mapVote");
+  Scheduler.cancel("minerushVote");
   const config = ConfigManager.getConfig();
   const blueTeamRoleId = config.roles.blueTeamRole;
   const redTeamRoleId = config.roles.redTeamRole;
