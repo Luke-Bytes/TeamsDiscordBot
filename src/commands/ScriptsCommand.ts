@@ -207,9 +207,7 @@ export default class ScriptsCommand implements Command {
       const team =
         typeof row.team === "string" ? row.team.trim().toUpperCase() : null;
       const winner =
-        typeof row.winner === "string"
-          ? row.winner.trim().toUpperCase()
-          : null;
+        typeof row.winner === "string" ? row.winner.trim().toUpperCase() : null;
       if (!team || (team !== "RED" && team !== "BLUE")) {
         captainUnknownTeamCounts.set(
           row.playerId,
