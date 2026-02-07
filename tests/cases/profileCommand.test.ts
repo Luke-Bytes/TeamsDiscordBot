@@ -78,12 +78,9 @@ test("/profilecreate allowed in DMs", async () => {
       findUnique: async () => ({}),
       upsert: async () => ({}),
     };
-  await cmd.execute(i);
-  const reply = i.replies.find((r: any) => r.type === "reply");
-  assert(
-    !!reply && reply.payload?.embeds,
-    "Allowed in DMs"
-  );
+    await cmd.execute(i);
+    const reply = i.replies.find((r: any) => r.type === "reply");
+    assert(!!reply && reply.payload?.embeds, "Allowed in DMs");
   } finally {
     (PrismaUtils as any).findPlayer = origFind;
     (prismaClient as any).profile = origProfile;

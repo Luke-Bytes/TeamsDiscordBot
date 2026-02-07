@@ -25,6 +25,7 @@ const MANUAL_OVERRIDES: Record<string, HelpCategory> = {
   profilecreate: "user",
   titles: "user",
   title: "organiser",
+  scripts: "organiser",
 };
 
 const ORGANISER_HINTS = [
