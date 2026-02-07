@@ -82,7 +82,7 @@ export class PrismaSafeExtractor {
       "safeFindCaptainParticipations",
       {
         find: "GameParticipation",
-        filter: { captain: true, team: { $in: ["RED", "BLUE"] } },
+        filter: { captain: { $in: [true, "true", 1] } },
         projection: { playerId: 1, team: 1, gameId: 1, _id: 0 },
       },
       (row) => {
@@ -90,7 +90,10 @@ export class PrismaSafeExtractor {
         const record = row as Record<string, unknown>;
         const playerId =
           typeof record.playerId === "string" ? record.playerId : null;
-        const team = typeof record.team === "string" ? record.team : null;
+        const team =
+          typeof record.team === "string"
+            ? record.team.trim().toUpperCase()
+            : null;
         const gameId = typeof record.gameId === "string" ? record.gameId : null;
         if (!playerId || !gameId) return null;
         return { playerId, team, gameId };

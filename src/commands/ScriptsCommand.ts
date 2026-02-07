@@ -198,12 +198,26 @@ export default class ScriptsCommand implements Command {
       await PrismaUtils.safeFindCaptainParticipations();
     const captainWinCounts = new Map<string, number>();
     const captainGameCounts = new Map<string, number>();
+    const captainUnknownTeamCounts = new Map<string, number>();
     for (const row of captainParticipations) {
       captainGameCounts.set(
         row.playerId,
         (captainGameCounts.get(row.playerId) ?? 0) + 1
       );
-      if (row.winner && row.team && row.winner === row.team) {
+      const team =
+        typeof row.team === "string" ? row.team.trim().toUpperCase() : null;
+      const winner =
+        typeof row.winner === "string"
+          ? row.winner.trim().toUpperCase()
+          : null;
+      if (!team || (team !== "RED" && team !== "BLUE")) {
+        captainUnknownTeamCounts.set(
+          row.playerId,
+          (captainUnknownTeamCounts.get(row.playerId) ?? 0) + 1
+        );
+        continue;
+      }
+      if (winner && winner === team) {
         captainWinCounts.set(
           row.playerId,
           (captainWinCounts.get(row.playerId) ?? 0) + 1
@@ -252,7 +266,7 @@ export default class ScriptsCommand implements Command {
       const life = lifetimeStats.get(playerId) ?? { wins: 0, losses: 0 };
       const gamesPlayed = life.wins + life.losses;
       console.log(
-        `[TitlesDebug] playerId=${playerId} ign=${ign} wins=${life.wins} losses=${life.losses} games=${gamesPlayed} mvp=${mvpCounts.get(playerId) ?? 0} captainGames=${captainGameCounts.get(playerId) ?? 0} captainWins=${captainWinCounts.get(playerId) ?? 0} hostOrOrganiser=${hostCounts.get(playerId) ?? 0}`
+        `[TitlesDebug] playerId=${playerId} ign=${ign} wins=${life.wins} losses=${life.losses} games=${gamesPlayed} mvp=${mvpCounts.get(playerId) ?? 0} captainGames=${captainGameCounts.get(playerId) ?? 0} captainUnknownTeam=${captainUnknownTeamCounts.get(playerId) ?? 0} captainWins=${captainWinCounts.get(playerId) ?? 0} hostOrOrganiser=${hostCounts.get(playerId) ?? 0}`
       );
     }
 
