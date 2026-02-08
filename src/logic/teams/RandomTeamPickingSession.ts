@@ -122,14 +122,33 @@ export class RandomTeamPickingSession extends TeamPickingSession {
       //           await interaction.update({});
       //         }
       case "random-team-accept": {
-        game.teams.BLUE = [...this.proposedTeams.BLUE];
-        game.teams.RED = [...this.proposedTeams.RED];
-        game.teams.UNDECIDED = [...this.proposedTeams.UNDECIDED];
-
-        const { embeds, components } = this.createTeamGenerateEmbed(
-          game,
-          this.proposedTeams
+        const currentPlayers = game.getPlayers();
+        const currentIds = new Set(
+          currentPlayers.map((p) => p.discordSnowflake)
         );
+        const filterCurrent = (players: PlayerInstance[]) =>
+          players.filter((p) => currentIds.has(p.discordSnowflake));
+
+        game.teams.BLUE = filterCurrent(this.proposedTeams.BLUE);
+        game.teams.RED = filterCurrent(this.proposedTeams.RED);
+        game.teams.UNDECIDED = filterCurrent(this.proposedTeams.UNDECIDED);
+
+        const assigned = new Set([
+          ...game.teams.RED.map((p) => p.discordSnowflake),
+          ...game.teams.BLUE.map((p) => p.discordSnowflake),
+          ...game.teams.UNDECIDED.map((p) => p.discordSnowflake),
+        ]);
+        const unassigned = currentPlayers.filter(
+          (p) => !assigned.has(p.discordSnowflake)
+        );
+        if (unassigned.length) {
+          game.teams.UNDECIDED.push(...unassigned);
+        }
+
+        const { embeds, components } = this.createTeamGenerateEmbed(game, {
+          RED: game.teams.RED,
+          BLUE: game.teams.BLUE,
+        });
         await this.embedMessage?.edit({
           embeds,
           components,

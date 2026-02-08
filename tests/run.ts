@@ -36,6 +36,9 @@ import "./critical/classBanModes.test";
 import "./cases/ignsCommand.test";
 import "./cases/timestampChoices.test";
 import "./cases/punishExpungeCommand.test";
+import "./critical/teamGenerationFlows.test";
+import "./critical/teamGenerationConcurrency.test";
+import "./critical/teamGenerationUserErrors.test";
 import { runAll } from "./framework/test";
 
 runAll();

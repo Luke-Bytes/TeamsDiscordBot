@@ -345,7 +345,7 @@ export class CurrentGameManager {
           editReply: async (_: unknown) => {},
           guild,
         } as unknown as import("discord.js").ChatInputCommandInteraction;
-        const session = new DraftTeamPickingSession();
+        const session = new DraftTeamPickingSession("snake");
         await session.initialize(fakeInteraction);
         teamCommand.teamPickingSession = session;
       } catch (e) {

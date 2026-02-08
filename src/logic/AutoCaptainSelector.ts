@@ -17,10 +17,10 @@ export class AutoCaptainSelector {
     autoStartDraft = false
   ): Promise<SelectionResult> {
     const game = CurrentGameManager.getCurrentGame();
-    const selection = await this.selectEligibleCaptains(
-      guild,
-      game.getPlayers()
-    );
+    const teamsDecided = !!game.teamsDecidedBy;
+    const selection = teamsDecided
+      ? await this.selectEligibleCaptainsFromTeams(guild)
+      : await this.selectEligibleCaptains(guild, game.getPlayers());
 
     if ("error" in selection) {
       return selection;
@@ -28,8 +28,13 @@ export class AutoCaptainSelector {
 
     const { first, second } = selection;
 
-    await this.assignCaptain(guild, "BLUE", first);
-    await this.assignCaptain(guild, "RED", second);
+    if (teamsDecided) {
+      await this.assignCaptainWithinTeam(guild, "BLUE", first);
+      await this.assignCaptainWithinTeam(guild, "RED", second);
+    } else {
+      await this.assignCaptain(guild, "BLUE", first);
+      await this.assignCaptain(guild, "RED", second);
+    }
 
     if (autoStartDraft) {
       try {
@@ -37,7 +42,7 @@ export class AutoCaptainSelector {
           editReply: async (_: unknown) => {},
           guild,
         } as unknown as import("discord.js").ChatInputCommandInteraction;
-        const session = new DraftTeamPickingSession();
+        const session = new DraftTeamPickingSession("snake");
         await session.initialize(fakeInteraction);
         if (TeamCommand.instance) {
           TeamCommand.instance.teamPickingSession = session;
@@ -104,6 +109,41 @@ export class AutoCaptainSelector {
     return { first: first.p, second: second.p };
   }
 
+  private static async selectEligibleCaptainsFromTeams(
+    guild: Guild
+  ): Promise<
+    { first: PlayerInstance; second: PlayerInstance } | { error: string }
+  > {
+    const game = CurrentGameManager.getCurrentGame();
+    const redPlayers = game.getPlayersOfTeam("RED");
+    const bluePlayers = game.getPlayersOfTeam("BLUE");
+    const selectFrom = async (players: PlayerInstance[]) => {
+      const eligible: { p: PlayerInstance; elo: number }[] = [];
+      for (const p of players) {
+        const elo = Number(p.elo ?? 0);
+        if (elo <= 1000) continue;
+        const member: GuildMember | null = await guild.members
+          .fetch(p.discordSnowflake)
+          .catch(() => null);
+        const status = member?.presence?.status ?? undefined;
+        if (status && !this.allowedStatuses.has(status)) continue;
+        eligible.push({ p, elo });
+      }
+      if (eligible.length === 0) return null;
+      return eligible[Math.floor(Math.random() * eligible.length)]!.p;
+    };
+
+    const blue = await selectFrom(bluePlayers);
+    const red = await selectFrom(redPlayers);
+    if (!blue || !red) {
+      return {
+        error:
+          "Could not find enough eligible players for captains. Organisers, please set captains manually.",
+      };
+    }
+    return { first: blue, second: red };
+  }
+
   private static async assignCaptain(
     guild: Guild,
     team: "RED" | "BLUE",
@@ -126,6 +166,40 @@ export class AutoCaptainSelector {
         })
         .catch(() => undefined);
     }
+
+    await guild.members
+      .fetch(player.discordSnowflake)
+      .then(async (m) => {
+        await m.roles.add(PermissionsUtil.config.roles.captainRole);
+        if (team === "RED") {
+          await m.roles.add(PermissionsUtil.config.roles.redTeamRole);
+          await m.roles.remove(PermissionsUtil.config.roles.blueTeamRole);
+        } else {
+          await m.roles.add(PermissionsUtil.config.roles.blueTeamRole);
+          await m.roles.remove(PermissionsUtil.config.roles.redTeamRole);
+        }
+      })
+      .catch(() => undefined);
+  }
+
+  private static async assignCaptainWithinTeam(
+    guild: Guild,
+    team: "RED" | "BLUE",
+    player: PlayerInstance
+  ): Promise<void> {
+    const game = CurrentGameManager.getCurrentGame();
+    const oldCaptain = game.getCaptainOfTeam(team);
+    if (oldCaptain && oldCaptain !== player) {
+      oldCaptain.captain = false;
+      await guild.members
+        .fetch(oldCaptain.discordSnowflake)
+        .then((oldM) =>
+          oldM.roles.remove(PermissionsUtil.config.roles.captainRole)
+        )
+        .catch(() => undefined);
+    }
+
+    player.captain = true;
 
     await guild.members
       .fetch(player.discordSnowflake)

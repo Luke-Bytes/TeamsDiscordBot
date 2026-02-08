@@ -390,6 +390,7 @@ export class GameInstance {
         const simulatedTeams = this.simulateShuffledTeams();
         this.teams.BLUE = simulatedTeams.BLUE;
         this.teams.RED = simulatedTeams.RED;
+        this.teams.UNDECIDED = [];
         break;
       }
       case "elo": {
