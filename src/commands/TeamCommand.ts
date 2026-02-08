@@ -130,6 +130,8 @@ export default class TeamCommand implements Command {
             }
           }
 
+          await interaction.deferReply();
+
           const teamPickingChannelIds = [config.channels.teamPickingChat];
           try {
             await DiscordUtil.cleanUpAllChannelMessages(
@@ -142,8 +144,6 @@ export default class TeamCommand implements Command {
               error
             );
           }
-
-          await interaction.deferReply();
 
           switch (method) {
             case "random":

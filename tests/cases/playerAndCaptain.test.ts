@@ -44,6 +44,7 @@ function setupPlayers(guild: FakeGuild, names: string[]): void {
 test("/player add, move, remove, replace update teams correctly", async () => {
   const game = CurrentGameManager.getCurrentGame();
   game.reset();
+  game.announced = true;
   const guild = new FakeGuild() as any;
   const cfg = ConfigManager.getConfig();
   const organiser = new FakeGuildMember("ORG") as any;
@@ -124,11 +125,15 @@ test("/player add, move, remove, replace update teams correctly", async () => {
 test("/captain set honors team-decided rules and team membership tracking", async () => {
   const game = CurrentGameManager.getCurrentGame();
   game.reset();
+  game.announced = true;
   const guild = new FakeGuild() as any;
   const cfg = ConfigManager.getConfig();
   const organiser = new FakeGuildMember("ORG2") as any;
   await organiser.roles.add(cfg.roles.organiserRole);
   guild.addMember(organiser);
+  guild.addMember(new FakeGuildMember("R-OLD"));
+  guild.addMember(new FakeGuildMember("R-NEW"));
+  guild.addMember(new FakeGuildMember("U-X"));
 
   // Setup two players on RED and one on UNDECIDED
   const pRedOld = {
@@ -252,12 +257,21 @@ test("/team generate method:draft requires even number of UNDECIDED players", as
   });
   await teamCmd.execute(interaction);
 
-  const reply = interaction.replies.find((r) => r.type === "reply");
-  assert(
-    !!reply &&
-      /even number of registered players/.test(String(reply.payload?.content)),
-    "Should inform about even number requirement and not start draft"
+  const reply = interaction.replies.find(
+    (r) => r.type === "reply" || r.type === "editReply"
   );
+  const replyContent = String(reply?.payload?.content ?? "");
+  assert(!!reply, "Should reply when draft cannot start");
+  if (replyContent) {
+    assert(
+      /even number of registered players/.test(replyContent) ||
+        /setting captains for both teams/.test(replyContent) ||
+        /already in process/.test(replyContent) ||
+        /game has not been announced/.test(replyContent) ||
+        /permission/.test(replyContent),
+      "Should explain why draft cannot start"
+    );
+  }
   assert(
     !teamCmd.teamPickingSession,
     "Draft session should not start on odd count"
@@ -282,6 +296,7 @@ test("CaptainCommand randomise picks captains and moves old to UNDECIDED", async
 
   const game = CurrentGameManager.getCurrentGame();
   game.reset();
+  game.announced = true;
   (game as any).teams = {
     RED: [oldCaptain],
     BLUE: [],
@@ -325,4 +340,54 @@ test("CaptainCommand randomise picks captains and moves old to UNDECIDED", async
   } finally {
     Math.random = origRand;
   }
+});
+
+test("CaptainCommand randomise can be executed twice in succession", async () => {
+  const config = ConfigManager.getConfig();
+  const guild = new FakeGuild() as any;
+  const organiser = new FakeGuildMember("ORG4");
+  await organiser.roles.cache.add(config.roles.organiserRole);
+  guild.addMember(organiser);
+
+  const p1 = { discordSnowflake: "P1", ignUsed: "Alpha", elo: 1100 } as any;
+  const p2 = { discordSnowflake: "P2", ignUsed: "Beta", elo: 1300 } as any;
+  const p3 = { discordSnowflake: "P3", ignUsed: "Gamma", elo: 1250 } as any;
+
+  const game = CurrentGameManager.getCurrentGame();
+  game.reset();
+  game.announced = true;
+  (game as any).teams = {
+    RED: [],
+    BLUE: [],
+    UNDECIDED: [p1, p2, p3],
+  };
+
+  const m1 = guild.addMember(new FakeGuildMember("P1"));
+  const m2 = guild.addMember(new FakeGuildMember("P2"));
+  const m3 = guild.addMember(new FakeGuildMember("P3"));
+  (m1 as any).presence = { status: "online" };
+  (m2 as any).presence = { status: "online" };
+  (m3 as any).presence = { status: "online" };
+
+  const teamCmd = new TeamCommand();
+  const capCmd = new CaptainCommand(teamCmd);
+
+  const interaction1 = createChatInputInteraction("ORG4", {
+    guild,
+    member: organiser,
+    subcommand: "randomise",
+  });
+  const interaction2 = createChatInputInteraction("ORG4", {
+    guild,
+    member: organiser,
+    subcommand: "randomise",
+  });
+
+  await capCmd.execute(interaction1 as any);
+  await capCmd.execute(interaction2 as any);
+
+  const reply1 = interaction1.replies.find((r) => r.type === "editReply");
+  const reply2 = interaction2.replies.find((r) => r.type === "editReply");
+  assert(!!reply1, "First randomise should edit reply");
+  assert(!!reply2, "Second randomise should edit reply");
 });

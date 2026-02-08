@@ -18,6 +18,7 @@ import "./cases/discordUtilMoveToVC.test";
 import "./cases/unregisterRoleCleanup.test";
 import "./cases/playerRemoveRoleCleanup.test";
 import "./cases/autoCaptainCleanup.test";
+import "./cases/playerAndCaptain.test";
 import "./critical/mvpCritical.test";
 import "./critical/classbanCritical.test";
 import "./critical/captainNominateCritical.test";

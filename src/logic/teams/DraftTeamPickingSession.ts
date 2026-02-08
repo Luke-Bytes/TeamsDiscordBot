@@ -381,10 +381,11 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       safeName
     );
     if (teamPickingChannel.isSendable()) {
+      const teamEmoji = pickingTeam === "RED" ? "🔴" : "🔵";
       await teamPickingChannel.send(
         source === "manual"
-          ? `Player ${displayName} registered for **${pickingTeam}** team.`
-          : `Time expired - Auto-picked ${displayName} for **${pickingTeam}** team.`
+          ? `${displayName} drafted to **${pickingTeam}** ${teamEmoji}`
+          : `Time expired - Auto-picked ${displayName} for **${pickingTeam}** ${teamEmoji}`
       );
     }
 
@@ -403,8 +404,9 @@ export class DraftTeamPickingSession extends TeamPickingSession {
           lastPlayer.playerId,
           safeLast
         );
+        const otherEmoji = otherTeam === "RED" ? "🔴" : "🔵";
         await teamPickingChannel.send(
-          `Player ${displayLast} was automatically assigned to **${otherTeam}** team.`
+          `${displayLast} was automatically assigned to **${otherTeam}** ${otherEmoji}`
         );
       }
     }

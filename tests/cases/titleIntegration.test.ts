@@ -137,7 +137,7 @@ test("Draft pick and auto-assign messages include titles", async () => {
       "manual"
     );
 
-    const pickMsg = messages.find((m) => m.includes("registered"));
+    const pickMsg = messages.find((m) => m.includes("drafted"));
     assert(!!pickMsg, "Manual pick message sent");
     assert(pickMsg?.includes("the Champion"), "Pick uses titled display");
 

@@ -93,18 +93,18 @@ export default class CaptainCommand implements Command {
     }
 
     if (subCommand === "randomise") {
+      await interaction.deferReply();
       const result = await AutoCaptainSelector.randomiseCaptains(
         interaction.guild,
         false
       );
       if ("error" in result) {
-        await interaction.reply({
+        await interaction.editReply({
           content: result.error,
-          flags: MessageFlags.Ephemeral,
         });
         return;
       }
-      await interaction.reply(
+      await interaction.editReply(
         `Captains have been selected:\n🔵 Blue: **${escapeText(result.blue.ignUsed ?? "Unknown")}**\n🔴 Red: **${escapeText(result.red.ignUsed ?? "Unknown")}**`
       );
       return;
@@ -156,14 +156,23 @@ export default class CaptainCommand implements Command {
       const oldCaptainMember = await interaction.guild.members.fetch(
         captains.oldCaptain
       );
-      await oldCaptainMember.roles.remove(
-        PermissionsUtil.config.roles.captainRole
-      );
+      if (oldCaptainMember) {
+        await oldCaptainMember.roles.remove(
+          PermissionsUtil.config.roles.captainRole
+        );
+      }
     }
 
     const newCaptainMember = await interaction.guild.members.fetch(
       resolvedPlayer.discordSnowflake
     );
+    if (!newCaptainMember) {
+      await interaction.reply({
+        content: "Unable to find that member in the server.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
     await newCaptainMember.roles.add(PermissionsUtil.config.roles.captainRole);
 
     if (teamColor === "RED") {
