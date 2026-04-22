@@ -9,7 +9,7 @@ import { Team } from "@prisma/client";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 import TeamCommand from "../commands/TeamCommand";
 import { PrismaUtils } from "../util/PrismaUtils";
-import { escapeText } from "../util/Utils";
+import { escapeIgn } from "../util/Utils";
 import { AutoCaptainSelector } from "../logic/AutoCaptainSelector";
 
 export default class CaptainCommand implements Command {
@@ -105,7 +105,7 @@ export default class CaptainCommand implements Command {
         return;
       }
       await interaction.editReply(
-        `Captains have been selected:\n🔵 Blue: **${escapeText(result.blue.ignUsed ?? "Unknown")}**\n🔴 Red: **${escapeText(result.red.ignUsed ?? "Unknown")}**`
+        `Captains have been selected:\n🔵 Blue: **${escapeIgn(result.blue.ignUsed ?? "Unknown")}**\n🔴 Red: **${escapeIgn(result.red.ignUsed ?? "Unknown")}**`
       );
       return;
     }
@@ -192,7 +192,7 @@ export default class CaptainCommand implements Command {
     }
 
     await interaction.reply({
-      content: `Successfully set captain of team **${teamColor.toLowerCase()}** to **${escapeText(
+      content: `Successfully set captain of team **${teamColor.toLowerCase()}** to **${escapeIgn(
         player.ignUsed ?? "Unknown Player"
       )}**.`,
     });

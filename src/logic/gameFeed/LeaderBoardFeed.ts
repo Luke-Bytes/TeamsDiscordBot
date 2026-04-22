@@ -2,7 +2,7 @@ import { EmbedBuilder } from "discord.js";
 import { prismaClient } from "../../database/prismaClient";
 import { EloUtil } from "../../util/EloUtil";
 import { ConfigManager } from "../../ConfigManager";
-import { escapeText } from "../../util/Utils";
+import { escapeIgn } from "../../util/Utils";
 
 export class LeaderBoardFeed {
   private getLeaderboardEntryString(
@@ -41,7 +41,7 @@ export class LeaderBoardFeed {
     if (loseStreak >= 3) {
       extraEmojis += " 😢";
     }
-    return `${rankEmoji} **${escapeText(ign)}** ${eloEmoji} ${elo} | W/L: ${winLossDisplay}${extraEmojis}`;
+    return `${rankEmoji} **${escapeIgn(ign)}** ${eloEmoji} ${elo} | W/L: ${winLossDisplay}${extraEmojis}`;
   }
 
   public async generateEmbed(): Promise<EmbedBuilder> {

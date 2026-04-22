@@ -7,7 +7,7 @@ import { Command } from "./CommandInterface";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { PrismaUtils } from "../util/PrismaUtils";
-import { escapeText } from "../util/Utils";
+import { escapeIgn, escapeText } from "../util/Utils";
 
 export default class NicknameCommand implements Command {
   public name = "nickname";
@@ -93,7 +93,7 @@ export default class NicknameCommand implements Command {
       return;
     }
 
-    const safeIgn = escapeText(player.latestIGN);
+    const safeIgn = escapeIgn(player.latestIGN);
     try {
       await targetMember.setNickname(player.latestIGN);
       const tag =

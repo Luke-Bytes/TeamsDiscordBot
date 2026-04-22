@@ -3,7 +3,7 @@ import { CurrentGameManager } from "../../logic/CurrentGameManager";
 import { EmbedBuilder, TextChannel } from "discord.js";
 import { PlayerInstance } from "../../database/PlayerInstance";
 import { EloUtil } from "../../util/EloUtil";
-import { escapeText } from "../../util/Utils";
+import { escapeIgn } from "../../util/Utils";
 
 let cachedRedPlayersList = "";
 let cachedBluePlayersList = "";
@@ -23,7 +23,7 @@ const createTeamsGameFeed = async (): Promise<EmbedBuilder> => {
     players: PlayerInstance[],
     captain: PlayerInstance | undefined
   ): string => {
-    const escapeName = (name: string): string => escapeText(name);
+    const escapeName = (name: string): string => escapeIgn(name);
 
     const sortedPlayers = captain
       ? [captain, ...players.filter((player) => player !== captain)]

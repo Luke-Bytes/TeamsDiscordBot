@@ -53,9 +53,13 @@ export class ModifierSelector {
     const selector = new ModifierSelector();
     const mods = selector.select();
 
-    GameInstance.getInstance().settings.modifiers = mods;
+    const game = GameInstance.getInstance();
+    game.settings.modifiers = mods;
     const classBanMod = mods.find((m) => m.category === "Class Bans");
     const swapperMod = mods.find((m) => m.category === "Swapper");
+    const transporterMod = mods.find(
+      (m) => m.category === "TP Enabled - Skying Banned"
+    );
     const pickOtherTeamsRolesMod = mods.find(
       (m) => m.category === "Captain's Pick Other Team's Support Roles"
     );
@@ -66,16 +70,37 @@ export class ModifierSelector {
       this.handleClassBans("No Bans");
     }
 
-    if (swapperMod) {
-      const game = GameInstance.getInstance();
-      game.settings.organiserBannedClasses =
-        game.settings.organiserBannedClasses.filter(
-          (c) => c !== AnniClass.SWAPPER
-        );
-    }
+    this.clearProtectedClassBans(game, [
+      ...(swapperMod ? [AnniClass.SWAPPER] : []),
+      ...(transporterMod ? [AnniClass.TRANSPORTER] : []),
+    ]);
 
-    GameInstance.getInstance().pickOtherTeamsSupportRoles =
-      !!pickOtherTeamsRolesMod;
+    game.pickOtherTeamsSupportRoles = !!pickOtherTeamsRolesMod;
+  }
+
+  private static clearProtectedClassBans(
+    game: GameInstance,
+    protectedClasses: AnniClass[]
+  ): void {
+    if (protectedClasses.length === 0) return;
+
+    game.settings.organiserBannedClasses =
+      game.settings.organiserBannedClasses.filter(
+        (c) => !protectedClasses.includes(c)
+      );
+    game.settings.sharedCaptainBannedClasses =
+      game.settings.sharedCaptainBannedClasses.filter(
+        (c) => !protectedClasses.includes(c)
+      );
+
+    const byTeam = game.settings.nonSharedCaptainBannedClasses ?? {
+      RED: [],
+      BLUE: [],
+    };
+    game.settings.nonSharedCaptainBannedClasses = {
+      RED: byTeam.RED.filter((c) => !protectedClasses.includes(c)),
+      BLUE: byTeam.BLUE.filter((c) => !protectedClasses.includes(c)),
+    };
   }
 
   private static handleClassBans(name: string) {

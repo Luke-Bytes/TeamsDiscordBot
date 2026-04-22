@@ -2,7 +2,7 @@ import { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { PrismaClient } from "@prisma/client";
 import { PrismaUtils } from "../util/PrismaUtils";
-import { escapeText } from "../util/Utils";
+import { escapeIgn, escapeText } from "../util/Utils";
 
 const prisma = new PrismaClient();
 
@@ -92,7 +92,7 @@ export default class PunishedCommand implements Command {
 
         const userDetails = punishedUsers.map((entry, index) => {
           const username = entry.player.latestIGN
-            ? escapeText(entry.player.latestIGN)
+            ? escapeIgn(entry.player.latestIGN)
             : `Discord: <@${entry.player.discordSnowflake}>`;
           const expiryDate = entry.punishmentExpiry
             ? `<t:${Math.floor(entry.punishmentExpiry.getTime() / 1000)}:R>`

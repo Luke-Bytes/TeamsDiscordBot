@@ -14,7 +14,7 @@ import { EloUtil } from "../util/EloUtil";
 import { prismaClient } from "../database/prismaClient";
 import { Channels } from "../Channels";
 import { DiscordUtil } from "../util/DiscordUtil";
-import { escapeText } from "../util/Utils";
+import { escapeIgn } from "../util/Utils";
 
 export default class LeaderboardsCommand implements Command {
   public data: SlashCommandOptionsOnlyBuilder;
@@ -57,7 +57,7 @@ export default class LeaderboardsCommand implements Command {
     winStreak: number,
     loseStreak: number
   ): string {
-    ign = escapeText(ign);
+    ign = escapeIgn(ign);
     const rankEmojis = [
       "🥇",
       "🥈",

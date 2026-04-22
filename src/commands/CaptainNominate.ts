@@ -13,7 +13,7 @@ import { GameInstance } from "../database/GameInstance";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { Team } from "@prisma/client";
-import { escapeText } from "../util/Utils";
+import { escapeIgn } from "../util/Utils";
 import { PrismaUtils } from "../util/PrismaUtils";
 
 export default class CaptainNominateCommand implements Command {
@@ -193,7 +193,7 @@ export default class CaptainNominateCommand implements Command {
     }
 
     await interaction.reply({
-      content: `Set captain of team **${teamToSet.toLowerCase()}** to **${escapeText(
+      content: `Set captain of team **${teamToSet.toLowerCase()}** to **${escapeIgn(
         player.ignUsed ?? "Unknown Player"
       )}**.`,
     });

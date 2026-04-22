@@ -66,6 +66,9 @@ export default class GameCommand implements Command {
       case "start":
         await interaction.deferReply();
         try {
+          gameInstance.noElo = gameInstance.shouldBeNoEloForPlayerCount();
+          const activePlayerCount = gameInstance.getActivePlayerCount();
+
           const memberCache = await buildMemberCache(
             guild,
             [
@@ -80,6 +83,13 @@ export default class GameCommand implements Command {
           await interaction.editReply(
             "Game will begin soon! Roles assigned and players moved to VCs."
           );
+
+          if (gameInstance.noElo) {
+            const noEloMessage = `⚠️ This is a **no elo game** due to low player count (${activePlayerCount} players; minimum ${GameInstance.MIN_ELO_PLAYER_COUNT} required).`;
+            await DiscordUtil.sendMessage("gameFeed", noEloMessage);
+            await DiscordUtil.sendMessage("redTeamChat", noEloMessage);
+            await DiscordUtil.sendMessage("blueTeamChat", noEloMessage);
+          }
 
           await DiscordUtil.sendMessage(
             "redTeamChat",
@@ -245,7 +255,9 @@ export default class GameCommand implements Command {
         }
         GameInstance.getInstance().isRestarting = true;
         await interaction.reply(
-          "Beginning post game clean up of channels and calculating elo.."
+          gameInstance.noElo
+            ? "Beginning post game clean up. This game is marked as no elo due to low player count."
+            : "Beginning post game clean up of channels and calculating elo.."
         );
         await cleanUpAfterGame(guild);
         break;

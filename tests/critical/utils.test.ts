@@ -1,6 +1,6 @@
 import { test } from "../framework/test";
 import { assertEqual } from "../framework/assert";
-import { escapeText } from "../../src/util/Utils";
+import { escapeIgn, escapeText } from "../../src/util/Utils";
 
 test("escapeText escapes unpaired underscores", () => {
   assertEqual(
@@ -62,5 +62,31 @@ test("escapeText still prevents block quotes and inline code", () => {
     escapeText("`code`"),
     "\\`code\\`",
     "Inline code markers should be escaped"
+  );
+});
+
+test("escapeIgn escapes underscores without changing message formatting", () => {
+  assertEqual(
+    escapeIgn("Mr_________"),
+    "Mr\\_\\_\\_\\_\\_\\_\\_\\_\\_",
+    "Underscore-only IGNs should be escaped"
+  );
+  assertEqual(
+    escapeIgn("Notch_123"),
+    "Notch\\_123",
+    "Alphanumeric IGNs should preserve styling and escape underscores"
+  );
+});
+
+test("escapeIgn leaves non-underscore IGN characters alone", () => {
+  assertEqual(
+    escapeIgn("Unknown Player"),
+    "Unknown Player",
+    "Spaces should be left unchanged"
+  );
+  assertEqual(
+    escapeIgn("A*B"),
+    "A*B",
+    "Non-underscore characters should be untouched"
   );
 });

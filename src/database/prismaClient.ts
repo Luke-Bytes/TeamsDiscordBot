@@ -338,6 +338,13 @@ export const prismaClient = new PrismaClient({
           console.log("Double Elo is active this game!");
         }
 
+        if (gameInstance.noElo) {
+          console.log(
+            `Skipping Elo updates and history for low-player game (${gameInstance.getActivePlayerCount()} players).`
+          );
+          return gameRecord;
+        }
+
         for (const playerInstance of [...teams.RED, ...teams.BLUE]) {
           eloManager.applyEloUpdate(playerInstance);
 

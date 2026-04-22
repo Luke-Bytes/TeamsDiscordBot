@@ -163,6 +163,183 @@ fastTest(
 );
 
 fastTest(
+  "Captain 15m enforcement cancels announced game when fewer than 15 players are registered",
+  async () => {
+    const base = Date.now();
+    const game = CurrentGameManager.getCurrentGame();
+    game.reset();
+    game.announced = true;
+    game.startTime = new Date(base + 15 * 60 * 1000 + 10);
+
+    (game as any).teams = {
+      RED: [],
+      BLUE: [],
+      UNDECIDED: Array.from({ length: 14 }, (_, idx) =>
+        mkPlayer(`U${idx + 1}`, `Player${idx + 1}`)
+      ),
+    };
+
+    const sent: any[] = [];
+    const origSend = DiscordUtil.sendMessage;
+    const origClean = (DiscordUtil as any).cleanUpAllChannelMessages;
+    (DiscordUtil as any).sendMessage = async (
+      channelKey: string,
+      content: any
+    ) => {
+      sent.push({ channelKey, content });
+    };
+    (DiscordUtil as any).cleanUpAllChannelMessages = async () => {};
+
+    const guild = new FakeGuild() as any;
+    const origNow = Date.now;
+    (Date as any).now = () => base;
+
+    try {
+      await withImmediateTimers(async () => {
+        CurrentGameManager.scheduleCaptainTimers(guild);
+        await new Promise((r) => setImmediate(r));
+      });
+
+      assert(
+        game.getPlayers().length === 0,
+        "Game should be reset after low-registration auto-cancel"
+      );
+      const gameFeedNotice = sent.find(
+        (s) =>
+          s.channelKey === "gameFeed" &&
+          /automatically cancelled/i.test(String(s.content)) &&
+          /only 14 players/i.test(String(s.content))
+      );
+      const registrationNotice = sent.find(
+        (s) =>
+          s.channelKey === "registration" &&
+          /minimum of 15 registered players/i.test(String(s.content))
+      );
+      assert(
+        !!gameFeedNotice,
+        "Should announce low-registration auto-cancel in game feed"
+      );
+      assert(
+        !!registrationNotice,
+        "Should announce low-registration auto-cancel in registration"
+      );
+    } finally {
+      (DiscordUtil as any).sendMessage = origSend;
+      (DiscordUtil as any).cleanUpAllChannelMessages = origClean;
+      (Date as any).now = origNow;
+    }
+  }
+);
+
+fastTest(
+  "Captain 15m enforcement does not cancel when game is not announced",
+  async () => {
+    const base = Date.now();
+    const game = CurrentGameManager.getCurrentGame();
+    game.reset();
+    game.announced = false;
+    game.startTime = new Date(base + 15 * 60 * 1000 + 10);
+
+    (game as any).teams = {
+      RED: [],
+      BLUE: [],
+      UNDECIDED: Array.from({ length: 14 }, (_, idx) =>
+        mkPlayer(`U${idx + 1}`, `Player${idx + 1}`)
+      ),
+    };
+
+    const sent: any[] = [];
+    const origSend = DiscordUtil.sendMessage;
+    const origClean = (DiscordUtil as any).cleanUpAllChannelMessages;
+    (DiscordUtil as any).sendMessage = async (
+      channelKey: string,
+      content: any
+    ) => {
+      sent.push({ channelKey, content });
+    };
+    (DiscordUtil as any).cleanUpAllChannelMessages = async () => {};
+
+    const guild = new FakeGuild() as any;
+    const origNow = Date.now;
+    (Date as any).now = () => base;
+
+    try {
+      await withImmediateTimers(async () => {
+        CurrentGameManager.scheduleCaptainTimers(guild);
+        await new Promise((r) => setImmediate(r));
+      });
+
+      assert(
+        game.getPlayers().length === 14,
+        "Unannounced games should not be auto-cancelled"
+      );
+      assert(
+        !sent.some((s) => /automatically cancelled/i.test(String(s.content))),
+        "Should not announce auto-cancel for unannounced games"
+      );
+    } finally {
+      (DiscordUtil as any).sendMessage = origSend;
+      (DiscordUtil as any).cleanUpAllChannelMessages = origClean;
+      (Date as any).now = origNow;
+    }
+  }
+);
+
+fastTest(
+  "Captain 15m enforcement does not cancel when exactly 15 players are registered",
+  async () => {
+    const base = Date.now();
+    const game = CurrentGameManager.getCurrentGame();
+    game.reset();
+    game.announced = true;
+    game.startTime = new Date(base + 15 * 60 * 1000 + 10);
+
+    (game as any).teams = {
+      RED: [],
+      BLUE: [],
+      UNDECIDED: Array.from({ length: 15 }, (_, idx) =>
+        mkPlayer(`U${idx + 1}`, `Player${idx + 1}`)
+      ),
+    };
+
+    const sent: any[] = [];
+    const origSend = DiscordUtil.sendMessage;
+    const origClean = (DiscordUtil as any).cleanUpAllChannelMessages;
+    (DiscordUtil as any).sendMessage = async (
+      channelKey: string,
+      content: any
+    ) => {
+      sent.push({ channelKey, content });
+    };
+    (DiscordUtil as any).cleanUpAllChannelMessages = async () => {};
+
+    const guild = new FakeGuild() as any;
+    const origNow = Date.now;
+    (Date as any).now = () => base;
+
+    try {
+      await withImmediateTimers(async () => {
+        CurrentGameManager.scheduleCaptainTimers(guild);
+        await new Promise((r) => setImmediate(r));
+      });
+
+      assert(
+        game.getPlayers().length === 15,
+        "Exactly 15 registered players should not trigger auto-cancel"
+      );
+      assert(
+        !sent.some((s) => /automatically cancelled/i.test(String(s.content))),
+        "Should not announce auto-cancel at the exact minimum threshold"
+      );
+    } finally {
+      (DiscordUtil as any).sendMessage = origSend;
+      (DiscordUtil as any).cleanUpAllChannelMessages = origClean;
+      (Date as any).now = origNow;
+    }
+  }
+);
+
+fastTest(
   "Captain 15m enforcement auto-selects two captains and announces",
   async () => {
     const base = Date.now();

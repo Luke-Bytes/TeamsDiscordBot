@@ -148,6 +148,31 @@ export default class ClassbanCommand implements Command {
       [Team.BLUE]: [],
     };
     game.settings.nonSharedCaptainBannedClasses = byTeam;
+    const enabledModifierNames = new Set(
+      (game.settings.modifiers ?? []).map((m) => m.category)
+    );
+    const protectedByModifier: Partial<Record<AnniClass, string>> = {};
+    if (enabledModifierNames.has("Swapper")) {
+      protectedByModifier[AnniClass.SWAPPER] = "Swapper";
+    }
+    if (enabledModifierNames.has("TP Enabled - Skying Banned")) {
+      protectedByModifier[AnniClass.TRANSPORTER] = "TP Enabled - Skying Banned";
+    }
+
+    const protectedReason = protectedByModifier[cls];
+    if (protectedReason) {
+      return interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor("Orange")
+            .setTitle("🚫 Cannot Ban Modifier-Protected Class")
+            .setDescription(
+              `${prettifyName(cls)} cannot be banned while **${protectedReason}** is enabled.`
+            )
+            .setTimestamp(),
+        ],
+      });
+    }
 
     if (organiserBans.includes(cls)) {
       return interaction.editReply({

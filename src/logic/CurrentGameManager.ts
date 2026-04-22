@@ -4,7 +4,7 @@ import { ConfigManager } from "../ConfigManager";
 import { Team } from "@prisma/client";
 import { Guild, EmbedBuilder } from "discord.js";
 import { gameFeed } from "../logic/gameFeed/GameFeed";
-import { escapeText, prettifyName } from "../util/Utils";
+import { escapeIgn, escapeText, prettifyName } from "../util/Utils";
 import TeamCommand from "../commands/TeamCommand";
 import { AutoCaptainSelector } from "./AutoCaptainSelector";
 import { Scheduler } from "../util/SchedulerUtil";
@@ -300,6 +300,10 @@ export class CurrentGameManager {
     if (enforceTime.getTime() > now) {
       this.captainEnforceTimeout = setTimeout(async () => {
         try {
+          if (await this.cancelForLowRegistrationAtAutomaticStart(guild)) {
+            return;
+          }
+
           const redCap = game.getCaptainOfTeam("RED");
           const blueCap = game.getCaptainOfTeam("BLUE");
           const haveBoth = !!redCap && !!blueCap;
@@ -318,15 +322,36 @@ export class CurrentGameManager {
           }
           await DiscordUtil.sendMessage(
             "gameFeed",
-            `Captains have been auto-selected: BLUE - ${escapeText(
+            `Captains have been auto-selected: BLUE - ${escapeIgn(
               result.blue.ignUsed ?? "Unknown"
-            )}, RED - ${escapeText(result.red.ignUsed ?? "Unknown")}.`
+            )}, RED - ${escapeIgn(result.red.ignUsed ?? "Unknown")}.`
           );
         } catch (e) {
           console.error("Error enforcing auto-captain selection:", e);
         }
       }, enforceTime.getTime() - now);
     }
+  }
+
+  private static async cancelForLowRegistrationAtAutomaticStart(
+    guild: Guild
+  ): Promise<boolean> {
+    const game = this.getCurrentGame();
+    if (!game.announced) {
+      return false;
+    }
+
+    const registeredPlayerCount = game.getRegisteredPlayerCount();
+    if (!game.shouldAutoCancelForLowRegistration()) {
+      return false;
+    }
+
+    await this.cancelCurrentGame(guild);
+
+    const cancelMessage = `⚠️ The announced game has been automatically cancelled because only ${registeredPlayerCount} players were registered at the automatic start time. A minimum of ${GameInstance.MIN_AUTO_START_REGISTERED_COUNT} registered players is required 15 minutes before the announced start time.`;
+    await DiscordUtil.sendMessage("gameFeed", cancelMessage);
+    await DiscordUtil.sendMessage("registration", cancelMessage);
+    return true;
   }
 
   private static async attemptAutoStartDraft(guild: Guild): Promise<void> {

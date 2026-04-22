@@ -17,7 +17,7 @@ import { PlayerInstance } from "../../database/PlayerInstance";
 import { CurrentGameManager } from "../../logic/CurrentGameManager";
 import { Team } from "@prisma/client";
 import { EloUtil } from "../../util/EloUtil";
-import { escapeText } from "../../util/Utils";
+import { escapeIgn } from "../../util/Utils";
 
 export class RandomTeamPickingSession extends TeamPickingSession {
   state: TeamPickingSessionState = "inProgress";
@@ -222,7 +222,7 @@ export class RandomTeamPickingSession extends TeamPickingSession {
       players.length
         ? players
             .map((player, index) => {
-              const playerString = `${EloUtil.getEloEmoji(player.elo)} ${escapeText(
+              const playerString = `${EloUtil.getEloEmoji(player.elo)} ${escapeIgn(
                 player.ignUsed ?? "Unknown Player"
               )}`;
               return index === 0 ? `**${playerString}**` : playerString;
@@ -292,6 +292,8 @@ export class RandomTeamPickingSession extends TeamPickingSession {
 
   public async cancelSession(): Promise<void> {
     this.state = "cancelled";
-    await this.embedMessage?.delete().catch(() => {});
+    if (typeof this.embedMessage?.delete === "function") {
+      await this.embedMessage.delete().catch(() => {});
+    }
   }
 }

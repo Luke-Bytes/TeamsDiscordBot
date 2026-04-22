@@ -5,7 +5,7 @@ import {
 } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { PrismaUtils } from "../util/PrismaUtils";
-import { escapeText } from "../util/Utils";
+import { escapeIgn } from "../util/Utils";
 
 export default class IgnsCommand implements Command {
   public data: SlashCommandBuilder;
@@ -47,7 +47,7 @@ export default class IgnsCommand implements Command {
       : [];
 
     const titleDisplay = player.latestIGN
-      ? `${escapeText(player.latestIGN)})`
+      ? `${escapeIgn(player.latestIGN)})`
       : player.discordSnowflake;
 
     const embed = new EmbedBuilder()
@@ -62,7 +62,7 @@ export default class IgnsCommand implements Command {
       const lines = accounts
         .slice()
         .reverse()
-        .map((acc, idx) => `${idx + 1}. ${escapeText(acc)}`);
+        .map((acc, idx) => `${idx + 1}. ${escapeIgn(acc)}`);
       const value = lines.join("\n");
       embed.addFields({ name: "Accounts", value, inline: false });
     }

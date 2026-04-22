@@ -7,7 +7,7 @@ import {
 import { Command } from "./CommandInterface";
 import { PrismaUtils } from "../util/PrismaUtils";
 import { prismaClient } from "../database/prismaClient";
-import { escapeText } from "../util/Utils";
+import { escapeIgn, escapeText } from "../util/Utils";
 import {
   formatEnumList,
   LANGUAGE_LABELS,
@@ -70,7 +70,7 @@ export default class ProfileCommand implements Command {
     });
 
     const displayName = player.latestIGN
-      ? escapeText(player.latestIGN)
+      ? escapeIgn(player.latestIGN)
       : escapeText(player.discordSnowflake);
 
     const embed = new EmbedBuilder()
@@ -80,7 +80,7 @@ export default class ProfileCommand implements Command {
     if (player.latestIGN) {
       embed.addFields({
         name: "Minecraft IGN",
-        value: escapeText(player.latestIGN),
+        value: escapeIgn(player.latestIGN),
         inline: true,
       });
     }

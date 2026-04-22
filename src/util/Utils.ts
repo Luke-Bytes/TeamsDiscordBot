@@ -185,6 +185,10 @@ export function escapeText(text: string): string {
   return escaped.replace(/(^|\n)>/g, "$1\\>");
 }
 
+export function escapeIgn(text: string): string {
+  return text.replace(/_/g, "\\_");
+}
+
 export function stripVariationSelector(emoji: string): string {
   return emoji.replace(/\uFE0F/g, "");
 }

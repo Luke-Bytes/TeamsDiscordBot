@@ -18,7 +18,7 @@ import { PlayerInstance } from "../../database/PlayerInstance";
 import { Team } from "@prisma/client";
 import { ConfigManager } from "../../ConfigManager";
 import { EloUtil } from "../../util/EloUtil";
-import { escapeText } from "../../util/Utils";
+import { escapeIgn, escapeText } from "../../util/Utils";
 import { PrismaUtils } from "../../util/PrismaUtils";
 
 export class DraftTeamPickingSession extends TeamPickingSession {
@@ -147,7 +147,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       const otherThanCaptain = players.filter((p) => !p.captain);
 
       const formatPlayer = (player: PlayerInstance) => {
-        const safeIgnUsed = escapeText(player.ignUsed ?? "Unknown Player");
+        const safeIgnUsed = escapeIgn(player.ignUsed ?? "Unknown Player");
         const baseInfo = `${EloUtil.getEloEmoji(player.elo)} ${safeIgnUsed}`;
         return includeElo
           ? `${baseInfo} ${EloUtil.getEloFormatted(player)}`
@@ -375,10 +375,10 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     player.draftSlotPlacement = this.pickCounts[pickingTeam];
     await this.embedMessage?.edit(this.createDraftEmbed(false));
 
-    const safeName = escapeText(player.ignUsed ?? "Unknown Player");
+    const safeName = escapeIgn(player.ignUsed ?? "Unknown Player");
     const displayName = await PrismaUtils.getDisplayNameWithTitle(
       player.playerId,
-      safeName
+      `**${safeName}**`
     );
     if (teamPickingChannel.isSendable()) {
       const teamEmoji = pickingTeam === "RED" ? "🔴" : "🔵";
@@ -399,7 +399,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       this.proposedTeams.UNDECIDED = [];
       await this.embedMessage?.edit(this.createDraftEmbed(false));
       if (teamPickingChannel.isSendable()) {
-        const safeLast = escapeText(lastPlayer.ignUsed ?? "Unknown Player");
+        const safeLast = escapeIgn(lastPlayer.ignUsed ?? "Unknown Player");
         const displayLast = await PrismaUtils.getDisplayNameWithTitle(
           lastPlayer.playerId,
           safeLast
@@ -469,7 +469,9 @@ export class DraftTeamPickingSession extends TeamPickingSession {
   public async cancelSession(): Promise<void> {
     this.state = "cancelled";
     this.clearTurnTimers();
-    await this.embedMessage?.delete().catch(() => {});
+    if (typeof this.embedMessage?.delete === "function") {
+      await this.embedMessage.delete().catch(() => {});
+    }
     const channel = Channels.teamPicking;
     if (channel.isSendable()) {
       await channel.send("Draft picking cancelled.");
@@ -614,7 +616,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
 
     if (existingTeam && existingTeam !== "UNDECIDED") {
       await message.channel.send(
-        `Player ${escapeText(player.ignUsed ?? "Unknown Player")} is already picked on the other team!`
+        `Player ${escapeIgn(player.ignUsed ?? "Unknown Player")} is already picked on the other team!`
       );
       return;
     }
@@ -624,7 +626,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       this.blueCaptain?.discordSnowflake === player.discordSnowflake
     ) {
       await message.channel.send(
-        `Player ${escapeText(player.ignUsed ?? "Unknown Player")} is the captain of the other team and cannot be picked.`
+        `Player ${escapeIgn(player.ignUsed ?? "Unknown Player")} is the captain of the other team and cannot be picked.`
       );
       return;
     }
@@ -696,7 +698,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     await this.embedMessage?.edit(this.createDraftEmbed(false));
     if (channel.isSendable()) {
       const names = uniqueLeftovers
-        .map((p) => escapeText(p.ignUsed ?? "Unknown Player"))
+        .map((p) => escapeIgn(p.ignUsed ?? "Unknown Player"))
         .join(", ");
       await channel.send(
         `Late signup${uniqueLeftovers.length > 1 ? "s" : ""} ${names} remain undecided and may not participate.`

@@ -12,7 +12,7 @@ import { Command } from "./CommandInterface";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { DiscordUtil } from "../util/DiscordUtil";
-import { escapeText } from "../util/Utils";
+import { escapeIgn } from "../util/Utils";
 
 export default class WinnerCommand implements Command {
   name = "winner";
@@ -71,14 +71,14 @@ export default class WinnerCommand implements Command {
           {
             name: "🔴 Red Captain",
             value: redCaptain
-              ? escapeText(redCaptain.ignUsed ?? "Unknown Player")
+              ? escapeIgn(redCaptain.ignUsed ?? "Unknown Player")
               : "None",
             inline: true,
           },
           {
             name: "🔵 Blue Captain",
             value: blueCaptain
-              ? escapeText(blueCaptain.ignUsed ?? "Unknown Player")
+              ? escapeIgn(blueCaptain.ignUsed ?? "Unknown Player")
               : "None",
             inline: true,
           },
@@ -86,7 +86,7 @@ export default class WinnerCommand implements Command {
             name: "🔴 Red Players (first 3)",
             value: redPlayers.length
               ? redPlayers
-                  .map((p) => escapeText(p.ignUsed ?? "Unknown Player"))
+                  .map((p) => escapeIgn(p.ignUsed ?? "Unknown Player"))
                   .join("\n")
               : "None",
             inline: true,
@@ -95,7 +95,7 @@ export default class WinnerCommand implements Command {
             name: "🔵 Blue Players (first 3)",
             value: bluePlayers.length
               ? bluePlayers
-                  .map((p) => escapeText(p.ignUsed ?? "Unknown Player"))
+                  .map((p) => escapeIgn(p.ignUsed ?? "Unknown Player"))
                   .join("\n")
               : "None",
             inline: true,

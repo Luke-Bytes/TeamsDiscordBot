@@ -15,16 +15,19 @@ import { Elo } from "../logic/Elo";
 import { ModifierSelector } from "../logic/ModifierSelector";
 import { TeamPlanRecord } from "../util/PlanUtil";
 import { PrismaUtils } from "../util/PrismaUtils";
-import { escapeText } from "../util/Utils";
+import { escapeIgn } from "../util/Utils";
 
 // wrapper class for Game
 export class GameInstance {
+  public static readonly MIN_ELO_PLAYER_COUNT = 20;
+  public static readonly MIN_AUTO_START_REGISTERED_COUNT = 15;
   private static instance: GameInstance;
   gameId?: string;
   isFinished?: boolean;
   announced = false;
   isRestarting = false;
   isDoubleElo = false;
+  noElo = false;
   startTime?: Date;
   endTime?: Date;
   settings: {
@@ -111,6 +114,7 @@ export class GameInstance {
     this.announced = false;
     this.isRestarting = false;
     this.isDoubleElo = false;
+    this.noElo = false;
     this.startTime = undefined;
     this.endTime = undefined;
     this.settings = {
@@ -205,6 +209,25 @@ export class GameInstance {
     //     "Minerush vote has been stopped without deleting the message."
     //   );
     // }
+  }
+
+  public getActivePlayerCount(): number {
+    return this.teams.RED.length + this.teams.BLUE.length;
+  }
+
+  public getRegisteredPlayerCount(): number {
+    return this.getPlayers().length;
+  }
+
+  public shouldBeNoEloForPlayerCount(): boolean {
+    return this.getActivePlayerCount() < GameInstance.MIN_ELO_PLAYER_COUNT;
+  }
+
+  public shouldAutoCancelForLowRegistration(): boolean {
+    return (
+      this.getRegisteredPlayerCount() <
+      GameInstance.MIN_AUTO_START_REGISTERED_COUNT
+    );
   }
 
   public setMap(map: AnniMap) {
@@ -1030,7 +1053,7 @@ export class GameInstance {
     player: PlayerInstance | null
   ): Promise<string> {
     if (!player) return "no body";
-    const baseName = escapeText(player.ignUsed ?? "Unknown Player");
+    const baseName = escapeIgn(player.ignUsed ?? "Unknown Player");
     return PrismaUtils.getDisplayNameWithTitle(player.playerId, baseName);
   }
 
