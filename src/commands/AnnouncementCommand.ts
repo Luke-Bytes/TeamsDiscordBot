@@ -30,6 +30,7 @@ import { PermissionsUtil } from "../util/PermissionsUtil";
 import { ModifierSelector } from "../logic/ModifierSelector";
 
 export default class AnnouncementCommand implements Command {
+  private static readonly modifiersRerollCooldownMs = 15_000;
   public data: SlashCommandSubcommandsOnlyBuilder;
   public name: string = "announce";
   public description: string = "Create a game announcement";
@@ -51,6 +52,7 @@ export default class AnnouncementCommand implements Command {
   );
   private static readonly maxAutoResults = 25;
   private initialBannedClasses: AnniClass[] = [];
+  private lastModifiersRerollAt?: number;
 
   constructor() {
     this.data = new SlashCommandBuilder()
@@ -301,6 +303,7 @@ export default class AnnouncementCommand implements Command {
     const host = interaction.options.getString("host");
 
     await interaction.deferReply();
+    this.lastModifiersRerollAt = undefined;
 
     if (this.announcementPreviewMessage) {
       await interaction.editReply(
@@ -358,6 +361,7 @@ export default class AnnouncementCommand implements Command {
 
   private async handleAnnouncementCancel(guild: Guild) {
     await CurrentGameManager.cancelCurrentGame(guild);
+    this.lastModifiersRerollAt = undefined;
     if (this.announcementMessage) {
       await this.announcementMessage.delete();
       delete this.announcementMessage;
@@ -538,6 +542,21 @@ export default class AnnouncementCommand implements Command {
         break;
 
       case "announcement-edit-modifiers":
+        if (
+          this.lastModifiersRerollAt &&
+          Date.now() - this.lastModifiersRerollAt <
+            AnnouncementCommand.modifiersRerollCooldownMs
+        ) {
+          const remainingMs =
+            AnnouncementCommand.modifiersRerollCooldownMs -
+            (Date.now() - this.lastModifiersRerollAt);
+          const remainingSeconds = Math.ceil(remainingMs / 1000);
+          await interaction.editReply(
+            `⏳ Re-roll Modifiers is on cooldown. Try again in ${remainingSeconds}s.`
+          );
+          break;
+        }
+
         CurrentGameManager.getCurrentGame().settings.organiserBannedClasses = [
           ...this.initialBannedClasses,
         ];
@@ -546,6 +565,7 @@ export default class AnnouncementCommand implements Command {
         CurrentGameManager.getCurrentGame().settings.nonSharedCaptainBannedClasses =
           { RED: [], BLUE: [] };
         ModifierSelector.runSelection();
+        this.lastModifiersRerollAt = Date.now();
         await this.updateAnnouncementMessages();
         await interaction.editReply("🔄 Modifiers have been rerolled.");
         break;

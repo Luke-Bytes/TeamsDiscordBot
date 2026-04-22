@@ -3,6 +3,8 @@ import CaptainCommand from "../../src/commands/CaptainCommand";
 import RegisterCommand from "../../src/commands/RegisterCommand";
 import TeamCommand from "../../src/commands/TeamCommand";
 import UnregisterCommand from "../../src/commands/UnregisterCommand";
+import { CurrentGameManager } from "../../src/logic/CurrentGameManager";
+import { ModifierSelector } from "../../src/logic/ModifierSelector";
 import { test } from "../framework/test";
 import { assert } from "../framework/assert";
 import { createChatInputInteraction, FakeGuild } from "../framework/mocks";
@@ -22,6 +24,53 @@ test("AnnouncementCommand handleButtonPress default path responds", async () => 
     guild,
   } as any);
   assert(true, "button handled");
+});
+
+test("AnnouncementCommand reroll modifiers is rate-limited to once every 15 seconds", async () => {
+  const cmd = new AnnouncementCommand() as any;
+  const guild = new FakeGuild() as any;
+  const game = CurrentGameManager.getCurrentGame();
+  game.reset();
+
+  let rerolls = 0;
+  const originalRunSelection = ModifierSelector.runSelection;
+  const originalUpdateAnnouncementMessages = cmd.updateAnnouncementMessages;
+
+  ModifierSelector.runSelection = (() => {
+    rerolls += 1;
+  }) as typeof ModifierSelector.runSelection;
+  cmd.updateAnnouncementMessages = async () => {};
+  cmd.initialBannedClasses = [];
+
+  const replies: string[] = [];
+  const interaction: any = {
+    customId: "announcement-edit-modifiers",
+    deferReply: async () => ({}),
+    editReply: async (payload: any) => {
+      replies.push(typeof payload === "string" ? payload : String(payload));
+      return {};
+    },
+    guild,
+  };
+
+  try {
+    await cmd.handleButtonPress(interaction);
+    await cmd.handleButtonPress(interaction);
+
+    assert(rerolls === 1, "Second reroll should be blocked by cooldown");
+    assert(
+      replies.some((r) => /Modifiers have been rerolled/i.test(r)),
+      "First reroll should succeed"
+    );
+    assert(
+      replies.some((r) => /on cooldown/i.test(r)),
+      "Second reroll should return a cooldown message"
+    );
+  } finally {
+    ModifierSelector.runSelection = originalRunSelection;
+    cmd.updateAnnouncementMessages = originalUpdateAnnouncementMessages;
+    game.reset();
+  }
 });
 
 test("CaptainCommand errors when used outside guild", async () => {
