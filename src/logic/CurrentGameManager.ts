@@ -77,13 +77,14 @@ export class CurrentGameManager {
 
   public static async cancelCurrentGame(guild: Guild) {
     const config = ConfigManager.getConfig();
+    const game = this.getCurrentGame();
     try {
-      await this.getCurrentGame().mapVoteManager?.cancelVote();
+      await game.mapVoteManager?.cancelVote();
     } catch {
       // ignore vote cleanup failures
     }
     try {
-      await this.getCurrentGame().minerushVoteManager?.cancelVote();
+      await game.minerushVoteManager?.cancelVote();
     } catch {
       // ignore vote cleanup failures
     }
@@ -96,6 +97,18 @@ export class CurrentGameManager {
     } catch (error) {
       console.error("Failed to clean up messages:", error);
     }
+    for (const message of [
+      game.announcementPingMessage,
+      game.announcementMessage,
+      game.announcementPreviewMessage,
+    ]) {
+      if (typeof message?.delete === "function") {
+        await message.delete().catch(() => {});
+      }
+    }
+    game.announcementPingMessage = undefined;
+    game.announcementMessage = undefined;
+    game.announcementPreviewMessage = undefined;
     await this.resetCurrentGame();
   }
 

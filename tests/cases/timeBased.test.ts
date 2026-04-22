@@ -182,6 +182,9 @@ fastTest(
     const sent: any[] = [];
     const origSend = DiscordUtil.sendMessage;
     const origClean = (DiscordUtil as any).cleanUpAllChannelMessages;
+    let previewDeleted = 0;
+    let announcementDeleted = 0;
+    let pingDeleted = 0;
     (DiscordUtil as any).sendMessage = async (
       channelKey: string,
       content: any
@@ -189,6 +192,21 @@ fastTest(
       sent.push({ channelKey, content });
     };
     (DiscordUtil as any).cleanUpAllChannelMessages = async () => {};
+    game.announcementPreviewMessage = {
+      delete: async () => {
+        previewDeleted += 1;
+      },
+    } as any;
+    game.announcementMessage = {
+      delete: async () => {
+        announcementDeleted += 1;
+      },
+    } as any;
+    game.announcementPingMessage = {
+      delete: async () => {
+        pingDeleted += 1;
+      },
+    } as any;
 
     const guild = new FakeGuild() as any;
     const origNow = Date.now;
@@ -222,6 +240,10 @@ fastTest(
       assert(
         !!registrationNotice,
         "Should announce low-registration auto-cancel in registration"
+      );
+      assert(
+        previewDeleted === 1 && announcementDeleted === 1 && pingDeleted === 1,
+        "Auto-cancel should delete preview, announcement, and ping messages"
       );
     } finally {
       (DiscordUtil as any).sendMessage = origSend;

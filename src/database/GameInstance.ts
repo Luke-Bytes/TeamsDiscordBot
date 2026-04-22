@@ -1,5 +1,11 @@
 import { $Enums, AnniMap, Team } from "@prisma/client";
-import { CacheType, CacheTypeReducer, Guild, Snowflake } from "discord.js";
+import {
+  CacheType,
+  CacheTypeReducer,
+  Guild,
+  Message,
+  Snowflake,
+} from "discord.js";
 import { PlayerInstance } from "./PlayerInstance";
 import { MapVoteManager } from "../logic/MapVoteManager";
 import { MojangAPI } from "../api/MojangAPI";
@@ -76,6 +82,9 @@ export class GameInstance {
   organiser?: string | null;
   host?: string | null;
   lastRegisteredSnowflake?: Snowflake;
+  announcementPreviewMessage?: Message<boolean>;
+  announcementMessage?: Message<boolean>;
+  announcementPingMessage?: Message<boolean>;
   redTeamPlan?: TeamPlanRecord;
   blueTeamPlan?: TeamPlanRecord;
 
@@ -143,6 +152,9 @@ export class GameInstance {
     this.classBansAnnounced = false;
     this.redTeamPlan = undefined;
     this.blueTeamPlan = undefined;
+    this.announcementPreviewMessage = undefined;
+    this.announcementMessage = undefined;
+    this.announcementPingMessage = undefined;
   }
 
   public static async resetGameInstance() {

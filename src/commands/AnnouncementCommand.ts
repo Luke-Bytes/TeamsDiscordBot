@@ -357,21 +357,15 @@ export default class AnnouncementCommand implements Command {
     GameInstance.getInstance().host = host;
 
     this.announcementPreviewMessage = await interaction.editReply(embed);
+    GameInstance.getInstance().announcementPreviewMessage = this
+      .announcementPreviewMessage as Message<boolean>;
   }
 
   private async handleAnnouncementCancel(guild: Guild) {
     await CurrentGameManager.cancelCurrentGame(guild);
     this.lastModifiersRerollAt = undefined;
-    if (this.announcementMessage) {
-      await this.announcementMessage.delete();
-      delete this.announcementMessage;
-    }
-
-    if (this.announcementPreviewMessage) {
-      console.log("Attempting to delete announcement preview message");
-      await this.announcementPreviewMessage.delete();
-      delete this.announcementPreviewMessage;
-    }
+    this.announcementMessage = undefined;
+    this.announcementPreviewMessage = undefined;
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -405,13 +399,16 @@ export default class AnnouncementCommand implements Command {
     this.announcementMessage = await Channels.announcements.send({
       embeds: [embed],
     });
+    GameInstance.getInstance().announcementMessage = this
+      .announcementMessage as Message<boolean>;
 
     const notifyRoleId = ConfigManager.getConfig().roles.gameNotify;
     if (ping && notifyRoleId) {
-      await Channels.announcements.send({
-        content: `<@&${notifyRoleId}> Game Announced ⬆️`,
-        allowedMentions: { roles: [notifyRoleId] },
-      });
+      GameInstance.getInstance().announcementPingMessage =
+        (await Channels.announcements.send({
+          content: `<@&${notifyRoleId}> Game Announced ⬆️`,
+          allowedMentions: { roles: [notifyRoleId] },
+        })) as Message<boolean>;
     }
 
     if (Channels.registration.isTextBased()) {
