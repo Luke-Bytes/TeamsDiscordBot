@@ -1,5 +1,6 @@
 import { prismaClient } from "../../database/prismaClient";
 import { ConfigManager } from "../../ConfigManager";
+import { PrismaSafeExtractor } from "../../util/PrismaSafeExtractor";
 import {
   DEFAULT_MAX_BLOCK_LENGTH,
   DEFAULT_SEASON_RECAP_THRESHOLDS,
@@ -56,10 +57,18 @@ export async function generateSeasonRecap(
     throw new Error(`Season ${seasonNumber} not found.`);
   }
 
-  const [games, playerStats, histories] = await Promise.all([
+  const [games, supportByGameId, playerStats, histories] = await Promise.all([
     prismaClient.game.findMany({
       where: { seasonId: season.id, finished: true },
-      include: {
+      select: {
+        id: true,
+        finished: true,
+        startTime: true,
+        endTime: true,
+        settings: true,
+        winner: true,
+        type: true,
+        doubleElo: true,
         gameParticipations: {
           include: {
             player: {
@@ -74,6 +83,7 @@ export async function generateSeasonRecap(
       },
       orderBy: { startTime: "asc" },
     }),
+    findGameSupportById(season.id),
     prismaClient.playerStats.findMany({
       where: { seasonId: season.id },
       include: {
@@ -104,8 +114,8 @@ export async function generateSeasonRecap(
         winner: game.winner,
         type: game.type,
         doubleElo: game.doubleElo,
-        organiser: game.organiser,
-        host: game.host,
+        organiser: supportByGameId.get(game.id)?.organiser ?? "Unknown",
+        host: supportByGameId.get(game.id)?.host ?? "Unknown",
         gameParticipations: game.gameParticipations.map((gp) => ({
           playerId: gp.playerId,
           ignUsed: gp.ignUsed,
@@ -122,6 +132,62 @@ export async function generateSeasonRecap(
     },
     options
   );
+}
+
+async function findGameSupportById(seasonId: string) {
+  const rows = await PrismaSafeExtractor.runCommandRawSafe(
+    "seasonRecap.findGameSupportById",
+    {
+      find: "Game",
+      filter: { seasonId, finished: true },
+      projection: { _id: 1, organiser: 1, host: 1 },
+    },
+    (row) => {
+      if (typeof row !== "object" || row === null) return null;
+      const record = row as Record<string, unknown>;
+      const id = normalizeRawId(record._id);
+      if (!id) return null;
+      return {
+        id,
+        organiser:
+          typeof record.organiser === "string" ? record.organiser : "Unknown",
+        host: typeof record.host === "string" ? record.host : "Unknown",
+      };
+    },
+    []
+  );
+
+  return new Map(rows.map((row) => [row.id, row]));
+}
+
+function normalizeRawId(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  if (typeof value !== "object" || value === null) return null;
+
+  const record = value as Record<string, unknown>;
+  if (typeof record.$oid === "string") return record.$oid;
+
+  const toHex = record.toHexString;
+  if (typeof toHex === "function") {
+    try {
+      const hex = toHex.call(value);
+      if (typeof hex === "string") return hex;
+    } catch (error) {
+      void error;
+    }
+  }
+
+  const toString = record.toString;
+  if (typeof toString === "function") {
+    try {
+      const str = toString.call(value);
+      if (typeof str === "string" && str !== "[object Object]") return str;
+    } catch (error) {
+      void error;
+    }
+  }
+
+  return null;
 }
 
 export function generateSeasonRecapFromData(
