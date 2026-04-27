@@ -193,11 +193,11 @@ export function buildCommunityOps(
   return {
     title: "🙌 Organisers & Hosts",
     lines: [
-      "A huge thank you to everyone who organised and hosted games this season.",
+      "A big thank you to everyone who organised and hosted games this season!",
       organisers.length
-        ? `Special shoutout to organisers: ${organisers.join(", ")}.`
+        ? `A special shoutout to our organisers: ${organisers.join(", ")}.`
         : "",
-      hosts.length ? `And to hosts: ${hosts.join(", ")}.` : "",
+      hosts.length ? `And especially to our hosts: ${hosts.join(", ")}.` : "",
     ].filter(Boolean),
   };
 }

@@ -65,6 +65,53 @@ export function buildDuoChemistry(
   };
 }
 
+export function buildThreePlayerCores(
+  games: SeasonRecapGame[],
+  playerById: Map<string, SeasonRecapPlayer>,
+  thresholds: SeasonRecapThresholds
+): InsightSection {
+  const trios = new Map<
+    string,
+    { players: [string, string, string]; games: number; wins: number }
+  >();
+
+  for (const game of games) {
+    for (const team of [Team.RED, Team.BLUE]) {
+      const players = game.gameParticipations.filter((gp) => gp.team === team);
+      for (let i = 0; i < players.length; i += 1) {
+        for (let j = i + 1; j < players.length; j += 1) {
+          for (let k = j + 1; k < players.length; k += 1) {
+            const trio = [
+              players[i].playerId,
+              players[j].playerId,
+              players[k].playerId,
+            ].sort() as [string, string, string];
+            const key = trio.join("::");
+            const row = trios.get(key) ?? { players: trio, games: 0, wins: 0 };
+            row.games += 1;
+            if (game.winner === team) row.wins += 1;
+            trios.set(key, row);
+          }
+        }
+      }
+    }
+  }
+
+  const cores = [...trios.values()]
+    .filter((row) => row.games >= thresholds.minTrioGames)
+    .sort((a, b) => b.wins / b.games - a.wins / a.games || b.games - a.games)
+    .slice(0, thresholds.topLimit)
+    .map(
+      (row) =>
+        `${row.players.map((id) => playerName(id, playerById)).join(" + ")}: ${pct(row.wins / row.games)} win rate (${row.wins}W-${row.games - row.wins}L)`
+    );
+
+  return {
+    title: "🧩 Three-Player Cores",
+    lines: [...prefixRows("Best Three-Player Cores", cores)],
+  };
+}
+
 export function buildRivalries(
   games: SeasonRecapGame[],
   playerById: Map<string, SeasonRecapPlayer>,

@@ -151,6 +151,241 @@ function fixture(): SeasonRecapData {
   };
 }
 
+function richGame(
+  idx: number,
+  redIds: string[],
+  blueIds: string[],
+  winner: Team
+): SeasonRecapGame {
+  const start = new Date(base.getTime() + idx * 24 * 60 * 60 * 1000);
+  const end = new Date(start.getTime() + 40 * 60 * 1000);
+  return {
+    id: `rich-${idx}`,
+    finished: true,
+    startTime: start,
+    endTime: end,
+    winner,
+    type: "DRAFT",
+    doubleElo: false,
+    organiser: "Org",
+    host: "Host",
+    settings: {
+      map: idx % 2 === 0 ? "DUELSTAL" : "CANYON1V1",
+      organiserBannedClasses: [],
+      sharedCaptainBannedClasses: [],
+      nonSharedCaptainBannedClasses: { RED: [], BLUE: [] },
+      modifiers: [],
+    },
+    gameParticipations: [
+      ...redIds.map((id, pos) => ({
+        playerId: id,
+        ignUsed: id,
+        team: Team.RED,
+        mvp: id === "anchor" && idx === 2,
+        captain: pos === 0,
+        draftSlotPlacement: pos + 1,
+        votedForAMVP: pos !== 2,
+        player: player(id, id),
+      })),
+      ...blueIds.map((id, pos) => ({
+        playerId: id,
+        ignUsed: id,
+        team: Team.BLUE,
+        mvp: id === "late1" && idx === 0,
+        captain: pos === 0,
+        draftSlotPlacement: redIds.length + pos + 1,
+        votedForAMVP: pos !== 2,
+        player: player(id, id),
+      })),
+    ],
+  };
+}
+
+function richFixture(): SeasonRecapData {
+  const games = [
+    richGame(0, ["early1", "early2", "anchor"], ["late1", "late2", "late3"], Team.BLUE),
+    richGame(1, ["early1", "early2", "anchor"], ["late1", "late2", "late3"], Team.BLUE),
+    richGame(2, ["early1", "early2", "anchor"], ["late1", "late2", "late3"], Team.RED),
+    richGame(3, ["early1", "early2", "anchor"], ["late1", "late2", "late3"], Team.BLUE),
+  ];
+
+  return {
+    seasonNumber: 10,
+    games,
+    playerStats: [
+      {
+        playerId: "early1",
+        elo: 1060,
+        wins: 1,
+        losses: 3,
+        winStreak: 0,
+        loseStreak: 0,
+        biggestWinStreak: 1,
+        biggestLosingStreak: 3,
+        player: player("early1", "early1"),
+      },
+      {
+        playerId: "early2",
+        elo: 1040,
+        wins: 1,
+        losses: 3,
+        winStreak: 0,
+        loseStreak: 0,
+        biggestWinStreak: 1,
+        biggestLosingStreak: 3,
+        player: player("early2", "early2"),
+      },
+      {
+        playerId: "anchor",
+        elo: 1010,
+        wins: 1,
+        losses: 3,
+        winStreak: 0,
+        loseStreak: 0,
+        biggestWinStreak: 1,
+        biggestLosingStreak: 3,
+        player: player("anchor", "anchor"),
+      },
+      {
+        playerId: "late1",
+        elo: 1090,
+        wins: 3,
+        losses: 1,
+        winStreak: 0,
+        loseStreak: 0,
+        biggestWinStreak: 3,
+        biggestLosingStreak: 1,
+        player: player("late1", "late1"),
+      },
+      {
+        playerId: "late2",
+        elo: 1110,
+        wins: 3,
+        losses: 1,
+        winStreak: 0,
+        loseStreak: 0,
+        biggestWinStreak: 3,
+        biggestLosingStreak: 1,
+        player: player("late2", "late2"),
+      },
+      {
+        playerId: "late3",
+        elo: 1130,
+        wins: 3,
+        losses: 1,
+        winStreak: 0,
+        loseStreak: 0,
+        biggestWinStreak: 3,
+        biggestLosingStreak: 1,
+        player: player("late3", "late3"),
+      },
+    ],
+    histories: games.flatMap((g, gameIdx) =>
+      g.gameParticipations.map((gp) => ({
+        playerId: gp.playerId,
+        gameId: g.id,
+        elo:
+          gp.playerId.startsWith("late")
+            ? 1000 + gameIdx * 25 + 30
+            : gp.playerId.startsWith("early")
+              ? 1000 - gameIdx * 20
+              : 1000 + (gameIdx % 2 === 0 ? 10 : -10),
+        createdAt: new Date(g.endTime.getTime() + 1000),
+      }))
+    ),
+  };
+}
+
+function turnaroundFixture(): SeasonRecapData {
+  const games = [
+    richGame(0, ["turn", "steady", "helper"], ["opp1", "opp2", "opp3"], Team.BLUE),
+    richGame(1, ["turn", "steady", "helper"], ["opp1", "opp2", "opp3"], Team.BLUE),
+    richGame(2, ["opp1", "opp2", "opp3"], ["turn", "steady", "helper"], Team.BLUE),
+    richGame(3, ["opp1", "opp2", "opp3"], ["turn", "steady", "helper"], Team.BLUE),
+  ];
+
+  return {
+    seasonNumber: 11,
+    games,
+    playerStats: [
+      {
+        playerId: "turn",
+        elo: 1005,
+        wins: 2,
+        losses: 2,
+        winStreak: 0,
+        loseStreak: 0,
+        biggestWinStreak: 2,
+        biggestLosingStreak: 2,
+        player: player("turn", "turn"),
+      },
+      {
+        playerId: "steady",
+        elo: 1080,
+        wins: 3,
+        losses: 1,
+        winStreak: 0,
+        loseStreak: 0,
+        biggestWinStreak: 3,
+        biggestLosingStreak: 1,
+        player: player("steady", "steady"),
+      },
+      {
+        playerId: "helper",
+        elo: 1020,
+        wins: 2,
+        losses: 2,
+        winStreak: 0,
+        loseStreak: 0,
+        biggestWinStreak: 2,
+        biggestLosingStreak: 2,
+        player: player("helper", "helper"),
+      },
+      {
+        playerId: "opp1",
+        elo: 990,
+        wins: 1,
+        losses: 3,
+        winStreak: 0,
+        loseStreak: 0,
+        biggestWinStreak: 1,
+        biggestLosingStreak: 3,
+        player: player("opp1", "opp1"),
+      },
+      {
+        playerId: "opp2",
+        elo: 980,
+        wins: 1,
+        losses: 3,
+        winStreak: 0,
+        loseStreak: 0,
+        biggestWinStreak: 1,
+        biggestLosingStreak: 3,
+        player: player("opp2", "opp2"),
+      },
+      {
+        playerId: "opp3",
+        elo: 970,
+        wins: 1,
+        losses: 3,
+        winStreak: 0,
+        loseStreak: 0,
+        biggestWinStreak: 1,
+        biggestLosingStreak: 3,
+        player: player("opp3", "opp3"),
+      },
+    ],
+    histories: games.flatMap((g, gameIdx) =>
+      g.gameParticipations.map((gp) => ({
+        playerId: gp.playerId,
+        gameId: g.id,
+        elo: gp.playerId === "turn" ? 1000 + gameIdx * 20 : 1000,
+        createdAt: new Date(g.endTime.getTime() + 1000),
+      }))
+    ),
+  };
+}
+
 test("season recap keeps Discord blocks under the configured limit", () => {
   const result = generateSeasonRecapFromData(fixture(), {
     maxBlockLength: 500,
@@ -237,11 +472,98 @@ test("season recap includes MVP voting participation", () => {
 
   assert(output.includes("🗳️ MVP Voting"), "MVP voting section should appear");
   assert(
-    output.includes("Most Reliable Voters"),
+    output.includes("Most MVP Votes Cast"),
     "top MVP voters should appear"
   );
   assert(
-    output.includes("Average team ballot turnout"),
+    output.includes("Average MVP Ballot Turnout"),
     "average MVP voting turnout should appear"
+  );
+});
+
+test("season recap only counts Elo recovery after dropping below threshold", () => {
+  const result = generateSeasonRecapFromData(fixture(), {
+    thresholds: { minPlayerGames: 3, minPlayerSeasonShare: 0 },
+  });
+  const output = result.blocks.join("\n");
+
+  assert(
+    output.includes("Biggest Elo Recoveries After Dropping Below 950"),
+    "recovery label should show the threshold"
+  );
+  assert(
+    !output.includes("steady: +120 from season low (1000"),
+    "normal climb from starting Elo should not count as recovery"
+  );
+});
+
+test("season recap includes the most average player section", () => {
+  const result = generateSeasonRecapFromData(fixture(), {
+    thresholds: { minPlayerSeasonShare: 0 },
+  });
+  const output = result.blocks.join("\n");
+
+  assert(
+    output.includes("🎯 Most Average Player"),
+    "most average player section should appear"
+  );
+  assert(
+    output.includes("Closest to Median Elo"),
+    "closest to median label should appear"
+  );
+});
+
+test("season recap includes draft value, trio, and turnaround insights", () => {
+  const result = generateSeasonRecapFromData(richFixture(), {
+    thresholds: { minPlayerSeasonShare: 0 },
+  });
+  const output = result.blocks.join("\n");
+
+  assert(output.includes("💎 Draft Value"), "draft value section should appear");
+  assert(
+    output.includes("Best Late Draft Picks"),
+    "late draft picks should appear"
+  );
+  assert(
+    output.includes("First Pick Pressure"),
+    "early draft performance should appear"
+  );
+  assert(
+    output.includes("🧩 Three-Player Cores"),
+    "three-player cores section should appear"
+  );
+  assert(
+    output.includes("Biggest Turnarounds"),
+    "turnaround section should appear"
+  );
+});
+
+test("season recap includes most-voted games and MVP turnout", () => {
+  const result = generateSeasonRecapFromData(richFixture(), {
+    thresholds: { minPlayerSeasonShare: 0 },
+  });
+  const output = result.blocks.join("\n");
+
+  assert(output.includes("🗳️ MVP Voting"), "MVP voting section should appear");
+  assert(output.includes("Most Voted Games"), "most-voted games should appear");
+  assert(
+    output.includes("Average MVP Ballot Turnout"),
+    "average ballot turnout should appear"
+  );
+});
+
+test("season recap turnaround only appears with enough half-season games", () => {
+  const result = generateSeasonRecapFromData(turnaroundFixture(), {
+    thresholds: { minPlayerSeasonShare: 0 },
+  });
+  const output = result.blocks.join("\n");
+
+  assert(
+    output.includes("Biggest Turnarounds"),
+    "turnarounds section should appear"
+  );
+  assert(
+    output.includes("turn: 0.0% -> 100.0%"),
+    "turnaround should compare first and second halves"
   );
 });

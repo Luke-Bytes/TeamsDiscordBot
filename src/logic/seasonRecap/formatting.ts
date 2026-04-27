@@ -77,7 +77,7 @@ export function formatSeasonSpan(games: SeasonRecapGame[]) {
   const weeks = Math.floor(days / 7);
   const remainder = days % 7;
   return remainder
-    ? `${weeks} week${weeks === 1 ? "" : "s"}, ${remainder} day${remainder === 1 ? "" : "s"}`
+    ? `${weeks} week${weeks === 1 ? "" : "s"} and ${remainder} day${remainder === 1 ? "" : "s"}`
     : `${weeks} week${weeks === 1 ? "" : "s"}`;
 }
 
@@ -88,6 +88,16 @@ export function formatDate(date: Date) {
 export function mean(values: number[]) {
   if (!values.length) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+export function percentile(values: number[], pct: number) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const idx = Math.min(
+    sorted.length - 1,
+    Math.max(0, Math.floor(pct * sorted.length))
+  );
+  return sorted[idx];
 }
 
 export function pct(value: number) {

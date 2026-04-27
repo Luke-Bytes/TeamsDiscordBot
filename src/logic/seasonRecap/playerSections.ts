@@ -1,9 +1,12 @@
 import {
+  formatDate,
   formatSeasonSpan,
   groupBy,
   pct,
+  percentile,
   playerName,
   prefixRows,
+  pretty,
   totalGames,
 } from "./formatting";
 import {
@@ -26,8 +29,8 @@ export function buildSnapshot(
     title: `🎉 Friendly Wars Season ${seasonNumber} Recap`,
     lines: [
       `Season ${seasonNumber} ran from ${dateRange} across ${formatSeasonSpan(games)}.`,
-      `${games.length} finished games were played by ${playerCount} players.`,
-      "Here are the storylines, standout runs, draft patterns, and community moments that shaped the season.",
+      `${games.length} games were played by ${playerCount} unique players!`,
+      "Here are the highlights, interesting patterns, and community moments that shaped the season.",
     ],
   };
 }
@@ -50,17 +53,20 @@ export function buildEloStorylines(
   const climbs = [...historyByPlayer.entries()]
     .map(([playerId, rows]) => {
       const elos = [1000, ...rows.map((r) => r.elo)];
-      const lowest = Math.min(...elos);
+      const eligibleLows = elos.filter(
+        (elo) => elo < thresholds.recoveryEloThreshold
+      );
+      const lowest = eligibleLows.length ? Math.min(...eligibleLows) : null;
       const final = elos.at(-1)!;
       return {
         playerId,
-        delta: final - lowest,
+        delta: lowest === null ? 0 : final - lowest,
         final,
         lowest,
         games: outcomesByPlayer.get(playerId)?.length ?? 0,
       };
     })
-    .filter((r) => r.games >= minGames && r.delta > 0)
+    .filter((r) => r.lowest !== null && r.games >= minGames && r.delta > 0)
     .sort((a, b) => b.delta - a.delta)
     .slice(0, thresholds.topLimit)
     .map(
@@ -86,9 +92,50 @@ export function buildEloStorylines(
     title: "📈 Elo Storylines",
     lines: [
       ...prefixRows("Top Elo", topElo),
-      ...prefixRows("Biggest Elo Recoveries", climbs),
+      ...prefixRows(
+        `Biggest Elo Recoveries After Dropping Below ${thresholds.recoveryEloThreshold}`,
+        climbs
+      ),
       ...prefixRows("Biggest Elo Drops", drops),
     ],
+  };
+}
+
+export function buildMostAveragePlayer(
+  playerStats: SeasonRecapPlayerStats[],
+  playerById: Map<string, SeasonRecapPlayer>
+): InsightSection {
+  const activePlayerStats = playerStats.filter((ps) => totalGames(ps) > 0);
+  const medianElo = percentile(
+    activePlayerStats.map((ps) => ps.elo),
+    0.5
+  );
+  const closest = [...activePlayerStats]
+    .map((ps) => ({
+      playerId: ps.playerId,
+      elo: ps.elo,
+      games: totalGames(ps),
+      distance: Math.abs(ps.elo - medianElo),
+    }))
+    .sort(
+      (a, b) =>
+        a.distance - b.distance ||
+        b.games - a.games ||
+        a.elo - b.elo ||
+        a.playerId.localeCompare(b.playerId)
+    )
+    .slice(0, 1)
+    .map((row) => {
+      const distanceText =
+        row.distance === 0
+          ? "right on the median"
+          : `${row.distance.toFixed(0)} Elo from the median`;
+      return `${playerName(row.playerId, playerById)}: ${row.elo} Elo, ${distanceText}`;
+    });
+
+  return {
+    title: "🎯 Most Average Player",
+    lines: [...prefixRows("Closest to Median Elo", closest)],
   };
 }
 
@@ -131,7 +178,46 @@ export function buildFormTrends(
     .slice(0, thresholds.topLimit)
     .map(
       (r) =>
-        `${playerName(r.playerId, playerById)}: ${pct(r.rate)} over final ${r.tailGames} games`
+        `${playerName(r.playerId, playerById)}: ${pct(r.rate)} win rate in their final ${r.tailGames} games`
+    );
+
+  const turnarounds = [...outcomesByPlayer.entries()]
+    .map(([playerId, outcomes]) => {
+      const midpoint = Math.floor(outcomes.length / 2);
+      const firstHalf = outcomes.slice(0, midpoint);
+      const secondHalf = outcomes.slice(midpoint);
+      if (
+        firstHalf.length < thresholds.minTurnaroundHalfGames ||
+        secondHalf.length < thresholds.minTurnaroundHalfGames
+      ) {
+        return null;
+      }
+      const firstRate =
+        firstHalf.filter((o) => o.won).length / firstHalf.length;
+      const secondRate =
+        secondHalf.filter((o) => o.won).length / secondHalf.length;
+      return {
+        playerId,
+        firstRate,
+        secondRate,
+        delta: secondRate - firstRate,
+      };
+    })
+    .filter(
+      (
+        row
+      ): row is {
+        playerId: string;
+        firstRate: number;
+        secondRate: number;
+        delta: number;
+      } => row !== null && row.delta > 0
+    )
+    .sort((a, b) => b.delta - a.delta)
+    .slice(0, thresholds.topLimit)
+    .map(
+      (r) =>
+        `${playerName(r.playerId, playerById)}: ${pct(r.firstRate)} -> ${pct(r.secondRate)} (+${(r.delta * 100).toFixed(1)} pts)`
     );
 
   return {
@@ -139,7 +225,8 @@ export function buildFormTrends(
     lines: [
       ...prefixRows("Biggest Win Streaks", winStreaks),
       ...prefixRows("Biggest Losing Streaks", losingStreaks),
-      ...prefixRows("Best Final-Third Win Rate", finishers),
+      ...prefixRows("Strongest Finish", finishers),
+      ...prefixRows("Biggest Turnarounds", turnarounds),
     ],
   };
 }
@@ -232,6 +319,25 @@ export function buildMvpVotingFun(
 ): InsightSection {
   const votesByPlayer = new Map<string, { voted: number; games: number }>();
   const teamVoteRates: number[] = [];
+  const gameVoteStats = games
+    .map((game) => {
+      const votes = game.gameParticipations.filter((gp) => gp.votedForAMVP);
+      return {
+        game,
+        votes: votes.length,
+        players: game.gameParticipations.length,
+        turnout: game.gameParticipations.length
+          ? votes.length / game.gameParticipations.length
+          : 0,
+      };
+    })
+    .filter((row) => row.votes > 0)
+    .sort((a, b) => b.turnout - a.turnout || b.votes - a.votes)
+    .slice(0, thresholds.topLimit)
+    .map(
+      (row) =>
+        `${pretty(row.game.settings?.map ?? "Unknown")} on ${formatDate(row.game.startTime)}: ${pct(row.turnout)} turnout (${row.votes}/${row.players})`
+    );
 
   for (const game of games) {
     for (const gp of game.gameParticipations) {
@@ -268,11 +374,110 @@ export function buildMvpVotingFun(
   return {
     title: "🗳️ MVP Voting",
     lines: [
-      ...prefixRows("Most Reliable Voters", topVoters),
+      ...prefixRows("Most MVP Votes Cast", topVoters),
+      ...prefixRows("Most Voted Games", gameVoteStats),
       teamVoteRates.length
-        ? `Average team ballot turnout: ${pct(averageVoteRate)} of players voted.`
+        ? `Average MVP Ballot Turnout: ${pct(averageVoteRate)} of players voted.`
         : "",
     ].filter(Boolean),
+  };
+}
+
+export function buildDraftValueInsights(
+  games: SeasonRecapGame[],
+  playerById: Map<string, SeasonRecapPlayer>,
+  thresholds: SeasonRecapThresholds
+): InsightSection {
+  const slotRows = games.flatMap((game) =>
+    game.gameParticipations
+      .filter((gp) => typeof gp.draftSlotPlacement === "number")
+      .map((gp) => ({
+        playerId: gp.playerId,
+        slot: gp.draftSlotPlacement!,
+        won: gp.team === game.winner,
+      }))
+  );
+  const slotValues = slotRows.map((row) => row.slot);
+  const lateCutoff = percentile(slotValues, thresholds.lateDraftSlotPercentile);
+  const rows = new Map<
+    string,
+    {
+      earlyGames: number;
+      earlyWins: number;
+      lateGames: number;
+      lateWins: number;
+      draftGames: number;
+      slotTotal: number;
+    }
+  >();
+
+  for (const row of slotRows) {
+    const entry = rows.get(row.playerId) ?? {
+      earlyGames: 0,
+      earlyWins: 0,
+      lateGames: 0,
+      lateWins: 0,
+      draftGames: 0,
+      slotTotal: 0,
+    };
+    entry.draftGames += 1;
+    entry.slotTotal += row.slot;
+    if (row.slot <= thresholds.earlyDraftSlotMax) {
+      entry.earlyGames += 1;
+      if (row.won) entry.earlyWins += 1;
+    }
+    if (row.slot >= lateCutoff) {
+      entry.lateGames += 1;
+      if (row.won) entry.lateWins += 1;
+    }
+    rows.set(row.playerId, entry);
+  }
+
+  const latePicks = [...rows.entries()]
+    .filter(([, row]) => row.lateGames >= thresholds.minLateDraftGames)
+    .sort(
+      (a, b) =>
+        b[1].lateWins / b[1].lateGames - a[1].lateWins / a[1].lateGames ||
+        b[1].lateGames - a[1].lateGames
+    )
+    .slice(0, thresholds.topLimit)
+    .map(([playerId, row]) => {
+      const rate = row.lateWins / row.lateGames;
+      return `${playerName(playerId, playerById)}: ${pct(rate)} win rate in late picks (${row.lateWins}W-${row.lateGames - row.lateWins}L)`;
+    });
+
+  const earlyPicks = [...rows.entries()]
+    .filter(([, row]) => row.earlyGames >= thresholds.minLateDraftGames)
+    .sort(
+      (a, b) =>
+        b[1].earlyWins / b[1].earlyGames - a[1].earlyWins / a[1].earlyGames ||
+        b[1].earlyGames - a[1].earlyGames
+    )
+    .slice(0, thresholds.topLimit)
+    .map(([playerId, row]) => {
+      const rate = row.earlyWins / row.earlyGames;
+      return `${playerName(playerId, playerById)}: ${pct(rate)} win rate in early picks (${row.earlyWins}W-${row.earlyGames - row.earlyWins}L)`;
+    });
+
+  const averageSlot = [...rows.entries()]
+    .filter(([, row]) => row.draftGames >= thresholds.minLateDraftGames)
+    .sort(
+      (a, b) =>
+        b[1].slotTotal / b[1].draftGames - a[1].slotTotal / a[1].draftGames
+    )
+    .slice(0, thresholds.topLimit)
+    .map(([playerId, row]) => {
+      const average = row.slotTotal / row.draftGames;
+      return `${playerName(playerId, playerById)}: avg draft slot ${average.toFixed(1)}`;
+    });
+
+  return {
+    title: "💎 Draft Value",
+    lines: [
+      ...prefixRows("Best Late Draft Picks", latePicks),
+      ...prefixRows("First Pick Pressure", earlyPicks),
+      ...prefixRows("Highest Average Draft Slot", averageSlot),
+    ],
   };
 }
 

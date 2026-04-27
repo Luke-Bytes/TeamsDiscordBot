@@ -10,6 +10,12 @@ export type SeasonRecapThresholds = {
   minFastLongGames: number;
   closeGameEloGap: number;
   underdogEloGap: number;
+  recoveryEloThreshold: number;
+  minLateDraftGames: number;
+  lateDraftSlotPercentile: number;
+  earlyDraftSlotMax: number;
+  minTurnaroundHalfGames: number;
+  minTrioGames: number;
   topLimit: number;
 };
 
@@ -23,6 +29,12 @@ export const DEFAULT_SEASON_RECAP_THRESHOLDS: SeasonRecapThresholds = {
   minFastLongGames: 5,
   closeGameEloGap: 25,
   underdogEloGap: 50,
+  recoveryEloThreshold: 950,
+  minLateDraftGames: 3,
+  lateDraftSlotPercentile: 0.6,
+  earlyDraftSlotMax: 2,
+  minTurnaroundHalfGames: 2,
+  minTrioGames: 3,
   topLimit: 3,
 };
 
