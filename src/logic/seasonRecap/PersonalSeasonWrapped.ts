@@ -127,8 +127,8 @@ export function generatePersonalSeasonWrappedFromData(
   return {
     seasonNumber: data.seasonNumber,
     playerName,
-    title: `Season ${data.seasonNumber} Wrapped: ${playerName}`,
-    description: `Your season type: **${formatCardLabel(seasonType)}**`,
+    title: `Season ${data.seasonNumber} Wrapped - ${playerName}`,
+    description: `Main Character Stat: **${formatCardLabel(seasonType)}**`,
     fields: buildFields(fallbackCards),
     footer: `Season ${data.seasonNumber} • ${outcomes.length} games played`,
     summary: {
