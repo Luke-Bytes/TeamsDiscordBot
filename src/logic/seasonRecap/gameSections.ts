@@ -31,6 +31,7 @@ export function buildMapInsights(
     map,
     games: rows.length,
   }));
+  const uniqueMapCount = mapRows.length;
   const most = [...mapRows]
     .sort((a, b) => b.games - a.games)
     .slice(0, thresholds.topLimit)
@@ -58,6 +59,7 @@ export function buildMapInsights(
   return {
     title: "🗺️ Map Insights",
     lines: [
+      `${uniqueMapCount} unique maps were played this season.`,
       ...prefixRows("Most played", most),
       ...prefixRows("Specialists", specialists),
     ],
@@ -148,6 +150,21 @@ export function buildUpsetsAndCloseGames(
   const biggest = upsets[0]
     ? [formatGameHighlight(upsets[0].game, upsets[0].ctx.eloGap)]
     : [];
+  const underdogWins = new Map<string, number>();
+  for (const { game } of upsets) {
+    for (const gp of game.gameParticipations) {
+      if (gp.team === game.winner) {
+        underdogWins.set(gp.playerId, (underdogWins.get(gp.playerId) ?? 0) + 1);
+      }
+    }
+  }
+  const underdogPlayers = [...underdogWins.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, thresholds.topLimit)
+    .map(
+      ([playerId, wins]) =>
+        `${playerName(playerId, playerById)}: ${wins} underdog wins`
+    );
   const closeWins = new Map<string, number>();
   for (const game of games) {
     const ctx = model.gameContexts.get(game.id);
@@ -171,9 +188,13 @@ export function buildUpsetsAndCloseGames(
   return {
     title: "🐉 Upsets & Close Games",
     lines: [
-      ...prefixRows("Biggest upset", biggest),
+      ...prefixRows("Biggest Upset", biggest),
+      ...prefixRows("Most Underdog Wins", underdogPlayers),
+      closers.length
+        ? `Clutch closers are players with the most wins in games where the teams were within ${thresholds.closeGameEloGap} average Elo.`
+        : "",
       ...prefixRows("Clutch closers", closers),
-    ],
+    ].filter(Boolean),
   };
 }
 
@@ -184,20 +205,22 @@ export function buildCommunityOps(
   const hosts = topCounts(
     games.map((g) => g.host).filter(isUsefulName),
     thresholds.topLimit
-  ).map(([host, count]) => `${host} (${count})`);
+  ).map(([host]) => host);
   const organisers = topCounts(
     games.map((g) => g.organiser).filter(isUsefulName),
     thresholds.topLimit
-  ).map(([organiser, count]) => `${organiser} (${count})`);
+  ).map(([organiser]) => organiser);
 
   return {
     title: "🙌 Organisers & Hosts",
     lines: [
       "A big thank you to everyone who organised and hosted games this season!",
       organisers.length
-        ? `A special shoutout to our organisers: ${organisers.join(", ")}.`
+        ? `A special shoutout to ${organisers.join(", ")} for making one of the biggest organiser impacts this season.`
         : "",
-      hosts.length ? `And especially to our hosts: ${hosts.join(", ")}.` : "",
+      hosts.length
+        ? `And especially to ${hosts.join(", ")} for being some of the most active hosts.`
+        : "",
     ].filter(Boolean),
   };
 }

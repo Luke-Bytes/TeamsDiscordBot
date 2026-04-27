@@ -437,7 +437,7 @@ test("season recap includes draft order insights", () => {
     output.includes("First off the board"),
     "first pick counts should appear"
   );
-  assert(output.includes("Final picks"), "last pick counts should appear");
+  assert(output.includes("Last but not least"), "last pick counts should appear");
 });
 
 test("season recap uses clear stat labels", () => {
@@ -510,6 +510,23 @@ test("season recap includes the most average player section", () => {
   assert(
     output.includes("Closest to Median Elo"),
     "closest to median label should appear"
+  );
+});
+
+test("season recap explains close-game and underdog stats", () => {
+  const result = generateSeasonRecapFromData(fixture(), {
+    thresholds: { minPlayerSeasonShare: 0 },
+  });
+  const output = result.blocks.join("\n");
+
+  assert(output.includes("Biggest Upset"), "biggest upset should appear");
+  assert(
+    output.includes("Most Underdog Wins"),
+    "underdog player stat should appear"
+  );
+  assert(
+    output.includes("Clutch closers are players with the most wins"),
+    "clutch closers should be explained"
   );
 });
 

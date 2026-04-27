@@ -368,7 +368,7 @@ export function buildMvpVotingFun(
     .slice(0, thresholds.topLimit)
     .map(
       ([playerId, row]) =>
-        `${playerName(playerId, playerById)}: voted in ${pct(row.voted / row.games)} of games (${row.voted}/${row.games})`
+        `${playerName(playerId, playerById)}: voted in ${pct(row.voted / row.games)} of games`
     );
   const averageVoteRate =
     teamVoteRates.length > 0
@@ -572,8 +572,8 @@ export function buildDraftOrderInsights(
     title: "📋 Draft Board",
     lines: [
       ...prefixRows("First off the board", firstPicks),
-      ...prefixRows("Final picks", lastPicks),
       ...prefixRows("Earliest average pick", earliestAverage),
+      ...prefixRows("Last but not least", lastPicks),
     ],
   };
 }
