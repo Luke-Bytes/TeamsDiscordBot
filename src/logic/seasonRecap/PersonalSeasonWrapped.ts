@@ -71,12 +71,6 @@ export function generatePersonalSeasonWrappedFromData(
   const personalGames = games.filter((game) =>
     game.gameParticipations.some((gp) => gp.playerId === playerId)
   );
-  const histories = data.histories
-    .filter((history) => history.playerId === playerId)
-    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-  const eloTrail = [1000, ...histories.map((history) => history.elo)];
-  const peakElo = Math.max(...eloTrail);
-  const lowElo = Math.min(...eloTrail);
   const rank = calculateRank(data.playerStats, stats);
   const totalPlayers = data.playerStats.filter(
     (row) => totalGames(row) > 0
@@ -107,9 +101,6 @@ export function generatePersonalSeasonWrappedFromData(
   const playerName = displayName(playerId, playerById);
   const highlights = buildHighlights({
     stats,
-    outcomes,
-    peakElo,
-    lowElo,
     mvpCount,
     closeWins,
     underdogWins,
@@ -128,22 +119,7 @@ export function generatePersonalSeasonWrappedFromData(
     description: `Your season type: **${seasonType}**`,
     fields: [
       {
-        name: "Record",
-        value: `${stats.wins}W-${stats.losses}L (${pct(winRate(stats))})`,
-        inline: true,
-      },
-      {
-        name: "Elo",
-        value: `${stats.elo} final (${formatSigned(stats.elo - 1000)})`,
-        inline: true,
-      },
-      {
-        name: "Rank",
-        value: `#${rank}/${totalPlayers} (${percentileValue.toFixed(1)}%)`,
-        inline: true,
-      },
-      {
-        name: "Highlights",
+        name: "Wrapped Notes",
         value: highlights.join("\n"),
       },
     ],
@@ -177,9 +153,6 @@ function collectPlayers(data: SeasonRecapData, games: SeasonRecapGame[]) {
 
 function buildHighlights(context: {
   stats: SeasonRecapPlayerStats;
-  outcomes: PlayerGameOutcome[];
-  peakElo: number;
-  lowElo: number;
   mvpCount: number;
   closeWins: number;
   underdogWins: number;
@@ -192,9 +165,6 @@ function buildHighlights(context: {
 }) {
   const {
     stats,
-    outcomes,
-    peakElo,
-    lowElo,
     mvpCount,
     closeWins,
     underdogWins,
@@ -205,10 +175,32 @@ function buildHighlights(context: {
     playerById,
     memorableGame,
   } = context;
-  const lines = [
-    `Played ${outcomes.length} games with a best win streak of ${stats.biggestWinStreak}.`,
-    `Elo range: ${lowElo}-${peakElo}, finishing ${formatSigned(stats.elo - 1000)} from the season start.`,
-  ];
+  const lines: string[] = [];
+
+  if (relationships.bestTeammate) {
+    lines.push(
+      `Best duo: ${displayName(relationships.bestTeammate.playerId, playerById)} (${relationships.bestTeammate.wins}W-${relationships.bestTeammate.games - relationships.bestTeammate.wins}L).`
+    );
+  } else if (relationships.frequentTeammate) {
+    lines.push(
+      `Most common teammate: ${displayName(relationships.frequentTeammate.playerId, playerById)} (${relationships.frequentTeammate.games} games).`
+    );
+  }
+  if (relationships.roughTeammate) {
+    lines.push(
+      `Worst duo: ${displayName(relationships.roughTeammate.playerId, playerById)} (${relationships.roughTeammate.wins}W-${relationships.roughTeammate.games - relationships.roughTeammate.wins}L).`
+    );
+  }
+  if (relationships.bestOpponent) {
+    lines.push(
+      `Best matchup: ${displayName(relationships.bestOpponent.playerId, playerById)} (${relationships.bestOpponent.wins}W-${relationships.bestOpponent.games - relationships.bestOpponent.wins}L).`
+    );
+  }
+  if (relationships.roughOpponent) {
+    lines.push(
+      `Nemesis: ${displayName(relationships.roughOpponent.playerId, playerById)} (${relationships.roughOpponent.wins}W-${relationships.roughOpponent.games - relationships.roughOpponent.wins}L).`
+    );
+  }
 
   if (mvpCount > 0) lines.push(`Collected ${mvpCount} MVP${plural(mvpCount)}.`);
   if (closeWins > 0) {
@@ -239,21 +231,12 @@ function buildHighlights(context: {
       `Average draft pick: ${draft.averageSlot.toFixed(1)} over ${draft.draftedGames} draft${plural(draft.draftedGames)}.`
     );
   }
-  if (relationships.bestTeammate) {
-    lines.push(
-      `Best duo: ${displayName(relationships.bestTeammate.playerId, playerById)} (${relationships.bestTeammate.wins}W-${relationships.bestTeammate.games - relationships.bestTeammate.wins}L).`
-    );
-  } else if (relationships.frequentTeammate) {
-    lines.push(
-      `Most common teammate: ${displayName(relationships.frequentTeammate.playerId, playerById)} (${relationships.frequentTeammate.games} games).`
-    );
-  }
-  if (relationships.bestOpponent) {
-    lines.push(
-      `Best matchup: ${displayName(relationships.bestOpponent.playerId, playerById)} (${relationships.bestOpponent.wins}W-${relationships.bestOpponent.games - relationships.bestOpponent.wins}L).`
-    );
-  }
   if (memorableGame) lines.push(memorableGame);
+  if (!lines.length) {
+    lines.push(
+      `Best win streak: ${stats.biggestWinStreak}; roughest losing streak: ${stats.biggestLosingStreak}.`
+    );
+  }
 
   return lines.slice(0, 7);
 }
@@ -331,9 +314,19 @@ function buildRelationships(games: SeasonRecapGame[], playerId: string) {
       [...teammates.values()].filter((row) => row.games >= 2),
       "rate"
     ),
+    roughTeammate: bottomRelationship(
+      [...teammates.values()].filter(
+        (row) => row.games > 0 && row.wins < row.games
+      )
+    ),
     bestOpponent: topRelationship(
       [...opponents.values()].filter((row) => row.games >= 2 && row.wins > 0),
       "rate"
+    ),
+    roughOpponent: bottomRelationship(
+      [...opponents.values()].filter(
+        (row) => row.games >= 2 && row.wins < row.games
+      )
     ),
   };
 }
@@ -450,6 +443,17 @@ function topRelationship(rows: RelationshipRow[], mode: "games" | "rate") {
   })[0];
 }
 
+function bottomRelationship(rows: RelationshipRow[]) {
+  if (!rows.length) return null;
+  return [...rows].sort(
+    (a, b) =>
+      a.wins / a.games - b.wins / b.games ||
+      b.games - a.games ||
+      a.wins - b.wins ||
+      a.playerId.localeCompare(b.playerId)
+  )[0];
+}
+
 function displayName(
   playerId: string,
   players: Map<string, SeasonRecapPlayer>
@@ -465,10 +469,6 @@ function totalGames(stats: SeasonRecapPlayerStats) {
 function winRate(stats: SeasonRecapPlayerStats) {
   const games = totalGames(stats);
   return games ? stats.wins / games : 0;
-}
-
-function formatSigned(value: number) {
-  return value > 0 ? `+${value}` : `${value}`;
 }
 
 function plural(count: number) {

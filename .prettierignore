@@ -1,0 +1,16 @@
+node_modules
+dist
+coverage
+
+.git
+.idea
+.codex
+
+logs
+backups
+
+.env
+.env.*
+!.env.sample
+
+package-lock.json

@@ -1,5 +1,4 @@
 import typescriptEslintPlugin from "@typescript-eslint/eslint-plugin";
-import prettierPlugin from "eslint-plugin-prettier";
 import js from "@eslint/js";
 import typescriptParser from "@typescript-eslint/parser";
 import importPlugin from "eslint-plugin-import";
@@ -17,7 +16,6 @@ export default [
       parserOptions: {
         ecmaVersion: "latest",
         sourceType: "module",
-        project: "./tsconfig.json",
       },
       globals: {
         console: "readonly",
@@ -34,24 +32,18 @@ export default [
     },
     plugins: {
       "@typescript-eslint": typescriptEslintPlugin,
-      prettier: prettierPlugin,
       import: importPlugin,
     },
     rules: {
       ...js.configs.recommended.rules,
       ...tsEslintRules,
-      "prettier/prettier": "error",
       "@typescript-eslint/explicit-function-return-type": "off",
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-unused-vars": [
         "warn",
         { argsIgnorePattern: "^_" },
       ],
-      "import/extensions": [
-        "error",
-        "always",
-        { js: "never", ts: "never", tsx: "never" },
-      ],
+      "import/extensions": "off",
       "import/no-unresolved": [
         "error",
         {
@@ -76,7 +68,6 @@ export default [
       "@typescript-eslint/no-unused-vars": "off",
       "import/no-unresolved": "off",
       "import/extensions": "off",
-      "prettier/prettier": "off",
     },
   },
 ];
