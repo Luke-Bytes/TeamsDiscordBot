@@ -521,7 +521,7 @@ test("season recap includes draft value, trio, and turnaround insights", () => {
 
   assert(output.includes("💎 Draft Value"), "draft value section should appear");
   assert(
-    output.includes("Best Late Draft Picks"),
+    output.includes("Best Sleeper Draft Picks"),
     "late draft picks should appear"
   );
   assert(

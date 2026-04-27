@@ -38,7 +38,7 @@ export const DEFAULT_SEASON_RECAP_THRESHOLDS: SeasonRecapThresholds = {
   topLimit: 3,
 };
 
-export const DEFAULT_MAX_BLOCK_LENGTH = 1800;
+export const DEFAULT_MAX_BLOCK_LENGTH = 1650;
 export const DISCORD_HARD_LIMIT = 2000;
 export const EXCLUDED_BANNED_CLASSES = new Set(["SWAPPER"]);
 

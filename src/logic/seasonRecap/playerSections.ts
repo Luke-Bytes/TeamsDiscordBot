@@ -359,11 +359,16 @@ export function buildMvpVotingFun(
 
   const topVoters = [...votesByPlayer.entries()]
     .filter(([, row]) => row.voted > 0)
-    .sort((a, b) => b[1].voted - a[1].voted || b[1].games - a[1].games)
+    .sort(
+      (a, b) =>
+        b[1].voted / b[1].games - a[1].voted / a[1].games ||
+        b[1].voted - a[1].voted ||
+        b[1].games - a[1].games
+    )
     .slice(0, thresholds.topLimit)
     .map(
       ([playerId, row]) =>
-        `${playerName(playerId, playerById)}: voted in ${row.voted}/${row.games} games`
+        `${playerName(playerId, playerById)}: voted in ${pct(row.voted / row.games)} of games (${row.voted}/${row.games})`
     );
   const averageVoteRate =
     teamVoteRates.length > 0
@@ -459,24 +464,35 @@ export function buildDraftValueInsights(
       return `${playerName(playerId, playerById)}: ${pct(rate)} win rate in early picks (${row.earlyWins}W-${row.earlyGames - row.earlyWins}L)`;
     });
 
-  const averageSlot = [...rows.entries()]
-    .filter(([, row]) => row.draftGames >= thresholds.minLateDraftGames)
-    .sort(
-      (a, b) =>
-        b[1].slotTotal / b[1].draftGames - a[1].slotTotal / a[1].draftGames
+  const valueSwings = [...rows.entries()]
+    .filter(
+      ([, row]) =>
+        row.earlyGames >= thresholds.minLateDraftGames &&
+        row.lateGames >= thresholds.minLateDraftGames
     )
-    .slice(0, thresholds.topLimit)
     .map(([playerId, row]) => {
-      const average = row.slotTotal / row.draftGames;
-      return `${playerName(playerId, playerById)}: avg draft slot ${average.toFixed(1)}`;
-    });
+      const earlyRate = row.earlyWins / row.earlyGames;
+      const lateRate = row.lateWins / row.lateGames;
+      return {
+        playerId,
+        earlyRate,
+        lateRate,
+        delta: lateRate - earlyRate,
+      };
+    })
+    .sort((a, b) => b.delta - a.delta || b.lateRate - a.lateRate)
+    .slice(0, thresholds.topLimit)
+    .map(
+      (r) =>
+        `${playerName(r.playerId, playerById)}: ${pct(r.earlyRate)} early -> ${pct(r.lateRate)} late (+${(r.delta * 100).toFixed(1)} pts)`
+    );
 
   return {
     title: "💎 Draft Value",
     lines: [
-      ...prefixRows("Best Late Draft Picks", latePicks),
+      ...prefixRows("Best Sleeper Draft Picks", latePicks),
       ...prefixRows("First Pick Pressure", earlyPicks),
-      ...prefixRows("Highest Average Draft Slot", averageSlot),
+      ...prefixRows("Biggest Draft Value Swings", valueSwings),
     ],
   };
 }
