@@ -15,6 +15,7 @@ import "./cases/titleIntegration.test";
 import "./cases/interactionGuard.test";
 import "./cases/scriptsCommand.test";
 import "./cases/seasonRecap.test";
+import "./cases/personalSeasonWrapped.test";
 import "./cases/discordUtilMoveToVC.test";
 import "./cases/unregisterRoleCleanup.test";
 import "./cases/playerRemoveRoleCleanup.test";

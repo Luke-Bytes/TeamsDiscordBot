@@ -57,6 +57,14 @@ export async function generateSeasonRecap(
   options: GenerateOptions = {}
 ): Promise<SeasonRecapResult> {
   const seasonNumber = options.seasonNumber ?? ConfigManager.getConfig().season;
+  const data = await loadSeasonRecapData(seasonNumber);
+
+  return generateSeasonRecapFromData(data, options);
+}
+
+export async function loadSeasonRecapData(
+  seasonNumber: number
+): Promise<SeasonRecapData> {
   const season = await prismaClient.season.findUnique({
     where: { number: seasonNumber },
   });
@@ -110,36 +118,33 @@ export async function generateSeasonRecap(
     }),
   ]);
 
-  return generateSeasonRecapFromData(
-    {
-      seasonNumber,
-      games: games.map((game) => ({
-        id: game.id,
-        finished: game.finished,
-        startTime: game.startTime,
-        endTime: game.endTime,
-        settings: game.settings as SeasonRecapGameSettings,
-        winner: game.winner,
-        type: game.type,
-        doubleElo: game.doubleElo,
-        organiser: supportByGameId.get(game.id)?.organiser ?? "Unknown",
-        host: supportByGameId.get(game.id)?.host ?? "Unknown",
-        gameParticipations: game.gameParticipations.map((gp) => ({
-          playerId: gp.playerId,
-          ignUsed: gp.ignUsed,
-          team: gp.team,
-          mvp: gp.mvp,
-          captain: gp.captain,
-          draftSlotPlacement: gp.draftSlotPlacement,
-          votedForAMVP: gp.votedForAMVP,
-          player: gp.player,
-        })),
+  return {
+    seasonNumber,
+    games: games.map((game) => ({
+      id: game.id,
+      finished: game.finished,
+      startTime: game.startTime,
+      endTime: game.endTime,
+      settings: game.settings as SeasonRecapGameSettings,
+      winner: game.winner,
+      type: game.type,
+      doubleElo: game.doubleElo,
+      organiser: supportByGameId.get(game.id)?.organiser ?? "Unknown",
+      host: supportByGameId.get(game.id)?.host ?? "Unknown",
+      gameParticipations: game.gameParticipations.map((gp) => ({
+        playerId: gp.playerId,
+        ignUsed: gp.ignUsed,
+        team: gp.team,
+        mvp: gp.mvp,
+        captain: gp.captain,
+        draftSlotPlacement: gp.draftSlotPlacement,
+        votedForAMVP: gp.votedForAMVP,
+        player: gp.player,
       })),
-      playerStats,
-      histories,
-    },
-    options
-  );
+    })),
+    playerStats,
+    histories,
+  };
 }
 
 async function findGameSupportById(seasonId: string) {

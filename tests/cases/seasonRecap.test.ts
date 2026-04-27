@@ -203,10 +203,30 @@ function richGame(
 
 function richFixture(): SeasonRecapData {
   const games = [
-    richGame(0, ["early1", "early2", "anchor"], ["late1", "late2", "late3"], Team.BLUE),
-    richGame(1, ["early1", "early2", "anchor"], ["late1", "late2", "late3"], Team.BLUE),
-    richGame(2, ["early1", "early2", "anchor"], ["late1", "late2", "late3"], Team.RED),
-    richGame(3, ["early1", "early2", "anchor"], ["late1", "late2", "late3"], Team.BLUE),
+    richGame(
+      0,
+      ["early1", "early2", "anchor"],
+      ["late1", "late2", "late3"],
+      Team.BLUE
+    ),
+    richGame(
+      1,
+      ["early1", "early2", "anchor"],
+      ["late1", "late2", "late3"],
+      Team.BLUE
+    ),
+    richGame(
+      2,
+      ["early1", "early2", "anchor"],
+      ["late1", "late2", "late3"],
+      Team.RED
+    ),
+    richGame(
+      3,
+      ["early1", "early2", "anchor"],
+      ["late1", "late2", "late3"],
+      Team.BLUE
+    ),
   ];
 
   return {
@@ -284,12 +304,11 @@ function richFixture(): SeasonRecapData {
       g.gameParticipations.map((gp) => ({
         playerId: gp.playerId,
         gameId: g.id,
-        elo:
-          gp.playerId.startsWith("late")
-            ? 1000 + gameIdx * 25 + 30
-            : gp.playerId.startsWith("early")
-              ? 1000 - gameIdx * 20
-              : 1000 + (gameIdx % 2 === 0 ? 10 : -10),
+        elo: gp.playerId.startsWith("late")
+          ? 1000 + gameIdx * 25 + 30
+          : gp.playerId.startsWith("early")
+            ? 1000 - gameIdx * 20
+            : 1000 + (gameIdx % 2 === 0 ? 10 : -10),
         createdAt: new Date(g.endTime.getTime() + 1000),
       }))
     ),
@@ -298,10 +317,30 @@ function richFixture(): SeasonRecapData {
 
 function turnaroundFixture(): SeasonRecapData {
   const games = [
-    richGame(0, ["turn", "steady", "helper"], ["opp1", "opp2", "opp3"], Team.BLUE),
-    richGame(1, ["turn", "steady", "helper"], ["opp1", "opp2", "opp3"], Team.BLUE),
-    richGame(2, ["opp1", "opp2", "opp3"], ["turn", "steady", "helper"], Team.BLUE),
-    richGame(3, ["opp1", "opp2", "opp3"], ["turn", "steady", "helper"], Team.BLUE),
+    richGame(
+      0,
+      ["turn", "steady", "helper"],
+      ["opp1", "opp2", "opp3"],
+      Team.BLUE
+    ),
+    richGame(
+      1,
+      ["turn", "steady", "helper"],
+      ["opp1", "opp2", "opp3"],
+      Team.BLUE
+    ),
+    richGame(
+      2,
+      ["opp1", "opp2", "opp3"],
+      ["turn", "steady", "helper"],
+      Team.BLUE
+    ),
+    richGame(
+      3,
+      ["opp1", "opp2", "opp3"],
+      ["turn", "steady", "helper"],
+      Team.BLUE
+    ),
   ];
 
   return {
@@ -453,7 +492,10 @@ test("season recap includes draft order insights", () => {
     output.includes("First off the board"),
     "first pick counts should appear"
   );
-  assert(output.includes("Last but not least"), "last pick counts should appear");
+  assert(
+    output.includes("Last but not least"),
+    "last pick counts should appear"
+  );
 });
 
 test("season recap formats ranked stat groups cleanly", () => {
@@ -572,7 +614,10 @@ test("season recap includes draft value, trio, and turnaround insights", () => {
   });
   const output = result.blocks.join("\n");
 
-  assert(output.includes("💎 Draft Value"), "draft value section should appear");
+  assert(
+    output.includes("💎 Draft Value"),
+    "draft value section should appear"
+  );
   assert(
     output.includes("Best Sleeper Draft Picks"),
     "late draft picks should appear"
