@@ -32,9 +32,9 @@ export function buildSnapshot(
   return {
     title: `🎉 Friendly Wars Season ${seasonNumber} Recap`,
     lines: [
-      `Season ${seasonNumber} ran from ${dateRange} across ${formatSeasonSpan(games)}.`,
-      `${games.length} games were played by ${playerCount} unique players, with the biggest game having ${biggestGamePlayers} players!`,
-      "Here are the highlights, interesting patterns, and community moments that shaped the season.",
+      `Season ${seasonNumber} ran from ${dateRange}, covering ${formatSeasonSpan(games)} of games, drafts, and close calls.`,
+      `${games.length} games were played by ${playerCount} unique players, with the biggest game reaching ${biggestGamePlayers} players at once.`,
+      "Check out the stats, patterns, and highlights from the season ⬇️",
     ],
   };
 }
