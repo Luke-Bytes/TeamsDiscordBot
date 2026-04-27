@@ -452,6 +452,22 @@ test("season recap includes draft order insights", () => {
   assert(output.includes("Last but not least"), "last pick counts should appear");
 });
 
+test("season recap formats ranked stat groups cleanly", () => {
+  const result = generateSeasonRecapFromData(fixture(), {
+    thresholds: { minPlayerSeasonShare: 0 },
+  });
+  const output = result.blocks.join("\n");
+
+  assert(
+    output.includes("**Most Games Together**\n1."),
+    "ranked labels should sit above the numbered rows"
+  );
+  assert(
+    !output.includes("Most Games Together: 1."),
+    "ranked labels should not share a line with the first row"
+  );
+});
+
 test("season recap uses clear stat labels", () => {
   const result = generateSeasonRecapFromData(fixture(), {
     thresholds: { minPlayerSeasonShare: 0 },

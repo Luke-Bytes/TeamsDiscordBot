@@ -34,9 +34,7 @@ export function splitDiscordBlocks(text: string, maxLength: number): string[] {
 
 export function prefixRows(label: string, rows: string[]) {
   if (!rows.length) return [];
-  return rows.map(
-    (row, idx) => `${idx === 0 ? `${label}: ` : "  "}${idx + 1}. ${row}`
-  );
+  return [`**${label}**`, ...rows.map((row, idx) => `${idx + 1}. ${row}`)];
 }
 
 export function playerName(
