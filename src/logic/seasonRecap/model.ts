@@ -1,5 +1,5 @@
 import { Team } from "@prisma/client";
-import { duration, mean } from "./formatting";
+import { mean } from "./formatting";
 import {
   SeasonRecapEloHistory,
   SeasonRecapGame,
@@ -50,7 +50,6 @@ export function buildSeasonRecapModel(
           ? Team.BLUE
           : null;
     const closeGame = eloGap < thresholds.closeGameEloGap;
-    const durationMinutes = duration(game);
 
     gameContexts.set(game.id, {
       redMean,
@@ -58,7 +57,6 @@ export function buildSeasonRecapModel(
       eloGap,
       underdogTeam,
       closeGame,
-      durationMinutes,
     });
 
     for (const gp of game.gameParticipations) {
@@ -72,7 +70,6 @@ export function buildSeasonRecapModel(
         won: gp.team === game.winner,
         team: gp.team,
         map: game.settings?.map ?? "Unknown",
-        durationMinutes,
         closeGame,
         underdog: underdogTeam === gp.team,
         captain: gp.captain,

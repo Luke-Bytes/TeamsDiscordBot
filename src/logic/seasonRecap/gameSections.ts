@@ -1,16 +1,9 @@
-import { Team } from "@prisma/client";
 import {
   bannedClasses,
-  duration,
   formatGameHighlight,
-  formatGameSummary,
-  formatMinutes,
   groupBy,
   isUsefulName,
-  mean,
-  median,
   pct,
-  percentile,
   playerName,
   prefixRows,
   pretty,
@@ -37,30 +30,11 @@ export function buildMapInsights(
   ].map(([map, rows]) => ({
     map,
     games: rows.length,
-    redWins: rows.filter((g) => g.winner === Team.RED).length,
-    medianDuration: median(rows.map(duration)),
   }));
   const most = [...mapRows]
     .sort((a, b) => b.games - a.games)
     .slice(0, thresholds.topLimit)
     .map((r) => `${pretty(r.map)}: ${r.games} plays`);
-  const skew = [...mapRows]
-    .filter((r) => r.games >= 3)
-    .map((r) => ({ ...r, skew: Math.abs(r.redWins / r.games - 0.5) }))
-    .sort((a, b) => b.skew - a.skew || b.games - a.games)
-    .slice(0, thresholds.topLimit)
-    .map(
-      (r) =>
-        `${pretty(r.map)}: ${r.redWins >= r.games / 2 ? "RED" : "BLUE"} ${pct(Math.max(r.redWins, r.games - r.redWins) / r.games)}`
-    );
-  const slowFast = [...mapRows]
-    .filter((r) => r.games >= 2)
-    .sort((a, b) => b.medianDuration - a.medianDuration)
-    .slice(0, 1)
-    .map(
-      (r) =>
-        `Slowest: ${pretty(r.map)} (${formatMinutes(r.medianDuration)} median)`
-    );
   const specialists = [...outcomesByPlayer.entries()]
     .flatMap(([playerId, outcomes]) => {
       if (outcomes.length < minGames) return [];
@@ -85,8 +59,6 @@ export function buildMapInsights(
     title: "🗺️ Map Insights",
     lines: [
       ...prefixRows("Most played", most),
-      ...prefixRows("Color skew", skew),
-      ...slowFast,
       ...prefixRows("Specialists", specialists),
     ],
   };
@@ -133,13 +105,9 @@ export function buildGameTypeAndModifierInsights(
   games: SeasonRecapGame[]
 ): InsightSection {
   const typeRows = [...groupBy(games, (g) => g.type ?? "UNKNOWN").entries()]
-    .filter(([, rows]) => rows.length >= 2)
     .sort((a, b) => b[1].length - a[1].length)
     .slice(0, 3)
-    .map(
-      ([type, rows]) =>
-        `${pretty(String(type))}: ${rows.length} games, ${formatMinutes(mean(rows.map(duration)))} avg`
-    );
+    .map(([type, rows]) => `${pretty(String(type))}: ${rows.length} games`);
   const modifiers = new Map<string, SeasonRecapGame[]>();
   for (const game of games) {
     for (const modifier of game.settings?.modifiers ?? []) {
@@ -150,19 +118,15 @@ export function buildGameTypeAndModifierInsights(
     }
   }
   const modifierRows = [...modifiers.entries()]
-    .filter(([, rows]) => rows.length >= 2)
-    .sort((a, b) => mean(b[1].map(duration)) - mean(a[1].map(duration)))
+    .sort((a, b) => b[1].length - a[1].length)
     .slice(0, 3)
-    .map(
-      ([modifier, rows]) =>
-        `${modifier}: ${formatMinutes(mean(rows.map(duration)))} avg over ${rows.length}`
-    );
+    .map(([modifier, rows]) => `${modifier}: ${rows.length} games`);
 
   return {
     title: "🎲 Game Type & Modifier Notes",
     lines: [
       ...prefixRows("Types", typeRows),
-      ...prefixRows("Longest modifiers", modifierRows),
+      ...prefixRows("Most common modifiers", modifierRows),
     ],
   };
 }
@@ -213,64 +177,6 @@ export function buildUpsetsAndCloseGames(
   };
 }
 
-export function buildDurationStories(
-  games: SeasonRecapGame[],
-  outcomesByPlayer: Map<string, PlayerGameOutcome[]>,
-  playerById: Map<string, SeasonRecapPlayer>,
-  thresholds: SeasonRecapThresholds
-): InsightSection {
-  const sorted = [...games].sort((a, b) => duration(a) - duration(b));
-  const shortest = sorted[0] ? `Shortest: ${formatGameSummary(sorted[0])}` : "";
-  const longest = sorted.at(-1)
-    ? `Longest: ${formatGameSummary(sorted.at(-1)!)} `
-    : "";
-  const durations = games.map(duration);
-  const fastCutoff = percentile(durations, 0.25);
-  const longCutoff = percentile(durations, 0.75);
-  const fast = [...outcomesByPlayer.entries()]
-    .map(([playerId, outcomes]) => {
-      const rows = outcomes.filter((o) => o.durationMinutes <= fastCutoff);
-      return {
-        playerId,
-        games: rows.length,
-        wins: rows.filter((o) => o.won).length,
-      };
-    })
-    .filter((r) => r.games >= thresholds.minFastLongGames)
-    .sort((a, b) => b.wins / b.games - a.wins / a.games)
-    .slice(0, thresholds.topLimit)
-    .map(
-      (r) =>
-        `${playerName(r.playerId, playerById)}: ${pct(r.wins / r.games)} fast games`
-    );
-  const long = [...outcomesByPlayer.entries()]
-    .map(([playerId, outcomes]) => {
-      const rows = outcomes.filter((o) => o.durationMinutes >= longCutoff);
-      return {
-        playerId,
-        games: rows.length,
-        wins: rows.filter((o) => o.won).length,
-      };
-    })
-    .filter((r) => r.games >= thresholds.minFastLongGames)
-    .sort((a, b) => b.wins / b.games - a.wins / a.games)
-    .slice(0, thresholds.topLimit)
-    .map(
-      (r) =>
-        `${playerName(r.playerId, playerById)}: ${pct(r.wins / r.games)} long games`
-    );
-
-  return {
-    title: "⏱️ Duration Stories",
-    lines: [
-      shortest,
-      longest.trim(),
-      ...prefixRows("Fast specialists", fast),
-      ...prefixRows("Marathon players", long),
-    ].filter(Boolean),
-  };
-}
-
 export function buildCommunityOps(
   games: SeasonRecapGame[],
   thresholds: SeasonRecapThresholds
@@ -278,17 +184,20 @@ export function buildCommunityOps(
   const hosts = topCounts(
     games.map((g) => g.host).filter(isUsefulName),
     thresholds.topLimit
-  ).map(([host, count]) => `${host}: ${count} games`);
+  ).map(([host, count]) => `${host} (${count})`);
   const organisers = topCounts(
     games.map((g) => g.organiser).filter(isUsefulName),
     thresholds.topLimit
-  ).map(([organiser, count]) => `${organiser}: ${count} games`);
+  ).map(([organiser, count]) => `${organiser} (${count})`);
 
   return {
-    title: "🧑‍💼 Community Ops",
+    title: "🙌 Organisers & Hosts",
     lines: [
-      ...prefixRows("Hosts", hosts),
-      ...prefixRows("Organisers", organisers),
-    ],
+      "A huge thank you to everyone who organised and hosted games this season.",
+      organisers.length
+        ? `Special shoutout to organisers: ${organisers.join(", ")}.`
+        : "",
+      hosts.length ? `And to hosts: ${hosts.join(", ")}.` : "",
+    ].filter(Boolean),
   };
 }

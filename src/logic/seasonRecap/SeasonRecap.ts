@@ -20,6 +20,7 @@ import {
 import { buildSeasonRecapModel } from "./model";
 import {
   buildCaptainImpact,
+  buildDraftOrderInsights,
   buildEloStorylines,
   buildFormTrends,
   buildMvpTrends,
@@ -29,7 +30,6 @@ import { buildDuoChemistry, buildRivalries } from "./relationshipSections";
 import {
   buildBanTrends,
   buildCommunityOps,
-  buildDurationStories,
   buildGameTypeAndModifierInsights,
   buildMapInsights,
   buildUpsetsAndCloseGames,
@@ -301,6 +301,7 @@ function buildSections(context: {
       thresholds,
       effectiveMinPlayerGames
     ),
+    buildDraftOrderInsights(games, playerById, thresholds),
     buildDuoChemistry(games, playerById, thresholds),
     buildRivalries(games, playerById, thresholds),
     buildMapInsights(
@@ -313,7 +314,6 @@ function buildSections(context: {
     buildBanTrends(games, thresholds),
     buildGameTypeAndModifierInsights(games),
     buildUpsetsAndCloseGames(games, model, playerById, thresholds),
-    buildDurationStories(games, model.outcomesByPlayer, playerById, thresholds),
     buildCommunityOps(games, thresholds),
   ];
 }

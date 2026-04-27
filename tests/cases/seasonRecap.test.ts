@@ -46,6 +46,7 @@ function game(
         team: Team.RED,
         mvp: (id === "steady" && idx <= 3) || id === "onegame",
         captain: pos === 0,
+        draftSlotPlacement: pos + 1,
         player: player(id, id),
       })),
       ...blueIds.map((id, pos) => ({
@@ -54,6 +55,7 @@ function game(
         team: Team.BLUE,
         mvp: id === "onegame",
         captain: pos === 0,
+        draftSlotPlacement: redIds.length + pos + 1,
         player: player(id, id),
       })),
     ],
@@ -185,4 +187,18 @@ test("season recap output avoids raw ids and Discord mentions", () => {
 
   assert(!output.includes("<@"), "recap should not mention Discord users");
   assert(!output.includes("game-"), "recap should not expose raw game ids");
+});
+
+test("season recap includes draft order insights", () => {
+  const result = generateSeasonRecapFromData(fixture(), {
+    thresholds: { minPlayerSeasonShare: 0 },
+  });
+  const output = result.blocks.join("\n");
+
+  assert(output.includes("📋 Draft Board"), "draft section should appear");
+  assert(
+    output.includes("First off the board"),
+    "first pick counts should appear"
+  );
+  assert(output.includes("Final picks"), "last pick counts should appear");
 });

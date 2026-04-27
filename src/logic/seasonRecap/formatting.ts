@@ -68,46 +68,26 @@ export function formatDateRange(games: SeasonRecapGame[]) {
   return `${formatDate(games[0].startTime)}-${formatDate(games.at(-1)!.endTime)}`;
 }
 
+export function formatSeasonSpan(games: SeasonRecapGame[]) {
+  if (!games.length) return "0 days";
+  const first = games[0].startTime.getTime();
+  const last = games.at(-1)!.endTime.getTime();
+  const days = Math.max(1, Math.ceil((last - first) / 86_400_000));
+  if (days < 14) return `${days} day${days === 1 ? "" : "s"}`;
+  const weeks = Math.floor(days / 7);
+  const remainder = days % 7;
+  return remainder
+    ? `${weeks} week${weeks === 1 ? "" : "s"}, ${remainder} day${remainder === 1 ? "" : "s"}`
+    : `${weeks} week${weeks === 1 ? "" : "s"}`;
+}
+
 export function formatDate(date: Date) {
   return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
-}
-
-export function duration(game: SeasonRecapGame) {
-  return Math.max(
-    0,
-    (game.endTime.getTime() - game.startTime.getTime()) / 60000
-  );
-}
-
-export function formatMinutes(minutes: number) {
-  if (!Number.isFinite(minutes)) return "0m";
-  const hours = Math.floor(minutes / 60);
-  const mins = Math.round(minutes % 60);
-  return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
 }
 
 export function mean(values: number[]) {
   if (!values.length) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-export function median(values: number[]) {
-  if (!values.length) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[mid - 1] + sorted[mid]) / 2
-    : sorted[mid];
-}
-
-export function percentile(values: number[], pct: number) {
-  if (!values.length) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const idx = Math.min(
-    sorted.length - 1,
-    Math.max(0, Math.floor(pct * sorted.length))
-  );
-  return sorted[idx];
 }
 
 export function pct(value: number) {
@@ -160,15 +140,6 @@ export function formatGameHighlight(game: SeasonRecapGame, eloGap: number) {
     .map((gp) => escapeIgn(gp.ignUsed))
     .join(", ");
   return `${pretty(game.settings?.map ?? "Unknown")} on ${formatDate(game.startTime)}: ${game.winner} won despite ${Math.round(eloGap)} avg Elo gap. RED: ${red}. BLUE: ${blue}.`;
-}
-
-export function formatGameSummary(game: SeasonRecapGame) {
-  const captains = game.gameParticipations
-    .filter((gp) => gp.captain)
-    .map((gp) => escapeIgn(gp.ignUsed))
-    .join(" vs ");
-  const captainText = captains ? `, captains ${captains}` : "";
-  return `${formatMinutes(duration(game))} on ${pretty(game.settings?.map ?? "Unknown")} (${formatDate(game.startTime)}${captainText})`;
 }
 
 function splitOversizedBlock(block: string, maxLength: number) {

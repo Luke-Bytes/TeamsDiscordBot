@@ -127,7 +127,6 @@ export type PlayerGameOutcome = {
   won: boolean;
   team: Team;
   map: string;
-  durationMinutes: number;
   closeGame: boolean;
   underdog: boolean;
   captain: boolean;
@@ -144,7 +143,6 @@ export type SeasonRecapModel = {
       eloGap: number;
       underdogTeam: Team | null;
       closeGame: boolean;
-      durationMinutes: number;
     }
   >;
   outcomesByPlayer: Map<string, PlayerGameOutcome[]>;

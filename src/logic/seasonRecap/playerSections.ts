@@ -1,10 +1,6 @@
-import { Team } from "@prisma/client";
 import {
-  duration,
-  formatMinutes,
+  formatSeasonSpan,
   groupBy,
-  mean,
-  median,
   pct,
   playerName,
   prefixRows,
@@ -26,16 +22,12 @@ export function buildSnapshot(
   playerCount: number,
   dateRange: string
 ): InsightSection {
-  const durations = games.map(duration).filter(Number.isFinite);
-  const redWins = games.filter((g) => g.winner === Team.RED).length;
-  const blueWins = games.filter((g) => g.winner === Team.BLUE).length;
-
   return {
-    title: `🎉 Season ${seasonNumber} Recap`,
+    title: `🎉 Friendly Wars Season ${seasonNumber} Recap`,
     lines: [
-      `${games.length} games • ${playerCount} players • ${dateRange}`,
-      `Avg duration ${formatMinutes(mean(durations))} • median ${formatMinutes(median(durations))}`,
-      `RED ${redWins} wins • BLUE ${blueWins} wins`,
+      `Season ${seasonNumber} ran from ${dateRange} across ${formatSeasonSpan(games)}.`,
+      `${games.length} finished games were played by ${playerCount} players.`,
+      "Here are the storylines, standout runs, draft patterns, and community moments that shaped the season.",
     ],
   };
 }
@@ -235,6 +227,87 @@ export function buildMvpTrends(
       ...prefixRows("Leaders", leaders),
       ...prefixRows("Best rate", rates),
       ...prefixRows("Close-game picks", close),
+    ],
+  };
+}
+
+export function buildDraftOrderInsights(
+  games: SeasonRecapGame[],
+  playerById: Map<string, SeasonRecapPlayer>,
+  thresholds: SeasonRecapThresholds
+): InsightSection {
+  const rows = new Map<
+    string,
+    {
+      draftedGames: number;
+      firstPicks: number;
+      lastPicks: number;
+      slotTotal: number;
+    }
+  >();
+
+  for (const game of games) {
+    const drafted = game.gameParticipations.filter(
+      (gp) => typeof gp.draftSlotPlacement === "number"
+    );
+    if (!drafted.length) continue;
+
+    const slots = drafted.map((gp) => gp.draftSlotPlacement!);
+    const firstSlot = Math.min(...slots);
+    const lastSlot = Math.max(...slots);
+
+    for (const gp of drafted) {
+      const row = rows.get(gp.playerId) ?? {
+        draftedGames: 0,
+        firstPicks: 0,
+        lastPicks: 0,
+        slotTotal: 0,
+      };
+      row.draftedGames += 1;
+      row.slotTotal += gp.draftSlotPlacement!;
+      if (gp.draftSlotPlacement === firstSlot) row.firstPicks += 1;
+      if (gp.draftSlotPlacement === lastSlot) row.lastPicks += 1;
+      rows.set(gp.playerId, row);
+    }
+  }
+
+  const minDraftedGames = Math.max(2, thresholds.minCaptainGames);
+  const firstPicks = [...rows.entries()]
+    .filter(([, row]) => row.firstPicks > 0)
+    .sort((a, b) => b[1].firstPicks - a[1].firstPicks)
+    .slice(0, thresholds.topLimit)
+    .map(
+      ([playerId, row]) =>
+        `${playerName(playerId, playerById)}: ${row.firstPicks} first picks`
+    );
+  const lastPicks = [...rows.entries()]
+    .filter(([, row]) => row.lastPicks > 0)
+    .sort((a, b) => b[1].lastPicks - a[1].lastPicks)
+    .slice(0, thresholds.topLimit)
+    .map(
+      ([playerId, row]) =>
+        `${playerName(playerId, playerById)}: ${row.lastPicks} final picks`
+    );
+  const earliestAverage = [...rows.entries()]
+    .filter(([, row]) => row.draftedGames >= minDraftedGames)
+    .sort(
+      (a, b) =>
+        a[1].slotTotal / a[1].draftedGames -
+          b[1].slotTotal / b[1].draftedGames ||
+        b[1].draftedGames - a[1].draftedGames
+    )
+    .slice(0, thresholds.topLimit)
+    .map(([playerId, row]) => {
+      const average = row.slotTotal / row.draftedGames;
+      return `${playerName(playerId, playerById)}: avg pick ${average.toFixed(1)} over ${row.draftedGames} drafts`;
+    });
+
+  return {
+    title: "📋 Draft Board",
+    lines: [
+      ...prefixRows("First off the board", firstPicks),
+      ...prefixRows("Final picks", lastPicks),
+      ...prefixRows("Earliest average pick", earliestAverage),
     ],
   };
 }
