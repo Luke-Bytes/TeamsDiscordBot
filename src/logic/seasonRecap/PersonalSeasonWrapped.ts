@@ -128,7 +128,7 @@ export function generatePersonalSeasonWrappedFromData(
     seasonNumber: data.seasonNumber,
     playerName,
     title: `Season ${data.seasonNumber} Wrapped: ${playerName}`,
-    description: `**${seasonType}**`,
+    description: `Your season type: **${formatCardLabel(seasonType)}**`,
     fields: buildFields(fallbackCards),
     footer: `Season ${data.seasonNumber} • ${outcomes.length} games played`,
     summary: {
@@ -161,19 +161,24 @@ function buildFields(cards: InsightCard[]): PersonalWrappedField[] {
   const vibe = cards.find((card) => card.category === "vibe") ?? cards[0];
   if (vibe) {
     fields.push({
-      name: "Season Vibe",
-      value: `${vibe.label}\n${vibe.line}`,
+      name: "✨ Season Vibe",
+      value: renderCard(vibe),
     });
   }
 
   const grouped = groupCards(cards.filter((card) => card !== vibe));
-  addField(fields, "People Lore", grouped.people);
-  addField(fields, "Signature Moment", grouped.moment);
-  addField(fields, "Special Mentions", grouped.special);
+  addField(fields, "🤝 People Lore", grouped.people);
+  addField(fields, "🎬 Signature Moment", grouped.moment);
+  addField(fields, "💫 Special Mentions", grouped.special);
 
   return fields.length
     ? fields
-    : [{ name: "Season Vibe", value: "Season Regular\nYou showed up." }];
+    : [
+        {
+          name: "✨ Season Vibe",
+          value: "**🎮 Season Regular**\nYou showed up.",
+        },
+      ];
 }
 
 function addField(
@@ -184,7 +189,7 @@ function addField(
   if (!cards.length) return;
   fields.push({
     name,
-    value: cards.map((card) => `${card.label}\n${card.line}`).join("\n\n"),
+    value: orderCardsForDisplay(cards).map(renderCard).join("\n\n"),
   });
 }
 
@@ -780,6 +785,102 @@ function groupCards(cards: InsightCard[]) {
       (card) => card.category === "special" || card.category === "vibe"
     ),
   };
+}
+
+function orderCardsForDisplay(cards: InsightCard[]) {
+  return [...cards].sort(
+    (a, b) =>
+      displayOrder(a) - displayOrder(b) ||
+      b.score - a.score ||
+      a.label.localeCompare(b.label)
+  );
+}
+
+function displayOrder(card: InsightCard) {
+  const orders: Record<WrappedCategory, string[]> = {
+    vibe: [
+      "MVP Magnet",
+      "Hot Finisher",
+      "Second-Half Surge",
+      "Elo Recovery Arc",
+      "Streak Mode",
+      "Season Regular",
+    ],
+    people: [
+      "Best Duo",
+      "Cursed Duo",
+      "Three-Stack Energy",
+      "Favourite Matchup",
+      "Nemesis",
+      "Always Opposite",
+      "Most Familiar Teammate",
+    ],
+    moment: [
+      "Upset Artist",
+      "MVP Spotlight",
+      "Clutch Closer",
+      "Heartbreak Games",
+      "Underdog Run",
+      "Upset Captain",
+    ],
+    special: [
+      "Draft Steal",
+      "First-Pick Pressure",
+      "Last-Pick Lore",
+      "Sleeper Pick",
+      "Map Specialist",
+      "Cursed Map",
+      "Modifier Magnet",
+      "Captain Chapter",
+      "Ballot Regular",
+      "Most Visited Map",
+    ],
+  };
+  const index = orders[card.category].indexOf(card.label);
+  return index === -1 ? 999 : index;
+}
+
+function renderCard(card: InsightCard) {
+  return `**${formatCardLabel(card.label)}**\n${card.line}`;
+}
+
+function formatCardLabel(label: string) {
+  return `${labelEmoji(label)} ${label}`;
+}
+
+function labelEmoji(label: string) {
+  const emojis: Record<string, string> = {
+    "Always Opposite": "🔀",
+    "Ballot Regular": "🗳️",
+    "Best Duo": "🤝",
+    "Captain Chapter": "👑",
+    "Clutch Closer": "🧊",
+    "Cursed Duo": "💔",
+    "Cursed Map": "🗺️",
+    "Draft Steal": "💎",
+    "Elo Recovery Arc": "📈",
+    "Favourite Matchup": "⚔️",
+    "First-Pick Pressure": "📋",
+    "Heartbreak Games": "🥀",
+    "Hot Finisher": "🔥",
+    "Last-Pick Lore": "🎯",
+    "Map Specialist": "🗺️",
+    "Modifier Magnet": "🎲",
+    "Most Familiar Teammate": "👥",
+    "Most Visited Map": "🧭",
+    "MVP Magnet": "🌟",
+    Nemesis: "🐉",
+    "Season Regular": "🎮",
+    "Second-Half Surge": "🚀",
+    "Sleeper Pick": "🛌",
+    "Streak Mode": "⚡",
+    "Three-Stack Energy": "🧩",
+    "Underdog Run": "🐺",
+    "Upset Artist": "🌋",
+    "Upset Captain": "👑",
+    "MVP Spotlight": "🏅",
+  };
+  return emojis[label] ?? "•";
 }
 
 function buildBasicTeammates(context: WrappedContext) {
