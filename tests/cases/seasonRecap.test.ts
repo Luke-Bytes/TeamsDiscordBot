@@ -426,6 +426,18 @@ test("season recap output avoids raw ids and Discord mentions", () => {
   assert(!output.includes("game-"), "recap should not expose raw game ids");
 });
 
+test("season recap snapshot includes biggest game player count", () => {
+  const result = generateSeasonRecapFromData(fixture(), {
+    thresholds: { minPlayerSeasonShare: 0 },
+  });
+  const output = result.blocks.join("\n");
+
+  assert(
+    output.includes("with the biggest game having 4 players"),
+    "snapshot should include largest single-game player count"
+  );
+});
+
 test("season recap includes draft order insights", () => {
   const result = generateSeasonRecapFromData(fixture(), {
     thresholds: { minPlayerSeasonShare: 0 },

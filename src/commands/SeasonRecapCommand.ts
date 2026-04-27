@@ -159,16 +159,9 @@ export default class SeasonRecapCommand implements Command {
       content: `${intro}\n\n${this.wrapPreview(recap.blocks[0] ?? "No recap content generated.")}`,
     });
 
-    for (const block of recap.blocks.slice(1, 4)) {
+    for (const block of recap.blocks.slice(1)) {
       await interaction.followUp({
         content: this.wrapPreview(block),
-        flags: MessageFlags.Ephemeral,
-      });
-    }
-
-    if (recap.blocks.length > 4) {
-      await interaction.followUp({
-        content: `Preview trimmed after 4 blocks. Full publish would send ${recap.blocks.length} blocks.`,
         flags: MessageFlags.Ephemeral,
       });
     }

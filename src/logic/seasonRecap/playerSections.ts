@@ -25,11 +25,15 @@ export function buildSnapshot(
   playerCount: number,
   dateRange: string
 ): InsightSection {
+  const biggestGamePlayers = games.length
+    ? Math.max(...games.map((game) => game.gameParticipations.length))
+    : 0;
+
   return {
     title: `🎉 Friendly Wars Season ${seasonNumber} Recap`,
     lines: [
       `Season ${seasonNumber} ran from ${dateRange} across ${formatSeasonSpan(games)}.`,
-      `${games.length} games were played by ${playerCount} unique players!`,
+      `${games.length} games were played by ${playerCount} unique players, with the biggest game having ${biggestGamePlayers} players!`,
       "Here are the highlights, interesting patterns, and community moments that shaped the season.",
     ],
   };
