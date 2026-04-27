@@ -670,8 +670,8 @@ function buildRoleCards(context: WrappedContext): InsightCard[] {
   const mvpCount = context.outcomes.filter((outcome) => outcome.mvp).length;
   if (mvpCount > 0) {
     cards.push({
-      label: "MVP Magnet",
-      line: `You took MVP ${mvpCount} time${plural(mvpCount)}.`,
+      label: "Teammates' Pick",
+      line: `Your team voted you MVP ${mvpCount === 1 ? "once" : `${mvpCount} times`}.`,
       score: 94 + mvpCount * 4,
       category: "vibe",
     });
@@ -799,7 +799,7 @@ function orderCardsForDisplay(cards: InsightCard[]) {
 function displayOrder(card: InsightCard) {
   const orders: Record<WrappedCategory, string[]> = {
     vibe: [
-      "MVP Magnet",
+      "Teammates' Pick",
       "Hot Finisher",
       "Second-Half Surge",
       "Elo Recovery Arc",
@@ -868,7 +868,7 @@ function labelEmoji(label: string) {
     "Modifier Magnet": "🎲",
     "Most Familiar Teammate": "👥",
     "Most Visited Map": "🧭",
-    "MVP Magnet": "🌟",
+    "Teammates' Pick": "🌟",
     Nemesis: "🐉",
     "Season Regular": "🎮",
     "Second-Half Surge": "🚀",
