@@ -515,7 +515,7 @@ test("season recap includes the most average player section", () => {
 
 test("season recap explains close-game and underdog stats", () => {
   const result = generateSeasonRecapFromData(fixture(), {
-    thresholds: { minPlayerSeasonShare: 0 },
+    thresholds: { minPlayerSeasonShare: 0, underdogEloGap: 999 },
   });
   const output = result.blocks.join("\n");
 

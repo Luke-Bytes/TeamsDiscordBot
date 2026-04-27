@@ -1,3 +1,4 @@
+import { Team } from "@prisma/client";
 import {
   bannedClasses,
   formatGameHighlight,
@@ -17,6 +18,11 @@ import {
   SeasonRecapPlayer,
   SeasonRecapThresholds,
 } from "./types";
+
+type GameContext =
+  SeasonRecapModel["gameContexts"] extends Map<string, infer Context>
+    ? Context
+    : never;
 
 export function buildMapInsights(
   games: SeasonRecapGame[],
@@ -141,11 +147,7 @@ export function buildUpsetsAndCloseGames(
 ): InsightSection {
   const upsets = games
     .map((game) => ({ game, ctx: model.gameContexts.get(game.id)! }))
-    .filter(
-      ({ game, ctx }) =>
-        ctx.underdogTeam === game.winner &&
-        ctx.eloGap >= thresholds.underdogEloGap
-    )
+    .filter(({ game, ctx }) => lowerEloTeam(ctx) === game.winner)
     .sort((a, b) => b.ctx.eloGap - a.ctx.eloGap);
   const biggest = upsets[0]
     ? [formatGameHighlight(upsets[0].game, upsets[0].ctx.eloGap)]
@@ -196,6 +198,11 @@ export function buildUpsetsAndCloseGames(
       ...prefixRows("Clutch closers", closers),
     ].filter(Boolean),
   };
+}
+
+function lowerEloTeam(ctx: GameContext) {
+  if (ctx.redMean === ctx.blueMean) return null;
+  return ctx.redMean < ctx.blueMean ? Team.RED : Team.BLUE;
 }
 
 export function buildCommunityOps(
