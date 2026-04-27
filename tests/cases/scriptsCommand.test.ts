@@ -7,6 +7,7 @@ import {
   FakeGuildMember,
 } from "../framework/mocks";
 import { ConfigManager } from "../../src/ConfigManager";
+import { Channels } from "../../src/Channels";
 import { prismaClient } from "../../src/database/prismaClient";
 import { TitleStore } from "../../src/util/TitleStore";
 
@@ -30,9 +31,11 @@ test("/scripts titles-update awards earned titles", async () => {
     player: (prismaClient as any).player,
     game: (prismaClient as any).game,
     profile: (prismaClient as any).profile,
+    announcements: Channels.announcements,
   };
 
   const updated: Record<string, string[]> = {};
+  const announcements: string[] = [];
   try {
     (prismaClient as any).season = {
       findMany: async () => [{ id: "S1", number: 1 }],
@@ -124,7 +127,13 @@ test("/scripts titles-update awards earned titles", async () => {
       ],
     };
     (prismaClient as any).player = {
-      findMany: async () => [{ id: "P1", latestIGN: "Alpha" }],
+      findMany: async () => [
+        {
+          id: "P1",
+          latestIGN: "Alpha",
+          discordSnowflake: "123456789012345678",
+        },
+      ],
     };
     (prismaClient as any).game = {
       findMany: async () => [],
@@ -136,6 +145,13 @@ test("/scripts titles-update awards earned titles", async () => {
         return {};
       },
     };
+    Channels.announcements = {
+      send: async (content: string) => {
+        announcements.push(content);
+        return {};
+      },
+      toString: () => "#announcements",
+    } as any;
 
     const i = createChatInputInteraction("ORG", {
       guild,
@@ -160,6 +176,25 @@ test("/scripts titles-update awards earned titles", async () => {
 
     assert(updated.P1?.includes("CHAMPION"), "Champion awarded for #1 season");
     assert(updated.P1?.includes("PARAGON"), "Paragon awarded for 10 MVPs");
+    assert(
+      announcements.some((message) =>
+        message.includes("🏷️ **New Titles Unlocked**")
+      ),
+      "titles update should announce newly unlocked titles"
+    );
+    assert(
+      announcements.some(
+        (message) =>
+          message.includes("<@123456789012345678>") &&
+          message.includes("Champion") &&
+          message.includes("Paragon")
+      ),
+      "announcement should detail who unlocked which titles"
+    );
+    assert(
+      announcements.some((message) => message.includes("/profilecreate")),
+      "announcement should explain how to equip unlocked titles"
+    );
   } finally {
     (prismaClient as any).playerStats = orig.playerStats;
     (prismaClient as any).gameParticipation = orig.gameParticipation;
@@ -167,6 +202,7 @@ test("/scripts titles-update awards earned titles", async () => {
     (prismaClient as any).player = orig.player;
     (prismaClient as any).game = orig.game;
     (prismaClient as any).profile = orig.profile;
+    Channels.announcements = orig.announcements;
     TitleStore.clearOverride();
   }
 });

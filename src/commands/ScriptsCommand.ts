@@ -8,11 +8,14 @@ import {
   EmbedBuilder,
 } from "discord.js";
 import { Command } from "./CommandInterface";
+import { Channels } from "../Channels";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { TitleStore } from "../util/TitleStore";
 import { PrismaUtils } from "../util/PrismaUtils";
 import { prismaClient } from "../database/prismaClient";
 import { DiscordUtil } from "../util/DiscordUtil";
+import { formatTitleLabel } from "../util/ProfileUtil";
+import { escapeText } from "../util/Utils";
 
 type ProfileModel = {
   findUnique: (args: { where: { playerId: string } }) => Promise<unknown>;
@@ -32,7 +35,18 @@ type TitlesUpdateSnapshot = {
   awardsByPlayer: Map<string, Set<string>>;
   awardCounts: AwardCounts;
   ignByPlayerId: Map<string, string>;
+  snowflakeByPlayerId: Map<string, string>;
   summary: string;
+};
+type NewlyUnlockedTitle = {
+  playerId: string;
+  ign: string;
+  discordSnowflake: string | null;
+  titleIds: string[];
+};
+type TitlesUpdateResult = {
+  summary: string;
+  newlyUnlocked: NewlyUnlockedTitle[];
 };
 
 export default class ScriptsCommand implements Command {
@@ -145,8 +159,20 @@ export default class ScriptsCommand implements Command {
         embeds: [],
         components: [],
       });
-      const summary = await this.applyTitlesUpdate(pending.snapshot);
-      await interaction.editReply({ content: summary });
+      const result = await this.applyTitlesUpdate(pending.snapshot);
+      const announcementBlocks = this.buildTitlesAnnouncement(result);
+      if (announcementBlocks.length) {
+        for (const block of announcementBlocks) {
+          await Channels.announcements.send(block);
+        }
+      }
+      await interaction.editReply({
+        content: `${result.summary}${
+          announcementBlocks.length
+            ? `\nAnnouncement posted to ${Channels.announcements}.`
+            : "\nNo announcement posted because no new titles were unlocked."
+        }`,
+      });
       this.pendingByMessage.delete(interaction.message.id);
       this.pendingByUser.delete(interaction.user.id);
       return;
@@ -224,14 +250,18 @@ export default class ScriptsCommand implements Command {
     }
 
     const players = await prismaClient.player.findMany({
-      select: { id: true, latestIGN: true },
+      select: { id: true, latestIGN: true, discordSnowflake: true },
     });
     const playerByIgn = new Map<string, string>();
     const ignByPlayerId = new Map<string, string>();
+    const snowflakeByPlayerId = new Map<string, string>();
     for (const player of players) {
       if (player.latestIGN) {
         playerByIgn.set(player.latestIGN.toLowerCase(), player.id);
         ignByPlayerId.set(player.id, player.latestIGN);
+      }
+      if (player.discordSnowflake) {
+        snowflakeByPlayerId.set(player.id, player.discordSnowflake);
       }
     }
 
@@ -308,6 +338,7 @@ export default class ScriptsCommand implements Command {
       awardsByPlayer,
       awardCounts,
       ignByPlayerId,
+      snowflakeByPlayerId,
       summary: "",
     };
 
@@ -331,9 +362,10 @@ export default class ScriptsCommand implements Command {
 
   private async applyTitlesUpdate(
     snapshot: TitlesUpdateSnapshot
-  ): Promise<string> {
+  ): Promise<TitlesUpdateResult> {
     const profileModel = getProfileModel();
     let updatedPlayers = 0;
+    const newlyUnlocked: NewlyUnlockedTitle[] = [];
     if (profileModel) {
       for (const [playerId, awards] of snapshot.awardsByPlayer) {
         const existing = await profileModel.findUnique({
@@ -351,6 +383,13 @@ export default class ScriptsCommand implements Command {
         });
         if (newlyEarned.length) {
           const ign = snapshot.ignByPlayerId.get(playerId) ?? "Unknown";
+          newlyUnlocked.push({
+            playerId,
+            ign,
+            discordSnowflake:
+              snapshot.snowflakeByPlayerId.get(playerId) ?? null,
+            titleIds: newlyEarned,
+          });
           console.log(
             `[TitlesUpdate] playerId=${playerId} ign=${ign} earned=${newlyEarned.join(", ")}`
           );
@@ -363,8 +402,60 @@ export default class ScriptsCommand implements Command {
       .map(([id, count]) => `${id}: ${count}`)
       .join(", ");
 
-    return `Titles update complete.\nPlayers updated: ${updatedPlayers}.\nAwards: ${
-      awardSummary || "none"
-    }.`;
+    return {
+      summary: `Titles update complete.\nPlayers updated: ${updatedPlayers}.\nAwards: ${
+        awardSummary || "none"
+      }.`,
+      newlyUnlocked,
+    };
   }
+
+  private buildTitlesAnnouncement(result: TitlesUpdateResult): string[] {
+    if (!result.newlyUnlocked.length) return [];
+
+    const titles = TitleStore.loadTitles();
+    const totalTitles = result.newlyUnlocked.reduce(
+      (sum, row) => sum + row.titleIds.length,
+      0
+    );
+    const rows = result.newlyUnlocked
+      .sort((a, b) => b.titleIds.length - a.titleIds.length)
+      .map((row) => {
+        const labels = row.titleIds
+          .map((id) => formatTitleLabel(id, titles) ?? id)
+          .map((label) => `**${escapeText(label)}**`)
+          .join(", ");
+        const awardee = row.discordSnowflake
+          ? `<@${row.discordSnowflake}>`
+          : `**${escapeText(row.ign)}**`;
+        return `✦ ${awardee} unlocked ${labels}`;
+      });
+
+    const intro = [
+      "🏷️ **New Titles Unlocked**",
+      `${result.newlyUnlocked.length} player${
+        result.newlyUnlocked.length === 1 ? "" : "s"
+      } earned ${totalTitles} new title${totalTitles === 1 ? "" : "s"}.`,
+      "A fresh batch of profile titles has been awarded. Wear them well.",
+      "Use `/profilecreate` to choose and equip an unlocked title.",
+    ].join("\n");
+
+    return splitAnnouncementBlocks([intro, ...rows]);
+  }
+}
+
+function splitAnnouncementBlocks(lines: string[]): string[] {
+  const blocks: string[] = [];
+  let current = "";
+  for (const line of lines) {
+    const next = current ? `${current}\n${line}` : line;
+    if (next.length <= 1800) {
+      current = next;
+      continue;
+    }
+    if (current) blocks.push(current);
+    current = line;
+  }
+  if (current) blocks.push(current);
+  return blocks;
 }
