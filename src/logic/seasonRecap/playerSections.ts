@@ -50,9 +50,13 @@ export function buildEloStorylines(
   const climbs = [...historyByPlayer.entries()]
     .map(([playerId, rows]) => {
       const elos = [1000, ...rows.map((r) => r.elo)];
+      const lowest = Math.min(...elos);
+      const final = elos.at(-1)!;
       return {
         playerId,
-        delta: Math.max(...elos) - Math.min(...elos),
+        delta: final - lowest,
+        final,
+        lowest,
         games: outcomesByPlayer.get(playerId)?.length ?? 0,
       };
     })
@@ -60,7 +64,8 @@ export function buildEloStorylines(
     .sort((a, b) => b.delta - a.delta)
     .slice(0, thresholds.topLimit)
     .map(
-      (r) => `${playerName(r.playerId, playerById)}: +${r.delta} from low point`
+      (r) =>
+        `${playerName(r.playerId, playerById)}: +${r.delta} from season low (${r.lowest} → ${r.final})`
     );
 
   const drops = [...historyByPlayer.entries()]
@@ -81,8 +86,8 @@ export function buildEloStorylines(
     title: "📈 Elo Storylines",
     lines: [
       ...prefixRows("Top Elo", topElo),
-      ...prefixRows("Biggest climbs", climbs),
-      ...prefixRows("Biggest slides", drops),
+      ...prefixRows("Biggest Elo Recoveries", climbs),
+      ...prefixRows("Biggest Elo Drops", drops),
     ],
   };
 }
@@ -132,9 +137,9 @@ export function buildFormTrends(
   return {
     title: "🔥 Form Trends",
     lines: [
-      ...prefixRows("Win streaks", winStreaks),
-      ...prefixRows("Losing streaks", losingStreaks),
-      ...prefixRows("Strong finishers", finishers),
+      ...prefixRows("Biggest Win Streaks", winStreaks),
+      ...prefixRows("Biggest Losing Streaks", losingStreaks),
+      ...prefixRows("Best Final-Third Win Rate", finishers),
     ],
   };
 }
@@ -195,7 +200,6 @@ export function buildMvpTrends(
     playerId,
     games: outcomes.length,
     mvps: outcomes.filter((o) => o.mvp).length,
-    closeMvps: outcomes.filter((o) => o.mvp && o.closeGame).length,
   }));
   const leaders = rows
     .filter((r) => r.mvps > 0)
@@ -212,22 +216,63 @@ export function buildMvpTrends(
       (r) =>
         `${playerName(r.playerId, playerById)}: ${pct(r.mvps / r.games)} (${r.mvps}/${r.games})`
     );
-  const close = rows
-    .filter((r) => r.closeMvps > 0)
-    .sort((a, b) => b.closeMvps - a.closeMvps)
-    .slice(0, thresholds.topLimit)
-    .map(
-      (r) =>
-        `${playerName(r.playerId, playerById)}: ${r.closeMvps} close-game MVPs`
-    );
-
   return {
     title: "🌟 MVP Trends",
     lines: [
-      ...prefixRows("Leaders", leaders),
-      ...prefixRows("Best rate", rates),
-      ...prefixRows("Close-game picks", close),
+      ...prefixRows("Most MVPs", leaders),
+      ...prefixRows("Highest MVP Rate", rates),
     ],
+  };
+}
+
+export function buildMvpVotingFun(
+  games: SeasonRecapGame[],
+  playerById: Map<string, SeasonRecapPlayer>,
+  thresholds: SeasonRecapThresholds
+): InsightSection {
+  const votesByPlayer = new Map<string, { voted: number; games: number }>();
+  const teamVoteRates: number[] = [];
+
+  for (const game of games) {
+    for (const gp of game.gameParticipations) {
+      const row = votesByPlayer.get(gp.playerId) ?? { voted: 0, games: 0 };
+      row.games += 1;
+      if (gp.votedForAMVP) row.voted += 1;
+      votesByPlayer.set(gp.playerId, row);
+    }
+
+    for (const team of new Set(game.gameParticipations.map((gp) => gp.team))) {
+      const teamPlayers = game.gameParticipations.filter(
+        (gp) => gp.team === team
+      );
+      if (!teamPlayers.length) continue;
+      const voted = teamPlayers.filter((gp) => gp.votedForAMVP).length;
+      teamVoteRates.push(voted / teamPlayers.length);
+    }
+  }
+
+  const topVoters = [...votesByPlayer.entries()]
+    .filter(([, row]) => row.voted > 0)
+    .sort((a, b) => b[1].voted - a[1].voted || b[1].games - a[1].games)
+    .slice(0, thresholds.topLimit)
+    .map(
+      ([playerId, row]) =>
+        `${playerName(playerId, playerById)}: voted in ${row.voted}/${row.games} games`
+    );
+  const averageVoteRate =
+    teamVoteRates.length > 0
+      ? teamVoteRates.reduce((sum, rate) => sum + rate, 0) /
+        teamVoteRates.length
+      : 0;
+
+  return {
+    title: "🗳️ MVP Voting",
+    lines: [
+      ...prefixRows("Most Reliable Voters", topVoters),
+      teamVoteRates.length
+        ? `Average team ballot turnout: ${pct(averageVoteRate)} of players voted.`
+        : "",
+    ].filter(Boolean),
   };
 }
 

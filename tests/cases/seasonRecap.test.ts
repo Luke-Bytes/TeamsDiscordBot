@@ -47,6 +47,7 @@ function game(
         mvp: (id === "steady" && idx <= 3) || id === "onegame",
         captain: pos === 0,
         draftSlotPlacement: pos + 1,
+        votedForAMVP: id === "steady" || id === "buddy",
         player: player(id, id),
       })),
       ...blueIds.map((id, pos) => ({
@@ -56,6 +57,7 @@ function game(
         mvp: id === "onegame",
         captain: pos === 0,
         draftSlotPlacement: redIds.length + pos + 1,
+        votedForAMVP: id === "steady",
         player: player(id, id),
       })),
     ],
@@ -201,4 +203,45 @@ test("season recap includes draft order insights", () => {
     "first pick counts should appear"
   );
   assert(output.includes("Final picks"), "last pick counts should appear");
+});
+
+test("season recap uses clear stat labels", () => {
+  const result = generateSeasonRecapFromData(fixture(), {
+    thresholds: { minPlayerSeasonShare: 0 },
+  });
+  const output = result.blocks.join("\n");
+
+  assert(
+    output.includes("Biggest Win Streaks"),
+    "win streak label should be explicit"
+  );
+  assert(
+    output.includes("Most Likely To Win Together"),
+    "duo win label should be explicit"
+  );
+  assert(
+    output.includes("Most Likely To Lose Together"),
+    "duo loss label should be explicit"
+  );
+  assert(
+    !output.includes("Close-game MVP"),
+    "ambiguous close-game MVP stat should not appear"
+  );
+});
+
+test("season recap includes MVP voting participation", () => {
+  const result = generateSeasonRecapFromData(fixture(), {
+    thresholds: { minPlayerSeasonShare: 0 },
+  });
+  const output = result.blocks.join("\n");
+
+  assert(output.includes("🗳️ MVP Voting"), "MVP voting section should appear");
+  assert(
+    output.includes("Most Reliable Voters"),
+    "top MVP voters should appear"
+  );
+  assert(
+    output.includes("Average team ballot turnout"),
+    "average MVP voting turnout should appear"
+  );
 });

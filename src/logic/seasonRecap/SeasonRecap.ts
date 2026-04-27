@@ -23,6 +23,7 @@ import {
   buildDraftOrderInsights,
   buildEloStorylines,
   buildFormTrends,
+  buildMvpVotingFun,
   buildMvpTrends,
   buildSnapshot,
 } from "./playerSections";
@@ -301,6 +302,7 @@ function buildSections(context: {
       thresholds,
       effectiveMinPlayerGames
     ),
+    buildMvpVotingFun(games, playerById, thresholds),
     buildDraftOrderInsights(games, playerById, thresholds),
     buildDuoChemistry(games, playerById, thresholds),
     buildRivalries(games, playerById, thresholds),

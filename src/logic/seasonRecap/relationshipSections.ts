@@ -41,14 +41,14 @@ export function buildDuoChemistry(
     .slice(0, thresholds.topLimit)
     .map(
       (d) =>
-        `${duoName(d.a, d.b, playerById)}: ${pct(d.wins / d.games)} (${d.wins}/${d.games})`
+        `${duoName(d.a, d.b, playerById)}: ${pct(d.wins / d.games)} win rate (${d.wins}W-${d.games - d.wins}L)`
     );
   const worst = [...qualified]
     .sort((a, b) => a.wins / a.games - b.wins / b.games || b.games - a.games)
     .slice(0, thresholds.topLimit)
     .map(
       (d) =>
-        `${duoName(d.a, d.b, playerById)}: ${pct(d.wins / d.games)} (${d.wins}/${d.games})`
+        `${duoName(d.a, d.b, playerById)}: ${pct((d.games - d.wins) / d.games)} loss rate (${d.wins}W-${d.games - d.wins}L)`
     );
   const frequent = [...duos.values()]
     .sort((a, b) => b.games - a.games)
@@ -56,11 +56,11 @@ export function buildDuoChemistry(
     .map((d) => `${duoName(d.a, d.b, playerById)}: ${d.games} games`);
 
   return {
-    title: "🤝 Duo Chemistry",
+    title: "🤝 Teammate Records",
     lines: [
-      ...prefixRows("Best pairings", best),
-      ...prefixRows("Cursed pairings", worst),
-      ...prefixRows("Most paired", frequent),
+      ...prefixRows("Most Likely To Win Together", best),
+      ...prefixRows("Most Likely To Lose Together", worst),
+      ...prefixRows("Most Games Together", frequent),
     ],
   };
 }
@@ -112,12 +112,38 @@ export function buildRivalries(
       const leader = p.winsA >= p.winsB ? p.a : p.b;
       return `${duoName(p.a, p.b, playerById)}: ${playerName(leader, playerById)} leads ${Math.max(p.winsA, p.winsB)}-${Math.min(p.winsA, p.winsB)}`;
     });
+  const bestHeadToHead = [...pairs.values()]
+    .filter((p) => p.games >= thresholds.minDuoGames)
+    .flatMap((p) => [
+      {
+        playerId: p.a,
+        opponentId: p.b,
+        wins: p.winsA,
+        losses: p.winsB,
+        games: p.games,
+      },
+      {
+        playerId: p.b,
+        opponentId: p.a,
+        wins: p.winsB,
+        losses: p.winsA,
+        games: p.games,
+      },
+    ])
+    .filter((p) => p.wins > p.losses)
+    .sort((a, b) => b.wins / b.games - a.wins / a.games || b.wins - a.wins)
+    .slice(0, thresholds.topLimit)
+    .map(
+      (p) =>
+        `${playerName(p.playerId, playerById)} vs ${playerName(p.opponentId, playerById)}: ${p.wins}W-${p.losses}L`
+    );
 
   return {
-    title: "⚔️ Rivalries",
+    title: "⚔️ Head-To-Head Records",
     lines: [
-      ...prefixRows("Most repeated", frequent),
-      ...prefixRows("Most one-sided", oneSided),
+      ...prefixRows("Most Common Matchups", frequent),
+      ...prefixRows("Best Head-To-Head Records", bestHeadToHead),
+      ...prefixRows("Most One-Sided Matchups", oneSided),
     ],
   };
 }
