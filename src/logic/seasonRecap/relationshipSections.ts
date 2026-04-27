@@ -105,10 +105,73 @@ export function buildThreePlayerCores(
       (row) =>
         `${row.players.map((id) => playerName(id, playerById)).join(" + ")}: ${pct(row.wins / row.games)} win rate (${row.wins}W-${row.games - row.wins}L)`
     );
+  const roughCores = [...trios.values()]
+    .filter((row) => row.games >= thresholds.minTrioGames)
+    .sort((a, b) => a.wins / a.games - b.wins / b.games || b.games - a.games)
+    .slice(0, thresholds.topLimit)
+    .map(
+      (row) =>
+        `${row.players.map((id) => playerName(id, playerById)).join(" + ")}: ${pct((row.games - row.wins) / row.games)} loss rate (${row.wins}W-${row.games - row.wins}L)`
+    );
 
   return {
     title: "🧩 Three-Player Cores",
-    lines: [...prefixRows("Best Three-Player Cores", cores)],
+    lines: [
+      ...prefixRows("Best Three-Player Cores", cores),
+      ...prefixRows("Worst Three-Player Cores", roughCores),
+    ],
+  };
+}
+
+export function buildPairSeparationStats(
+  games: SeasonRecapGame[],
+  playerById: Map<string, SeasonRecapPlayer>,
+  thresholds: SeasonRecapThresholds
+): InsightSection {
+  const pairs = new Map<
+    string,
+    { a: string; b: string; games: number; sameTeam: number; against: number }
+  >();
+
+  for (const game of games) {
+    const players = game.gameParticipations;
+    for (let i = 0; i < players.length; i += 1) {
+      for (let j = i + 1; j < players.length; j += 1) {
+        const a = players[i].playerId;
+        const b = players[j].playerId;
+        const key = pairKey(a, b);
+        const row = pairs.get(key) ?? {
+          a: key.split("::")[0],
+          b: key.split("::")[1],
+          games: 0,
+          sameTeam: 0,
+          against: 0,
+        };
+        row.games += 1;
+        if (players[i].team === players[j].team) row.sameTeam += 1;
+        else row.against += 1;
+        pairs.set(key, row);
+      }
+    }
+  }
+
+  const neverTeamed = [...pairs.values()]
+    .filter((row) => row.games >= thresholds.minDuoGames && row.sameTeam === 0)
+    .sort((a, b) => b.games - a.games)
+    .slice(0, thresholds.topLimit)
+    .map((row) => `${duoName(row.a, row.b, playerById)}: ${row.games} games`);
+  const neverOpposed = [...pairs.values()]
+    .filter((row) => row.games >= thresholds.minDuoGames && row.against === 0)
+    .sort((a, b) => b.games - a.games)
+    .slice(0, thresholds.topLimit)
+    .map((row) => `${duoName(row.a, row.b, playerById)}: ${row.games} games`);
+
+  return {
+    title: "🔀 Pair Paths",
+    lines: [
+      ...prefixRows("Never Teamed Together", neverTeamed),
+      ...prefixRows("Never Played Against Each Other", neverOpposed),
+    ],
   };
 }
 

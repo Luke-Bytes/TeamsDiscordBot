@@ -44,11 +44,7 @@ export function buildSeasonRecapModel(
     );
     const eloGap = Math.abs(redMean - blueMean);
     const underdogTeam =
-      redMean + thresholds.underdogEloGap <= blueMean
-        ? Team.RED
-        : blueMean + thresholds.underdogEloGap <= redMean
-          ? Team.BLUE
-          : null;
+      redMean < blueMean ? Team.RED : blueMean < redMean ? Team.BLUE : null;
     const closeGame = eloGap < thresholds.closeGameEloGap;
 
     gameContexts.set(game.id, {

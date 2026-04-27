@@ -525,6 +525,10 @@ test("season recap explains close-game and underdog stats", () => {
     "underdog player stat should appear"
   );
   assert(
+    output.includes("Upset captains"),
+    "upset captain stat should use the same underdog definition"
+  );
+  assert(
     output.includes("Clutch closers are players with the most wins"),
     "clutch closers should be explained"
   );
@@ -548,6 +552,19 @@ test("season recap includes draft value, trio, and turnaround insights", () => {
   assert(
     output.includes("🧩 Three-Player Cores"),
     "three-player cores section should appear"
+  );
+  assert(
+    output.includes("Worst Three-Player Cores"),
+    "worst three-player cores should appear"
+  );
+  assert(output.includes("🔀 Pair Paths"), "pair paths section should appear");
+  assert(
+    output.includes("Never Teamed Together"),
+    "pairs that never teamed should appear"
+  );
+  assert(
+    output.includes("Never Played Against Each Other"),
+    "pairs that never played against each other should appear"
   );
   assert(
     output.includes("Biggest Turnarounds"),

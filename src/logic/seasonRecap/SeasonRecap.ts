@@ -31,6 +31,7 @@ import {
 } from "./playerSections";
 import {
   buildDuoChemistry,
+  buildPairSeparationStats,
   buildRivalries,
   buildThreePlayerCores,
 } from "./relationshipSections";
@@ -314,6 +315,7 @@ function buildSections(context: {
     buildDraftValueInsights(games, playerById, thresholds),
     buildDuoChemistry(games, playerById, thresholds),
     buildThreePlayerCores(games, playerById, thresholds),
+    buildPairSeparationStats(games, playerById, thresholds),
     buildRivalries(games, playerById, thresholds),
     buildMapInsights(
       games,

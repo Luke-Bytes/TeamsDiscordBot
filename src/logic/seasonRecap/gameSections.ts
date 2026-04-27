@@ -1,4 +1,3 @@
-import { Team } from "@prisma/client";
 import {
   bannedClasses,
   formatGameHighlight,
@@ -18,11 +17,6 @@ import {
   SeasonRecapPlayer,
   SeasonRecapThresholds,
 } from "./types";
-
-type GameContext =
-  SeasonRecapModel["gameContexts"] extends Map<string, infer Context>
-    ? Context
-    : never;
 
 export function buildMapInsights(
   games: SeasonRecapGame[],
@@ -147,7 +141,7 @@ export function buildUpsetsAndCloseGames(
 ): InsightSection {
   const upsets = games
     .map((game) => ({ game, ctx: model.gameContexts.get(game.id)! }))
-    .filter(({ game, ctx }) => lowerEloTeam(ctx) === game.winner)
+    .filter(({ game, ctx }) => ctx.underdogTeam === game.winner)
     .sort((a, b) => b.ctx.eloGap - a.ctx.eloGap);
   const biggest = upsets[0]
     ? [formatGameHighlight(upsets[0].game, upsets[0].ctx.eloGap)]
@@ -200,11 +194,6 @@ export function buildUpsetsAndCloseGames(
   };
 }
 
-function lowerEloTeam(ctx: GameContext) {
-  if (ctx.redMean === ctx.blueMean) return null;
-  return ctx.redMean < ctx.blueMean ? Team.RED : Team.BLUE;
-}
-
 export function buildCommunityOps(
   games: SeasonRecapGame[],
   thresholds: SeasonRecapThresholds
@@ -223,10 +212,10 @@ export function buildCommunityOps(
     lines: [
       "A big thank you to everyone who organised and hosted games this season!",
       organisers.length
-        ? `A special shoutout to ${organisers.join(", ")} for making one of the biggest organiser impacts this season.`
+        ? `A special shoutout to our organisers ${organisers.join(", ")}.`
         : "",
       hosts.length
-        ? `And especially to ${hosts.join(", ")} for being some of the most active hosts.`
+        ? `And especially to ${hosts.join(", ")} for being such frequent hosts!`
         : "",
     ].filter(Boolean),
   };
