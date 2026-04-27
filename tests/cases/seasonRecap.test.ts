@@ -397,6 +397,10 @@ test("season recap keeps Discord blocks under the configured limit", () => {
     result.blocks.every((block) => block.length <= 500),
     "all blocks should stay under max length"
   );
+  assert(
+    result.blocks.every((block) => !/_\d+\/\d+_$/.test(block)),
+    "split blocks should not include page number footers"
+  );
 });
 
 test("season recap excludes one-game wonders from rate insights", () => {

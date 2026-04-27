@@ -248,9 +248,7 @@ export function generateSeasonRecapFromData(
 
   const body = sections.map(formatSection).join("\n\n");
   const splitLength = Math.max(100, maxBlockLength - 50);
-  const blocks = splitDiscordBlocks(body, splitLength).map((block, idx, all) =>
-    all.length > 1 ? `${block}\n\n_${idx + 1}/${all.length}_` : block
-  );
+  const blocks = splitDiscordBlocks(body, splitLength);
 
   return {
     seasonNumber: data.seasonNumber,
