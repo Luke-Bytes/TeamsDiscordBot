@@ -14,7 +14,7 @@ import {
   generateSeasonRecap,
   SeasonRecapResult,
 } from "../logic/seasonRecap/SeasonRecap";
-import { ConfigManager } from "../ConfigManager";
+import { SeasonService } from "../database/SeasonService";
 import { Channels } from "../Channels";
 
 type PendingSeasonRecap = {
@@ -60,7 +60,7 @@ export default class SeasonRecapCommand implements Command {
 
     const seasonNumber =
       interaction.options.getInteger("season") ??
-      ConfigManager.getConfig().season;
+      (await SeasonService.getActiveSeasonNumber());
     const recap = await generateSeasonRecap({ seasonNumber });
 
     if (preview) {

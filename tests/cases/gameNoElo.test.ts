@@ -202,6 +202,7 @@ test("saveGameFromInstance skips elo writes and elo history for no-elo games", a
   let eloHistoryCreates = 0;
 
   (prismaClient as any).season = {
+    findFirst: async () => ({ id: "season1", number: 1, isActive: true }),
     findUnique: async () => ({ id: "season1", number: 1 }),
   };
   (prismaClient as any).player.byDiscordSnowflake = async (id: string) => ({

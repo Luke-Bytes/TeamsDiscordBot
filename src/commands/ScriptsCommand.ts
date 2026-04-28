@@ -6,6 +6,7 @@ import {
   ButtonStyle,
   ButtonInteraction,
   EmbedBuilder,
+  ActivityType,
 } from "discord.js";
 import { Command } from "./CommandInterface";
 import { Channels } from "../Channels";
@@ -48,6 +49,25 @@ type TitlesUpdateResult = {
   summary: string;
   newlyUnlocked: NewlyUnlockedTitle[];
 };
+type SeasonUpdateSnapshot = {
+  seasonNumber: number;
+  exists: boolean;
+  summary: string;
+};
+type ScriptPending =
+  | {
+      userId: string;
+      script: "titles-update";
+      snapshot: TitlesUpdateSnapshot;
+    }
+  | {
+      userId: string;
+      script: "season-update";
+      snapshot: SeasonUpdateSnapshot;
+    };
+type UserScriptPending =
+  | { script: "titles-update"; snapshot: TitlesUpdateSnapshot }
+  | { script: "season-update"; snapshot: SeasonUpdateSnapshot };
 
 export default class ScriptsCommand implements Command {
   name = "scripts";
@@ -60,20 +80,22 @@ export default class ScriptsCommand implements Command {
       sub
         .setName("titles-update")
         .setDescription("Award titles based on lifetime stats")
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("season-update")
+        .setDescription("Create or activate a season")
+        .addIntegerOption((option) =>
+          option
+            .setName("number")
+            .setDescription("Season number to create or activate")
+            .setRequired(true)
+            .setMinValue(1)
+        )
     );
 
-  private readonly pendingByMessage = new Map<
-    string,
-    {
-      userId: string;
-      script: "titles-update";
-      snapshot: TitlesUpdateSnapshot;
-    }
-  >();
-  private readonly pendingByUser = new Map<
-    string,
-    { script: "titles-update"; snapshot: TitlesUpdateSnapshot }
-  >();
+  private readonly pendingByMessage = new Map<string, ScriptPending>();
+  private readonly pendingByUser = new Map<string, UserScriptPending>();
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const isAuthorized = await PermissionsUtil.isUserAuthorised(interaction);
@@ -114,20 +136,52 @@ export default class ScriptsCommand implements Command {
       return;
     }
 
+    if (sub === "season-update") {
+      const seasonNumber = interaction.options.getInteger("number", true);
+      const snapshot = await this.buildSeasonUpdateSnapshot(seasonNumber);
+      const embed = new EmbedBuilder()
+        .setTitle("Confirm Season Update")
+        .setDescription(snapshot.summary);
+      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId("scripts-confirm:season-update")
+          .setLabel("Confirm")
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId("scripts-cancel")
+          .setLabel("Cancel")
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+      const message = await DiscordUtil.replyWithMessage(interaction, {
+        embeds: [embed],
+        components: [row],
+      });
+      if (message?.id) {
+        this.pendingByMessage.set(message.id, {
+          userId: interaction.user.id,
+          script: "season-update",
+          snapshot,
+        });
+      }
+      this.pendingByUser.set(interaction.user.id, {
+        script: "season-update",
+        snapshot,
+      });
+      return;
+    }
+
     await interaction.reply({
       content: "Unknown script.",
     });
   }
 
   async handleButtonPress(interaction: ButtonInteraction): Promise<void> {
+    const userPending = this.pendingByUser.get(interaction.user.id);
     const pending =
       this.pendingByMessage.get(interaction.message.id) ??
-      (this.pendingByUser.get(interaction.user.id)
-        ? {
-            userId: interaction.user.id,
-            script: this.pendingByUser.get(interaction.user.id)!.script,
-            snapshot: this.pendingByUser.get(interaction.user.id)!.snapshot,
-          }
+      (userPending
+        ? { userId: interaction.user.id, ...userPending }
         : undefined);
     if (!pending) {
       await interaction.reply({
@@ -154,6 +208,7 @@ export default class ScriptsCommand implements Command {
     }
 
     if (interaction.customId === "scripts-confirm:titles-update") {
+      if (pending.script !== "titles-update") return;
       await interaction.update({
         content: "Running titles update...",
         embeds: [],
@@ -177,6 +232,89 @@ export default class ScriptsCommand implements Command {
       this.pendingByUser.delete(interaction.user.id);
       return;
     }
+
+    if (interaction.customId === "scripts-confirm:season-update") {
+      if (pending.script !== "season-update") return;
+      await interaction.update({
+        content: `Updating active season to Season ${pending.snapshot.seasonNumber}...`,
+        embeds: [],
+        components: [],
+      });
+      try {
+        const summary = await this.applySeasonUpdate(
+          pending.snapshot.seasonNumber
+        );
+        interaction.client.user?.setActivity(
+          `Season ${pending.snapshot.seasonNumber}!`,
+          {
+            type: ActivityType.Competing,
+          }
+        );
+        await interaction.editReply({ content: summary });
+      } catch (error) {
+        await interaction.editReply({
+          content: `Season update failed: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`,
+        });
+      } finally {
+        this.pendingByMessage.delete(interaction.message.id);
+        this.pendingByUser.delete(interaction.user.id);
+      }
+      return;
+    }
+  }
+
+  private async buildSeasonUpdateSnapshot(
+    seasonNumber: number
+  ): Promise<SeasonUpdateSnapshot> {
+    const existingSeason = await prismaClient.season.findUnique({
+      where: { number: seasonNumber },
+    });
+    const action = existingSeason ? "activate existing" : "create and activate";
+
+    return {
+      seasonNumber,
+      exists: Boolean(existingSeason),
+      summary: [
+        `Season update preview.`,
+        `This will ${action} Season ${seasonNumber}.`,
+        `All other active seasons will be marked inactive.`,
+        `This matches scripts/manage-season.js behavior.`,
+      ].join("\n"),
+    };
+  }
+
+  private async applySeasonUpdate(seasonNumber: number): Promise<string> {
+    const existingSeason = await prismaClient.season.findUnique({
+      where: { number: seasonNumber },
+    });
+
+    if (existingSeason) {
+      await prismaClient.season.update({
+        where: { number: seasonNumber },
+        data: { isActive: true },
+      });
+    } else {
+      await prismaClient.season.create({
+        data: {
+          number: seasonNumber,
+          name: `Season ${seasonNumber}`,
+          startDate: new Date(),
+          isActive: true,
+        },
+      });
+    }
+
+    await prismaClient.season.updateMany({
+      where: {
+        number: { not: seasonNumber },
+        isActive: true,
+      },
+      data: { isActive: false },
+    });
+
+    return `Season ${seasonNumber} is now the active season.`;
   }
 
   private async runTitlesUpdate(_opts: {

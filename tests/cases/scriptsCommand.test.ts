@@ -206,3 +206,79 @@ test("/scripts titles-update awards earned titles", async () => {
     TitleStore.clearOverride();
   }
 });
+
+test("/scripts season-update prompts before activating season", async () => {
+  const cmd = new ScriptsCommand();
+  const cfg = ConfigManager.getConfig();
+  const guild = new FakeGuild() as any;
+  const organiser = new FakeGuildMember("ORG");
+  await organiser.roles.add(cfg.roles.organiserRole);
+  guild.addMember(organiser);
+
+  const originalSeason = (prismaClient as any).season;
+  const operations: string[] = [];
+  let createdSeasonNumber: number | null = null;
+  let deactivatedOthers = false;
+
+  try {
+    (prismaClient as any).season = {
+      findUnique: async () => null,
+      create: async (args: any) => {
+        operations.push("create");
+        createdSeasonNumber = args.data.number;
+        return args.data;
+      },
+      update: async () => {
+        operations.push("update");
+        return {};
+      },
+      updateMany: async (args: any) => {
+        operations.push("updateMany");
+        deactivatedOthers =
+          args.where.number.not === 8 &&
+          args.where.isActive === true &&
+          args.data.isActive === false;
+        return { count: 1 };
+      },
+    };
+
+    const interaction = createChatInputInteraction("ORG", {
+      guild,
+      member: organiser as any,
+      subcommand: "season-update",
+      integers: { number: 8 },
+    }) as any;
+    interaction.inGuild = () => true;
+    await cmd.execute(interaction);
+
+    assert(operations.length === 0, "Season update should wait for confirm");
+
+    const reply = interaction.replies.find((r: any) => r.type === "reply");
+    assert(
+      reply?.payload?.embeds?.[0]?.data?.title === "Confirm Season Update",
+      "Season update should send a confirmation prompt"
+    );
+
+    const button = {
+      customId: "scripts-confirm:season-update",
+      message: { id: "msg-1" },
+      user: { id: "ORG" },
+      update: async (_payload: any) => ({}),
+      editReply: async (_payload: any) => ({}),
+      reply: async (_payload: any) => ({}),
+    } as any;
+    await cmd.handleButtonPress!(button);
+
+    assert(createdSeasonNumber === 8, "Confirmed season update creates season");
+    assert(
+      deactivatedOthers,
+      "Confirmed season update deactivates other seasons"
+    );
+    assert(
+      operations.join(",") === "create,updateMany",
+      "Confirmed season update should mirror manage-season create flow"
+    );
+  } finally {
+    (prismaClient as any).season = originalSeason;
+  }
+});

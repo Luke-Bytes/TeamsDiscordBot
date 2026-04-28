@@ -5,7 +5,7 @@ import {
   SlashCommandOptionsOnlyBuilder,
 } from "discord.js";
 import { Command } from "./CommandInterface";
-import { ConfigManager } from "../ConfigManager";
+import { SeasonService } from "../database/SeasonService";
 import { PrismaUtils } from "../util/PrismaUtils";
 import { generatePersonalSeasonWrapped } from "../logic/seasonRecap/PersonalSeasonWrapped";
 
@@ -22,7 +22,9 @@ export default class WrappedCommand implements Command {
       .addIntegerOption((option) =>
         option
           .setName("season")
-          .setDescription("Season number to recap (default: current season)")
+          .setDescription(
+            "Completed season to recap (default: previous season)"
+          )
           .setRequired(false)
       );
   }
@@ -36,9 +38,21 @@ export default class WrappedCommand implements Command {
       return;
     }
 
+    const activeSeason = await SeasonService.getActiveSeasonNumber();
     const seasonNumber =
-      interaction.options.getInteger("season") ??
-      ConfigManager.getConfig().season;
+      interaction.options.getInteger("season") ?? activeSeason - 1;
+
+    if (seasonNumber >= activeSeason) {
+      await interaction.editReply(
+        `Season ${activeSeason} is still active. Wrapped is only available for completed seasons.`
+      );
+      return;
+    }
+
+    if (seasonNumber < 1) {
+      await interaction.editReply("No completed seasons are available yet.");
+      return;
+    }
 
     try {
       const wrapped = await generatePersonalSeasonWrapped({

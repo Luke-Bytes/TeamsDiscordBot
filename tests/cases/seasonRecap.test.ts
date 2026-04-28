@@ -3,9 +3,11 @@ import { assert } from "../framework/assert";
 import { test } from "../framework/test";
 import {
   generateSeasonRecapFromData,
+  loadSeasonRecapData,
   SeasonRecapData,
   SeasonRecapGame,
 } from "../../src/logic/seasonRecap/SeasonRecap";
+import { prismaClient } from "../../src/database/prismaClient";
 
 const base = new Date("2026-01-01T19:00:00.000Z");
 
@@ -469,6 +471,81 @@ test("season recap output avoids raw ids and Discord mentions", () => {
   assert(!output.includes("game-"), "recap should not expose raw game ids");
 });
 
+test("season recap loader tolerates orphaned game participation players", async () => {
+  const originalSeason = (prismaClient as any).season;
+  const originalGame = (prismaClient as any).game;
+  const originalPlayer = (prismaClient as any).player;
+  const originalPlayerStats = (prismaClient as any).playerStats;
+  const originalEloHistory = (prismaClient as any).eloHistory;
+  const originalRunCommandRaw = (prismaClient as any).$runCommandRaw;
+
+  (prismaClient as any).season = {
+    findUnique: async () => ({ id: "season-3", number: 3 }),
+  };
+  (prismaClient as any).game = {
+    findMany: async () => [
+      {
+        id: "game-1",
+        finished: true,
+        startTime: new Date("2026-01-01T19:00:00.000Z"),
+        endTime: new Date("2026-01-01T20:00:00.000Z"),
+        settings: {},
+        winner: Team.RED,
+        type: "DRAFT",
+        doubleElo: false,
+        gameParticipations: [
+          {
+            playerId: "present",
+            ignUsed: "Present",
+            team: Team.RED,
+            mvp: false,
+            captain: false,
+            draftSlotPlacement: 1,
+            votedForAMVP: true,
+          },
+          {
+            playerId: "missing",
+            ignUsed: "MissingHistoricalIgn",
+            team: Team.BLUE,
+            mvp: false,
+            captain: false,
+            draftSlotPlacement: 2,
+            votedForAMVP: false,
+          },
+        ],
+      },
+    ],
+  };
+  (prismaClient as any).player = {
+    findMany: async () => [player("present", "Present")],
+  };
+  (prismaClient as any).playerStats = { findMany: async () => [] };
+  (prismaClient as any).eloHistory = { findMany: async () => [] };
+  (prismaClient as any).$runCommandRaw = async () => ({
+    cursor: { firstBatch: [] },
+  });
+
+  try {
+    const data = await loadSeasonRecapData(3);
+    const missing = data.games[0].gameParticipations.find(
+      (gp) => gp.playerId === "missing"
+    );
+
+    assert(missing?.player === null, "Orphaned participation keeps null player");
+    assert(
+      missing?.ignUsed === "MissingHistoricalIgn",
+      "Orphaned participation still keeps historical IGN"
+    );
+  } finally {
+    (prismaClient as any).season = originalSeason;
+    (prismaClient as any).game = originalGame;
+    (prismaClient as any).player = originalPlayer;
+    (prismaClient as any).playerStats = originalPlayerStats;
+    (prismaClient as any).eloHistory = originalEloHistory;
+    (prismaClient as any).$runCommandRaw = originalRunCommandRaw;
+  }
+});
+
 test("season recap snapshot includes biggest game player count", () => {
   const result = generateSeasonRecapFromData(fixture(), {
     thresholds: { minPlayerSeasonShare: 0 },
@@ -476,7 +553,7 @@ test("season recap snapshot includes biggest game player count", () => {
   const output = result.blocks.join("\n");
 
   assert(
-    output.includes("with the biggest game having 4 players"),
+    output.includes("with the biggest game reaching 4 players at once"),
     "snapshot should include largest single-game player count"
   );
 });
@@ -556,7 +633,15 @@ test("season recap includes MVP voting participation", () => {
 });
 
 test("season recap only counts Elo recovery after dropping below threshold", () => {
-  const result = generateSeasonRecapFromData(fixture(), {
+  const data = fixture();
+  data.histories = data.histories.map((history) => {
+    if (history.playerId !== "foil") return history;
+    const gameIndex = Number(history.gameId.replace("game-", ""));
+    const recoveredEloByGame = [930, 940, 955, 970, 980, 990];
+    return { ...history, elo: recoveredEloByGame[gameIndex] ?? history.elo };
+  });
+
+  const result = generateSeasonRecapFromData(data, {
     thresholds: { minPlayerGames: 3, minPlayerSeasonShare: 0 },
   });
   const output = result.blocks.join("\n");
@@ -564,6 +649,10 @@ test("season recap only counts Elo recovery after dropping below threshold", () 
   assert(
     output.includes("Biggest Elo Recoveries After Dropping Below 950"),
     "recovery label should show the threshold"
+  );
+  assert(
+    output.includes("foil: +60 from season low (930"),
+    "below-threshold recovery should appear"
   );
   assert(
     !output.includes("steady: +120 from season low (1000"),

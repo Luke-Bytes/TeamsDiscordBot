@@ -51,6 +51,7 @@ export class FakeGuild {
 type ChatOptions = {
   subcommand?: string;
   strings?: Record<string, string | null>;
+  integers?: Record<string, number | null>;
   users?: Record<string, Partial<User>>;
   channelId?: string;
   guild?: Guild;
@@ -72,6 +73,8 @@ export function createChatInputInteraction(
     getSubcommand: (_required?: boolean) => opts.subcommand ?? "",
     getString: (name: string, _required?: boolean) =>
       opts.strings?.[name] ?? null,
+    getInteger: (name: string, _required?: boolean) =>
+      opts.integers?.[name] ?? null,
     getBoolean: (name: string, _required?: boolean) =>
       (opts.strings?.[name] as any) ?? null,
     getUser: (name: string) =>

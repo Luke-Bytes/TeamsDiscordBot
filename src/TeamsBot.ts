@@ -10,6 +10,7 @@ import { PermissionsUtil } from "./util/PermissionsUtil";
 import { MaintenanceLoggingUtil } from "./util/MaintenanceLoggingUtil";
 import { PrismaUtils } from "./util/PrismaUtils";
 import { ConfigManager } from "./ConfigManager";
+import { SeasonService } from "./database/SeasonService";
 
 export class TeamsBot {
   client: Client;
@@ -106,12 +107,14 @@ export class TeamsBot {
       } else {
         console.log("No punishments expired today.");
       }
-      this.client.user?.setActivity(
-        `Season ${PermissionsUtil.config.season}!`,
-        {
+      try {
+        const activeSeasonNumber = await SeasonService.getActiveSeasonNumber();
+        this.client.user?.setActivity(`Season ${activeSeasonNumber}!`, {
           type: ActivityType.Competing,
-        }
-      );
+        });
+      } catch (error) {
+        console.error("Failed to set active season presence:", error);
+      }
     });
 
     // Command + Context Menu Listener

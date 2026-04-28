@@ -1,5 +1,5 @@
 import { prismaClient } from "../../database/prismaClient";
-import { ConfigManager } from "../../ConfigManager";
+import { SeasonService } from "../../database/SeasonService";
 import { PrismaSafeExtractor } from "../../util/PrismaSafeExtractor";
 import {
   DEFAULT_MAX_BLOCK_LENGTH,
@@ -56,7 +56,8 @@ export {
 export async function generateSeasonRecap(
   options: GenerateOptions = {}
 ): Promise<SeasonRecapResult> {
-  const seasonNumber = options.seasonNumber ?? ConfigManager.getConfig().season;
+  const seasonNumber =
+    options.seasonNumber ?? (await SeasonService.getActiveSeasonNumber());
   const data = await loadSeasonRecapData(seasonNumber);
 
   return generateSeasonRecapFromData(data, options);
@@ -86,14 +87,14 @@ export async function loadSeasonRecapData(
         type: true,
         doubleElo: true,
         gameParticipations: {
-          include: {
-            player: {
-              select: {
-                id: true,
-                latestIGN: true,
-                discordSnowflake: true,
-              },
-            },
+          select: {
+            playerId: true,
+            ignUsed: true,
+            team: true,
+            mvp: true,
+            captain: true,
+            draftSlotPlacement: true,
+            votedForAMVP: true,
           },
         },
       },
@@ -118,6 +119,25 @@ export async function loadSeasonRecapData(
     }),
   ]);
 
+  const playerIds = Array.from(
+    new Set(
+      games.flatMap((game) => game.gameParticipations.map((gp) => gp.playerId))
+    )
+  );
+  const participationPlayers = playerIds.length
+    ? await prismaClient.player.findMany({
+        where: { id: { in: playerIds } },
+        select: {
+          id: true,
+          latestIGN: true,
+          discordSnowflake: true,
+        },
+      })
+    : [];
+  const participationPlayerById = new Map(
+    participationPlayers.map((player) => [player.id, player])
+  );
+
   return {
     seasonNumber,
     games: games.map((game) => ({
@@ -139,7 +159,7 @@ export async function loadSeasonRecapData(
         captain: gp.captain,
         draftSlotPlacement: gp.draftSlotPlacement,
         votedForAMVP: gp.votedForAMVP,
-        player: gp.player,
+        player: participationPlayerById.get(gp.playerId) ?? null,
       })),
     })),
     playerStats,

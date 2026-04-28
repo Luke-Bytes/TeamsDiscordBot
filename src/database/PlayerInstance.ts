@@ -1,7 +1,7 @@
 import { Snowflake } from "discord.js";
 import { prismaClient } from "./prismaClient";
 import { Player, PlayerStats } from "@prisma/client";
-import { ConfigManager } from "../ConfigManager";
+import { SeasonService } from "./SeasonService";
 
 // wrapper class for Player
 export class PlayerInstance {
@@ -57,17 +57,7 @@ export class PlayerInstance {
       });
     }
 
-    const config = ConfigManager.getConfig();
-    const seasonNumber = config.season;
-
-    const season = await prismaClient.season.findUnique({
-      where: { number: seasonNumber },
-    });
-    if (!season) {
-      throw new Error(
-        `Season #${seasonNumber} does not exist. Please create it first.`
-      );
-    }
+    const season = await SeasonService.requireActiveSeason();
 
     let stats = await prismaClient.playerStats.findUnique({
       where: {

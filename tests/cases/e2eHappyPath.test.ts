@@ -150,6 +150,7 @@ test("E2E happy path: announce -> register -> nominate -> set captains -> random
         update: async () => {},
       };
       (prismaClient as any).season = {
+        findFirst: async () => ({ id: "season1", number: 1, isActive: true }),
         findUnique: async () => ({ id: "season1", number: 1 }),
       };
       (prismaClient as any).playerStats = {

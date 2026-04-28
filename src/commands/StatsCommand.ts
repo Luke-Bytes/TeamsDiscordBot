@@ -9,7 +9,7 @@ import { EloUtil } from "../util/EloUtil.js";
 import { PrismaUtils } from "../util/PrismaUtils.js";
 import { Channels } from "../Channels";
 import { prismaClient } from "../database/prismaClient.js";
-import { ConfigManager } from "../ConfigManager";
+import { SeasonService } from "../database/SeasonService";
 import { Team } from "@prisma/client";
 import { escapeText } from "../util/Utils";
 
@@ -60,18 +60,19 @@ export default class StatsCommand implements Command {
       return;
     }
 
-    const seasonNumber =
-      interaction.options.getInteger("season") ??
-      ConfigManager.getConfig().season;
-    const season = await prismaClient.season.findUnique({
-      where: { number: seasonNumber },
-    });
+    const requestedSeasonNumber = interaction.options.getInteger("season");
+    const season = requestedSeasonNumber
+      ? await prismaClient.season.findUnique({
+          where: { number: requestedSeasonNumber },
+        })
+      : await SeasonService.requireActiveSeason();
     if (!season) {
       await interaction.editReply(
-        `Season #${seasonNumber} not found. Are you a time traveller?`
+        `Season #${requestedSeasonNumber} not found. Are you a time traveller?`
       );
       return;
     }
+    const seasonNumber = requestedSeasonNumber ?? season.number;
 
     const stats = await prismaClient.playerStats.findUnique({
       where: {

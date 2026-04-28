@@ -1,7 +1,7 @@
 import { EmbedBuilder } from "discord.js";
 import { prismaClient } from "../../database/prismaClient";
 import { EloUtil } from "../../util/EloUtil";
-import { ConfigManager } from "../../ConfigManager";
+import { SeasonService } from "../../database/SeasonService";
 import { escapeIgn } from "../../util/Utils";
 
 export class LeaderBoardFeed {
@@ -46,17 +46,8 @@ export class LeaderBoardFeed {
 
   public async generateEmbed(): Promise<EmbedBuilder> {
     try {
-      const config = ConfigManager.getConfig();
-      const seasonNumber = config.season;
-      const season = await prismaClient.season.findUnique({
-        where: { number: seasonNumber },
-      });
-
-      if (!season) {
-        throw new Error(
-          `Season with number=${seasonNumber} not found. Please create it first.`
-        );
-      }
+      const season = await SeasonService.requireActiveSeason();
+      const seasonNumber = season.number;
 
       const topTenPlayerStats = await prismaClient.playerStats.findMany({
         where: { seasonId: season.id },

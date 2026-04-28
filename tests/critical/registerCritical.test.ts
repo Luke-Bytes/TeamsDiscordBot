@@ -37,7 +37,10 @@ test("Register blocks non-organiser from registering others and blocks duplicate
     idToPlayer.set(rec.discordSnowflake, rec);
     return rec;
   };
-  (prismaClient as any).season = { findUnique: async () => ({ id: "S1" }) };
+  (prismaClient as any).season = {
+    findFirst: async () => ({ id: "S1", number: 1, isActive: true }),
+    findUnique: async () => ({ id: "S1", number: 1, isActive: true }),
+  };
   (prismaClient as any).playerStats = {
     findUnique: async () => ({ seasonId: "S1" }),
     create: async ({ data }: any) => ({ ...data }),
@@ -115,7 +118,10 @@ test("Register late signups message when teams decided", async () => {
     latestIGN: data.latestIGN ?? null,
     primaryMinecraftAccount: null,
   });
-  (prismaClient as any).season = { findUnique: async () => ({ id: "S1" }) };
+  (prismaClient as any).season = {
+    findFirst: async () => ({ id: "S1", number: 1, isActive: true }),
+    findUnique: async () => ({ id: "S1", number: 1, isActive: true }),
+  };
   (prismaClient as any).playerStats = {
     findUnique: async () => ({ seasonId: "S1" }),
     create: async ({ data }: any) => ({ ...data }),

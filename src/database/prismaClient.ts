@@ -2,7 +2,17 @@ import { gameType, Prisma, PrismaClient, Team } from "@prisma/client";
 import { GameInstance } from "../database/GameInstance";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { Elo } from "../logic/Elo";
-import { ConfigManager } from "../ConfigManager";
+
+async function requireActiveSeasonForPrismaExtension() {
+  const season = await prismaClient.season.findFirst({
+    where: { isActive: true },
+    orderBy: { number: "desc" },
+  });
+  if (!season) {
+    throw new Error("No active season found. Please activate a season first.");
+  }
+  return season;
+}
 
 export const prismaClient = new PrismaClient({
   log: ["info", "warn", "error"],
@@ -79,17 +89,7 @@ export const prismaClient = new PrismaClient({
       },
 
       async getPlayerStatsForCurrentSeason(playerId: string) {
-        const config = ConfigManager.getConfig();
-        const seasonNumber = config.season;
-        const season = await prismaClient.season.findUnique({
-          where: { number: seasonNumber },
-        });
-
-        if (!season) {
-          throw new Error(
-            `Season with number=${seasonNumber} not found. Please create it first.`
-          );
-        }
+        const season = await requireActiveSeasonForPrismaExtension();
 
         let playerStats = await prismaClient.playerStats.findUnique({
           where: {
@@ -127,16 +127,7 @@ export const prismaClient = new PrismaClient({
           isDoubleElo,
         } = gameInstance;
 
-        const config = ConfigManager.getConfig();
-        const seasonNumber = config.season;
-        const season = await prismaClient.season.findUnique({
-          where: { number: seasonNumber },
-        });
-        if (!season) {
-          throw new Error(
-            `Season with number=${seasonNumber} not found. Please create it first.`
-          );
-        }
+        const season = await requireActiveSeasonForPrismaExtension();
 
         const gameSettings = {
           organiserBannedClasses: settings.organiserBannedClasses ?? [],

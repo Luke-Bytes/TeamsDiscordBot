@@ -13,6 +13,7 @@ import { Command } from "./CommandInterface";
 import { EloUtil } from "../util/EloUtil";
 import { prismaClient } from "../database/prismaClient";
 import { Channels } from "../Channels";
+import { SeasonService } from "../database/SeasonService";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { escapeIgn } from "../util/Utils";
 
@@ -87,19 +88,16 @@ export default class LeaderboardsCommand implements Command {
     userId: string,
     seasonNumberArg?: number
   ) {
-    const latest = await prismaClient.season.findFirst({
-      orderBy: { number: "desc" },
-    });
-    if (!latest) throw new Error("No seasons found!");
-    const seasonNumber = seasonNumberArg ?? latest.number;
-
-    const season = await prismaClient.season.findUnique({
-      where: { number: seasonNumber },
-    });
+    const season = seasonNumberArg
+      ? await prismaClient.season.findUnique({
+          where: { number: seasonNumberArg },
+        })
+      : await SeasonService.requireActiveSeason();
     if (!season)
       throw new Error(
-        `Season #${seasonNumber} not found. Is this an alternate timeline?`
+        `Season #${seasonNumberArg} not found. Is this an alternate timeline?`
       );
+    const seasonNumber = seasonNumberArg ?? season.number;
 
     const allStats = await prismaClient.playerStats.findMany({
       where: { seasonId: season.id },
