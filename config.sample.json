@@ -22,7 +22,8 @@
     "redTeamVC": "",
     "blueTeamVC": "",
     "redTeamChat": "",
-    "blueTeamChat": ""
+    "blueTeamChat": "",
+    "temporaryVoiceCategory": ""
   },
   "dev": {
     "enabled": false,

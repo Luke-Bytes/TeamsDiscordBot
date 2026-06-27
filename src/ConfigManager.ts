@@ -26,6 +26,7 @@ export type Config = {
     blueTeamVC: string;
     redTeamChat: string;
     blueTeamChat: string;
+    temporaryVoiceCategory: string;
   };
   dev: {
     enabled: boolean;

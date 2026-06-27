@@ -164,6 +164,26 @@ model PlayerPunishment {
   updatedAt DateTime @updatedAt
 }
 
+model TemporaryVoiceChannel {
+  id String @id @default(uuid()) @map("_id")
+
+  guildId    String
+  channelId  String @unique
+  ownerId    String
+  categoryId String
+
+  name       String
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime
+  autoLockAt DateTime?
+
+  locked         Boolean  @default(false)
+  invitedUserIds String[] @default([])
+
+  @@unique([guildId, ownerId])
+  @@index([expiresAt])
+}
+
 enum Team {
   RED
   BLUE

@@ -99,6 +99,9 @@ export class TeamsBot {
 
       this.commandHandler.loadCommands();
       await this.commandHandler.registerCommands();
+      await this.commandHandler.vcCommand.manager.recoverActiveChannels(
+        this.client
+      );
       MaintenanceLoggingUtil.startLogging();
 
       const updatedCount = await PrismaUtils.updatePunishmentsForExpiry();

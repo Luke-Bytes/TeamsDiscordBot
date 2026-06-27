@@ -47,6 +47,7 @@ import TitleCommand from "../commands/TitleCommand";
 import ScriptsCommand from "../commands/ScriptsCommand";
 import SeasonRecapCommand from "../commands/SeasonRecapCommand";
 import WrappedCommand from "../commands/WrappedCommand";
+import VcCommand from "../commands/VcCommand";
 import CaptainPlanDMManager from "../logic/CaptainPlanDMManager";
 import { InteractionGuard } from "../util/InteractionGuard";
 
@@ -100,6 +101,7 @@ export class CommandHandler {
   scriptsCommand = new ScriptsCommand();
   seasonRecapCommand = new SeasonRecapCommand();
   wrappedCommand = new WrappedCommand();
+  vcCommand = new VcCommand();
 
   private readonly interactionGuard = new InteractionGuard();
 
@@ -150,6 +152,7 @@ export class CommandHandler {
       this.scriptsCommand,
       this.seasonRecapCommand,
       this.wrappedCommand,
+      this.vcCommand,
     ];
   }
 

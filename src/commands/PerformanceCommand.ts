@@ -15,10 +15,13 @@ export default class PerformanceCommand implements Command {
   buttonIds: string[] = [];
 
   formatUptime(seconds: number): string {
-    const hours = Math.floor(seconds / 3600);
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
-    return `${hours}h ${minutes}m ${secs}s`;
+    const dayPrefix = days > 0 ? `${days}d ` : "";
+
+    return `${dayPrefix}${hours}h ${minutes}m ${secs}s`;
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
