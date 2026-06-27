@@ -174,6 +174,11 @@ test("/vc create enforces one channel per user and stores category plus 12h expi
     );
     assertEqual(record.name, "my-squad", "channel name should be normalized");
     assertEqual(record.locked, true, "private channel should start locked");
+    const channel = guild.channels.cache.get("vc-1") as FakeVoiceChannel;
+    assert(
+      channel.permissionOverwrites.cache.has("111111111111111111"),
+      "private channel should explicitly allow the owner"
+    );
     assert(
       record.expiresAt.getTime() - createdAt <=
         TempVoiceChannelManager.expiryMs + 1000,

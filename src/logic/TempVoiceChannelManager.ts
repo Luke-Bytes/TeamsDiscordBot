@@ -71,12 +71,16 @@ export class TempVoiceChannelManager {
       : null;
     const permissionOverwrites = options.private
       ? [
-          {
-            id: this.everyoneRoleId(options.guild),
-            deny: [PermissionFlagsBits.Connect],
-          },
-        ]
-      : [];
+        {
+          id: this.everyoneRoleId(options.guild),
+          deny: [PermissionFlagsBits.Connect],
+        },
+        {
+          id: options.ownerId,
+          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect],
+        },
+      ]
+    : [];
 
     const channel = (await options.guild.channels.create({
       name: options.name,

@@ -1,7 +1,6 @@
 import {
   ChatInputCommandInteraction,
   GuildMember,
-  MessageFlags,
   SlashCommandBuilder,
 } from "discord.js";
 import { Command } from "./CommandInterface";
@@ -424,6 +423,6 @@ export default class VcCommand implements Command {
     interaction: ChatInputCommandInteraction,
     content: string
   ) {
-    await interaction.reply({ content, flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content });
   }
 }
