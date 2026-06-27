@@ -53,6 +53,7 @@ export class TempVoiceChannelManager {
 
   private readonly timers = new Map<string, NodeJS.Timeout>();
   private readonly autoLockTimers = new Map<string, NodeJS.Timeout>();
+  private readonly scheduledExpiryDelays = new Map<string, number>();
 
   public async create(
     options: CreateTempVoiceOptions
@@ -196,7 +197,9 @@ export class TempVoiceChannelManager {
   ): Promise<{ record: TemporaryVoiceChannelRecord; disconnected: string[] }> {
     const channel = await this.requireVoiceChannel(guild, record.channelId);
     for (const userId of userIds) {
-      await channel.permissionOverwrites.delete(userId).catch(() => undefined);
+      await channel.permissionOverwrites.edit(userId, {
+        Connect: false,
+      });
     }
 
     const disconnected: string[] = [];
@@ -237,8 +240,7 @@ export class TempVoiceChannelManager {
   }
 
   public getScheduledExpiryDelay(channelId: string): number | null {
-    const timer = this.timers.get(channelId);
-    return timer ? Number(timer._idleTimeout) : null;
+    return this.scheduledExpiryDelays.get(channelId) ?? null;
   }
 
   private schedule(record: TemporaryVoiceChannelRecord, guild: Guild) {
@@ -249,6 +251,7 @@ export class TempVoiceChannelManager {
     }, expiresIn);
     expiryTimer.unref?.();
     this.timers.set(record.channelId, expiryTimer);
+    this.scheduledExpiryDelays.set(record.channelId, expiresIn);
 
     if (
       record.autoLockAt &&
@@ -287,6 +290,7 @@ export class TempVoiceChannelManager {
     const expiryTimer = this.timers.get(channelId);
     if (expiryTimer) clearTimeout(expiryTimer);
     this.timers.delete(channelId);
+    this.scheduledExpiryDelays.delete(channelId);
 
     const autoLockTimer = this.autoLockTimers.get(channelId);
     if (autoLockTimer) clearTimeout(autoLockTimer);

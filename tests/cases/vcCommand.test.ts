@@ -358,8 +358,9 @@ test("/vc remove updates overwrites and disconnects users in the temp VC", async
       "removed user should leave invited list"
     );
     assert(
-      !channel.permissionOverwrites.cache.has("222222222222222222"),
-      "explicit overwrite should be removed"
+      channel.permissionOverwrites.cache.get("222222222222222222").Connect ===
+        false,
+      "removed user should be denied reconnecting"
     );
     assertEqual(member.voice.channelId, null, "member should be disconnected");
   } finally {
