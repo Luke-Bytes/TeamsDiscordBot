@@ -13,6 +13,7 @@ async function buildAndRun() {
     target: "node18",
     sourcemap: false,
     format: "cjs",
+    external: ["sharp"],
     logLevel: "info",
     tsconfig: path.resolve(process.cwd(), "tsconfig.json"),
   });

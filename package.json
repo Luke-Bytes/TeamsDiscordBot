@@ -7,7 +7,7 @@
     "node": ">=18.x"
   },
   "scripts": {
-    "build": "npx prisma generate --no-hints && esbuild src/main.ts --bundle --minify --platform=node --target=node18 --sourcemap --keep-names --outfile=dist/main.js",
+    "build": "npx prisma generate --no-hints && esbuild src/main.ts --bundle --minify --platform=node --target=node18 --sourcemap --keep-names --external:sharp --outfile=dist/main.js",
     "start:bot:prod": "node dist/main.js",
     "dev": "tsx watch src/main.ts",
     "dev:respawn": "node scripts/dev-runner.js",
@@ -49,6 +49,7 @@
     "luxon": "^3.6.1",
     "mongodb": "^6.12.0",
     "prisma": "^5.20.0",
+    "sharp": "^0.35.2",
     "source-map-support": "^0.5.21",
     "uuid": "^11.0.5",
     "winston": "^3.17.0",

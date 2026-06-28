@@ -15,6 +15,7 @@ import "./cases/titleIntegration.test";
 import "./cases/interactionGuard.test";
 import "./cases/scriptsCommand.test";
 import "./cases/seasonRecap.test";
+import "./cases/tierList.test";
 import "./cases/personalSeasonWrapped.test";
 import "./cases/wrappedCommand.test";
 import "./cases/vcCommand.test";

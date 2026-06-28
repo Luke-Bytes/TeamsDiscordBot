@@ -13,14 +13,16 @@ test("timestamp uses timezone choices and yields different epochs", async () => 
   const cmd = new (TimestampCommand as any)();
 
   const igmt = createChatInputInteraction("U1", {
-    strings: { time: "2025-01-01 19:00", timezone: "GMT", echo: false as any },
+    strings: { time: "2025-01-01 19:00", timezone: "GMT" },
+    booleans: { echo: false },
   });
   await cmd.execute(igmt as any);
   const r1 = igmt.replies.find((r: any) => r.type === "reply");
   const u1 = extractUnixFromReply(r1);
 
   const iest = createChatInputInteraction("U1", {
-    strings: { time: "2025-01-01 19:00", timezone: "EST", echo: false as any },
+    strings: { time: "2025-01-01 19:00", timezone: "EST" },
+    booleans: { echo: false },
   });
   await cmd.execute(iest as any);
   const r2 = iest.replies.find((r: any) => r.type === "reply");

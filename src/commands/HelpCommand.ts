@@ -26,6 +26,7 @@ const MANUAL_OVERRIDES: Record<string, HelpCategory> = {
   titles: "user",
   title: "organiser",
   scripts: "organiser",
+  tierlist: "organiser",
 };
 
 const ORGANISER_HINTS = [

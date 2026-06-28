@@ -152,6 +152,11 @@ export class TeamsBot {
       ) {
         return;
       }
+      const handledTierListMessage =
+        this.commandHandler.tierListCommand.handleMessage(msg);
+      if (handledTierListMessage) {
+        return;
+      }
       if (this.commandHandler.teamCommand.teamPickingSession) {
         try {
           await this.commandHandler.teamCommand.teamPickingSession.handleMessage(
