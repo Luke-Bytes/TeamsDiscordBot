@@ -17,7 +17,9 @@ export type PlayerTierDossier = {
   displayName: string;
   gamesPlayed: number;
   seasonsPlayed: number;
+  lastPlayedAt: Date;
   provisional: boolean;
+  limitedSample: boolean;
   statisticalBand: TierListTier;
   score: number;
   objectiveSummary: string;
@@ -31,11 +33,15 @@ export type PlayerTierDossier = {
     winRate: number;
     adjustedWinScore: number;
     mvpCount: number;
+    mvpEligibleGames: number;
     mvpRate: number;
     smoothedMvpRate: number;
+    captainEligibleGames: number;
+    captainRate: number;
     captainGames: number;
     captainWins: number;
     captainWinRate: number | null;
+    smoothedCaptainWinRate: number | null;
     underdogWins: number;
     draftGames: number;
     averageDraftSlotPercentile: number | null;
@@ -59,11 +65,37 @@ export type TierPlacement = {
   reasoning: string;
   confidence: TierConfidence;
   score: number;
+  limitedSampleEvidence?: boolean;
 };
+
+export type TierListPlacementReview = {
+  playerId: string;
+  placementId: string;
+  messageId?: string;
+  voters: string[];
+  justifications: string[];
+  statusNote?: string;
+  thresholdReached: boolean;
+};
+
+export type AnchorTierVote = "A" | "B" | "C" | "D" | "E";
+
+export type TierListAnchorVoteSummary = {
+  playerId: string;
+  displayName: string;
+  votes: Record<AnchorTierVote, number>;
+  consensus: AnchorTierVote | null;
+  totalVotes: number;
+};
+
+export type TierListPhase = "anchor" | "provisional" | "final";
 
 export type TierListState = {
   eventId: string;
   createdAt: Date;
+  phase: TierListPhase;
+  finalReviewTierIndex: number;
+  finalReviewedTiers: TierListTier[];
   unplacedPlayerIds: string[];
   placed: Record<TierListTier, TierPlacement[]>;
   placementHistory: TierPlacement[];
@@ -72,8 +104,17 @@ export type TierListState = {
   discardedCommunityNotePlayerIds: string[];
   skippedPlayerIds: string[];
   placementCount: number;
+  anchorPlayerIds: string[];
+  activeAnchorIndex: number;
+  anchorVotesByPlayerId: Record<string, TierListAnchorVoteSummary>;
   liveSummaryMessageId?: string;
   postedImageMessageIds: string[];
+  paused: boolean;
+  fastMode?: boolean;
+  noCommunityInput?: boolean;
+  placementReviewsByPlayerId: Record<string, TierListPlacementReview>;
+  activePlacementReview?: TierListPlacementReview;
+  autoAdvanceTimer?: NodeJS.Timeout;
 };
 
 export type TierComparable = {
@@ -81,6 +122,7 @@ export type TierComparable = {
   displayName: string;
   statisticalBand: TierListTier;
   gamesPlayed: number;
+  limitedSample: boolean;
   score: number;
   summary: string;
 };
@@ -96,6 +138,74 @@ export type PlacementPromptPayload = {
   manualNotes?: string[];
   placementInstructions: string[];
   instructions: string[];
+};
+
+export type TierListFinalReviewPlayer = {
+  playerId: string;
+  displayName: string;
+  tier: TierListTier;
+  position: TierPosition;
+  score: number;
+  confidence: TierConfidence;
+  statisticalBand: TierListTier;
+  gamesPlayed: number;
+  limitedSample: boolean;
+  reasoning: string;
+  objectiveSummary: string;
+  statContext: {
+    record: string;
+    adjustedWinScore: number;
+    mvpCount: number;
+    mvpEligibleGames: number;
+    mvpRate: number;
+    captainEligibleGames: number;
+    captainRate: number;
+    captainGames: number;
+    captainWins: number;
+    captainWinRate: number | null;
+    averageElo: number;
+    averageSeasonEloPercentile: number;
+  };
+};
+
+export type TierListFinalReviewPayload = {
+  tier: TierListTier;
+  segment?: TierPosition;
+  players: TierListFinalReviewPlayer[];
+  sameTierReferences?: {
+    higherSegment?: TierListFinalReviewPlayer[];
+    lowerSegment?: TierListFinalReviewPlayer[];
+  };
+  adjacentReferences: {
+    higherTier?: TierListFinalReviewPlayer[];
+    lowerTier?: TierListFinalReviewPlayer[];
+  };
+  currentTierList: Record<TierListTier, string[]>;
+  instructions: string[];
+};
+
+export type TierListFinalReviewRevision = {
+  playerId: string;
+  tier: TierListTier;
+  position: TierPosition;
+  reasoning: string;
+  confidence: TierConfidence;
+};
+
+export type TierListFinalVerdictPlayer = TierListFinalReviewPlayer & {
+  rank: number;
+  notableStrengths: string[];
+  riskNotes: string[];
+};
+
+export type TierListFinalVerdictPayload = {
+  tiers: Record<TierListTier, TierListFinalVerdictPlayer[]>;
+  currentTierList: Record<TierListTier, string[]>;
+  instructions: string[];
+};
+
+export type TierListFinalVerdict = Record<TierListTier, string> & {
+  overall: string;
 };
 
 export type CommunityAnswer = {

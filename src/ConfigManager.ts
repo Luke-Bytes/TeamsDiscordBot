@@ -12,6 +12,7 @@ export type TierListImageConfig = {
   gap?: number;
   padding?: number;
   fontSize?: number;
+  minFontSize?: number;
   maxImageHeight?: number;
   maxFileBytes?: number;
 };
@@ -21,8 +22,18 @@ export type TierListConfig = {
   questionWindowSeconds?: number;
   maxCommunityAnswersPerPlayer?: number;
   askCommunityEveryNPlayers?: number;
+  limitedSampleGamesThreshold?: number;
+  limitedSampleAutomaticTiers?: Array<"C" | "D">;
+  limitedSampleCommunityTier?: "B";
+  limitedSampleCommunityQuestionRequiredForB?: boolean;
   consistencyEveryNPlacements?: number;
   enabledCommunityQuestions?: boolean;
+  autoAdvanceSeconds?: number;
+  rerateVoteThreshold?: number;
+  rerateJustificationMaxLength?: number;
+  playedRecentlyDefault?: boolean;
+  playedRecentlyMonths?: number;
+  curveTargets?: Partial<Record<"S" | "A" | "B" | "C" | "D" | "E", number>>;
   image?: TierListImageConfig;
 };
 
@@ -45,8 +56,25 @@ export const DEFAULT_TIER_LIST_CONFIG: ResolvedTierListConfig = {
   questionWindowSeconds: 30,
   maxCommunityAnswersPerPlayer: 5,
   askCommunityEveryNPlayers: 1,
+  limitedSampleGamesThreshold: 6,
+  limitedSampleAutomaticTiers: ["C", "D"],
+  limitedSampleCommunityTier: "B",
+  limitedSampleCommunityQuestionRequiredForB: true,
   consistencyEveryNPlacements: 10,
   enabledCommunityQuestions: true,
+  autoAdvanceSeconds: 15,
+  rerateVoteThreshold: 3,
+  rerateJustificationMaxLength: 500,
+  playedRecentlyDefault: false,
+  playedRecentlyMonths: 6,
+  curveTargets: {
+    S: 0.02,
+    A: 0.08,
+    B: 0.2,
+    C: 0.4,
+    D: 0.2,
+    E: 0.1,
+  },
   image: {
     enabled: true,
     postChannel: "botCommands",
@@ -58,6 +86,7 @@ export const DEFAULT_TIER_LIST_CONFIG: ResolvedTierListConfig = {
     gap: 18,
     padding: 24,
     fontSize: 24,
+    minFontSize: 12,
     maxImageHeight: 4096,
     maxFileBytes: 8_000_000,
   },
@@ -68,7 +97,7 @@ export const DEFAULT_OLLAMA_CONFIG: ResolvedOllamaConfig = {
   baseUrl: "http://192.168.0.100:11434",
   model: "qwen3:14b",
   timeoutMs: 60000,
-  temperature: 0.2,
+  temperature: 0,
 };
 
 export type Config = {

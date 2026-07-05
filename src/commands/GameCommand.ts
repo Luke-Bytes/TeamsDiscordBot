@@ -6,13 +6,16 @@ import {
   Message,
   ButtonInteraction,
   TextChannel,
+  AutocompleteInteraction,
 } from "discord.js";
+import { AnniClass, AnniMap } from "@prisma/client";
 import { Command } from "./CommandInterface.js";
 import { ConfigManager } from "../ConfigManager";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { GameInstance } from "../database/GameInstance";
 import { cleanUpAfterGame } from "../logic/GameEndCleanUp";
 import { DiscordUtil } from "../util/DiscordUtil";
+import { prismaClient } from "../database/prismaClient";
 import { checkMissingPlayersInVC, formatTeamIGNs } from "../util/Utils";
 import {
   parsePlanText,
@@ -20,6 +23,10 @@ import {
   TeamPlanSource,
 } from "../util/PlanUtil";
 import CaptainPlanDMManager from "../logic/CaptainPlanDMManager";
+import {
+  parseDiscordTimestampInput,
+  TIMESTAMP_TIMEZONES,
+} from "../util/TimestampUtil";
 import { setTimeout as delay } from "timers/promises";
 
 export default class GameCommand implements Command {
@@ -38,6 +45,74 @@ export default class GameCommand implements Command {
       sub
         .setName("shutdown")
         .setDescription("Complete the game and calculate elo")
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("request")
+        .setDescription("Create a special game request template")
+        .addStringOption((option) =>
+          option
+            .setName("time")
+            .setDescription("Unix timestamp or date/time (e.g. tomorrow 7pm)")
+            .setRequired(true)
+        )
+        .addStringOption((option) =>
+          option
+            .setName("banned_classes")
+            .setDescription("Banned classes, e.g. SWA, or none")
+            .setRequired(true)
+            .setAutocomplete(true)
+        )
+        .addStringOption((option) =>
+          option
+            .setName("map")
+            .setDescription("Map name")
+            .setRequired(true)
+            .setAutocomplete(true)
+        )
+        .addStringOption((option) =>
+          option
+            .setName("phase_5_type")
+            .setDescription("Phase 5 type")
+            .setRequired(false)
+            .addChoices(
+              { name: "Bleed", value: "Bleed" },
+              { name: "Double", value: "Double" },
+              { name: "Nothing", value: "Nothing" }
+            )
+        )
+        .addStringOption((option) =>
+          option
+            .setName("duel")
+            .setDescription("Duel?")
+            .setRequired(false)
+            .addChoices(
+              { name: "Yes", value: "Yes" },
+              { name: "No", value: "No" }
+            )
+        )
+        .addStringOption((option) =>
+          option
+            .setName("looking_for_players")
+            .setDescription("Looking for players?")
+            .setRequired(false)
+            .addChoices(
+              { name: "Yes", value: "Yes" },
+              { name: "No", value: "No" }
+            )
+        )
+        .addStringOption((option) =>
+          option
+            .setName("timezone")
+            .setDescription("Timezone for natural language time")
+            .setRequired(false)
+            .addChoices(
+              ...TIMESTAMP_TIMEZONES.map((timezone) => ({
+                name: timezone,
+                value: timezone,
+              }))
+            )
+        )
     );
 
   name = "game";
@@ -58,6 +133,11 @@ export default class GameCommand implements Command {
 
   async execute(interaction: ChatInputCommandInteraction) {
     const subCommand = interaction.options.getSubcommand();
+    if (subCommand === "request") {
+      await this.handleGameRequest(interaction);
+      return;
+    }
+
     const isAuthorized = await PermissionsUtil.isUserAuthorised(interaction);
     if (!isAuthorized) return;
     const guild = interaction.guild!;
@@ -273,6 +353,87 @@ export default class GameCommand implements Command {
 
   async handleButtonPress(interaction: ButtonInteraction) {
     await this.captainPlanDMManager.handleButtonPress(interaction);
+  }
+
+  async handleAutocomplete(
+    interaction: AutocompleteInteraction
+  ): Promise<void> {
+    const subCommand = interaction.options.getSubcommand(false);
+    const focused = interaction.options.getFocused(true);
+    if (subCommand !== "request") {
+      await interaction.respond([]);
+      return;
+    }
+
+    const query = String(focused.value ?? "").toLowerCase();
+    if (focused.name === "banned_classes") {
+      const entries = ["none", ...Object.values(AnniClass).map((c) => c)];
+      await interaction.respond(
+        entries
+          .filter((entry) => entry.toLowerCase().includes(query))
+          .slice(0, 25)
+          .map((entry) => ({ name: entry, value: entry }))
+      );
+      return;
+    }
+
+    if (focused.name === "map") {
+      const entries = [
+        "random",
+        ...Object.values(AnniMap).map((map) => map.toLowerCase()),
+      ];
+      await interaction.respond(
+        entries
+          .filter((entry) => entry.toLowerCase().includes(query))
+          .slice(0, 25)
+          .map((entry) => ({
+            name: entry.charAt(0).toUpperCase() + entry.slice(1),
+            value: entry,
+          }))
+      );
+      return;
+    }
+
+    await interaction.respond([]);
+  }
+
+  private async handleGameRequest(
+    interaction: ChatInputCommandInteraction
+  ): Promise<void> {
+    const timeInput = interaction.options.getString("time", true);
+    const timezone = interaction.options.getString("timezone");
+    const parsedTime = parseDiscordTimestampInput(timeInput, timezone);
+
+    if ("error" in parsedTime) {
+      await interaction.reply({
+        content: `❌ ${parsedTime.error}`,
+      });
+      return;
+    }
+
+    const player = await prismaClient.player.byDiscordSnowflake(
+      interaction.user.id
+    );
+    const leaderIgn = player?.latestIGN ?? "";
+    const bannedClasses = interaction.options.getString("banned_classes", true);
+    const map = interaction.options.getString("map", true);
+    const phase5Type =
+      interaction.options.getString("phase_5_type") ?? "Nothing";
+    const duel = interaction.options.getString("duel") ?? "Yes";
+    const lookingForPlayers =
+      interaction.options.getString("looking_for_players") ?? "No";
+
+    await interaction.reply(
+      [
+        `:alarm_clock: Time: <t:${parsedTime.unix}:F>`,
+        `:name_badge: Leader IGN: ${leaderIgn}`,
+        `:x: Banned Classes: ${bannedClasses}`,
+        `:map: Map: ${map}`,
+        `:five: Phase 5 Type: ${phase5Type}`,
+        `:people_wrestling: Duel: ${duel}`,
+        `:eye: Looking for players: ${lookingForPlayers}`,
+      ].join("\n")
+    );
   }
 }
 

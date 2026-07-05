@@ -16,6 +16,7 @@ export type TierListImageOptions = {
   gap?: number;
   padding?: number;
   fontSize?: number;
+  minFontSize?: number;
   maxImageHeight?: number;
   maxFileBytes?: number;
   headUrlTemplate?: string;
@@ -43,6 +44,8 @@ export type TierListImageCellLayout = {
   displayName: string;
   headIdentifier: string;
   text: string;
+  fontSize: number;
+  textLength?: number;
   x: number;
   y: number;
 };
@@ -63,6 +66,7 @@ const DEFAULT_OPTIONS: ResolvedOptions = {
   gap: 18,
   padding: 24,
   fontSize: 24,
+  minFontSize: 12,
   maxImageHeight: 4096,
   maxFileBytes: 8_000_000,
   headUrlTemplate: "https://mc-heads.net/avatar/{identifier}/{size}.png",
@@ -226,16 +230,27 @@ export function emptyTierListImageRows(): TierListImageRows {
   return { S: [], A: [], B: [], C: [], D: [], E: [] };
 }
 
-export function truncateTierListName(
+export function fitTierListName(
   name: string,
   maxWidth: number,
-  fontSize: number
+  fontSize: number,
+  minFontSize = 12
 ) {
   const clean = name.trim() || "?";
-  const maxChars = Math.max(1, Math.floor(maxWidth / (fontSize * 0.56)));
-  if (clean.length <= maxChars) return clean;
-  if (maxChars <= 1) return "…";
-  return `${clean.slice(0, maxChars - 1)}…`;
+  const safeMinFontSize = Math.min(fontSize, Math.max(1, minFontSize));
+  const estimatedWidth = clean.length * fontSize * 0.56;
+  if (estimatedWidth <= maxWidth) return { text: clean, fontSize };
+
+  const fittedFontSize = Math.max(
+    safeMinFontSize,
+    Math.floor(maxWidth / Math.max(1, clean.length * 0.56))
+  );
+  const fittedWidth = clean.length * fittedFontSize * 0.56;
+  return {
+    text: clean,
+    fontSize: fittedFontSize,
+    textLength: fittedWidth > maxWidth ? maxWidth : undefined,
+  };
 }
 
 function splitRowsForPageHeight(
@@ -301,14 +316,19 @@ function cellLayout(
   const y =
     rowY + options.padding + line * (cellLineHeight(options) + options.gap);
 
+  const fittedName = fitTierListName(
+    player.displayName,
+    options.cellSize,
+    options.fontSize,
+    options.minFontSize
+  );
+
   return {
     displayName: player.displayName,
     headIdentifier: player.headIdentifier || player.displayName,
-    text: truncateTierListName(
-      player.displayName,
-      options.cellSize,
-      options.fontSize
-    ),
+    text: fittedName.text,
+    fontSize: fittedName.fontSize,
+    textLength: fittedName.textLength,
     x,
     y,
   };
@@ -344,8 +364,12 @@ function pageSvg(page: TierListImagePageLayout, options: ResolvedOptions) {
         .map(
           (player) => `
             <text x="${player.x + options.cellSize / 2}" y="${
-              player.y + options.cellSize + options.fontSize + 8
-            }" text-anchor="middle" font-size="${options.fontSize}" fill="${TEXT}" font-family="Arial, Helvetica, sans-serif">${escapeSvg(player.text)}</text>`
+              player.y + options.cellSize + player.fontSize + 8
+            }" text-anchor="middle" font-size="${player.fontSize}"${
+              player.textLength
+                ? ` textLength="${player.textLength}" lengthAdjust="spacingAndGlyphs"`
+                : ""
+            } fill="${TEXT}" font-family="Arial, Helvetica, sans-serif">${escapeSvg(player.text)}</text>`
         )
         .join("");
       return `
