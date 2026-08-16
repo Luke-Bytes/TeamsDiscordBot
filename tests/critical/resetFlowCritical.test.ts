@@ -21,6 +21,14 @@ test("resetCurrentGame clears timers, sessions, votes, and state in-place", asyn
   const pre = GameInstance.getInstance();
   pre.announced = true;
   pre.isFinished = false;
+  pre.gameWinner = "RED";
+  pre.organiser = "Old Organiser";
+  pre.host = "Old Host";
+  pre.blueMeanElo = 1234;
+  pre.redMeanElo = 987;
+  pre.blueExpectedScore = 0.75;
+  pre.redExpectedScore = 0.25;
+  pre.lateSignups.add("late-player");
   let mapCanceled = false;
   let minerushCanceled = false;
   (pre as any).mapVoteManager = {
@@ -61,6 +69,17 @@ test("resetCurrentGame clears timers, sessions, votes, and state in-place", asyn
     throw new Error("GameInstance reference changed (should reset in-place)");
   if (post.announced) throw new Error("announced not reset to false");
   if (post.getPlayers().length !== 0) throw new Error("players not cleared");
+  if (post.gameWinner) throw new Error("gameWinner not cleared");
+  if (post.organiser || post.host)
+    throw new Error("organiser/host not cleared");
+  if (
+    post.blueMeanElo !== undefined ||
+    post.redMeanElo !== undefined ||
+    post.blueExpectedScore !== undefined ||
+    post.redExpectedScore !== undefined
+  )
+    throw new Error("Elo result fields not cleared");
+  if (post.lateSignups.size !== 0) throw new Error("lateSignups not cleared");
   if (!mapCanceled) throw new Error("mapVoteManager.cancelVote was not called");
   if (!minerushCanceled)
     throw new Error("minerushVoteManager.cancelVote was not called");

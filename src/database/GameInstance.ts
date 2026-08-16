@@ -126,6 +126,13 @@ export class GameInstance {
     this.noElo = false;
     this.startTime = undefined;
     this.endTime = undefined;
+    this.gameWinner = undefined;
+    this.organiser = undefined;
+    this.host = undefined;
+    this.blueMeanElo = undefined;
+    this.redMeanElo = undefined;
+    this.blueExpectedScore = undefined;
+    this.redExpectedScore = undefined;
     this.settings = {
       organiserBannedClasses: [],
       sharedCaptainBannedClasses: [],
@@ -136,6 +143,7 @@ export class GameInstance {
     };
     this.classBanMode = null;
     this.teams = { RED: [], BLUE: [], UNDECIDED: [] };
+    this.lateSignups.clear();
     this.teamsDecidedBy = null;
     this.mapVoteManager = undefined;
     this.minerushVoteManager = undefined;
@@ -155,6 +163,50 @@ export class GameInstance {
     this.announcementPreviewMessage = undefined;
     this.announcementMessage = undefined;
     this.announcementPingMessage = undefined;
+  }
+
+  public hasFinalizedPlayableTeams(): boolean {
+    return (
+      this.teamsDecidedBy !== null &&
+      this.teamsDecidedBy !== undefined &&
+      this.teams.RED.length > 0 &&
+      this.teams.BLUE.length > 0
+    );
+  }
+
+  public beginConfirmedAnnouncement(): void {
+    this.gameId = undefined;
+    this.isFinished = false;
+    this.announced = true;
+    this.isRestarting = false;
+    this.noElo = false;
+    this.endTime = undefined;
+    this.gameWinner = undefined;
+
+    this.teams = { RED: [], BLUE: [], UNDECIDED: [] };
+    this.lateSignups.clear();
+    this.teamsDecidedBy = null;
+    this.lastRegisteredSnowflake = undefined;
+    this.captainNominations.clear();
+    this.captainBanLocked.clear();
+    this.captainBanCounts.clear();
+    this.classBansAnnounced = false;
+    this.settings.sharedCaptainBannedClasses = [];
+    this.settings.nonSharedCaptainBannedClasses = {
+      [Team.RED]: [],
+      [Team.BLUE]: [],
+    };
+    this.redTeamPlan = undefined;
+    this.blueTeamPlan = undefined;
+
+    this.mvpVoters.clear();
+    this.mvpVotes = { RED: {}, BLUE: {} };
+    this.MVPPlayerBlue = "";
+    this.MVPPlayerRed = "";
+    this.blueMeanElo = undefined;
+    this.redMeanElo = undefined;
+    this.blueExpectedScore = undefined;
+    this.redExpectedScore = undefined;
   }
 
   public static async resetGameInstance() {

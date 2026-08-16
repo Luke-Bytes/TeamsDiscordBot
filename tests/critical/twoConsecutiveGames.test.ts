@@ -270,6 +270,7 @@ async function runOneGame(params: {
   );
 
   const gameCmd = new GameCommand();
+  game.changeHowTeamsDecided("RANDOMISED");
   await gameCmd.execute(
     createChatInputInteraction(organiser.id, {
       guild,

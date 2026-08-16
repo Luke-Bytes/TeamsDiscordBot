@@ -30,6 +30,7 @@ import "./critical/classbanCritical.test";
 import "./critical/captainNominateCritical.test";
 import "./critical/registerCritical.test";
 import "./critical/resetFlowCritical.test";
+import "./critical/gameLifecycleTransitions.test";
 import "./critical/schedulerCancelCritical.test";
 import "./critical/twoConsecutiveGames.test";
 import "./critical/lateSignupDraft.test";

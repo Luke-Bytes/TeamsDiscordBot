@@ -258,6 +258,7 @@ test("E2E happy path: announce -> register -> nominate -> set captains -> random
         guild
       );
       await teamCmd.handleButtonPress(accept as any);
+      game.changeHowTeamsDecided("RANDOMISED");
 
       // Step 6: Organiser starts game
       const gameCmd = new GameCommand();

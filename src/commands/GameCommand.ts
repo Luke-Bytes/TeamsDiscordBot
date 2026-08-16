@@ -282,6 +282,34 @@ export default class GameCommand implements Command {
         break;
 
       case "end": {
+        if (!gameInstance.announced) {
+          await interaction.reply({
+            content:
+              "No game has been announced. Confirm an announcement before ending a game.",
+          });
+          return;
+        }
+        if (gameInstance.isFinished) {
+          await interaction.reply({
+            content:
+              "This game has already ended. Use `/game shutdown` to complete post-game cleanup.",
+          });
+          return;
+        }
+        if (gameInstance.isRestarting) {
+          await interaction.reply({
+            content: "A game shutdown is already in progress.",
+          });
+          return;
+        }
+        if (!gameInstance.hasFinalizedPlayableTeams()) {
+          await interaction.reply({
+            content:
+              "The game cannot be ended until team picking is finalized with at least one player on both RED and BLUE.",
+          });
+          return;
+        }
+
         gameInstance.isFinished = true;
         await interaction.reply(
           "Moving players back to team picking and starting MVP votes.."

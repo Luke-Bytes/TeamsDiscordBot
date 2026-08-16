@@ -396,6 +396,8 @@ export default class AnnouncementCommand implements Command {
     const embed = this.createGameAnnouncementEmbed(false).embeds?.[0];
     if (!Channels.announcements.isSendable()) return;
 
+    GameInstance.getInstance().beginConfirmedAnnouncement();
+
     this.announcementMessage = await Channels.announcements.send({
       embeds: [embed],
     });
@@ -505,6 +507,12 @@ export default class AnnouncementCommand implements Command {
 
     switch (interaction.customId) {
       case "announcement-cancel":
+        if (CurrentGameManager.getCurrentGame().hasFinalizedPlayableTeams()) {
+          await interaction.editReply(
+            "This announcement can no longer be cancelled because teams have been finalized. Use the normal `/game end` and `/game shutdown` flow."
+          );
+          break;
+        }
         await this.handleAnnouncementCancel(interaction.guild!);
         await interaction.editReply("Cancelled announcement.");
         break;
