@@ -5,9 +5,14 @@ import TeamCommand from "../../src/commands/TeamCommand";
 import UnregisterCommand from "../../src/commands/UnregisterCommand";
 import { CurrentGameManager } from "../../src/logic/CurrentGameManager";
 import { ModifierSelector } from "../../src/logic/ModifierSelector";
+import { ConfigManager } from "../../src/ConfigManager";
 import { test } from "../framework/test";
 import { assert } from "../framework/assert";
-import { createChatInputInteraction, FakeGuild } from "../framework/mocks";
+import {
+  createChatInputInteraction,
+  FakeGuild,
+  FakeGuildMember,
+} from "../framework/mocks";
 
 // Provide minimal TeamCommand instance dependency for commands that need it
 const teamCommand = new TeamCommand();
@@ -31,6 +36,7 @@ test("AnnouncementCommand reroll modifiers is rate-limited to once every 15 seco
   const guild = new FakeGuild() as any;
   const game = CurrentGameManager.getCurrentGame();
   game.reset();
+  game.modifierMode = "randomised";
 
   let rerolls = 0;
   const originalRunSelection = ModifierSelector.runSelection;
@@ -71,6 +77,125 @@ test("AnnouncementCommand reroll modifiers is rate-limited to once every 15 seco
     cmd.updateAnnouncementMessages = originalUpdateAnnouncementMessages;
     game.reset();
   }
+});
+
+test("Announcement modifier modes configure captain bans without clearing organiser bans", () => {
+  const cmd = new AnnouncementCommand() as any;
+  const game = CurrentGameManager.getCurrentGame();
+
+  game.reset();
+  cmd.initialBannedClasses = ["SCOUT"];
+  cmd.configureModifierMode("default");
+  assert(game.modifierMode === "default", "Default mode should be recorded");
+  assert(game.classBanMode === "shared", "Default bans should be shared");
+  assert(game.classBanLimit === 2, "Default should allow one ban per captain");
+  assert(
+    game.settings.organiserBannedClasses.includes("SCOUT" as any),
+    "Default should preserve organiser bans"
+  );
+
+  cmd.configureModifierMode("none");
+  assert(game.modifierMode === "none", "None mode should be recorded");
+  assert(
+    game.classBanMode === null,
+    "None should disable the captain ban mode"
+  );
+  assert(game.classBanLimit === 0, "None should disable /class ban");
+  assert(
+    game.settings.organiserBannedClasses.includes("SCOUT" as any),
+    "None should preserve organiser bans"
+  );
+  assert(game.settings.modifiers.length === 0, "None should use baselines");
+  game.reset();
+});
+
+test("Custom modifier editor stages changes and applies only on save", async () => {
+  const cmd = new AnnouncementCommand() as any;
+  const game = CurrentGameManager.getCurrentGame();
+  game.reset();
+  cmd.initialBannedClasses = ["SCOUT"];
+  cmd.configureModifierMode("custom");
+
+  const cfg = ConfigManager.getConfig();
+  const guild = new FakeGuild() as any;
+  const organiser = new FakeGuildMember("custom-org");
+  await organiser.roles.add(cfg.roles.organiserRole);
+  guild.addMember(organiser);
+
+  const previewEdits: any[] = [];
+  const preview = {
+    edit: async (payload: any) => previewEdits.push(payload),
+  } as any;
+  cmd.announcementPreviewMessage = preview;
+
+  const editorReplies: any[] = [];
+  await cmd.handleButtonPress({
+    customId: "announcement-edit-modifiers",
+    user: { id: organiser.id },
+    guild,
+    reply: async (payload: any) => editorReplies.push(payload),
+  } as any);
+  assert(editorReplies.length === 1, "Custom editor should open ephemerally");
+
+  const updates: any[] = [];
+  const select = async (customId: string, value: string) =>
+    cmd.handleSelectMenu({
+      customId,
+      values: [value],
+      user: { id: organiser.id },
+      guild,
+      update: async (payload: any) => updates.push(payload),
+      reply: async () => {},
+    } as any);
+
+  await select("announcement-custom-category", "Nexus HP");
+  await select("announcement-custom-value", "100");
+  assert(
+    game.settings.modifiers.length === 0,
+    "Selecting a value should not mutate the game before Save"
+  );
+
+  await cmd.handleButtonPress({
+    customId: "announcement-custom-save",
+    user: { id: organiser.id },
+    guild,
+    update: async (payload: any) => updates.push(payload),
+    reply: async () => {},
+  } as any);
+
+  assert(
+    game.settings.modifiers.some(
+      (modifier: any) =>
+        modifier.category === "Nexus HP" && modifier.name === "100"
+    ),
+    "Save should apply the staged non-default modifier"
+  );
+  assert(
+    game.settings.organiserBannedClasses.includes("SCOUT" as any),
+    "Custom Save should preserve organiser bans"
+  );
+  assert(previewEdits.length === 1, "Save should refresh the preview");
+  game.reset();
+});
+
+test("Announcement organiser autocomplete includes the new organisers", async () => {
+  const cmd = new AnnouncementCommand();
+  const results: any[] = [];
+  await cmd.handleAutocomplete!({
+    options: {
+      getFocused: () => ({ name: "organiser", value: "" }),
+    },
+    respond: async (choices: any[]) => results.push(...choices),
+  } as any);
+
+  assert(
+    results.some((choice) => choice.value === "JOJOB3AN"),
+    "JOJOB3AN should be an organiser choice"
+  );
+  assert(
+    results.some((choice) => choice.value === "xNolva"),
+    "xNolva should be an organiser choice"
+  );
 });
 
 test("CaptainCommand errors when used outside guild", async () => {

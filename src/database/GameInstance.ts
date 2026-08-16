@@ -23,6 +23,8 @@ import { TeamPlanRecord } from "../util/PlanUtil";
 import { PrismaUtils } from "../util/PrismaUtils";
 import { escapeIgn } from "../util/Utils";
 
+export type ModifierMode = "custom" | "randomised" | "default" | "none";
+
 // wrapper class for Game
 export class GameInstance {
   public static readonly MIN_ELO_PLAYER_COUNT = 20;
@@ -101,6 +103,7 @@ export class GameInstance {
   };
 
   public pickOtherTeamsSupportRoles: boolean = false;
+  public modifierMode: ModifierMode = "default";
 
   public classBanLimit: number = 0;
   private readonly captainBanCounts: Map<string, number> = new Map();
@@ -152,6 +155,7 @@ export class GameInstance {
     this.MVPPlayerBlue = "";
     this.MVPPlayerRed = "";
     this.pickOtherTeamsSupportRoles = false;
+    this.modifierMode = "default";
     this.classBanLimit = 2;
     this.captainBanCounts.clear();
     this.lastRegisteredSnowflake = undefined;

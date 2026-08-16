@@ -11,6 +11,8 @@ import {
   Guild,
   MessageFlags,
   AutocompleteInteraction,
+  StringSelectMenuBuilder,
+  StringSelectMenuInteraction,
 } from "discord.js";
 import { readFileSync } from "fs";
 import path from "path";
@@ -24,10 +26,17 @@ import { ConfigManager } from "../ConfigManager";
 import { activateFeed } from "../logic/gameFeed/ActivateFeed";
 import { addRegisteredPlayersFeed } from "../logic/gameFeed/RegisteredGameFeed";
 import { addTeamsGameFeed } from "../logic/gameFeed/TeamsGameFeed";
-import { GameInstance } from "../database/GameInstance";
+import { GameInstance, ModifierMode } from "../database/GameInstance";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { ModifierSelector } from "../logic/ModifierSelector";
+
+interface CustomModifierSession {
+  choices: Record<string, string>;
+  selectedCategory?: string;
+  previewMessage: Message;
+  revision: number;
+}
 
 export default class AnnouncementCommand implements Command {
   private static readonly modifiersRerollCooldownMs = 15_000;
@@ -42,6 +51,13 @@ export default class AnnouncementCommand implements Command {
     "announcement-edit-map",
     "announcement-edit-banned-classes",
     "announcement-edit-modifiers",
+    "announcement-custom-save",
+    "announcement-custom-reset",
+    "announcement-custom-cancel",
+  ];
+  public selectMenuIds: string[] = [
+    "announcement-custom-category",
+    "announcement-custom-value",
   ];
 
   private announcementPreviewMessage?: Message;
@@ -53,6 +69,13 @@ export default class AnnouncementCommand implements Command {
   private static readonly maxAutoResults = 25;
   private initialBannedClasses: AnniClass[] = [];
   private lastModifiersRerollAt?: number;
+  private readonly modifierSelector = new ModifierSelector();
+  private customModifierChoices: Record<string, string> = {};
+  private readonly customModifierSessions = new Map<
+    string,
+    CustomModifierSession
+  >();
+  private customModifierRevision = 0;
 
   constructor() {
     this.data = new SlashCommandBuilder()
@@ -69,11 +92,13 @@ export default class AnnouncementCommand implements Command {
             .addStringOption((o) =>
               o
                 .setName("modifiers")
-                .setDescription("Include game modifiers? (yes/no)")
+                .setDescription("Choose how game modifiers are configured")
                 .setRequired(true)
                 .addChoices(
-                  { name: "Yes", value: "yes" },
-                  { name: "No", value: "no" }
+                  { name: "Custom", value: "custom" },
+                  { name: "Randomised", value: "randomised" },
+                  { name: "Default", value: "default" },
+                  { name: "None", value: "none" }
                 )
             )
             // .addStringOption((option) =>
@@ -312,6 +337,9 @@ export default class AnnouncementCommand implements Command {
       return;
     }
 
+    this.customModifierSessions.clear();
+    this.customModifierRevision += 1;
+
     if (!(await this.setMap(interaction))) {
       return;
     }
@@ -332,18 +360,16 @@ export default class AnnouncementCommand implements Command {
     //   return;
     // }
 
-    const modifiersOption = interaction.options
+    const rawModifiersOption = interaction.options
       .getString("modifiers", true)
       .toLowerCase();
-    if (modifiersOption === "yes") {
-      ModifierSelector.runSelection();
-    } else {
-      // Default: no modifiers -> enable shared captain bans
-      const gi = GameInstance.getInstance();
-      gi.settings.modifiers = [];
-      gi.classBanMode = "shared";
-      gi.setClassBanLimit(2);
-    }
+    const modifiersOption: ModifierMode =
+      rawModifiersOption === "yes"
+        ? "randomised"
+        : rawModifiersOption === "no"
+          ? "default"
+          : (rawModifiersOption as ModifierMode);
+    this.configureModifierMode(modifiersOption);
 
     const doubleEloOption = interaction.options
       .getString("doubleelo")
@@ -361,9 +387,46 @@ export default class AnnouncementCommand implements Command {
       .announcementPreviewMessage as Message<boolean>;
   }
 
+  private resetModifierDerivedState(): void {
+    const game = GameInstance.getInstance();
+    game.settings.organiserBannedClasses = [...this.initialBannedClasses];
+    game.settings.sharedCaptainBannedClasses = [];
+    game.settings.nonSharedCaptainBannedClasses = { RED: [], BLUE: [] };
+    game.settings.delayedBan = 0;
+    game.pickOtherTeamsSupportRoles = false;
+    game.classBanMode = null;
+    game.setClassBanLimit(0);
+  }
+
+  private configureModifierMode(mode: ModifierMode): void {
+    const game = GameInstance.getInstance();
+    game.modifierMode = mode;
+    this.resetModifierDerivedState();
+
+    switch (mode) {
+      case "randomised":
+        ModifierSelector.runSelection();
+        break;
+      case "default":
+        ModifierSelector.applySelection([]);
+        game.classBanMode = "shared";
+        game.setClassBanLimit(2);
+        break;
+      case "custom":
+        this.customModifierChoices = this.modifierSelector.getDefaultChoices();
+        ModifierSelector.applySelection([]);
+        break;
+      case "none":
+        ModifierSelector.applySelection([]);
+        break;
+    }
+  }
+
   private async handleAnnouncementCancel(guild: Guild) {
     await CurrentGameManager.cancelCurrentGame(guild);
     this.lastModifiersRerollAt = undefined;
+    this.customModifierSessions.clear();
+    this.customModifierChoices = {};
     this.announcementMessage = undefined;
     this.announcementPreviewMessage = undefined;
   }
@@ -397,6 +460,7 @@ export default class AnnouncementCommand implements Command {
     if (!Channels.announcements.isSendable()) return;
 
     GameInstance.getInstance().beginConfirmedAnnouncement();
+    this.customModifierSessions.clear();
 
     this.announcementMessage = await Channels.announcements.send({
       embeds: [embed],
@@ -445,6 +509,7 @@ export default class AnnouncementCommand implements Command {
   }
 
   private getEditComponents(isConfirmed: boolean) {
+    const modifierMode = GameInstance.getInstance().modifierMode;
     const confirmPingButton = new ButtonBuilder()
       .setCustomId("announcement-confirm-ping")
       .setLabel("✅ Confirm & Send (Ping)")
@@ -479,8 +544,17 @@ export default class AnnouncementCommand implements Command {
 
     const editModifiersButton = new ButtonBuilder()
       .setCustomId("announcement-edit-modifiers")
-      .setLabel("⚙️ Re-Roll Modifiers")
-      .setStyle(ButtonStyle.Secondary);
+      .setLabel(
+        modifierMode === "randomised"
+          ? "⚙️ Re-Roll Modifiers"
+          : modifierMode === "custom"
+            ? "⚙️ Customise Modifiers"
+            : `⚙️ Modifiers: ${modifierMode === "default" ? "Default" : "None"}`
+      )
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(
+        isConfirmed || modifierMode === "default" || modifierMode === "none"
+      );
 
     const firstRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       confirmPingButton,
@@ -501,6 +575,23 @@ export default class AnnouncementCommand implements Command {
   public async handleButtonPress(
     interaction: ButtonInteraction
   ): Promise<void> {
+    if (
+      interaction.customId === "announcement-custom-save" ||
+      interaction.customId === "announcement-custom-reset" ||
+      interaction.customId === "announcement-custom-cancel"
+    ) {
+      await this.handleCustomModifierButton(interaction);
+      return;
+    }
+
+    if (
+      interaction.customId === "announcement-edit-modifiers" &&
+      GameInstance.getInstance().modifierMode === "custom"
+    ) {
+      await this.openCustomModifierEditor(interaction);
+      return;
+    }
+
     await interaction.deferReply({});
 
     const isConfirmed = !!this.announcementMessage;
@@ -547,6 +638,18 @@ export default class AnnouncementCommand implements Command {
         break;
 
       case "announcement-edit-modifiers":
+        if (isConfirmed) {
+          await interaction.editReply(
+            "Modifiers are locked because the announcement has already been sent."
+          );
+          break;
+        }
+        if (GameInstance.getInstance().modifierMode !== "randomised") {
+          await interaction.editReply(
+            "This modifier mode does not have editable selections."
+          );
+          break;
+        }
         if (
           this.lastModifiersRerollAt &&
           Date.now() - this.lastModifiersRerollAt <
@@ -562,13 +665,7 @@ export default class AnnouncementCommand implements Command {
           break;
         }
 
-        CurrentGameManager.getCurrentGame().settings.organiserBannedClasses = [
-          ...this.initialBannedClasses,
-        ];
-        CurrentGameManager.getCurrentGame().settings.sharedCaptainBannedClasses =
-          [];
-        CurrentGameManager.getCurrentGame().settings.nonSharedCaptainBannedClasses =
-          { RED: [], BLUE: [] };
+        this.resetModifierDerivedState();
         ModifierSelector.runSelection();
         this.lastModifiersRerollAt = Date.now();
         await this.updateAnnouncementMessages();
@@ -586,6 +683,254 @@ export default class AnnouncementCommand implements Command {
         await this.announcementMessage.edit({ embeds: [embed] });
       }
     }
+  }
+
+  private isOrganiserInteraction(
+    interaction: ButtonInteraction | StringSelectMenuInteraction
+  ): boolean {
+    const member = interaction.guild?.members.cache.get(interaction.user.id);
+    return PermissionsUtil.hasRole(member, "organiserRole");
+  }
+
+  private isCustomModifierSessionCurrent(
+    session: CustomModifierSession | undefined
+  ): session is CustomModifierSession {
+    return (
+      !!session &&
+      !!this.announcementPreviewMessage &&
+      session.previewMessage === this.announcementPreviewMessage &&
+      session.revision === this.customModifierRevision &&
+      !this.announcementMessage &&
+      GameInstance.getInstance().modifierMode === "custom"
+    );
+  }
+
+  private getCustomModifierEditor(
+    session: CustomModifierSession,
+    notice?: string
+  ) {
+    const categories = this.modifierSelector.getCategories();
+    const selectedCategory = categories.find(
+      (category) => category.name === session.selectedCategory
+    );
+    const selectedModifiers = this.modifierSelector.selectionsFromChoices(
+      session.choices
+    );
+    const summary = selectedModifiers.length
+      ? selectedModifiers
+          .map((modifier) => `• ${modifier.category}: ${modifier.name}`)
+          .join("\n")
+      : "No changes from baseline defaults.";
+
+    const categorySelect = new StringSelectMenuBuilder()
+      .setCustomId("announcement-custom-category")
+      .setPlaceholder("Choose a modifier category")
+      .setMinValues(1)
+      .setMaxValues(1)
+      .addOptions(
+        categories.map((category) => ({
+          label: category.name.slice(0, 100),
+          description: `Current: ${session.choices[category.name]}`.slice(
+            0,
+            100
+          ),
+          value: category.name,
+          default: category.name === selectedCategory?.name,
+        }))
+      );
+
+    const components: Array<
+      | ActionRowBuilder<StringSelectMenuBuilder>
+      | ActionRowBuilder<ButtonBuilder>
+    > = [
+      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+        categorySelect
+      ),
+    ];
+
+    if (selectedCategory) {
+      const valueSelect = new StringSelectMenuBuilder()
+        .setCustomId("announcement-custom-value")
+        .setPlaceholder(`Choose ${selectedCategory.name}`.slice(0, 150))
+        .setMinValues(1)
+        .setMaxValues(1)
+        .addOptions(
+          selectedCategory.modifiers.map((modifier) => ({
+            label: modifier.name.slice(0, 100),
+            value: modifier.name,
+            default: modifier.name === session.choices[selectedCategory.name],
+          }))
+        );
+      components.push(
+        new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+          valueSelect
+        )
+      );
+    }
+
+    components.push(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId("announcement-custom-save")
+          .setLabel("Save")
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId("announcement-custom-reset")
+          .setLabel("Reset to Defaults")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("announcement-custom-cancel")
+          .setLabel("Cancel")
+          .setStyle(ButtonStyle.Danger)
+      )
+    );
+
+    return {
+      content: `${notice ? `${notice}\n\n` : ""}**Custom modifiers**\n${summary}`,
+      components,
+    };
+  }
+
+  private async openCustomModifierEditor(
+    interaction: ButtonInteraction
+  ): Promise<void> {
+    if (!this.isOrganiserInteraction(interaction)) {
+      await interaction.reply({
+        content: "Only organisers can customise announcement modifiers.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    if (this.announcementMessage) {
+      await interaction.reply({
+        content: "Modifiers are locked because the announcement has been sent.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    if (!this.announcementPreviewMessage) {
+      await interaction.reply({
+        content: "This announcement preview is no longer active.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const session: CustomModifierSession = {
+      choices: { ...this.customModifierChoices },
+      previewMessage: this.announcementPreviewMessage,
+      revision: this.customModifierRevision,
+    };
+    this.customModifierSessions.set(interaction.user.id, session);
+    await interaction.reply({
+      ...this.getCustomModifierEditor(session),
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  private async handleCustomModifierButton(
+    interaction: ButtonInteraction
+  ): Promise<void> {
+    if (!this.isOrganiserInteraction(interaction)) {
+      await interaction.reply({
+        content: "Only organisers can customise announcement modifiers.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const session = this.customModifierSessions.get(interaction.user.id);
+    if (!this.isCustomModifierSessionCurrent(session)) {
+      this.customModifierSessions.delete(interaction.user.id);
+      await interaction.reply({
+        content: "This custom modifier editor has expired.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if (interaction.customId === "announcement-custom-cancel") {
+      this.customModifierSessions.delete(interaction.user.id);
+      await interaction.update({
+        content: "Custom modifier changes discarded.",
+        components: [],
+      });
+      return;
+    }
+
+    if (interaction.customId === "announcement-custom-reset") {
+      session.choices = this.modifierSelector.getDefaultChoices();
+      session.selectedCategory = undefined;
+      await interaction.update(
+        this.getCustomModifierEditor(session, "Reset to baseline defaults.")
+      );
+      return;
+    }
+
+    this.customModifierChoices = { ...session.choices };
+    this.customModifierRevision += 1;
+    this.resetModifierDerivedState();
+    ModifierSelector.applySelection(
+      this.modifierSelector.selectionsFromChoices(this.customModifierChoices)
+    );
+    this.customModifierSessions.delete(interaction.user.id);
+    await interaction.update({
+      content: "Custom modifiers saved.",
+      components: [],
+    });
+    await this.updateAnnouncementMessages();
+  }
+
+  public async handleSelectMenu(
+    interaction: StringSelectMenuInteraction
+  ): Promise<void> {
+    if (!this.isOrganiserInteraction(interaction)) {
+      await interaction.reply({
+        content: "Only organisers can customise announcement modifiers.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const session = this.customModifierSessions.get(interaction.user.id);
+    if (!this.isCustomModifierSessionCurrent(session)) {
+      this.customModifierSessions.delete(interaction.user.id);
+      await interaction.reply({
+        content: "This custom modifier editor has expired.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const categories = this.modifierSelector.getCategories();
+    if (interaction.customId === "announcement-custom-category") {
+      const category = categories.find(
+        (entry) => entry.name === interaction.values[0]
+      );
+      if (!category) {
+        await interaction.reply({
+          content: "That modifier category is no longer available.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      session.selectedCategory = category.name;
+    } else if (interaction.customId === "announcement-custom-value") {
+      const category = categories.find(
+        (entry) => entry.name === session.selectedCategory
+      );
+      const value = interaction.values[0];
+      if (!category?.modifiers.some((modifier) => modifier.name === value)) {
+        await interaction.reply({
+          content: "That modifier option is no longer available.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      session.choices[category.name] = value;
+    }
+
+    await interaction.update(this.getCustomModifierEditor(session));
   }
 
   public async handleAutocomplete(
@@ -762,56 +1107,8 @@ export default class AnnouncementCommand implements Command {
     }
     embed.setTimestamp();
 
-    const confirmPingButton = new ButtonBuilder()
-      .setCustomId("announcement-confirm-ping")
-      .setLabel("✅ Confirm & Send (Ping)")
-      .setStyle(ButtonStyle.Success);
-
-    const confirmNoPingButton = new ButtonBuilder()
-      .setCustomId("announcement-confirm-noping")
-      .setLabel("✅ Confirm & Send (No ping)")
-      .setStyle(ButtonStyle.Success);
-
-    const cancelButton = new ButtonBuilder()
-      .setCustomId("announcement-cancel")
-      .setLabel("❌ Cancel")
-      .setStyle(ButtonStyle.Danger);
-
-    const editTimeButton = new ButtonBuilder()
-      .setCustomId("announcement-edit-time")
-      .setLabel("🕒 Edit Time")
-      .setStyle(ButtonStyle.Secondary);
-
-    const editMapButton = new ButtonBuilder()
-      .setCustomId("announcement-edit-map")
-      .setLabel("🗺️ Edit Map")
-      .setStyle(ButtonStyle.Secondary);
-
-    const editBannedClassesButton = new ButtonBuilder()
-      .setCustomId("announcement-edit-banned-classes")
-      .setLabel("🚫 Edit Banned Classes")
-      .setStyle(ButtonStyle.Secondary);
-
-    const editModifiersButton = new ButtonBuilder()
-      .setCustomId("announcement-edit-modifiers")
-      .setLabel("⚙️ Re-roll Modifiers")
-      .setStyle(ButtonStyle.Secondary);
-
-    const firstRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      confirmPingButton,
-      confirmNoPingButton,
-      cancelButton
-    );
-
-    const secondRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      editTimeButton,
-      editMapButton,
-      editBannedClassesButton,
-      editModifiersButton
-    );
-
     return preview
-      ? { embeds: [embed], components: [firstRow, secondRow] }
+      ? { embeds: [embed], components: this.getEditComponents(false) }
       : { embeds: [embed] };
   }
 

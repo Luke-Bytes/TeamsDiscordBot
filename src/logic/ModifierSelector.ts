@@ -4,21 +4,26 @@ import { GameInstance } from "../database/GameInstance";
 import { AnniClass } from "@prisma/client";
 import { getRandomAnniClass } from "../util/Utils";
 
-interface Modifier {
+export interface ModifierOption {
   name: string;
   weight: number;
 }
-interface Category {
+export interface ModifierCategory {
   name: string;
   maxPerRun: number;
-  modifiers: Modifier[];
+  modifiers: ModifierOption[];
 }
 interface Config {
-  categories: Category[];
+  categories: ModifierCategory[];
+}
+
+export interface SelectedModifier {
+  category: string;
+  name: string;
 }
 
 export class ModifierSelector {
-  private readonly categories: Category[];
+  private readonly categories: ModifierCategory[];
 
   constructor(
     configPath = path.resolve(process.cwd(), "modifiers-config.json")
@@ -27,8 +32,44 @@ export class ModifierSelector {
     this.categories = (JSON.parse(raw) as Config).categories;
   }
 
-  public select(): { category: string; name: string }[] {
-    const results: { category: string; name: string }[] = [];
+  public getCategories(): ModifierCategory[] {
+    return this.categories.map((category) => ({
+      ...category,
+      modifiers: category.modifiers.map((modifier) => ({ ...modifier })),
+    }));
+  }
+
+  public getDefaultChoices(): Record<string, string> {
+    return Object.fromEntries(
+      this.categories.map((category) => [
+        category.name,
+        category.modifiers[0].name,
+      ])
+    );
+  }
+
+  public selectionsFromChoices(
+    choices: Record<string, string>
+  ): SelectedModifier[] {
+    return this.categories.flatMap((category) => {
+      const selectedName = choices[category.name] ?? category.modifiers[0].name;
+      const selected = category.modifiers.find(
+        (modifier) => modifier.name === selectedName
+      );
+      if (!selected) {
+        throw new Error(
+          `Unknown modifier '${selectedName}' for category '${category.name}'.`
+        );
+      }
+
+      return selected.name === category.modifiers[0].name
+        ? []
+        : [{ category: category.name, name: selected.name }];
+    });
+  }
+
+  public select(): SelectedModifier[] {
+    const results: SelectedModifier[] = [];
     for (const cat of this.categories) {
       const pool = [...cat.modifiers];
       const defaultName = cat.modifiers[0].name;
@@ -51,16 +92,25 @@ export class ModifierSelector {
 
   public static runSelection(): void {
     const selector = new ModifierSelector();
-    const mods = selector.select();
+    this.applySelection(selector.select());
+  }
+
+  public static applySelection(mods: SelectedModifier[]): void {
+    const selectedModifiers = mods.map((modifier) => ({ ...modifier }));
 
     const game = GameInstance.getInstance();
-    game.settings.modifiers = mods;
-    const classBanMod = mods.find((m) => m.category === "Class Bans");
-    const swapperMod = mods.find((m) => m.category === "Swapper");
-    const transporterMod = mods.find(
+    game.settings.modifiers = selectedModifiers;
+    game.settings.sharedCaptainBannedClasses = [];
+    game.settings.nonSharedCaptainBannedClasses = { RED: [], BLUE: [] };
+
+    const classBanMod = selectedModifiers.find(
+      (m) => m.category === "Class Bans"
+    );
+    const swapperMod = selectedModifiers.find((m) => m.category === "Swapper");
+    const transporterMod = selectedModifiers.find(
       (m) => m.category === "TP Enabled - Skying Banned"
     );
-    const pickOtherTeamsRolesMod = mods.find(
+    const pickOtherTeamsRolesMod = selectedModifiers.find(
       (m) => m.category === "Captain's Pick Other Team's Support Roles"
     );
 
@@ -75,7 +125,7 @@ export class ModifierSelector {
       ...(transporterMod ? [AnniClass.TRANSPORTER] : []),
     ]);
 
-    game.pickOtherTeamsSupportRoles = !!pickOtherTeamsRolesMod;
+    game.pickOtherTeamsSupportRoles = pickOtherTeamsRolesMod?.name === "Yes";
   }
 
   private static clearProtectedClassBans(
