@@ -3708,7 +3708,7 @@ test("Tier-list no-community-input mode starts without anchors and hides rerate 
   const originalTierList = config.tierList;
   config.tierList = {
     enabledCommunityQuestions: true,
-    askEveryNPlayers: 1,
+    askCommunityEveryNPlayers: 1,
     image: { enabled: false },
     autoAdvanceSeconds: 0,
   };
@@ -3800,7 +3800,7 @@ test("Tier-list no-community-input completion posts final reviews and final verd
   const originalTierList = config.tierList;
   config.tierList = {
     enabledCommunityQuestions: true,
-    askEveryNPlayers: 1,
+    askCommunityEveryNPlayers: 1,
     image: { enabled: true },
     autoAdvanceSeconds: 0,
   };

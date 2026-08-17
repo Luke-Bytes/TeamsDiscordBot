@@ -19,6 +19,7 @@ import { TeamPickingSession } from "../logic/teams/TeamPickingSession";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { escapeText } from "../util/Utils";
+import { createGameStartPrompt } from "./GameCommand";
 
 export default class TeamCommand implements Command {
   static instance?: TeamCommand;
@@ -408,6 +409,7 @@ export default class TeamCommand implements Command {
   public async handleButtonPress(interaction: ButtonInteraction) {
     if (!interaction.guild) return;
     if (this.teamPickingSession) {
+      const previousState = this.teamPickingSession.getState();
       await this.teamPickingSession.handleInteraction(interaction);
       const state = this.teamPickingSession.getState();
       switch (state) {
@@ -422,9 +424,11 @@ export default class TeamCommand implements Command {
               embeds: [updatedEmbed],
               components: [],
             });
-            await interaction.followUp({
-              content: "Teams have been selected!",
-            });
+          }
+          if (previousState !== "finalized") {
+            await interaction.followUp(
+              createGameStartPrompt("Teams have been selected! Start game?")
+            );
           }
           break;
         case "cancelled":

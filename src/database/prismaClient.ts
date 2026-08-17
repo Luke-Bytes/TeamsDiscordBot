@@ -1,4 +1,11 @@
-import { gameType, Prisma, PrismaClient, Team } from "@prisma/client";
+import {
+  gameType,
+  Prisma,
+  PrismaClient,
+  SeasonType,
+  Team,
+  UnratedGameReason,
+} from "@prisma/client";
 import { GameInstance } from "../database/GameInstance";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { Elo } from "../logic/Elo";
@@ -128,6 +135,14 @@ export const prismaClient = new PrismaClient({
         } = gameInstance;
 
         const season = await requireActiveSeasonForPrismaExtension();
+        const eloRated =
+          season.type !== SeasonType.RELAXED && !gameInstance.noElo;
+        const unratedReason =
+          season.type === SeasonType.RELAXED
+            ? UnratedGameReason.RELAXED_SEASON
+            : gameInstance.noElo
+              ? UnratedGameReason.LOW_PLAYER_COUNT
+              : null;
 
         const gameSettings = {
           organiserBannedClasses: settings.organiserBannedClasses ?? [],
@@ -266,6 +281,8 @@ export const prismaClient = new PrismaClient({
             organiser: organiser ?? undefined,
             host: host ?? undefined,
             doubleElo: isDoubleElo,
+            eloRated,
+            unratedReason,
             participantsIGNs: validParticipants.map(
               (p) => p.ignUsed || "UnknownIGN"
             ),
@@ -294,6 +311,8 @@ export const prismaClient = new PrismaClient({
             organiser: organiser ?? "Unknown",
             host: host ?? "Unknown",
             doubleElo: isDoubleElo,
+            eloRated,
+            unratedReason,
             participantsIGNs: validParticipants.map(
               (p) => p.ignUsed ?? "UnknownIGN"
             ),
@@ -329,10 +348,8 @@ export const prismaClient = new PrismaClient({
           console.log("Double Elo is active this game!");
         }
 
-        if (gameInstance.noElo) {
-          console.log(
-            `Skipping Elo updates and history for low-player game (${gameInstance.getActivePlayerCount()} players).`
-          );
+        if (!eloRated) {
+          console.log(`Skipping Elo updates and history (${unratedReason}).`);
           return gameRecord;
         }
 

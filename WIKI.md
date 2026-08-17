@@ -47,10 +47,29 @@ For users adding the bot to their server:
 
 Commands (excluding subcommands):
 
-`/announcement` `/igns` `/leaderboards` `/register` `/role` `/stats` `/team`
+`/announcement` `/igns` `/leaderboards` `/register` `/role` `/stats` `/team` `/season`
 `/captain` `/test` `/cleanup` `/scenario` `/registered` `/unregister`
 `/restart` `/player` `/winner` `/performance` `/mvp` `/game` `/missing`
 `/captainNominate` `/teamless` `/plan` `/massRegister`
+
+### Season controls
+
+- `/season view [number]` shows season statistics.
+- `/season status` shows the active type, completed games, limits, calendar
+  deadline, next-type policy, pending rollover, and announcement retries.
+- `/season configure [game-limit] [month-limit] [current-type] [next-type]` is
+  organiser-only. Omitted values stay unchanged; `0` clears a limit and
+  `next-type:auto` restores alternating successors. The current type can only
+  change before the first finished game.
+- `/season end [next-type]` confirms a manual close and complete rollover.
+- `/season start [type] [number]` confirms initial bootstrap and is rejected
+  while a season is active.
+
+Automatic rollover uses the first game or calendar-month limit reached. A
+deadline reached during an announced game is deferred until that game is
+saved. Closure and Discord delivery are recoverable after restart. The
+`/scripts titles-update` command remains only as an explicit title repair; old
+season activation scripts are retired.
 
 ---
 

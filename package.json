@@ -31,7 +31,6 @@
     "tests:fast": "node dist/tests/run.js",
     "update-db-igns": "tsx scripts/fetch-latest-igns.ts",
     "season-recap": "tsx scripts/seasonRecap.ts",
-    "manage-season": "node scripts/manage-season.js",
     "fix-last-game-winner": "tsx scripts/fix-last-game-winner.ts",
     "typecheck": "tsc --noEmit",
     "check": "npm run build && npm run typecheck && npm run lint && npm run tests"

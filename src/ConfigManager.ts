@@ -101,7 +101,6 @@ export const DEFAULT_OLLAMA_CONFIG: ResolvedOllamaConfig = {
 };
 
 export type Config = {
-  season: number;
   mvpBonus: number;
   captainBonus: number;
   underdogMultiplier: number;

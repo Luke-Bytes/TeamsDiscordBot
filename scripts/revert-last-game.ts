@@ -1,6 +1,5 @@
 #!/usr/bin/env ts-node
 import { prismaClient } from "../src/database/prismaClient";
-import { ConfigManager } from "../src/ConfigManager";
 import { Team, Prisma, type Season } from "@prisma/client";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
@@ -12,12 +11,13 @@ type GameWithParts = Prisma.GameGetPayload<{
 const rl = createInterface({ input, output });
 
 async function resolveSeason(): Promise<Season> {
-  const cfg = ConfigManager?.getConfig?.();
-  if (cfg?.season) {
+  const explicitNumber = Number.parseInt(process.argv[2] ?? "", 10);
+  if (Number.isInteger(explicitNumber)) {
     const s = await prismaClient.season.findUnique({
-      where: { number: cfg.season },
+      where: { number: explicitNumber },
     });
     if (s) return s;
+    throw new Error(`Season ${explicitNumber} not found.`);
   }
   const active = await prismaClient.season.findFirst({
     where: { isActive: true },

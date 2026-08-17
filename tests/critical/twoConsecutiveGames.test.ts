@@ -25,6 +25,8 @@ import CaptainPlanDMManager from "../../src/logic/CaptainPlanDMManager";
 import AnnouncementCommand from "../../src/commands/AnnouncementCommand";
 import MVPCommand from "../../src/commands/MVPCommand";
 import { withImmediateTimers } from "../framework/timers";
+import { PrismaUtils } from "../../src/util/PrismaUtils";
+import { SeasonService } from "../../src/database/SeasonService";
 
 function makeRoleManagerLike(obj: any) {
   try {
@@ -155,7 +157,7 @@ async function runOneGame(params: {
     member: organiser as any,
     subcommand: "start",
     strings: {
-      // Keep within 5 minutes so MapVoteManager won't schedule a long closure timer.
+      // Keep within 10 minutes so MapVoteManager finalizes without a long timer.
       when: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
       modifiers: "no",
       banned_classes: bannedClasses,
@@ -415,6 +417,8 @@ fastTest(
     const origAssignRole = (DiscordUtil as any).assignRole;
     const origBatchRem = (DiscordUtil as any).batchRemoveRoleFromMembers;
     const origBatchMove = (DiscordUtil as any).batchMoveMembersToChannel;
+    const origDisplayName = PrismaUtils.getDisplayNameWithTitle;
+    const origAfterGameSaved = SeasonService.afterGameSaved;
 
     (DiscordUtil as any).sendMessage = async (_ch: any, content: any) => {
       sent.push(content);
@@ -424,6 +428,11 @@ fastTest(
     (DiscordUtil as any).assignRole = async () => {};
     (DiscordUtil as any).batchRemoveRoleFromMembers = async () => {};
     (DiscordUtil as any).batchMoveMembersToChannel = async () => {};
+    PrismaUtils.getDisplayNameWithTitle = async (
+      _playerId: string,
+      fallback: string
+    ) => fallback;
+    SeasonService.afterGameSaved = async () => {};
 
     const makeSendableChannel = (id: string) => ({
       id,
@@ -591,5 +600,7 @@ fastTest(
     (DiscordUtil as any).assignRole = origAssignRole;
     (DiscordUtil as any).batchRemoveRoleFromMembers = origBatchRem;
     (DiscordUtil as any).batchMoveMembersToChannel = origBatchMove;
+    PrismaUtils.getDisplayNameWithTitle = origDisplayName;
+    SeasonService.afterGameSaved = origAfterGameSaved;
   }
 );

@@ -17,7 +17,7 @@ import {
 import { readFileSync } from "fs";
 import path from "path";
 import { Command } from "../commands/CommandInterface.js";
-import { AnniClass, AnniMap } from "@prisma/client";
+import { AnniClass, AnniMap, SeasonType } from "@prisma/client";
 import { prettifyName, randomEnum, formatTimestamp } from "../util/Utils.js";
 import { parseDate } from "chrono-node";
 import { Channels } from "../Channels";
@@ -30,6 +30,7 @@ import { GameInstance, ModifierMode } from "../database/GameInstance";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { ModifierSelector } from "../logic/ModifierSelector";
+import { SeasonService } from "../database/SeasonService";
 
 interface CustomModifierSession {
   choices: Record<string, string>;
@@ -287,7 +288,6 @@ export default class AnnouncementCommand implements Command {
     date.setSeconds(0);
 
     CurrentGameManager.getCurrentGame().startTime = date;
-    CurrentGameManager.schedulePollCloseTime(date);
 
     return true;
   }
@@ -374,8 +374,11 @@ export default class AnnouncementCommand implements Command {
     const doubleEloOption = interaction.options
       .getString("doubleelo")
       ?.toLowerCase();
-    const doubleElo = doubleEloOption === "yes";
+    const activeSeason = await SeasonService.requireActiveSeason();
+    const relaxed = activeSeason.type === SeasonType.RELAXED;
+    const doubleElo = doubleEloOption === "yes" && !relaxed;
     CurrentGameManager.getCurrentGame().isDoubleElo = doubleElo;
+    CurrentGameManager.getCurrentGame().isRelaxedSeason = relaxed;
 
     const embed = this.createGameAnnouncementEmbed(true, organiser, host);
 
@@ -1020,7 +1023,9 @@ export default class AnnouncementCommand implements Command {
 
     const doubleEloMessage = game.isDoubleElo
       ? "\n\n**🌟 A special DOUBLE ELO game! 🌟**\n\n"
-      : "";
+      : game.isRelaxedSeason
+        ? "\n\n**🎈 Relaxed season: this game is unranked and Double Elo is unavailable.**\n\n"
+        : "";
 
     const sharedBans = Array.from(
       new Set([
@@ -1159,11 +1164,9 @@ export default class AnnouncementCommand implements Command {
       }
 
       date.setSeconds(0);
-      CurrentGameManager.getCurrentGame().startTime = date;
-
-      if (CurrentGameManager.pollCloseTimeout) {
-        clearTimeout(CurrentGameManager.pollCloseTimeout);
-      }
+      const game = CurrentGameManager.getCurrentGame();
+      game.startTime = date;
+      await game.mapVoteManager?.rescheduleFinalization();
 
       await this.updateAnnouncementMessages();
 

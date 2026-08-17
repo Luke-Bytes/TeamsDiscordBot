@@ -7,6 +7,11 @@ import {
   ButtonInteraction,
   TextChannel,
   AutocompleteInteraction,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  Client,
+  MessageFlags,
 } from "discord.js";
 import { AnniClass, AnniMap } from "@prisma/client";
 import { Command } from "./CommandInterface.js";
@@ -28,6 +33,22 @@ import {
   TIMESTAMP_TIMEZONES,
 } from "../util/TimestampUtil";
 import { setTimeout as delay } from "timers/promises";
+
+export const GAME_START_BUTTON_ID = "game-start-confirm";
+
+export function createGameStartPrompt(content = "Start game?") {
+  return {
+    content,
+    components: [
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(GAME_START_BUTTON_ID)
+          .setLabel("Start Game")
+          .setStyle(ButtonStyle.Success)
+      ),
+    ],
+  };
+}
 
 export default class GameCommand implements Command {
   data = new SlashCommandBuilder()
@@ -124,7 +145,7 @@ export default class GameCommand implements Command {
   }
 
   get buttonIds(): string[] {
-    return this.captainPlanDMManager.buttonIds;
+    return [GAME_START_BUTTON_ID, ...this.captainPlanDMManager.buttonIds];
   }
 
   public isAwaitingCaptainPlan(userId: string): boolean {
@@ -144,140 +165,32 @@ export default class GameCommand implements Command {
     const gameInstance = GameInstance.getInstance();
     switch (subCommand) {
       case "start":
-        await interaction.deferReply();
-        try {
-          gameInstance.noElo = gameInstance.shouldBeNoEloForPlayerCount();
-          const activePlayerCount = gameInstance.getActivePlayerCount();
+        {
+          const attempt = gameInstance.tryBeginGameStart();
+          if (attempt !== "acquired") {
+            await interaction.reply(this.getStartRejectionMessage(attempt));
+            return;
+          }
 
-          const memberCache = await buildMemberCache(
-            guild,
-            [
-              ...gameInstance.getPlayersOfTeam("RED"),
-              ...gameInstance.getPlayersOfTeam("BLUE"),
-            ].map((player) => player.discordSnowflake)
-          );
-
-          await assignTeamVCAfterPicking(guild, memberCache);
-          await assignTeamRolesAfterPicking(guild, memberCache);
-
+          try {
+            await interaction.deferReply();
+            await this.runGameStartWorkflow(
+              guild,
+              interaction.client,
+              gameInstance
+            );
+          } catch (error) {
+            gameInstance.releaseGameStart();
+            console.error("Error starting the game: ", error);
+            await interaction.editReply({
+              content: "Failed to start the game. Please try again.",
+            });
+            return;
+          }
+          gameInstance.completeGameStart();
           await interaction.editReply(
             "Game will begin soon! Roles assigned and players moved to VCs."
           );
-
-          if (gameInstance.noElo) {
-            const noEloMessage = `⚠️ This is a **no elo game** due to low player count (${activePlayerCount} players; minimum ${GameInstance.MIN_ELO_PLAYER_COUNT} required).`;
-            await DiscordUtil.sendMessage("gameFeed", noEloMessage);
-            await DiscordUtil.sendMessage("redTeamChat", noEloMessage);
-            await DiscordUtil.sendMessage("blueTeamChat", noEloMessage);
-          }
-
-          await DiscordUtil.sendMessage(
-            "redTeamChat",
-            `Welcome to the red team! This is the planning phase. Please be ready to join the event server ⚔️`
-          );
-
-          await DiscordUtil.sendMessage(
-            "blueTeamChat",
-            `Welcome to the blue team! This is the planning phase. Please be ready to join the event server ⚔️`
-          );
-
-          await checkMissingPlayersInVC(
-            interaction.guild!,
-            "RED",
-            async (msg) => {
-              await DiscordUtil.sendMessage("redTeamChat", `${msg}`);
-            }
-          );
-          await checkMissingPlayersInVC(
-            interaction.guild!,
-            "BLUE",
-            async (msg) => {
-              await DiscordUtil.sendMessage("blueTeamChat", `${msg}`);
-            }
-          );
-
-          const redNamesFormatted = await formatTeamIGNs(
-            gameInstance,
-            "RED",
-            false
-          );
-          const blueNamesFormatted = await formatTeamIGNs(
-            gameInstance,
-            "BLUE",
-            false
-          );
-          await DiscordUtil.sendMessage(
-            "redTeamChat",
-            `**Mid Blocks Plan**\n\`\`\`\n${redNamesFormatted}\n\`\`\`\n**Game Plan**\n\`\`\`\n${redNamesFormatted}\n\`\`\``
-          );
-          await DiscordUtil.sendMessage(
-            "blueTeamChat",
-            `**Mid Blocks Plan**\n\`\`\`\n${blueNamesFormatted}\n\`\`\`\n**Game Plan**\n\`\`\`\n${blueNamesFormatted}\n\`\`\``
-          );
-
-          if (gameInstance.getClassBanLimit() !== 0) {
-            await DiscordUtil.sendMessage(
-              "redTeamChat",
-              `⚠️ **Team captain** submit your class ban when ready with \`/class ban [class]\``
-            );
-
-            await DiscordUtil.sendMessage(
-              "blueTeamChat",
-              `⚠️ **Team captain** submit your class ban when ready with \`/class ban [class]\``
-            );
-          }
-
-          if (gameInstance.pickOtherTeamsSupportRoles) {
-            await DiscordUtil.sendMessage(
-              "redTeamChat",
-              "Team captain — please list out the support roles for the other team:\n```\nBunker:\nFarmer:\nGold Miner:\n```"
-            );
-
-            await DiscordUtil.sendMessage(
-              "blueTeamChat",
-              "Team captain — please list out the support roles for the other team:\n```\nBunker:\nFarmer:\nGold Miner:\n```"
-            );
-          }
-
-          // After team picking is finished and just before start, DM captains plan template
-          const redCaptain = gameInstance.getCaptainOfTeam("RED");
-          const blueCaptain = gameInstance.getCaptainOfTeam("BLUE");
-          const client = interaction.client;
-          if (!client || !client.users) {
-            console.warn(
-              "[CaptainPlanDM] Interaction client missing; skipping captain plan DMs."
-            );
-            break;
-          }
-          if (redCaptain) {
-            await this.captainPlanDMManager.startForCaptain({
-              client,
-              captainId: redCaptain.discordSnowflake,
-              team: "RED",
-              teamList: await formatTeamIGNs(gameInstance, "RED", false),
-              members: gameInstance.getPlayersOfTeam("RED").map((p) => ({
-                id: p.discordSnowflake,
-                ign: p.ignUsed ?? p.latestIGN ?? "Unknown",
-              })),
-            });
-          }
-          if (blueCaptain) {
-            await this.captainPlanDMManager.startForCaptain({
-              client,
-              captainId: blueCaptain.discordSnowflake,
-              team: "BLUE",
-              teamList: await formatTeamIGNs(gameInstance, "BLUE", false),
-              members: gameInstance.getPlayersOfTeam("BLUE").map((p) => ({
-                id: p.discordSnowflake,
-                ign: p.ignUsed ?? p.latestIGN ?? "Unknown",
-              })),
-            });
-          }
-        } catch (error) {
-          console.error("Error starting the game: ", error);
-          await interaction.editReply({
-            content: "Failed to start the game.",
-          });
         }
         break;
 
@@ -375,12 +288,191 @@ export default class GameCommand implements Command {
     }
   }
 
+  private async runGameStartWorkflow(
+    guild: Guild,
+    client: Client,
+    gameInstance: GameInstance
+  ): Promise<void> {
+    gameInstance.noElo = gameInstance.shouldBeNoEloForPlayerCount();
+    const activePlayerCount = gameInstance.getActivePlayerCount();
+
+    const memberCache = await buildMemberCache(
+      guild,
+      [
+        ...gameInstance.getPlayersOfTeam("RED"),
+        ...gameInstance.getPlayersOfTeam("BLUE"),
+      ].map((player) => player.discordSnowflake)
+    );
+
+    await assignTeamVCAfterPicking(guild, memberCache);
+    await assignTeamRolesAfterPicking(guild, memberCache);
+
+    if (gameInstance.noElo) {
+      const noEloMessage = `⚠️ This is a **no elo game** due to low player count (${activePlayerCount} players; minimum ${GameInstance.MIN_ELO_PLAYER_COUNT} required).`;
+      await DiscordUtil.sendMessage("gameFeed", noEloMessage);
+      await DiscordUtil.sendMessage("redTeamChat", noEloMessage);
+      await DiscordUtil.sendMessage("blueTeamChat", noEloMessage);
+    }
+
+    await DiscordUtil.sendMessage(
+      "redTeamChat",
+      `Welcome to the red team! This is the planning phase. Please be ready to join the event server ⚔️`
+    );
+
+    await DiscordUtil.sendMessage(
+      "blueTeamChat",
+      `Welcome to the blue team! This is the planning phase. Please be ready to join the event server ⚔️`
+    );
+
+    await checkMissingPlayersInVC(guild, "RED", async (msg) => {
+      await DiscordUtil.sendMessage("redTeamChat", `${msg}`);
+    });
+    await checkMissingPlayersInVC(guild, "BLUE", async (msg) => {
+      await DiscordUtil.sendMessage("blueTeamChat", `${msg}`);
+    });
+
+    const redNamesFormatted = await formatTeamIGNs(gameInstance, "RED", false);
+    const blueNamesFormatted = await formatTeamIGNs(
+      gameInstance,
+      "BLUE",
+      false
+    );
+    await DiscordUtil.sendMessage(
+      "redTeamChat",
+      `**Mid Blocks Plan**\n\`\`\`\n${redNamesFormatted}\n\`\`\`\n**Game Plan**\n\`\`\`\n${redNamesFormatted}\n\`\`\``
+    );
+    await DiscordUtil.sendMessage(
+      "blueTeamChat",
+      `**Mid Blocks Plan**\n\`\`\`\n${blueNamesFormatted}\n\`\`\`\n**Game Plan**\n\`\`\`\n${blueNamesFormatted}\n\`\`\``
+    );
+
+    if (gameInstance.getClassBanLimit() !== 0) {
+      await DiscordUtil.sendMessage(
+        "redTeamChat",
+        `⚠️ **Team captain** submit your class ban when ready with \`/class ban [class]\``
+      );
+
+      await DiscordUtil.sendMessage(
+        "blueTeamChat",
+        `⚠️ **Team captain** submit your class ban when ready with \`/class ban [class]\``
+      );
+    }
+
+    if (gameInstance.pickOtherTeamsSupportRoles) {
+      await DiscordUtil.sendMessage(
+        "redTeamChat",
+        "Team captain — please list out the support roles for the other team:\n```\nBunker:\nFarmer:\nGold Miner:\n```"
+      );
+
+      await DiscordUtil.sendMessage(
+        "blueTeamChat",
+        "Team captain — please list out the support roles for the other team:\n```\nBunker:\nFarmer:\nGold Miner:\n```"
+      );
+    }
+
+    // After team picking is finished and just before start, DM captains plan template
+    const redCaptain = gameInstance.getCaptainOfTeam("RED");
+    const blueCaptain = gameInstance.getCaptainOfTeam("BLUE");
+    if (!client || !client.users) {
+      console.warn(
+        "[CaptainPlanDM] Interaction client missing; skipping captain plan DMs."
+      );
+      return;
+    }
+    if (redCaptain) {
+      await this.captainPlanDMManager.startForCaptain({
+        client,
+        captainId: redCaptain.discordSnowflake,
+        team: "RED",
+        teamList: await formatTeamIGNs(gameInstance, "RED", false),
+        members: gameInstance.getPlayersOfTeam("RED").map((p) => ({
+          id: p.discordSnowflake,
+          ign: p.ignUsed ?? p.latestIGN ?? "Unknown",
+        })),
+      });
+    }
+    if (blueCaptain) {
+      await this.captainPlanDMManager.startForCaptain({
+        client,
+        captainId: blueCaptain.discordSnowflake,
+        team: "BLUE",
+        teamList: await formatTeamIGNs(gameInstance, "BLUE", false),
+        members: gameInstance.getPlayersOfTeam("BLUE").map((p) => ({
+          id: p.discordSnowflake,
+          ign: p.ignUsed ?? p.latestIGN ?? "Unknown",
+        })),
+      });
+    }
+  }
+
   async handleDM(message: Message): Promise<boolean> {
     return this.captainPlanDMManager.handleDM(message);
   }
 
   async handleButtonPress(interaction: ButtonInteraction) {
+    if (interaction.customId === GAME_START_BUTTON_ID) {
+      await this.handleStartButton(interaction);
+      return;
+    }
     await this.captainPlanDMManager.handleButtonPress(interaction);
+  }
+
+  private getStartRejectionMessage(
+    attempt: "inProgress" | "alreadyStarted"
+  ): string {
+    return attempt === "inProgress"
+      ? "The game start is already in progress."
+      : "This game has already been started.";
+  }
+
+  private async handleStartButton(
+    interaction: ButtonInteraction
+  ): Promise<void> {
+    const member = interaction.guild?.members.cache.get(interaction.user.id);
+    if (
+      !interaction.guild ||
+      !PermissionsUtil.hasRole(member, "organiserRole")
+    ) {
+      await interaction.reply({
+        content: "Only an organiser can start the game.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const gameInstance = GameInstance.getInstance();
+    const attempt = gameInstance.tryBeginGameStart();
+    if (attempt !== "acquired") {
+      await interaction.reply({
+        content: this.getStartRejectionMessage(attempt),
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    try {
+      await interaction.update({
+        content: "Starting game…",
+        components: [],
+      });
+      await this.runGameStartWorkflow(
+        interaction.guild,
+        interaction.client,
+        gameInstance
+      );
+    } catch (error) {
+      gameInstance.releaseGameStart();
+      console.error("Error starting the game: ", error);
+      await interaction.editReply(
+        createGameStartPrompt("Failed to start the game. Please try again.")
+      );
+      return;
+    }
+    gameInstance.completeGameStart();
+    await interaction.editReply({
+      content: "Game will begin soon! Roles assigned and players moved to VCs.",
+      components: [],
+    });
   }
 
   async handleAutocomplete(

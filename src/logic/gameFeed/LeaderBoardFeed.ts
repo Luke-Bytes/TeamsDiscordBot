@@ -3,6 +3,7 @@ import { prismaClient } from "../../database/prismaClient";
 import { EloUtil } from "../../util/EloUtil";
 import { SeasonService } from "../../database/SeasonService";
 import { escapeIgn } from "../../util/Utils";
+import { SeasonType } from "@prisma/client";
 
 export class LeaderBoardFeed {
   private getLeaderboardEntryString(
@@ -51,7 +52,10 @@ export class LeaderBoardFeed {
 
       const topTenPlayerStats = await prismaClient.playerStats.findMany({
         where: { seasonId: season.id },
-        orderBy: { elo: "desc" },
+        orderBy:
+          season.type !== SeasonType.RELAXED
+            ? { elo: "desc" }
+            : [{ wins: "desc" }, { biggestWinStreak: "desc" }],
         take: 10,
         include: {
           player: {
@@ -76,24 +80,38 @@ export class LeaderBoardFeed {
       });
 
       const embed = new EmbedBuilder()
-        .setColor("#FFD700")
-        .setTitle("🏆 Friendly Wars Leaderboards 🏆")
-        .setDescription(`Top rated players for Season ${seasonNumber}!`)
+        .setColor(season.type !== SeasonType.RELAXED ? "#FFD700" : "#57F287")
+        .setTitle(
+          season.type !== SeasonType.RELAXED
+            ? "🏆 Friendly Wars Leaderboards 🏆"
+            : "🎉 Friendly Wars Activity Board"
+        )
+        .setDescription(
+          season.type !== SeasonType.RELAXED
+            ? `Top rated players for Season ${seasonNumber}!`
+            : `Unranked activity highlights for Relaxed Season ${seasonNumber}.`
+        )
         .setTimestamp();
 
       topTen.forEach((player) => {
         embed.addFields({
-          name: this.getLeaderboardEntryString(
-            player.rank,
-            player.ign,
-            player.elo,
-            player.winLossRatio,
-            player.wins,
-            player.losses,
-            player.winStreak,
-            player.loseStreak
-          ),
-          value: "\u200b",
+          name:
+            season.type !== SeasonType.RELAXED
+              ? this.getLeaderboardEntryString(
+                  player.rank,
+                  player.ign,
+                  player.elo,
+                  player.winLossRatio,
+                  player.wins,
+                  player.losses,
+                  player.winStreak,
+                  player.loseStreak
+                )
+              : `**${escapeIgn(player.ign)}** — ${player.wins + player.losses} games`,
+          value:
+            season.type !== SeasonType.RELAXED
+              ? "\u200b"
+              : `${player.wins} wins • ${player.losses} losses • current streak ${player.winStreak}`,
           inline: false,
         });
       });

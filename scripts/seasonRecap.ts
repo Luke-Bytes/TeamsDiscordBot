@@ -1,5 +1,4 @@
 import { PrismaClient, Team } from "@prisma/client";
-import { ConfigManager } from "../src/ConfigManager";
 
 const prisma = new PrismaClient();
 
@@ -16,12 +15,19 @@ const EXCLUDED_BANNED_CLASSES = new Set(["SWAPPER"]);
 type LeaderboardRow = { label: string; value: string };
 
 async function getSeasonId(seasonNumberOverride?: number) {
-  const seasonNumber = seasonNumberOverride ?? ConfigManager.getConfig().season;
-  const seasonRecord = await prisma.season.findUnique({
-    where: { number: seasonNumber },
-  });
+  const seasonRecord = seasonNumberOverride
+    ? await prisma.season.findUnique({
+        where: { number: seasonNumberOverride },
+      })
+    : await prisma.season.findFirst({
+        orderBy: [{ isActive: "desc" }, { number: "desc" }],
+      });
   if (!seasonRecord) {
-    throw new Error(`Season ${seasonNumber} not found. Create it first.`);
+    throw new Error(
+      seasonNumberOverride
+        ? `Season ${seasonNumberOverride} not found.`
+        : "No seasons found."
+    );
   }
   return { seasonId: seasonRecord.id, seasonNumber: seasonRecord.number };
 }

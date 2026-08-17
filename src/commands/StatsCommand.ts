@@ -10,7 +10,7 @@ import { PrismaUtils } from "../util/PrismaUtils.js";
 import { Channels } from "../Channels";
 import { prismaClient } from "../database/prismaClient.js";
 import { SeasonService } from "../database/SeasonService";
-import { Team } from "@prisma/client";
+import { SeasonType, Team } from "@prisma/client";
 import { escapeText } from "../util/Utils";
 
 export default class StatsCommand implements Command {
@@ -186,12 +186,18 @@ export default class StatsCommand implements Command {
         { name: "Player", value: userDisplayName, inline: true },
         {
           name: "Elo",
-          value: `${Math.round(stats.elo)} ${EloUtil.getEloEmoji(stats.elo)}`,
+          value:
+            season.type !== SeasonType.RELAXED
+              ? `${Math.round(stats.elo)} ${EloUtil.getEloEmoji(stats.elo)}`
+              : "Unavailable in Relaxed seasons",
           inline: true,
         },
         {
           name: "Season Rank",
-          value: `#${seasonRank}/${totalPlayers} (${percentile})`,
+          value:
+            season.type !== SeasonType.RELAXED
+              ? `#${seasonRank}/${totalPlayers} (${percentile})`
+              : "Unranked",
           inline: true,
         },
         { name: "Win/Loss Ratio", value: winLossDisplay, inline: true },
@@ -216,8 +222,20 @@ export default class StatsCommand implements Command {
         { name: "MVP Count", value: `${mvpCount}`, inline: true },
         { name: "Captain Count", value: `${captainCount}`, inline: true },
         { name: "Captain Win Rate", value: captainWinRate, inline: true },
-        { name: "Double Elo Wins", value: `${doubleEloWins}`, inline: true },
-        { name: "Average Elo Change", value: avgEloChange, inline: true },
+        {
+          name: "Double Elo Wins",
+          value:
+            season.type !== SeasonType.RELAXED
+              ? `${doubleEloWins}`
+              : "Unavailable",
+          inline: true,
+        },
+        {
+          name: "Average Elo Change",
+          value:
+            season.type !== SeasonType.RELAXED ? avgEloChange : "Unavailable",
+          inline: true,
+        },
         { name: "Last Game Date", value: lastGameDate, inline: true }
       );
     } else {
@@ -236,12 +254,18 @@ export default class StatsCommand implements Command {
         { name: "Player", value: userDisplayName, inline: true },
         {
           name: "Elo",
-          value: `${Math.round(stats.elo)} ${EloUtil.getEloEmoji(stats.elo)}`,
+          value:
+            season.type !== SeasonType.RELAXED
+              ? `${Math.round(stats.elo)} ${EloUtil.getEloEmoji(stats.elo)}`
+              : "Unavailable in Relaxed seasons",
           inline: true,
         },
         {
           name: "Season Rank",
-          value: `#${seasonRank}/${totalPlayers} (${percentile})`,
+          value:
+            season.type !== SeasonType.RELAXED
+              ? `#${seasonRank}/${totalPlayers} (${percentile})`
+              : "Unranked",
           inline: true,
         },
         {

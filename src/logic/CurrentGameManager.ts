@@ -13,7 +13,6 @@ import { DraftTeamPickingSession } from "./teams/DraftTeamPickingSession";
 
 export class CurrentGameManager {
   private static currentGame?: GameInstance;
-  static pollCloseTimeout?: NodeJS.Timeout;
   static classBanWarningTimeout?: NodeJS.Timeout;
   static classBanDeadlineTimeout?: NodeJS.Timeout;
   static captainReminderTimeout?: NodeJS.Timeout;
@@ -45,11 +44,6 @@ export class CurrentGameManager {
     // Clear any scheduled timers
     this.clearClassBanTimers();
     this.clearCaptainTimers();
-    if (this.pollCloseTimeout) {
-      clearTimeout(this.pollCloseTimeout);
-      this.pollCloseTimeout = undefined;
-    }
-
     // Stop game feed updaters
     try {
       gameFeed.removeAllFeedMessages();
@@ -110,26 +104,6 @@ export class CurrentGameManager {
     game.announcementMessage = undefined;
     game.announcementPreviewMessage = undefined;
     await this.resetCurrentGame();
-  }
-
-  public static schedulePollCloseTime(startTime: Date) {
-    if (this.pollCloseTimeout) {
-      clearTimeout(this.pollCloseTimeout);
-    }
-
-    const pollCloseTime = new Date(startTime.getTime() - 5 * 60 * 1000);
-    const delay = pollCloseTime.getTime() - Date.now();
-
-    if (delay > 0) {
-      this.pollCloseTimeout = setTimeout(() => {
-        this.getCurrentGame().stopVoting();
-        console.log(
-          "Poll has been stopped automatically without deleting messages."
-        );
-      }, delay);
-    } else {
-      console.warn("Poll close time is in the past. Skipping scheduling.");
-    }
   }
 
   public static scheduleClassBanTimers(): void {

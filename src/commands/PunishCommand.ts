@@ -100,7 +100,14 @@ export default class PunishCommand implements Command {
       const reason = interaction.options.getString("reason", true);
       const duration = interaction.options.getString("duration", true);
       const currentDate = new Date();
-      const expiryDate = duration ? this.computeExpiryDate(duration) : null;
+      const expiryDate = this.computeExpiryDate(duration);
+
+      if (!expiryDate) {
+        await interaction.editReply(
+          "Invalid duration. Use a number followed by `s`, `m`, `h`, or `d` (for example, use `7d` instead of `1w`)."
+        );
+        return;
+      }
 
       const existing = await prismaClient.playerPunishment.findFirst({
         where: { playerId: player.id },
@@ -297,9 +304,9 @@ export default class PunishCommand implements Command {
     });
   }
 
-  private computeExpiryDate(duration: string): Date {
-    const durationMatch = RegExp(/(\d+)([smhd])/).exec(duration);
-    if (!durationMatch) throw new Error("Invalid duration format");
+  private computeExpiryDate(duration: string): Date | null {
+    const durationMatch = /^(\d+)([smhd])$/.exec(duration.trim());
+    if (!durationMatch) return null;
 
     const value = parseInt(durationMatch[1]);
     const unit = durationMatch[2];
@@ -319,7 +326,7 @@ export default class PunishCommand implements Command {
         expiryDate.setDate(expiryDate.getDate() + value);
         break;
       default:
-        throw new Error("Invalid duration unit");
+        return null;
     }
 
     return expiryDate;

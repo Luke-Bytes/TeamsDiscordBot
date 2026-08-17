@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { Client, GatewayIntentBits, ActivityType, Partials } from "discord.js";
+import { Client, GatewayIntentBits, Partials } from "discord.js";
 import { CommandHandler } from "./commands/CommandHandler";
 import { MessageHandler } from "./interactions/MessageHandler";
 import { ReactionHandler } from "./interactions/ReactionHandler";
@@ -111,12 +111,9 @@ export class TeamsBot {
         console.log("No punishments expired today.");
       }
       try {
-        const activeSeasonNumber = await SeasonService.getActiveSeasonNumber();
-        this.client.user?.setActivity(`Season ${activeSeasonNumber}!`, {
-          type: ActivityType.Competing,
-        });
+        await SeasonService.initialize(this.client);
       } catch (error) {
-        console.error("Failed to set active season presence:", error);
+        console.error("Failed to initialise season lifecycle:", error);
       }
     });
 

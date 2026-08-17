@@ -28,6 +28,21 @@ or
 - Set team and organiser roles
 - Manage announcements and polls
 - Record game and player data into a database
+- Run Ranked and Relaxed seasons with automatic game/month rollovers
+
+## Season management
+
+Seasons are stored entirely in MongoDB; `config.json` has no season selector.
+Use `/season start` only to bootstrap when no season is active, `/season
+configure` to set game/month limits and type policy, `/season status` to inspect
+progress, and confirmed `/season end` for a manual rollover. A successor is
+activated even if Discord announcements fail; recap, title, and new-season
+blocks are persisted and retried after restart.
+
+Ranked seasons update Elo and award placement titles. Relaxed seasons retain
+games, records, streaks, captains, and MVPs but never change Elo, write Elo
+history, or produce ranked leaderboards. Successor types alternate unless an
+organiser sets a one-time override.
 
 ## Known Issues
 

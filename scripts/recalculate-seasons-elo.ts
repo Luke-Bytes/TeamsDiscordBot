@@ -34,12 +34,13 @@ const rl = createInterface({ input, output });
 const fmt = (dt?: Date) => (dt ? new Date(dt).toLocaleString() : "n/a");
 
 async function resolveSeason(): Promise<Season> {
-  const cfg = ConfigManager?.getConfig?.();
-  if (cfg?.season) {
+  const explicitNumber = Number.parseInt(process.argv[2] ?? "", 10);
+  if (Number.isInteger(explicitNumber)) {
     const s = await prismaClient.season.findUnique({
-      where: { number: cfg.season },
+      where: { number: explicitNumber },
     });
     if (s) return s;
+    throw new Error(`Season ${explicitNumber} not found.`);
   }
   const active = await prismaClient.season.findFirst({
     where: { isActive: true },

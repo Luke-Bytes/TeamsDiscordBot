@@ -8,17 +8,55 @@ datasource db {
 }
 
 model Season {
-  id        String    @id @default(uuid()) @map("_id")
-  number    Int       @unique
+  id        String      @id @default(uuid()) @map("_id")
+  number    Int         @unique
   name      String?
   startDate DateTime
   endDate   DateTime?
-  isActive  Boolean   @default(true)
+  isActive  Boolean     @default(true)
+  type      SeasonType? @default(RANKED)
+
+  gameLimit        Int?
+  monthLimit       Int?
+  rolloverDeadline DateTime?
+  rolloverPending  Boolean?    @default(false)
+  nextTypeOverride SeasonType?
+
+  lifecycleState     SeasonLifecycleState? @default(ACTIVE)
+  lifecycleToken     String?
+  closureReason      SeasonClosureReason?
+  closureRequestedAt DateTime?
+  closedAt           DateTime?
+  successorSeasonId  String?
+  titlesProcessedAt  DateTime?
+  recapProcessedAt   DateTime?
 
   games              Game[]
   gameParticipations GameParticipation[]
   eloHistories       EloHistory[]
   playerStats        PlayerStats[]
+  announcements      SeasonAnnouncement[]
+}
+
+model SeasonAnnouncement {
+  id               String                    @id @default(uuid()) @map("_id")
+  seasonId         String
+  season           Season                    @relation(fields: [seasonId], references: [id])
+  kind             SeasonAnnouncementKind
+  blockIndex       Int
+  marker           String
+  content          String
+  state            AnnouncementDeliveryState @default(PENDING)
+  discordMessageId String?
+  attempts         Int                       @default(0)
+  lastAttemptAt    DateTime?
+  deliveredAt      DateTime?
+  lastError        String?
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+
+  @@unique([seasonId, kind, blockIndex])
+  @@index([state, createdAt])
 }
 
 model PlayerStats {
@@ -69,19 +107,21 @@ model Game {
   id       String  @id @default(uuid()) @map("_id")
   finished Boolean @default(false)
 
-  startTime DateTime
-  endTime   DateTime
-  settings  GameSettings
-  winner    Team
-  type      gameType?
-  doubleElo Boolean?
+  startTime     DateTime
+  endTime       DateTime
+  settings      GameSettings
+  winner        Team
+  type          gameType?
+  doubleElo     Boolean?
+  eloRated      Boolean?           @default(true)
+  unratedReason UnratedGameReason?
 
   organiser String
   host      String
 
   participantsIGNs String[]
-  redTeamPlan Json?
-  blueTeamPlan Json?
+  redTeamPlan      Json?
+  blueTeamPlan     Json?
 
   eloHistories       EloHistory[]
   gameParticipations GameParticipation[]
@@ -93,8 +133,8 @@ model Game {
 model GameParticipation {
   id String @id @default(uuid()) @map("_id")
 
-  ignUsed String
-  team    Team
+  ignUsed            String
+  team               Team
   draftSlotPlacement Int?
 
   playerId String
@@ -102,8 +142,8 @@ model GameParticipation {
   player   Player @relation(fields: [playerId], references: [id])
   game     Game   @relation(fields: [gameId], references: [id])
 
-  mvp     Boolean @default(false)
-  captain Boolean @default(false)
+  mvp          Boolean  @default(false)
+  captain      Boolean  @default(false)
   votedForAMVP Boolean? @default(false)
 
   seasonId String
@@ -146,7 +186,7 @@ type GameSettings {
   nonSharedCaptainBannedClasses BanList?
   map                           AnniMap
   modifiers                     ModifierTypes[]
-  delayedBan                    Int @default(0)
+  delayedBan                    Int             @default(0)
 }
 
 model PlayerPunishment {
@@ -189,6 +229,39 @@ enum Team {
   BLUE
 }
 
+enum SeasonType {
+  RANKED
+  RELAXED
+}
+
+enum SeasonLifecycleState {
+  ACTIVE
+  CLOSING
+  CLOSED
+}
+
+enum SeasonClosureReason {
+  GAME_LIMIT
+  MONTH_LIMIT
+  MANUAL
+}
+
+enum SeasonAnnouncementKind {
+  RECAP
+  TITLES
+  NEW_SEASON
+}
+
+enum AnnouncementDeliveryState {
+  PENDING
+  DELIVERED
+}
+
+enum UnratedGameReason {
+  RELAXED_SEASON
+  LOW_PLAYER_COUNT
+}
+
 enum gameType {
   DRAFT
   SNAKE_DRAFT
@@ -203,17 +276,17 @@ model Profile {
   playerId String @unique
   player   Player @relation(fields: [playerId], references: [id])
 
-  preferredName String?
-  title         String?
-  unlockedTitles String[] @default([])
-  pronouns      Pronouns?
-  languages     Language[]
-  region        Region?
-  rank          PlayerRank?
+  preferredName  String?
+  title          String?
+  unlockedTitles String[]    @default([])
+  pronouns       Pronouns?
+  languages      Language[]
+  region         Region?
+  rank           PlayerRank?
 
-  preferredRoles Role[]
+  preferredRoles    Role[]
   proficientAtRoles Role[]
-  improveRoles   Role[]
+  improveRoles      Role[]
 
   playstyles Playstyle[]
 

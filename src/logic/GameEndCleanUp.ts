@@ -9,6 +9,7 @@ import { Channels } from "../Channels";
 import RestartCommand from "../commands/RestartCommand";
 import TeamCommand from "../commands/TeamCommand";
 import { Scheduler } from "../util/SchedulerUtil";
+import { SeasonService } from "../database/SeasonService";
 
 export async function cleanUpAfterGame(guild: Guild) {
   Scheduler.cancel("mapVote");
@@ -79,6 +80,8 @@ export async function cleanUpAfterGame(guild: Guild) {
   } catch (e) {
     void e;
   }
+
+  await SeasonService.afterGameSaved();
 
   await DiscordUtil.sendMessage("gameFeed", "\u200b");
   const leaderboardFeed = new LeaderBoardFeed();

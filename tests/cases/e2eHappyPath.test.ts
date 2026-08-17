@@ -21,6 +21,8 @@ import { prismaClient } from "../../src/database/prismaClient";
 import { MojangAPI } from "../../src/api/MojangAPI";
 import { GuildMemberRoleManager } from "discord.js";
 import { withImmediateTimers } from "../framework/timers";
+import { SeasonService } from "../../src/database/SeasonService";
+import { PrismaUtils } from "../../src/util/PrismaUtils";
 
 // Helper to set prototype so instanceof GuildMemberRoleManager passes
 function makeRoleManagerLike(obj: any) {
@@ -72,6 +74,8 @@ test("E2E happy path: announce -> register -> nominate -> set captains -> random
     const origCreate = (prismaClient as any).player.create;
     const origUpdate = (prismaClient as any).player.update;
     const origSaveGame = (prismaClient as any).game.saveGameFromInstance;
+    const origAfterGameSaved = SeasonService.afterGameSaved;
+    const origDisplayName = PrismaUtils.getDisplayNameWithTitle;
 
     try {
       (DiscordUtil as any).sendMessage = async (_ch: any, content: any) => {
@@ -82,6 +86,10 @@ test("E2E happy path: announce -> register -> nominate -> set captains -> random
       (DiscordUtil as any).assignRole = async () => {};
       (DiscordUtil as any).batchRemoveRoleFromMembers = async () => {};
       (DiscordUtil as any).batchMoveMembersToChannel = async () => {};
+      PrismaUtils.getDisplayNameWithTitle = async (
+        _playerId: string,
+        fallback: string
+      ) => fallback;
 
       // Fake gameFeed channel to absorb sends
       (Channels as any).gameFeed = {
@@ -380,6 +388,7 @@ test("E2E happy path: announce -> register -> nominate -> set captains -> random
         console.log("Intercepted exit", code);
       }) as any;
       (prismaClient as any).game.saveGameFromInstance = async () => {};
+      SeasonService.afterGameSaved = async () => {};
       const shut = createChatInputInteraction(organiser.id, {
         guild,
         member: organiser as any,
@@ -404,5 +413,7 @@ test("E2E happy path: announce -> register -> nominate -> set captains -> random
       (prismaClient as any).player.create = origCreate;
       (prismaClient as any).player.update = origUpdate;
       (prismaClient as any).game.saveGameFromInstance = origSaveGame;
+      SeasonService.afterGameSaved = origAfterGameSaved;
+      PrismaUtils.getDisplayNameWithTitle = origDisplayName;
     }
   }));

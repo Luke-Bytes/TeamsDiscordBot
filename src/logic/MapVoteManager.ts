@@ -40,6 +40,7 @@ interface MapVoteManagerEvents {
 }
 
 export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
+  private static readonly CLOSE_BEFORE_START_MS = 10 * 60 * 1000;
   maps: AnniMap[];
   pollMessage?: Message;
 
@@ -255,21 +256,27 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
       },
     });
 
+    await this.rescheduleFinalization();
+  }
+
+  async rescheduleFinalization() {
+    if (!this.pollMessage) return;
+
     const gameStartTime = GameInstance.getInstance().startTime;
     if (!gameStartTime) {
       console.error("Game start time is not set.");
       return;
     }
 
-    const fiveMinutesBeforeStart = new Date(
-      gameStartTime.getTime() - 5 * 60 * 1000
+    const pollCloseTime = new Date(
+      gameStartTime.getTime() - MapVoteManager.CLOSE_BEFORE_START_MS
     );
     const now = new Date();
 
-    if (fiveMinutesBeforeStart > now) {
-      const delay = fiveMinutesBeforeStart.getTime() - now.getTime();
+    if (pollCloseTime > now) {
+      const delay = pollCloseTime.getTime() - now.getTime();
       console.info(
-        `Scheduling map poll closure in ${delay / 1000}s at ${fiveMinutesBeforeStart.toISOString()}`
+        `Scheduling map poll closure in ${delay / 1000}s at ${pollCloseTime.toISOString()}`
       );
       Scheduler.schedule(
         "mapVote",
@@ -277,10 +284,14 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
           console.info(`Finalizing map vote at ${new Date().toISOString()}`);
           await this.finalizeVotes();
         },
-        fiveMinutesBeforeStart
+        pollCloseTime
       );
     } else {
-      console.warn("Game start time already passed or is within 5 minutes.");
+      Scheduler.cancel("mapVote");
+      console.warn(
+        "Game start time already passed or is within 10 minutes. Finalizing map vote immediately."
+      );
+      await this.finalizeVotes();
     }
   }
 

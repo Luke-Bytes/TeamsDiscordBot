@@ -16,6 +16,7 @@ import { Channels } from "../Channels";
 import { SeasonService } from "../database/SeasonService";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { escapeIgn } from "../util/Utils";
+import { SeasonType } from "@prisma/client";
 
 export default class LeaderboardsCommand implements Command {
   public data: SlashCommandOptionsOnlyBuilder;
@@ -101,7 +102,10 @@ export default class LeaderboardsCommand implements Command {
 
     const allStats = await prismaClient.playerStats.findMany({
       where: { seasonId: season.id },
-      orderBy: { elo: "desc" },
+      orderBy:
+        season.type !== SeasonType.RELAXED
+          ? { elo: "desc" }
+          : [{ wins: "desc" }, { biggestWinStreak: "desc" }],
       include: {
         player: { select: { latestIGN: true, discordSnowflake: true } },
       },
@@ -133,30 +137,47 @@ export default class LeaderboardsCommand implements Command {
     );
 
     const embed = new EmbedBuilder()
-      .setColor("#FFD700")
-      .setTitle("🏆 Friendly Wars Leaderboards 🏆")
-      .setDescription(`The top rated players for Season ${seasonNumber}!`)
+      .setColor(season.type !== SeasonType.RELAXED ? "#FFD700" : "#57F287")
+      .setTitle(
+        season.type !== SeasonType.RELAXED
+          ? "🏆 Friendly Wars Leaderboards 🏆"
+          : "🎉 Friendly Wars Activity Board"
+      )
+      .setDescription(
+        season.type !== SeasonType.RELAXED
+          ? `The top rated players for Season ${seasonNumber}!`
+          : `Season ${seasonNumber} is Relaxed and has no Elo ranking or overall winner.`
+      )
       .setTimestamp();
 
     topTen.forEach((p) => {
       embed.addFields({
-        name: this.getLeaderboardEntryString(
-          p.rank,
-          p.ign,
-          p.elo,
-          p.winLossRatio,
-          p.wins,
-          p.losses,
-          p.winStreak,
-          p.loseStreak
-        ),
-        value: "\u200b",
+        name:
+          season.type !== SeasonType.RELAXED
+            ? this.getLeaderboardEntryString(
+                p.rank,
+                p.ign,
+                p.elo,
+                p.winLossRatio,
+                p.wins,
+                p.losses,
+                p.winStreak,
+                p.loseStreak
+              )
+            : `**${escapeIgn(p.ign)}** — ${p.wins + p.losses} games`,
+        value:
+          season.type !== SeasonType.RELAXED
+            ? "\u200b"
+            : `${p.wins} wins • ${p.losses} losses • current streak ${p.winStreak}`,
         inline: false,
       });
     });
 
     embed.setFooter({
-      text: `Your ranking: ${currentPlace === -1 ? "Unranked" : "#" + (currentPlace + 1).toLocaleString()} | Page ${page + 1}/${totalPages}`,
+      text:
+        season.type !== SeasonType.RELAXED
+          ? `Your ranking: ${currentPlace === -1 ? "Unranked" : "#" + (currentPlace + 1).toLocaleString()} | Page ${page + 1}/${totalPages}`
+          : `Unranked activity • Page ${page + 1}/${totalPages}`,
       iconURL: `https://cdn.discordapp.com/avatars/${userId}/.png`,
     });
 

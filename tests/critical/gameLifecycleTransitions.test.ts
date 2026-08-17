@@ -188,7 +188,7 @@ test("confirmed announcement transition preserves configuration and clears stale
   game.beginConfirmedAnnouncement();
 
   assert(game.announced, "New announcement should be active");
-  assert(game.isFinished === false, "Stale finished flag should be cleared");
+  assert(!Boolean(game.isFinished), "Stale finished flag should be cleared");
   assert(!game.isRestarting, "Stale shutdown flag should be cleared");
   assert(
     !game.gameWinner && !game.gameId && !game.endTime,

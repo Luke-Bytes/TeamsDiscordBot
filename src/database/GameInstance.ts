@@ -24,6 +24,8 @@ import { PrismaUtils } from "../util/PrismaUtils";
 import { escapeIgn } from "../util/Utils";
 
 export type ModifierMode = "custom" | "randomised" | "default" | "none";
+export type GameStartStatus = "idle" | "starting" | "started";
+export type GameStartAttempt = "acquired" | "inProgress" | "alreadyStarted";
 
 // wrapper class for Game
 export class GameInstance {
@@ -35,7 +37,9 @@ export class GameInstance {
   announced = false;
   isRestarting = false;
   isDoubleElo = false;
+  isRelaxedSeason = false;
   noElo = false;
+  private gameStartStatus: GameStartStatus = "idle";
   startTime?: Date;
   endTime?: Date;
   settings: {
@@ -126,7 +130,9 @@ export class GameInstance {
     this.announced = false;
     this.isRestarting = false;
     this.isDoubleElo = false;
+    this.isRelaxedSeason = false;
     this.noElo = false;
+    this.gameStartStatus = "idle";
     this.startTime = undefined;
     this.endTime = undefined;
     this.gameWinner = undefined;
@@ -178,12 +184,36 @@ export class GameInstance {
     );
   }
 
+  public getGameStartStatus(): GameStartStatus {
+    return this.gameStartStatus;
+  }
+
+  public tryBeginGameStart(): GameStartAttempt {
+    if (this.gameStartStatus === "starting") return "inProgress";
+    if (this.gameStartStatus === "started") return "alreadyStarted";
+    this.gameStartStatus = "starting";
+    return "acquired";
+  }
+
+  public completeGameStart(): void {
+    if (this.gameStartStatus === "starting") {
+      this.gameStartStatus = "started";
+    }
+  }
+
+  public releaseGameStart(): void {
+    if (this.gameStartStatus === "starting") {
+      this.gameStartStatus = "idle";
+    }
+  }
+
   public beginConfirmedAnnouncement(): void {
     this.gameId = undefined;
     this.isFinished = false;
     this.announced = true;
     this.isRestarting = false;
     this.noElo = false;
+    this.gameStartStatus = "idle";
     this.endTime = undefined;
     this.gameWinner = undefined;
 

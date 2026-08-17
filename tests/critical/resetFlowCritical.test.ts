@@ -50,7 +50,6 @@ test("resetCurrentGame clears timers, sessions, votes, and state in-place", asyn
   };
 
   // Create some timers that should be cleared
-  (CurrentGameManager as any).pollCloseTimeout = setTimeout(() => {}, 1000000);
   (CurrentGameManager as any).classBanWarningTimeout = setTimeout(
     () => {},
     1000000
@@ -85,8 +84,6 @@ test("resetCurrentGame clears timers, sessions, votes, and state in-place", asyn
     throw new Error("minerushVoteManager.cancelVote was not called");
   if (!feedCleared)
     throw new Error("gameFeed.removeAllFeedMessages was not called");
-  if ((CurrentGameManager as any).pollCloseTimeout)
-    throw new Error("pollCloseTimeout not cleared");
   if ((CurrentGameManager as any).classBanWarningTimeout)
     throw new Error("classBanWarningTimeout not cleared");
   if ((CurrentGameManager as any).classBanDeadlineTimeout)

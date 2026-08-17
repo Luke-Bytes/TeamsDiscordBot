@@ -17,6 +17,91 @@ function makeOrganiserInteraction(userId: string) {
   return i;
 }
 
+function makePunishAddInteraction(duration: string) {
+  const i = createChatInputInteraction("ORG", {
+    subcommand: "add",
+    strings: { player: "Target", reason: "Late", duration },
+  }) as any;
+  i.guild = {
+    members: { cache: new Map([["ORG", { id: "ORG" }]]) },
+  } as any;
+  return i;
+}
+
+test("/punish add reports unsupported durations without writing", async () => {
+  const cmd = new PunishCommand();
+  const origFind = (PrismaUtils as any).findPlayer;
+  const origFindPun = (prismaClient as any).playerPunishment.findFirst;
+  const origPerm = PermissionsUtil.hasRole;
+  let punishmentLookupCalled = false;
+
+  try {
+    (PermissionsUtil as any).hasRole = () => true;
+    (PrismaUtils as any).findPlayer = async () => ({ id: "P1" });
+    (prismaClient as any).playerPunishment.findFirst = async () => {
+      punishmentLookupCalled = true;
+      return null;
+    };
+
+    const i = makePunishAddInteraction("1w");
+    await cmd.execute(i);
+
+    const reply = i.replies.find((r: any) => r.type === "editReply");
+    assert(
+      String(reply?.payload || "").includes("Invalid duration"),
+      "Should explain the invalid duration to the user"
+    );
+    assert(
+      String(reply?.payload || "").includes("7d"),
+      "Should explain how to express a week in days"
+    );
+    assert(
+      !punishmentLookupCalled,
+      "Should stop before reading or writing punishment records"
+    );
+  } finally {
+    (PrismaUtils as any).findPlayer = origFind;
+    (prismaClient as any).playerPunishment.findFirst = origFindPun;
+    (PermissionsUtil as any).hasRole = origPerm;
+  }
+});
+
+test("/punish add accepts a strict day duration", async () => {
+  const cmd = new PunishCommand();
+  const origFind = (PrismaUtils as any).findPlayer;
+  const origFindPun = (prismaClient as any).playerPunishment.findFirst;
+  const origCreate = (prismaClient as any).playerPunishment.create;
+  const origPerm = PermissionsUtil.hasRole;
+  let created: any;
+
+  try {
+    (PermissionsUtil as any).hasRole = () => true;
+    (PrismaUtils as any).findPlayer = async () => ({ id: "P1" });
+    (prismaClient as any).playerPunishment.findFirst = async () => null;
+    (prismaClient as any).playerPunishment.create = async (args: any) => {
+      created = args;
+      return args.data;
+    };
+
+    const before = Date.now();
+    const i = makePunishAddInteraction("7d");
+    await cmd.execute(i);
+
+    assert(!!created, "Should create a punishment for a valid duration");
+    const expiry = created.data.punishmentExpiry.getTime();
+    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+    assert(
+      expiry >= before + sevenDays && expiry <= Date.now() + sevenDays,
+      "Should set the punishment expiry seven days ahead"
+    );
+  } finally {
+    (PrismaUtils as any).findPlayer = origFind;
+    (prismaClient as any).playerPunishment.findFirst = origFindPun;
+    (prismaClient as any).playerPunishment.create = origCreate;
+    (PermissionsUtil as any).hasRole = origPerm;
+  }
+});
+
 test("/punish expunge shows select menu for existing punishments", async () => {
   const cmd = new PunishCommand();
   const origFind = (PrismaUtils as any).findPlayer;
