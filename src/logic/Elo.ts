@@ -4,7 +4,7 @@ import { PlayerInstance } from "../database/PlayerInstance";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 
 export class Elo {
-  public calculateNewElo(player: PlayerInstance): number {
+  public calculateNewElo(player: PlayerInstance, winStreakOverride?: number): number {
     const config = ConfigManager.getConfig();
     const game = CurrentGameManager.getCurrentGame();
     const mvpVoteBonus = 1;
@@ -34,7 +34,7 @@ export class Elo {
     }
 
     if (game.gameWinner && playerTeam === game.gameWinner) {
-      let winEloGain = EloUtil.calculateEloChange(game, player, true);
+      let winEloGain = EloUtil.calculateEloChange(game, player, true, winStreakOverride);
 
       if (game.isDoubleElo) {
         winEloGain = winEloGain * 2;

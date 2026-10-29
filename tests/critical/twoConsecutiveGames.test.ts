@@ -119,6 +119,7 @@ function stubPrismaAndMojang() {
 
   (prismaClient as any).game = (prismaClient as any).game || {};
   (prismaClient as any).game.saveGameFromInstance = async () => {};
+  (prismaClient as any).game.updateMany = async () => ({ count: 1 });
 
   return { idToPlayer };
 }
@@ -489,6 +490,26 @@ fastTest(
       guild.addMember(member);
       players.push(member);
       playerNames.push(ign);
+    }
+
+    // Production cleanup fetches the role and enumerates its current members.
+    // Supply that actual projection instead of silently skipping it in this fake.
+    const captainRoleId = config.roles.captainRole;
+    const captainRole = {
+      id: captainRoleId,
+      get members() {
+        return new Map(
+          players
+            .filter((member) => member.roles.cache.has(captainRoleId))
+            .map((member) => [member.id, member])
+        );
+      },
+    };
+    guild.roles.cache = new Map([[captainRoleId, captainRole]]);
+    for (const member of players) {
+      const remove = member.roles.remove;
+      member.roles.remove = async (role: any) =>
+        remove(typeof role === "string" ? role : role.id);
     }
 
     // Also create a captain plan DM session and ensure reset clears it.

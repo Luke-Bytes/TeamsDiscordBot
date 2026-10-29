@@ -7,6 +7,7 @@ import {
 } from "discord.js";
 import { prismaClient } from "../database/prismaClient";
 import { ConfigManager } from "../ConfigManager";
+import { discordErrorCode } from "../util/DiscordFailures";
 
 export type TemporaryVoiceChannelRecord = {
   id?: string;
@@ -91,20 +92,28 @@ export class TempVoiceChannelManager {
       permissionOverwrites,
     })) as VoiceChannel;
 
-    const record = await this.delegate().create({
-      data: {
-        guildId: options.guild.id,
-        channelId: channel.id,
-        ownerId: options.ownerId,
-        categoryId,
-        name: options.name,
-        createdAt: now,
-        expiresAt,
-        autoLockAt,
-        locked: Boolean(options.private),
-        invitedUserIds: [],
-      },
-    });
+    let record: TemporaryVoiceChannelRecord;
+    try {
+      record = await this.delegate().create({
+        data: {
+          guildId: options.guild.id,
+          channelId: channel.id,
+          ownerId: options.ownerId,
+          categoryId,
+          name: options.name,
+          createdAt: now,
+          expiresAt,
+          autoLockAt,
+          locked: Boolean(options.private),
+          invitedUserIds: [],
+        },
+      });
+    } catch (error) {
+      // A failed acknowledgement cannot prove the DB record wasn't created.
+      // Preserve the Discord channel and identify the orphan for operator review.
+      console.error(`[temp-voice] record creation uncertain guild=${options.guild.id} channel=${channel.id}; inspect before manual cleanup`, error);
+      throw error;
+    }
 
     this.schedule(record, options.guild);
     return { ok: true, record, channel };
@@ -116,7 +125,7 @@ export class TempVoiceChannelManager {
     for (const record of records) {
       const guild = await this.fetchGuild(client, record.guildId);
       if (!guild) {
-        await this.deleteRecord(record);
+        console.error(`[temp-voice] cannot verify guild=${record.guildId} channel=${record.channelId}; retaining DB record`);
         continue;
       }
 
@@ -277,13 +286,23 @@ export class TempVoiceChannelManager {
     guild?: Guild
   ): Promise<void> {
     this.clearTimers(record.channelId);
-    const channel = guild
-      ? await this.fetchVoiceChannel(guild, record.channelId)
-      : null;
-    await channel?.delete().catch(() => undefined);
-    await this.delegate()
-      .delete({ where: { channelId: record.channelId } })
-      .catch(() => undefined);
+    if (!guild) {
+      throw new Error(`Cannot delete temporary voice record ${record.channelId} without verified guild`);
+    }
+    const channel = await this.fetchVoiceChannel(guild, record.channelId);
+    if (channel) {
+      try {
+        await channel.delete();
+      } catch (error) {
+        if (discordErrorCode(error) !== 10003) {
+          // Timeout/permission failures leave Discord completion unknown.
+          // Do not discard the only durable ownership evidence.
+          console.error(`[temp-voice] delete uncertain guild=${record.guildId} channel=${record.channelId}`, error);
+          throw error;
+        }
+      }
+    }
+    await this.delegate().delete({ where: { channelId: record.channelId } });
   }
 
   private clearTimers(channelId: string) {
@@ -314,9 +333,18 @@ export class TempVoiceChannelManager {
   ): Promise<VoiceChannel | null> {
     const cached = guild.channels.cache.get(channelId);
     if (cached?.isVoiceBased()) return cached as VoiceChannel;
-    const fetched = await guild.channels.fetch?.(channelId).catch(() => null);
-    if (fetched?.isVoiceBased()) return fetched as VoiceChannel;
-    return null;
+    if (!guild.channels.fetch) {
+      throw new Error(`Cannot verify temporary voice channel ${channelId}: channel fetch unavailable`);
+    }
+    try {
+      const fetched = await guild.channels.fetch(channelId);
+      if (fetched?.isVoiceBased()) return fetched as VoiceChannel;
+      if (fetched) throw new Error(`Channel ${channelId} exists but is not voice-based`);
+      return null;
+    } catch (error) {
+      if (discordErrorCode(error) === 10003) return null;
+      throw error;
+    }
   }
 
   private async fetchGuild(

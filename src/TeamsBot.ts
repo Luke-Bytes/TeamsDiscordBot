@@ -11,6 +11,9 @@ import { MaintenanceLoggingUtil } from "./util/MaintenanceLoggingUtil";
 import { PrismaUtils } from "./util/PrismaUtils";
 import { ConfigManager } from "./ConfigManager";
 import { SeasonService } from "./database/SeasonService";
+import { prismaClient } from "./database/prismaClient";
+import { MatchCleanupState } from "@prisma/client";
+import { MatchRecoveryGate } from "./logic/MatchRecoveryGate";
 
 export class TeamsBot {
   client: Client;
@@ -22,6 +25,7 @@ export class TeamsBot {
   private static processHandlersAttached = false;
 
   constructor() {
+    MatchRecoveryGate.markUnchecked();
     this.client = new Client({
       intents: [
         GatewayIntentBits.Guilds,
@@ -97,6 +101,16 @@ export class TeamsBot {
       console.debug = (...args: unknown[]) => logger.debug(args.join(" "));
       console.log(`Logged in as ${this.client.user?.tag}!`);
 
+      // Detect previously committed matches whose Discord cleanup was interrupted.
+      // Never infer a winner or automatically reverse moderator edits on restart.
+      await MatchRecoveryGate.inspectPending(async () => {
+        const pending = await prismaClient.game.findMany({
+          where: { cleanupState: MatchCleanupState.PENDING },
+          select: { id: true },
+          take: 100,
+        });
+        return pending.map((record) => record.id);
+      });
       this.commandHandler.loadCommands();
       await this.commandHandler.registerCommands();
       await this.commandHandler.vcCommand.manager.recoverActiveChannels(

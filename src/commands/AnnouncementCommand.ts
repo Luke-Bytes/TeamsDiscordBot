@@ -29,6 +29,7 @@ import { addTeamsGameFeed } from "../logic/gameFeed/TeamsGameFeed";
 import { GameInstance, ModifierMode } from "../database/GameInstance";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { PermissionsUtil } from "../util/PermissionsUtil";
+import { MatchRecoveryGate } from "../logic/MatchRecoveryGate";
 import { ModifierSelector } from "../logic/ModifierSelector";
 import { SeasonService } from "../database/SeasonService";
 
@@ -448,6 +449,14 @@ export default class AnnouncementCommand implements Command {
     }
 
     const subcommand = interaction.options.getSubcommand(true);
+    const blocked = MatchRecoveryGate.getBlockReason();
+    if (blocked) {
+      await interaction.reply({
+        content: `Cannot change game announcement while match recovery requires an organiser: ${blocked}`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
 
     switch (subcommand) {
       case "start":
@@ -459,6 +468,8 @@ export default class AnnouncementCommand implements Command {
   }
 
   private async handleAnnouncementConfirm(guild: Guild, ping: boolean) {
+    const blocked = MatchRecoveryGate.getBlockReason();
+    if (blocked) throw new Error(`Cannot announce a new match: ${blocked}`);
     const embed = this.createGameAnnouncementEmbed(false).embeds?.[0];
     if (!Channels.announcements.isSendable()) return;
 
@@ -596,6 +607,13 @@ export default class AnnouncementCommand implements Command {
     }
 
     await interaction.deferReply({});
+    const blocked = MatchRecoveryGate.getBlockReason();
+    if (blocked) {
+      await interaction.editReply(
+        `Game announcement is blocked pending operator recovery: ${blocked}`
+      );
+      return;
+    }
 
     const isConfirmed = !!this.announcementMessage;
 

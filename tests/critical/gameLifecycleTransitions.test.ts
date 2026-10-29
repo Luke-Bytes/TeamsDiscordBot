@@ -188,11 +188,12 @@ test("confirmed announcement transition preserves configuration and clears stale
   game.beginConfirmedAnnouncement();
 
   assert(game.announced, "New announcement should be active");
-  assert(!Boolean(game.isFinished), "Stale finished flag should be cleared");
+  assert(!game.isFinished, "Stale finished flag should be cleared");
   assert(!game.isRestarting, "Stale shutdown flag should be cleared");
   assert(
-    !game.gameWinner && !game.gameId && !game.endTime,
-    "Old result identity should clear"
+    !game.gameWinner && game.gameId === game.getLifecycleToken() &&
+      game.gameId !== "stale-game" && !game.endTime,
+    "Old result should clear and new match must receive a distinct durable ID"
   );
   assert(game.getPlayers().length === 0, "Old players should clear");
   assert(game.teamsDecidedBy === null, "Old team finalization should clear");

@@ -1,5 +1,6 @@
 import { $Enums, AnniMap, Team } from "@prisma/client";
 import { randomUUID } from "node:crypto";
+import { MatchRecoveryGate } from "../logic/MatchRecoveryGate";
 import {
   CacheType,
   CacheTypeReducer,
@@ -223,9 +224,14 @@ export class GameInstance {
   }
 
   public beginConfirmedAnnouncement(): void {
+    const blocked = MatchRecoveryGate.getBlockReason();
+    if (blocked) {
+      throw new Error(`Cannot begin announcement while recovery is unresolved: ${blocked}`);
+    }
     this.lifecycleVersion += 1;
     this.lifecycleToken = randomUUID();
-    this.gameId = undefined;
+    // Stable for the entire announcement; Mongo Game.id is the match claim.
+    this.gameId = this.lifecycleToken;
     this.isFinished = false;
     this.announced = true;
     this.isRestarting = false;

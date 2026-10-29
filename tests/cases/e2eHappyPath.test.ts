@@ -57,6 +57,24 @@ test("E2E happy path: announce -> register -> nominate -> set captains -> random
       playerNames.push(ign);
     }
 
+    // Match cleanup must observe a resolvable captain role projection.
+    guild.roles.cache = new Map([[
+      captainRole,
+      {
+        id: captainRole,
+        get members() {
+          return new Map(players
+            .filter((member) => member.roles.cache.has(captainRole))
+            .map((member) => [member.id, member]));
+        },
+      },
+    ]]);
+    for (const member of players) {
+      const remove = member.roles.remove;
+      member.roles.remove = async (role: any) =>
+        remove(typeof role === "string" ? role : role.id);
+    }
+
     // Stubs and captures
     const sent: any[] = [];
     const origSend = DiscordUtil.sendMessage;
@@ -74,6 +92,7 @@ test("E2E happy path: announce -> register -> nominate -> set captains -> random
     const origCreate = (prismaClient as any).player.create;
     const origUpdate = (prismaClient as any).player.update;
     const origSaveGame = (prismaClient as any).game.saveGameFromInstance;
+    const origMarkCleanup = (prismaClient as any).game.updateMany;
     const origAfterGameSaved = SeasonService.afterGameSaved;
     const origDisplayName = PrismaUtils.getDisplayNameWithTitle;
 
@@ -388,6 +407,7 @@ test("E2E happy path: announce -> register -> nominate -> set captains -> random
         console.log("Intercepted exit", code);
       }) as any;
       (prismaClient as any).game.saveGameFromInstance = async () => {};
+      (prismaClient as any).game.updateMany = async () => ({ count: 1 });
       SeasonService.afterGameSaved = async () => {};
       const shut = createChatInputInteraction(organiser.id, {
         guild,
@@ -413,6 +433,7 @@ test("E2E happy path: announce -> register -> nominate -> set captains -> random
       (prismaClient as any).player.create = origCreate;
       (prismaClient as any).player.update = origUpdate;
       (prismaClient as any).game.saveGameFromInstance = origSaveGame;
+      (prismaClient as any).game.updateMany = origMarkCleanup;
       SeasonService.afterGameSaved = origAfterGameSaved;
       PrismaUtils.getDisplayNameWithTitle = origDisplayName;
     }

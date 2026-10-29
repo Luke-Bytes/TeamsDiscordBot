@@ -19,6 +19,7 @@ import { ConfigManager } from "../ConfigManager";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { GameInstance } from "../database/GameInstance";
 import { cleanUpAfterGame } from "../logic/GameEndCleanUp";
+import { MatchRecoveryGate } from "../logic/MatchRecoveryGate";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { prismaClient } from "../database/prismaClient";
 import { checkMissingPlayersInVC, formatTeamIGNs } from "../util/Utils";
@@ -216,6 +217,7 @@ export default class GameCommand implements Command {
           return;
         }
 
+        gameInstance.endTime ??= new Date();
         gameInstance.isFinished = true;
         await interaction.reply(
           "Moving players back to team picking and starting MVP votes.."
@@ -273,7 +275,23 @@ export default class GameCommand implements Command {
             ? "Beginning post game clean up. This game is marked as no elo due to low player count."
             : "Beginning post game clean up of channels and calculating elo.."
         );
-        await cleanUpAfterGame(guild);
+        try {
+          await cleanUpAfterGame(guild);
+        } catch (error) {
+          console.error(
+            `[match-shutdown] failed stage=save-or-cleanup match=${gameInstance.gameId ?? gameInstance.getLifecycleToken()} lifecycle=${gameInstance.getLifecycleToken()}`,
+            error
+          );
+          // Block new announcements in this process as well as on restart
+          // (where persisted PENDING cleanup is discovered at startup).
+          MatchRecoveryGate.block(
+            `Match ${gameInstance.gameId ?? gameInstance.getLifecycleToken()} shutdown is unresolved`
+          );
+          await interaction.editReply({
+            content:
+              `⚠️ Shutdown incomplete for match ${gameInstance.gameId ?? gameInstance.getLifecycleToken()}. Do not restart or start another game automatically. An organiser must inspect persistence and Discord cleanup before recovery.`,
+          });
+        }
         break;
 
       default:
@@ -688,14 +706,14 @@ export async function assignTeamVCAfterPicking(
     const players = gameInstance.getPlayersOfTeam(team);
     for (let i = 0; i < players.length; i += BATCH_SIZE) {
       const batch = players.slice(i, i + BATCH_SIZE);
-      await Promise.allSettled(
+      const results = await Promise.allSettled(
         batch.map(async (player) => {
           const member = await getCachedMember(
             guild,
             cache,
             player.discordSnowflake
           );
-          if (!member) return;
+          if (!member) throw new Error(`Cannot move departed player ${player.discordSnowflake}`);
           await DiscordUtil.moveToVC(
             guild,
             vcId,
@@ -705,21 +723,24 @@ export async function assignTeamVCAfterPicking(
           );
         })
       );
+      const rejected = results.filter(
+        (result): result is PromiseRejectedResult => result.status === "rejected"
+      );
+      if (rejected.length) {
+        console.error(`[game-start] voice changes partially applied team=${team} lifecycle=${gameInstance.getLifecycleToken()}`, rejected.map((result) => result.reason));
+        throw new Error(`Game start voice assignment incomplete team=${team} failed=${rejected.length}; inspect Discord before retry`);
+      }
       if (i + BATCH_SIZE < players.length) {
         await delay(DELAY_MS);
       }
     }
   };
 
-  try {
-    await Promise.all([
-      moveTeam("RED", config.channels.redTeamVC, redTeamRoleId),
-      moveTeam("BLUE", config.channels.blueTeamVC, blueTeamRoleId),
-    ]);
-    console.log("Finished assigning players to team voice channels.");
-  } catch (error) {
-    console.error("Unexpected error during team VC assignment:", error);
-  }
+  await Promise.all([
+    moveTeam("RED", config.channels.redTeamVC, redTeamRoleId),
+    moveTeam("BLUE", config.channels.blueTeamVC, blueTeamRoleId),
+  ]);
+  console.log("Finished assigning players to team voice channels.");
 }
 
 export async function assignTeamRolesAfterPicking(

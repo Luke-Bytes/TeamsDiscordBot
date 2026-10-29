@@ -99,15 +99,17 @@ export const EloUtil = {
   calculateEloChange(
     game: GameInstance,
     player: PlayerInstance,
-    isWin: boolean
+    isWin: boolean,
+    winStreakOverride?: number
   ): number {
-    return this.getEloChangeBreakdown(game, player, isWin).finalChange;
+    return this.getEloChangeBreakdown(game, player, isWin, winStreakOverride).finalChange;
   },
 
   getEloChangeBreakdown(
     game: GameInstance,
     player: PlayerInstance,
-    isWin: boolean
+    isWin: boolean,
+    winStreakOverride?: number
   ): {
     kFactor: number;
     expectedScore: number;
@@ -143,7 +145,8 @@ export const EloUtil = {
     const afterWinStreakChange = this.applyWinStreakBonus(
       player,
       baseChange,
-      isWin
+      isWin,
+      winStreakOverride
     );
     if (baseChange > 0) {
       winStreakMultiplier = afterWinStreakChange / baseChange;
@@ -231,11 +234,13 @@ export const EloUtil = {
   applyWinStreakBonus(
     player: PlayerInstance,
     eloChange: number,
-    isWin: boolean
+    isWin: boolean,
+    winStreakOverride?: number
   ): number {
-    if (!isWin || player.winStreak < this.WIN_STREAK_MIN) return eloChange;
+    const effectiveStreak = winStreakOverride ?? player.winStreak;
+    if (!isWin || effectiveStreak < this.WIN_STREAK_MIN) return eloChange;
 
-    const winStreak = Math.min(player.winStreak, this.WIN_STREAK_MAX_THRESHOLD);
+    const winStreak = Math.min(effectiveStreak, this.WIN_STREAK_MAX_THRESHOLD);
 
     const bonusMultiplier =
       winStreak > this.WIN_STREAK_MEDIUM_THRESHOLD
@@ -247,7 +252,7 @@ export const EloUtil = {
             this.BONUS_MULTIPLIER_INCREMENT_LOW;
 
     console.log(
-      `${player.latestIGN} is on a (${player.winStreak}) win streak! Applying bonus Elo with multiplier: ${bonusMultiplier.toFixed(2)}`
+      `${player.latestIGN} is on a (${effectiveStreak}) win streak! Applying bonus Elo with multiplier: ${bonusMultiplier.toFixed(2)}`
     );
     return eloChange * bonusMultiplier;
   },

@@ -50,13 +50,20 @@ export default class UsernameCommand implements Command {
       return;
     }
 
-    const oldUUID = await MojangAPI.usernameToUUID(oldUsername);
-    const newUUID = await MojangAPI.usernameToUUID(newUsername);
-
-    if (!oldUUID || !newUUID) {
-      await interaction.editReply("Failed to resolve one or both UUIDs.");
+    const oldLookup = await MojangAPI.lookupUsername(oldUsername);
+    const newLookup = await MojangAPI.lookupUsername(newUsername);
+    if (oldLookup.status !== "found" || newLookup.status !== "found") {
+      const unavailable = oldLookup.status === "unavailable" ||
+        newLookup.status === "unavailable";
+      await interaction.editReply(
+        unavailable
+          ? "Minecraft identity service is unavailable. No account changes were made."
+          : "One or both Minecraft usernames could not be verified. No account changes were made."
+      );
       return;
     }
+    const oldUUID = oldLookup.uuid;
+    const newUUID = newLookup.uuid;
 
     const oldPlayer = await prismaClient.player.findFirst({
       where: { primaryMinecraftAccount: oldUUID },
@@ -69,28 +76,53 @@ export default class UsernameCommand implements Command {
       return;
     }
 
-    const newPlayer = await prismaClient.player.findFirst({
-      where: { primaryMinecraftAccount: newUUID },
+    // Check both primary and secondary associations, including case-only name
+    // conflicts. This is a precondition, NOT a cross-player uniqueness guarantee.
+    const conflictingPlayers = await prismaClient.player.findMany({
+      where: {
+        OR: [
+          { primaryMinecraftAccount: newUUID },
+          { minecraftAccounts: { has: newUUID } },
+          { latestIGN: { equals: newUsername, mode: "insensitive" } },
+        ],
+      },
+      select: { id: true },
     });
 
-    if (newPlayer) {
+    if (conflictingPlayers.length) {
       await interaction.editReply(
-        `Another player already uses the username: ${safeNewUsername}`
+        `The requested identity is already associated with a player; no change was made: ${safeNewUsername}`
       );
       return;
     }
 
-    await prismaClient.player.update({
-      where: { id: oldPlayer.id },
-      data: {
-        primaryMinecraftAccount: newUUID,
-        latestIGN: newUsername,
-      },
-    });
+    // Compare-and-swap protects against two concurrent changes to the *same*
+    // primary account. A global UUID claim table is still needed to exclude
+    // simultaneous claims by different players.
+    let changed: { count: number };
+    try {
+      changed = await prismaClient.player.updateMany({
+        where: { id: oldPlayer.id, primaryMinecraftAccount: oldUUID },
+        data: {
+          primaryMinecraftAccount: newUUID,
+          latestIGN: newUsername,
+        },
+      });
+    } catch (error) {
+      console.error("[UsernameCommand] Identity mutation completion uncertain; organiser review required", error);
+      await interaction.editReply(
+        "Unable to confirm the account update. An organiser must check its current association before retrying."
+      );
+      return;
+    }
+    if (changed.count !== 1) {
+      await interaction.editReply(
+        "The account association changed during this request. No further update was applied; review the current account owner."
+      );
+      return;
+    }
 
-    console.log(
-      `[UsernameCommand] Updated player ${oldPlayer.id}: ${oldUsername} (${oldUUID}) → ${newUsername} (${newUUID})`
-    );
+    console.info("[UsernameCommand] Conditional identity update committed");
 
     await interaction.editReply(
       `✅ Successfully updated player **${oldPlayer.id}**:\n` +

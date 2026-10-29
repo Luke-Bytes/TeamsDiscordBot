@@ -57,6 +57,17 @@ import "./critical/followupReliability.test";
 import "./critical/staleResultControls.test";
 import "./critical/lifecycleMutationRaces.test";
 import "./critical/minecraftLookupStatus.test";
+import "./critical/matchPersistenceAtomic.test";
+import "./critical/recoveryAndDiscordIntegrity.test";
+import "./critical/identityMutationSafety.test";
 import { runAll } from "./framework/test";
 
-runAll();
+// Offline reliability suite: any test needing an HTTP response must explicitly
+// supply its own deterministic fetch fake. Never fall through to a live API.
+const previousFetch = globalThis.fetch;
+globalThis.fetch = (async () => {
+  throw new Error("Unmocked network fetch in offline test suite");
+}) as typeof fetch;
+void runAll().finally(() => {
+  globalThis.fetch = previousFetch;
+});

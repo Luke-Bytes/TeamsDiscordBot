@@ -122,6 +122,11 @@ model Game {
   participantsIGNs String[]
   redTeamPlan      Json?
   blueTeamPlan     Json?
+  // Immutable payload digest for recognising a completed retry by match ID.
+  persistenceFingerprint String?
+  // PENDING is persisted in the match transaction; COMPLETE only after cleanup.
+  cleanupState MatchCleanupState?
+  cleanupCompletedAt DateTime?
 
   eloHistories       EloHistory[]
   gameParticipations GameParticipation[]
@@ -167,6 +172,7 @@ model EloHistory {
   seasonId String
   season   Season @relation(fields: [seasonId], references: [id])
 
+  @@unique([playerId, gameId])
   @@index([playerId, seasonId, createdAt])
 }
 
@@ -222,6 +228,11 @@ model TemporaryVoiceChannel {
 
   @@unique([guildId, ownerId])
   @@index([expiresAt])
+}
+
+enum MatchCleanupState {
+  PENDING
+  COMPLETE
 }
 
 enum Team {

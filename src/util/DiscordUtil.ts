@@ -108,17 +108,13 @@ export class DiscordUtil {
     const voiceChannel = guild.channels.cache.get(vcId);
 
     if (!voiceChannel || !voiceChannel.isVoiceBased()) {
-      console.error(`Invalid setup for VC: ${vcId}`);
-      return;
+      throw new Error(`Cannot move game players: voice channel ${vcId} is unavailable`);
     }
 
     try {
-      const member =
-        cachedMember ??
-        (await guild.members.fetch(discordSnowflake).catch(() => null));
+      const member = cachedMember ?? await guild.members.fetch(discordSnowflake);
       if (!member) {
-        console.error(`Unable to find member ${discordSnowflake} to move.`);
-        return;
+        throw new Error(`Cannot move game player: member ${discordSnowflake} unavailable`);
       }
 
       if (!member.voice?.channelId) {
@@ -144,6 +140,7 @@ export class DiscordUtil {
         `Failed to move member ${discordSnowflake} to ${voiceChannel?.name}: `,
         error
       );
+      throw error;
     }
   }
 
@@ -239,16 +236,22 @@ export class DiscordUtil {
   ): Promise<void> {
     const role = guild.roles.cache.get(roleId);
     if (!role) {
-      console.log(`Role with ID ${roleId} not found in guild ${guild.name}`);
-      return;
+      throw new Error(`Cannot reconcile role ${roleId}: role missing from guild cache`);
     }
 
     const members = Array.from(role.members.values());
     for (let i = 0; i < members.length; i += batchSize) {
       const batch = members.slice(i, i + batchSize);
-      await Promise.allSettled(
-        batch.map((member) => member.roles.remove(role).catch(console.error))
+      const results = await Promise.allSettled(
+        batch.map((member) => member.roles.remove(role))
       );
+      const failures = results.filter(
+        (result): result is PromiseRejectedResult => result.status === "rejected"
+      );
+      if (failures.length) {
+        console.error(`Role cleanup failures role=${roleId}`, failures.map((failure) => failure.reason));
+        throw new Error(`Role cleanup incomplete role=${roleId} failed=${failures.length}`);
+      }
       await delay(delayMs);
     }
     console.log(`Completed removing role ${role.name} from members.`);
@@ -270,20 +273,24 @@ export class DiscordUtil {
       !fromChannel.isVoiceBased() ||
       !toChannel.isVoiceBased()
     ) {
-      console.error(
-        `Invalid channels provided for moving members: ${fromChannelId}, ${toChannelId}`
+      throw new Error(
+        `Cannot reconcile voice channels: invalid source=${fromChannelId} destination=${toChannelId}`
       );
-      return;
     }
 
     const members = Array.from(fromChannel.members.values());
     for (let i = 0; i < members.length; i += batchSize) {
       const batch = members.slice(i, i + batchSize);
-      await Promise.allSettled(
-        batch.map((member) =>
-          member.voice.setChannel(toChannel).catch(console.error)
-        )
+      const results = await Promise.allSettled(
+        batch.map((member) => member.voice.setChannel(toChannel))
       );
+      const failures = results.filter(
+        (result): result is PromiseRejectedResult => result.status === "rejected"
+      );
+      if (failures.length) {
+        console.error(`Voice cleanup failures source=${fromChannelId}`, failures.map((failure) => failure.reason));
+        throw new Error(`Voice cleanup incomplete source=${fromChannelId} failed=${failures.length}`);
+      }
       await delay(delayMs);
     }
     console.log(
