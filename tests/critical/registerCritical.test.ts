@@ -12,6 +12,8 @@ import { ConfigManager } from "../../src/ConfigManager";
 import { MojangAPI } from "../../src/api/MojangAPI";
 import { prismaClient } from "../../src/database/prismaClient";
 
+const mockUUID = (name: string) => Buffer.from(name).toString("hex").padEnd(32, "0").slice(0, 32);
+
 test("Register blocks non-organiser from registering others and blocks duplicates", async () => {
   const teamCmd = new TeamCommand();
   const cmd = new RegisterCommand(teamCmd);
@@ -21,8 +23,8 @@ test("Register blocks non-organiser from registering others and blocks duplicate
   const cfg = ConfigManager.getConfig();
   const guild = new FakeGuild() as any;
 
-  // Stub Mojang and prisma
-  (MojangAPI as any).usernameToUUID = async (name: string) => `uuid-${name}`;
+  // Stub Mojang and prisma with syntactically valid UUIDs.
+  (MojangAPI as any).usernameToUUID = async (name: string) => mockUUID(name);
   const idToPlayer = new Map<string, any>();
   (prismaClient as any).player.byDiscordSnowflake = async (id: string) =>
     idToPlayer.get(id) || null;
@@ -82,7 +84,7 @@ test("Register blocks non-organiser from registering others and blocks duplicate
   (game as any).teams.UNDECIDED.push({
     discordSnowflake: "U3",
     ignUsed: "PlayerY",
-    primaryMinecraftAccount: `uuid-PlayerY`,
+    primaryMinecraftAccount: mockUUID("PlayerY"),
   });
   i = createChatInputInteraction("U3", {
     guild,
@@ -109,7 +111,7 @@ test("Register late signups message when teams decided", async () => {
   const org = new FakeGuildMember("U9") as any;
   guild.addMember(org);
   await org.roles.add(cfg.roles.organiserRole);
-  (MojangAPI as any).usernameToUUID = async (name: string) => `uuid-${name}`;
+  (MojangAPI as any).usernameToUUID = async (name: string) => mockUUID(name);
   (prismaClient as any).player.byDiscordSnowflake = async () => null;
   (prismaClient as any).player.create = async ({ data }: any) => ({
     id: `db-${data.discordSnowflake}`,
@@ -153,13 +155,13 @@ test("Register nudges when IGN provided but already known", async () => {
   const member = new FakeGuildMember("U11") as any;
   guild.addMember(member);
 
-  (MojangAPI as any).usernameToUUID = async (name: string) => `uuid-${name}`;
+  (MojangAPI as any).usernameToUUID = async (name: string) => mockUUID(name);
   (prismaClient as any).player.byDiscordSnowflake = async () => ({
     id: "db-U11",
     discordSnowflake: "U11",
     minecraftAccounts: ["KnownIgn"],
     latestIGN: "KnownIgn",
-    primaryMinecraftAccount: "uuid-KnownIgn",
+    primaryMinecraftAccount: mockUUID("KnownIgn"),
   });
   (prismaClient as any).playerPunishment = {
     findMany: async () => [],

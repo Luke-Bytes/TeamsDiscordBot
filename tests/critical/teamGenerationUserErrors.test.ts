@@ -74,11 +74,14 @@ async function runGenerate(
     i.deferred = true;
     return {};
   };
-  i.editReply = async (_payload: any) => ({
-    edit: async () => {},
-    delete: async () => {},
-    embeds: [],
-  });
+  i.editReply = async (payload: any) => {
+    i.replies.push({ type: "editReply", payload });
+    return {
+      edit: async () => {},
+      delete: async () => {},
+      embeds: [],
+    };
+  };
   await teamCmd.execute(i);
   return i;
 }
@@ -291,12 +294,12 @@ test("Team generate blocked when announcement cancelled", () =>
 
       const teamCmd = new TeamCommand();
       const i = await runGenerate(teamCmd, guild, organiser.id, "random");
-      const reply = i.replies.find((r: any) => r.type === "reply");
+      const reply = i.replies.find((r: any) => r.type === "editReply");
       assert(
-        String(reply?.payload?.content || "").includes(
-          "has not been announced"
-        ),
-        "Blocked when announcement cancelled"
+        i.deferred &&
+          i.replies.filter((r: any) => r.type === "reply").length === 0 &&
+          String(reply?.payload?.content || "").includes("has not been announced"),
+        "Blocked after one deferred acknowledgement when announcement cancelled"
       );
     } finally {
       (DiscordUtil as any).getGuildMember = origGetMember;

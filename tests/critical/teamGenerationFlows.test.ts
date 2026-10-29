@@ -266,12 +266,12 @@ test("Confirm random teams, then cancel and generate balance", () =>
       blocked.inGuild = () => true;
       blocked.guild = guild;
       await teamCmd.execute(blocked);
-      const blockedReply = blocked.replies.find((r: any) => r.type === "reply");
+      const blockedReply = blocked.replies.find((r: any) => r.type === "editReply");
       assert(
-        String(blockedReply?.payload?.content || "").includes(
-          "already in process"
-        ),
-        "Should block new generation while session active"
+        blocked.deferred &&
+          blocked.replies.filter((r: any) => r.type === "reply").length === 0 &&
+          String(blockedReply?.payload?.content || "").includes("already in process"),
+        "Should defer once, then block new generation while session active"
       );
 
       // Cancel session and regenerate

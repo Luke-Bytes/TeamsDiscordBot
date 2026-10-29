@@ -14,6 +14,9 @@ test("Winner confirmation rejects other users", async () => {
   let setCalled = false;
 
   const game = {
+    announced: true,
+    isRestarting: false,
+    getLifecycleToken: () => "game-token",
     getCaptainOfTeam: (_team: string) => null,
     getPlayersOfTeam: (_team: string) => [],
     setGameWinner: async (_team: string) => {

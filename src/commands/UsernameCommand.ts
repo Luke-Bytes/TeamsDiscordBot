@@ -1,11 +1,10 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
 import { Command } from "./CommandInterface";
 import { MojangAPI } from "../api/MojangAPI";
-import { PrismaClient } from "@prisma/client";
+import { prismaClient } from "../database/prismaClient";
 import { escapeText } from "../util/Utils";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 
-const prisma = new PrismaClient();
 
 export default class UsernameCommand implements Command {
   name = "username";
@@ -59,7 +58,7 @@ export default class UsernameCommand implements Command {
       return;
     }
 
-    const oldPlayer = await prisma.player.findFirst({
+    const oldPlayer = await prismaClient.player.findFirst({
       where: { primaryMinecraftAccount: oldUUID },
     });
 
@@ -70,7 +69,7 @@ export default class UsernameCommand implements Command {
       return;
     }
 
-    const newPlayer = await prisma.player.findFirst({
+    const newPlayer = await prismaClient.player.findFirst({
       where: { primaryMinecraftAccount: newUUID },
     });
 
@@ -81,7 +80,7 @@ export default class UsernameCommand implements Command {
       return;
     }
 
-    await prisma.player.update({
+    await prismaClient.player.update({
       where: { id: oldPlayer.id },
       data: {
         primaryMinecraftAccount: newUUID,

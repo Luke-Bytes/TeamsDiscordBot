@@ -92,9 +92,9 @@ export class TeamsBot {
       console.log = (...args: unknown[]) => logger.info(args.join(" "));
       console.table = (...args: unknown[]) => logger.info(args.join(" "));
       console.info = (...args: unknown[]) => logger.info(args.join(" "));
-      console.warn = (...args: unknown[]) => logger.error(args.join(" "));
-      console.error = (...args: unknown[]) => logger.info(args.join(" "));
-      console.debug = (...args: unknown[]) => logger.error(args.join(" "));
+      console.warn = (...args: unknown[]) => logger.warn(args.join(" "));
+      console.error = (...args: unknown[]) => logger.error(args.join(" "));
+      console.debug = (...args: unknown[]) => logger.debug(args.join(" "));
       console.log(`Logged in as ${this.client.user?.tag}!`);
 
       this.commandHandler.loadCommands();
@@ -114,6 +114,14 @@ export class TeamsBot {
         await SeasonService.initialize(this.client);
       } catch (error) {
         console.error("Failed to initialise season lifecycle:", error);
+      }
+    });
+
+    this.client.on("guildMemberRemove", async (member) => {
+      try {
+        await this.commandHandler.teamCommand.handleGuildDeparture(member.id);
+      } catch (error) {
+        console.error(`Guild departure handling failed guild=${member.guild.id} member=${member.id}`, error);
       }
     });
 
@@ -156,7 +164,7 @@ export class TeamsBot {
       }
       if (this.commandHandler.teamCommand.teamPickingSession) {
         try {
-          await this.commandHandler.teamCommand.teamPickingSession.handleMessage(
+          await this.commandHandler.teamCommand.handleTeamPickingMessage(
             msg
           );
         } catch (error) {

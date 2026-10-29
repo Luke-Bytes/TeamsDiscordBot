@@ -25,6 +25,9 @@ test("WinnerCommand /winner set replies with confirmation embed", async () => {
   ];
 
   const game = {
+    announced: true,
+    isRestarting: false,
+    getLifecycleToken: () => "game-token",
     getCaptainOfTeam: (team: string) => (team === "RED" ? redCap : blueCap),
     getPlayersOfTeam: (team: string) =>
       team === "RED" ? redPlayers : bluePlayers,
@@ -77,6 +80,9 @@ test("WinnerCommand confirmation button sets winner", async () => {
   let setTeam: string | null = null;
 
   const game = {
+    announced: true,
+    isRestarting: false,
+    getLifecycleToken: () => "game-token",
     getCaptainOfTeam: (_team: string) => null,
     getPlayersOfTeam: (_team: string) => [],
     setGameWinner: async (team: string) => {

@@ -12,6 +12,7 @@ export abstract class TeamPickingSession {
   public embedMessage?: Message<boolean>;
   public abstract getState(): TeamPickingSessionState;
   public cancelSession?(): Promise<void> | void;
+  public handleUnregister?(discordSnowflake: string): Promise<void> | void;
 
   public abstract initialize(
     interaction: ChatInputCommandInteraction

@@ -13,6 +13,7 @@ import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { Team } from "@prisma/client";
+import { fetchGuildMember } from "../util/DiscordFailures";
 export default class ForfeitCommand implements Command {
   public data = new SlashCommandBuilder()
     .setName("forfeit")
@@ -25,7 +26,8 @@ export default class ForfeitCommand implements Command {
     interaction: ChatInputCommandInteraction
   ): Promise<void> {
     const game = CurrentGameManager.getCurrentGame();
-    if (!game?.announced) {
+    if (!game?.announced || game.getGameStartStatus() !== "started" ||
+        game.isFinished || game.isRestarting) {
       await interaction.reply({
         content: "No game is currently in progress.",
       });
@@ -50,7 +52,12 @@ export default class ForfeitCommand implements Command {
     }
 
     const team = isBlue ? Team.BLUE : Team.RED;
+    if (game.getCaptainOfTeam(team)?.discordSnowflake !== interaction.user.id) {
+      await interaction.reply({ content: "Only the current game captain may forfeit for this team." });
+      return;
+    }
     const opponent = team === Team.BLUE ? Team.RED : Team.BLUE;
+    const token = game.getLifecycleToken();
 
     const embed = new EmbedBuilder()
       .setColor(isBlue ? "Blue" : "Red")
@@ -62,11 +69,11 @@ export default class ForfeitCommand implements Command {
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
-        .setCustomId("forfeit_confirm")
+        .setCustomId(`forfeit_confirm:${token}`)
         .setLabel("Confirm Forfeit")
         .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
-        .setCustomId("forfeit_cancel")
+        .setCustomId(`forfeit_cancel:${token}`)
         .setLabel("Cancel")
         .setStyle(ButtonStyle.Secondary)
     );
@@ -81,6 +88,17 @@ export default class ForfeitCommand implements Command {
     interaction: ButtonInteraction
   ): Promise<void> {
     const id = interaction.customId;
+    const game = CurrentGameManager.getCurrentGame();
+    const match = /^forfeit_(confirm|cancel):([a-f0-9-]{36})$/.exec(id);
+    if (!match || match[2] !== game.getLifecycleToken() ||
+        !game.announced || game.getGameStartStatus() !== "started" ||
+        game.isFinished || game.isRestarting) {
+      await interaction.reply({
+        content: "This forfeit confirmation has expired.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
 
     const originalInvokerId = interaction.message.interaction?.user.id;
     if (!originalInvokerId || originalInvokerId !== interaction.user.id) {
@@ -91,7 +109,7 @@ export default class ForfeitCommand implements Command {
       return;
     }
 
-    if (id === "forfeit_cancel") {
+    if (match[1] === "cancel") {
       const disabledRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
           .setCustomId("forfeit_confirm")
@@ -111,12 +129,12 @@ export default class ForfeitCommand implements Command {
       });
       return;
     }
-    if (id !== "forfeit_confirm") return;
+    if (match[1] !== "confirm") return;
 
     await interaction.deferUpdate();
 
-    const game = CurrentGameManager.getCurrentGame();
-    if (!game?.announced) {
+    if (!game.announced || match[2] !== game.getLifecycleToken() ||
+        game.getGameStartStatus() !== "started" || game.isFinished || game.isRestarting) {
       await interaction.editReply({
         content: "No game is currently in progress.",
         embeds: [],
@@ -125,9 +143,15 @@ export default class ForfeitCommand implements Command {
       return;
     }
 
-    const member = await interaction
-      .guild!.members.fetch(interaction.user.id)
-      .catch(() => null);
+    let member;
+    try {
+      if (!interaction.guild) throw new Error("No guild for forfeit confirmation");
+      member = await fetchGuildMember(interaction.guild, interaction.user.id);
+    } catch (error) {
+      console.error("Forfeit captain verification failed", error);
+      await interaction.editReply({ content: "Cannot verify captain membership with Discord right now.", embeds: [], components: [] });
+      return;
+    }
     if (!member || !PermissionsUtil.hasRole(member, "captainRole")) {
       await interaction.editReply({
         content: "Only team captains can forfeit!",
@@ -149,6 +173,10 @@ export default class ForfeitCommand implements Command {
     }
 
     const forfeitingTeam = isBlue ? Team.BLUE : Team.RED;
+    if (game.getCaptainOfTeam(forfeitingTeam)?.discordSnowflake !== interaction.user.id) {
+      await interaction.editReply({ content: "You are no longer the current captain of this team.", embeds: [], components: [] });
+      return;
+    }
     const winnerTeam = forfeitingTeam === Team.BLUE ? Team.RED : Team.BLUE;
 
     try {

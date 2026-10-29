@@ -87,7 +87,13 @@ export class FakeGuild {
   id = "guild-1";
   roles = { everyone: { id: this.id } } as any;
   members = {
-    fetch: async (id: string) => this._members.get(id)!,
+    fetch: async (input?: string | { user: string; force?: boolean }) => {
+      if (input === undefined) return new Map(this._members);
+      const id = typeof input === "string" ? input : input.user;
+      const member = this._members.get(id);
+      if (!member) throw Object.assign(new Error("Unknown Member"), { code: 10007 });
+      return member;
+    },
     cache: { get: (id: string) => this._members.get(id)! },
   } as any;
   private _members = new Map<string, FakeGuildMember>();

@@ -9,7 +9,6 @@ import TeamCommand from "../commands/TeamCommand";
 import { AutoCaptainSelector } from "./AutoCaptainSelector";
 import { Scheduler } from "../util/SchedulerUtil";
 import CaptainPlanDMManager from "./CaptainPlanDMManager";
-import { DraftTeamPickingSession } from "./teams/DraftTeamPickingSession";
 
 export class CurrentGameManager {
   private static currentGame?: GameInstance;
@@ -53,7 +52,7 @@ export class CurrentGameManager {
 
     // Reset any active team picking session
     try {
-      TeamCommand.instance?.resetTeamPickingSession();
+      await TeamCommand.instance?.resetTeamPickingSession();
     } catch (e) {
       void e;
     }
@@ -260,6 +259,7 @@ export class CurrentGameManager {
   public static scheduleCaptainTimers(guild: Guild): void {
     const game = this.getCurrentGame();
     if (!game.startTime) return;
+    const token = game.getLifecycleToken();
     this.clearCaptainTimers();
     // The rest of the logic has been moved to AutoCaptainSelector; keep timer scheduling here.
 
@@ -270,6 +270,8 @@ export class CurrentGameManager {
     if (reminderTime.getTime() > now) {
       this.captainReminderTimeout = setTimeout(async () => {
         try {
+          if (game.getLifecycleToken() !== token || !game.announced ||
+              game.getGameStartStatus() !== "idle" || game.isFinished) return;
           const redCap = game.getCaptainOfTeam("RED");
           const blueCap = game.getCaptainOfTeam("BLUE");
           const haveBoth = !!redCap && !!blueCap;
@@ -287,10 +289,14 @@ export class CurrentGameManager {
     if (enforceTime.getTime() > now) {
       this.captainEnforceTimeout = setTimeout(async () => {
         try {
+          if (this.getCurrentGame() !== game || game.getLifecycleToken() !== token ||
+              !game.announced || game.getGameStartStatus() !== "idle" || game.isFinished) return;
           if (await this.cancelForLowRegistrationAtAutomaticStart(guild)) {
             return;
           }
 
+          if (game.getLifecycleToken() !== token || !game.announced ||
+              game.getGameStartStatus() !== "idle") return;
           const redCap = game.getCaptainOfTeam("RED");
           const blueCap = game.getCaptainOfTeam("BLUE");
           const haveBoth = !!redCap && !!blueCap;
@@ -299,10 +305,12 @@ export class CurrentGameManager {
             return;
           }
 
-          const result = await AutoCaptainSelector.randomiseCaptains(
-            guild,
-            true
-          );
+          const teamCommand = TeamCommand.instance;
+          const result = teamCommand
+            ? await teamCommand.runRosterOperation(() =>
+                AutoCaptainSelector.randomiseCaptains(guild, false)
+              )
+            : await AutoCaptainSelector.randomiseCaptains(guild, false);
           if ("error" in result) {
             await DiscordUtil.sendMessage("gameFeed", result.error);
             return;
@@ -313,6 +321,7 @@ export class CurrentGameManager {
               result.blue.ignUsed ?? "Unknown"
             )}, RED - ${escapeIgn(result.red.ignUsed ?? "Unknown")}.`
           );
+          await this.attemptAutoStartDraft(guild);
         } catch (e) {
           console.error("Error enforcing auto-captain selection:", e);
         }
@@ -341,8 +350,9 @@ export class CurrentGameManager {
     return true;
   }
 
-  private static async attemptAutoStartDraft(guild: Guild): Promise<void> {
+  public static async attemptAutoStartDraft(guild: Guild): Promise<void> {
     const game = this.getCurrentGame();
+    const token = game.getLifecycleToken();
     const teamCommand = TeamCommand.instance;
     if (!teamCommand || teamCommand.isTeamPickingSessionActive()) return;
     if (game.teamsDecidedBy) return;
@@ -353,15 +363,12 @@ export class CurrentGameManager {
 
     const startDraft = async () => {
       try {
-        const fakeInteraction = {
-          editReply: async (_: unknown) => {},
-          guild,
-        } as unknown as import("discord.js").ChatInputCommandInteraction;
-        const session = new DraftTeamPickingSession("snake");
-        await session.initialize(fakeInteraction);
-        teamCommand.teamPickingSession = session;
-      } catch (e) {
-        console.error("Failed to auto-start draft team picking:", e);
+        const started = await teamCommand.startAutomaticDraft(guild);
+        if (!started) {
+          console.warn("Automatic draft not started; roster, captains or lifecycle changed.");
+        }
+      } catch (error) {
+        console.error("Failed to auto-start draft team picking:", error);
       }
     };
 
@@ -381,6 +388,9 @@ export class CurrentGameManager {
     }
     this.draftAutoStartTimeout = setTimeout(async () => {
       const currentGame = this.getCurrentGame();
+      if (currentGame !== game || game.getLifecycleToken() !== token ||
+          !game.announced || game.isFinished ||
+          game.getGameStartStatus() !== "idle") return;
       if (teamCommand.isTeamPickingSessionActive()) return;
       if (currentGame.teamsDecidedBy) return;
 
@@ -410,7 +420,16 @@ export class CurrentGameManager {
         removedPlayer?.ignUsed ?? "Unknown Player"
       );
 
-      await currentGame.removePlayerByDiscordId(removalId);
+      const removed = await teamCommand.runRosterOperation(async () => {
+        if (this.getCurrentGame() !== game || game.getLifecycleToken() !== token ||
+            !game.announced || game.getGameStartStatus() !== "idle" || game.isFinished ||
+            teamCommand.isTeamPickingSessionActive() || game.teamsDecidedBy ||
+            game.getPlayersOfTeam("UNDECIDED").length % 2 === 0 ||
+            !game.getPlayers().some((p) => p.discordSnowflake === removalId)) return false;
+        await currentGame.removePlayerByDiscordId(removalId);
+        return true;
+      });
+      if (!removed) return;
       await DiscordUtil.sendMessage(
         "registration",
         `Teams must be even to start picking. <@${removalId}> (${removedName}) was the last to register and has been removed. You may re-register if another player joins.`

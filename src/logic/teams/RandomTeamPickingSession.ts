@@ -18,6 +18,7 @@ import { CurrentGameManager } from "../../logic/CurrentGameManager";
 import { Team } from "@prisma/client";
 import { EloUtil } from "../../util/EloUtil";
 import { escapeIgn } from "../../util/Utils";
+import { withObsoleteMessageGuard } from "../../util/DiscordFailures";
 
 export class RandomTeamPickingSession extends TeamPickingSession {
   state: TeamPickingSessionState = "inProgress";
@@ -30,6 +31,7 @@ export class RandomTeamPickingSession extends TeamPickingSession {
   redCaptain?: PlayerInstance;
   blueCaptain?: PlayerInstance;
   private mode: "random" | "elo" | "balance";
+  private readonly previewCaptains = new Set<string>();
 
   constructor(mode: "random" | "elo" | "balance" = "random") {
     super();
@@ -65,13 +67,34 @@ export class RandomTeamPickingSession extends TeamPickingSession {
     //       this.state = "cancelled";
     //       return;
     //   }
-    game.createTeams(this.mode);
-    this.proposedTeams = {
+    // Simulate synchronously, then restore the authoritative roster before
+    // any Discord await. Preview messages are not commits.
+    const originalTeams = {
       RED: [...game.teams.RED],
       BLUE: [...game.teams.BLUE],
       UNDECIDED: [...game.teams.UNDECIDED],
     };
-    const embed = this.createTeamGenerateEmbed(game);
+    const captains = new Map(game.getPlayers().map((p) => [p.discordSnowflake, Boolean(p.captain)]));
+    try {
+      game.createTeams(this.mode);
+      this.proposedTeams = {
+        RED: [...game.teams.RED],
+        BLUE: [...game.teams.BLUE],
+        UNDECIDED: [...game.teams.UNDECIDED],
+      };
+      this.previewCaptains.clear();
+      for (const p of game.getPlayers()) {
+        if (p.captain) this.previewCaptains.add(p.discordSnowflake);
+      }
+    } finally {
+      game.teams.RED = originalTeams.RED;
+      game.teams.BLUE = originalTeams.BLUE;
+      game.teams.UNDECIDED = originalTeams.UNDECIDED;
+      for (const p of game.getPlayers()) {
+        p.captain = captains.get(p.discordSnowflake) ?? false;
+      }
+    }
+    const embed = this.createTeamGenerateEmbed(game, this.proposedTeams);
 
     if (!interaction.deferred && !interaction.replied) {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -100,6 +123,7 @@ export class RandomTeamPickingSession extends TeamPickingSession {
   }
 
   public async handleInteraction(interaction: ButtonInteraction) {
+    if (this.state !== "inProgress") return;
     const game = CurrentGameManager.getCurrentGame();
 
     switch (interaction.customId) {
@@ -123,45 +147,56 @@ export class RandomTeamPickingSession extends TeamPickingSession {
       //         }
       case "random-team-accept": {
         const currentPlayers = game.getPlayers();
-        const currentIds = new Set(
-          currentPlayers.map((p) => p.discordSnowflake)
-        );
-        const filterCurrent = (players: PlayerInstance[]) =>
-          players.filter((p) => currentIds.has(p.discordSnowflake));
-
-        game.teams.BLUE = filterCurrent(this.proposedTeams.BLUE);
-        game.teams.RED = filterCurrent(this.proposedTeams.RED);
-        game.teams.UNDECIDED = filterCurrent(this.proposedTeams.UNDECIDED);
-
-        const assigned = new Set([
-          ...game.teams.RED.map((p) => p.discordSnowflake),
-          ...game.teams.BLUE.map((p) => p.discordSnowflake),
-          ...game.teams.UNDECIDED.map((p) => p.discordSnowflake),
-        ]);
-        const unassigned = currentPlayers.filter(
-          (p) => !assigned.has(p.discordSnowflake)
-        );
-        if (unassigned.length) {
-          game.teams.UNDECIDED.push(...unassigned);
+        if (currentPlayers.length < 2) {
+          await interaction.reply({
+            content: "Too few players remain to finalize these teams. Cancel and generate again.",
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
         }
+        const currentIds = new Set(currentPlayers.map((p) => p.discordSnowflake));
+        const assigned = new Set<string>();
+        const takeCurrent = (players: PlayerInstance[]) =>
+          players.filter((p) => {
+            if (!currentIds.has(p.discordSnowflake) || assigned.has(p.discordSnowflake)) return false;
+            assigned.add(p.discordSnowflake);
+            return true;
+          });
+        const nextTeams = {
+          RED: takeCurrent(this.proposedTeams.RED),
+          BLUE: takeCurrent(this.proposedTeams.BLUE),
+          UNDECIDED: takeCurrent(this.proposedTeams.UNDECIDED),
+        };
+        nextTeams.UNDECIDED.push(...currentPlayers.filter((p) => !assigned.has(p.discordSnowflake)));
 
-        const { embeds, components } = this.createTeamGenerateEmbed(game, {
-          RED: game.teams.RED,
-          BLUE: game.teams.BLUE,
-        });
-        await this.embedMessage?.edit({
-          embeds,
-          components,
-        });
-
+        if (!nextTeams.RED.length || !nextTeams.BLUE.length) {
+          await interaction.reply({
+            content: "Both teams need players. Cancel and generate again.",
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+        const { embeds, components } = this.createTeamGenerateEmbed(game, nextTeams);
+        // A failed component acknowledgement or unexpected message edit must
+        // not commit half-finished teams.
         await interaction.update({});
-        if (this.mode === "random") {
-          game.changeHowTeamsDecided("RANDOMISED");
-        } else if (this.mode === "elo") {
-          game.changeHowTeamsDecided("ELO");
-        } else {
-          game.changeHowTeamsDecided("BALANCE");
+        if (this.embedMessage) {
+          await withObsoleteMessageGuard("edit", this.embedMessage, () =>
+            this.embedMessage!.edit({ embeds, components })
+          );
         }
+        game.teams.RED = nextTeams.RED;
+        game.teams.BLUE = nextTeams.BLUE;
+        game.teams.UNDECIDED = nextTeams.UNDECIDED;
+        if (this.mode !== "random") {
+          game.getPlayers().forEach((p) => {
+            p.captain = this.previewCaptains.has(p.discordSnowflake);
+          });
+        }
+        game.changeHowTeamsDecided(
+          this.mode === "random" ? "RANDOMISED" :
+          this.mode === "elo" ? "ELO" : "BALANCE"
+        );
         this.state = "finalized";
         break;
       }
@@ -181,18 +216,19 @@ export class RandomTeamPickingSession extends TeamPickingSession {
           game,
           simulatedTeams
         );
-        await this.embedMessage?.edit({
-          embeds,
-          components,
-        });
+        if (this.embedMessage) {
+          await withObsoleteMessageGuard("edit", this.embedMessage, () =>
+            this.embedMessage!.edit({ embeds, components })
+          );
+        }
 
         await interaction.update({});
         break;
       }
 
       case "random-team-generate-cancel":
-        await this.embedMessage?.delete();
-        this.state = "cancelled";
+        await interaction.update({ components: [] });
+        await this.cancelSession();
         break;
     }
   }
@@ -290,10 +326,27 @@ export class RandomTeamPickingSession extends TeamPickingSession {
     return this.state;
   }
 
+  public async handleUnregister(discordSnowflake: string): Promise<void> {
+    for (const team of ["RED", "BLUE", "UNDECIDED"] as const) {
+      this.proposedTeams[team] = this.proposedTeams[team].filter(
+        (p) => p.discordSnowflake !== discordSnowflake
+      );
+    }
+    if (this.redCaptain?.discordSnowflake === discordSnowflake) this.redCaptain = undefined;
+    if (this.blueCaptain?.discordSnowflake === discordSnowflake) this.blueCaptain = undefined;
+    if (this.state === "inProgress" && this.embedMessage) {
+      await withObsoleteMessageGuard("edit", this.embedMessage, () =>
+        this.embedMessage!.edit(this.createTeamGenerateEmbed(GameInstance.getInstance(), this.proposedTeams))
+      );
+    }
+  }
+
   public async cancelSession(): Promise<void> {
     this.state = "cancelled";
+    // A preview made no live-game changes. Cancellation must not restore a
+    // stale snapshot over registrations/departures that occurred meanwhile.
     if (typeof this.embedMessage?.delete === "function") {
-      await this.embedMessage.delete().catch(() => {});
+      await withObsoleteMessageGuard("delete", this.embedMessage, () => this.embedMessage!.delete());
     }
   }
 }

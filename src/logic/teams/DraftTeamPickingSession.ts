@@ -20,6 +20,7 @@ import { ConfigManager } from "../../ConfigManager";
 import { EloUtil } from "../../util/EloUtil";
 import { escapeIgn, escapeText } from "../../util/Utils";
 import { PrismaUtils } from "../../util/PrismaUtils";
+import { withObsoleteMessageGuard } from "../../util/DiscordFailures";
 
 export class DraftTeamPickingSession extends TeamPickingSession {
   state: TeamPickingSessionState = "inProgress";
@@ -236,11 +237,16 @@ export class DraftTeamPickingSession extends TeamPickingSession {
   }
 
   public async handleInteraction(interaction: ButtonInteraction) {
+    if (this.state !== "inProgress") {
+      await interaction.deferUpdate();
+      return;
+    }
     const organiserRoleId = ConfigManager.getConfig().roles.organiserRole;
     const member = interaction.guild?.members.cache.get(interaction.user.id);
     const isOrganiser = member?.roles.cache.has(organiserRoleId);
 
-    await interaction.deferUpdate().catch(console.error);
+    // Do not change any teams if Discord has rejected/expired the button.
+    await interaction.deferUpdate();
 
     if (
       !isOrganiser ||
@@ -253,10 +259,11 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     switch (interaction.customId) {
       case "draft-accept": {
         const embed = this.createDraftEmbed(true, false);
-        await this.finalizeMessage?.edit({
-          embeds: embed.embeds,
-          components: [],
-        });
+        if (this.finalizeMessage) {
+          await withObsoleteMessageGuard("edit", this.finalizeMessage, () =>
+            this.finalizeMessage!.edit({ embeds: embed.embeds, components: [] })
+          );
+        }
 
         await interaction.channel.send("Teams have been finalised!");
 
@@ -283,10 +290,14 @@ export class DraftTeamPickingSession extends TeamPickingSession {
         break;
       }
       case "draft-cancel":
-        await this.embedMessage?.delete().catch(() => {});
-        await interaction.channel.send("Draft picking cancelled.");
         this.state = "cancelled";
         this.clearTurnTimers();
+        if (this.embedMessage) {
+          await withObsoleteMessageGuard("delete", this.embedMessage, () =>
+            this.embedMessage!.delete()
+          );
+        }
+        await interaction.channel.send("Draft picking cancelled.");
         break;
     }
   }
@@ -354,6 +365,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     pickingFrom: "UNDECIDED" | "LATE",
     source: "manual" | "auto"
   ): Promise<void> {
+    if (this.state !== "inProgress") return;
     const teamPickingChannel = Channels.teamPicking;
     this.proposedTeams[pickingTeam].push(player);
     if (pickingFrom === "LATE") {
@@ -373,13 +385,19 @@ export class DraftTeamPickingSession extends TeamPickingSession {
 
     this.pickCounts[pickingTeam] += 1;
     player.draftSlotPlacement = this.pickCounts[pickingTeam];
-    await this.embedMessage?.edit(this.createDraftEmbed(false));
+    if (this.embedMessage) {
+      await withObsoleteMessageGuard("edit", this.embedMessage, () =>
+        this.embedMessage!.edit(this.createDraftEmbed(false))
+      );
+    }
+    if (this.state !== "inProgress") return;
 
     const safeName = escapeIgn(player.ignUsed ?? "Unknown Player");
     const displayName = await PrismaUtils.getDisplayNameWithTitle(
       player.playerId,
       `**${safeName}**`
     );
+    if (this.state !== "inProgress") return;
     if (teamPickingChannel.isSendable()) {
       const teamEmoji = pickingTeam === "RED" ? "🔴" : "🔵";
       await teamPickingChannel.send(
@@ -397,7 +415,12 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       const otherTeam = pickingTeam === "RED" ? "BLUE" : "RED";
       this.proposedTeams[otherTeam].push(lastPlayer);
       this.proposedTeams.UNDECIDED = [];
-      await this.embedMessage?.edit(this.createDraftEmbed(false));
+      if (this.embedMessage) {
+        await withObsoleteMessageGuard("edit", this.embedMessage, () =>
+          this.embedMessage!.edit(this.createDraftEmbed(false))
+        );
+      }
+      if (this.state !== "inProgress") return;
       if (teamPickingChannel.isSendable()) {
         const safeLast = escapeIgn(lastPlayer.ignUsed ?? "Unknown Player");
         const displayLast = await PrismaUtils.getDisplayNameWithTitle(
@@ -416,7 +439,9 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       this.getLateDraftablePlayers().length === 0
     ) {
       await this.handleRemainingLateSignups(teamPickingChannel);
+      if (this.state !== "inProgress") return;
       await this.sendFinalizationMessage(teamPickingChannel);
+      if (this.state !== "inProgress") return;
       this.finishedPicking = true;
       this.clearTurnTimers();
       return;
@@ -441,7 +466,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
   }
 
   private async sendFinalizationMessage(channel: TextChannel) {
-    if (!channel.isSendable()) {
+    if (this.state !== "inProgress" || !channel.isSendable()) {
       return;
     }
     const embed = this.createDraftEmbed(true);
@@ -470,7 +495,9 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     this.state = "cancelled";
     this.clearTurnTimers();
     if (typeof this.embedMessage?.delete === "function") {
-      await this.embedMessage.delete().catch(() => {});
+      await withObsoleteMessageGuard("delete", this.embedMessage, () =>
+        this.embedMessage!.delete()
+      );
     }
     const channel = Channels.teamPicking;
     if (channel.isSendable()) {
@@ -491,7 +518,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
 
     if (duration > 15_000) {
       this.pickWarningTimeout = setTimeout(async () => {
-        if (!teamPickingChannel.isSendable()) return;
+        if (this.state !== "inProgress" || this.turn !== team || !teamPickingChannel.isSendable()) return;
         await teamPickingChannel.send(
           `<@${captain.discordSnowflake}> has 15 seconds remaining before auto-pick for **${team}**.`
         );
@@ -500,6 +527,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
 
     if (isFirstPick && duration > 60_000) {
       this.pickDmTimeout = setTimeout(async () => {
+        if (this.state !== "inProgress" || this.turn !== team) return;
         try {
           const user = await teamPickingChannel.client.users.fetch(
             captain.discordSnowflake
@@ -540,6 +568,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
   }
 
   public async handleMessage(message: Message<boolean>) {
+    if (this.state !== "inProgress") return;
     if (message.channel.id !== Channels.teamPicking.id) return;
 
     if (!message.channel.isSendable()) {
@@ -634,23 +663,29 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     this.clearTurnTimers();
     await this.processPick(currentTeam, player, pickingFrom, "manual");
 
-    await message.delete().catch(() => {});
+    await withObsoleteMessageGuard("delete", message, () => message.delete());
+    if (this.state !== "inProgress") return;
     const messages = await message.channel.messages.fetch({ limit: 10 });
     const invalidMessages = messages.filter(
       (msg) => msg.author.bot && msg.content.includes("Invalid player pick:")
     );
 
     await Promise.all(
-      invalidMessages.map((msg) => msg.delete().catch(() => {}))
+      invalidMessages.map((msg) =>
+        withObsoleteMessageGuard("delete", msg, () => msg.delete())
+      )
     );
   }
 
   public async registerLateSignup(player: PlayerInstance) {
-    if (this.latePickingStarted) return;
+    if (this.state !== "inProgress" || this.latePickingStarted ||
+        this.lateSignups.some((p) => p.discordSnowflake === player.discordSnowflake)) return;
     this.lateSignups.push(player);
     this.syncLateDraftableWindow();
     if (this.embedMessage) {
-      await this.embedMessage.edit(this.createDraftEmbed(false));
+      await withObsoleteMessageGuard("edit", this.embedMessage, () =>
+        this.embedMessage!.edit(this.createDraftEmbed(false))
+      );
     }
   }
 
@@ -695,7 +730,12 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     this.lateSignups = [];
     this.lateDraftableWindow = 0;
     this.lateDraftableBonus = 0;
-    await this.embedMessage?.edit(this.createDraftEmbed(false));
+    if (this.embedMessage) {
+      await withObsoleteMessageGuard("edit", this.embedMessage, () =>
+        this.embedMessage!.edit(this.createDraftEmbed(false))
+      );
+    }
+    if (this.state !== "inProgress") return;
     if (channel.isSendable()) {
       const names = uniqueLeftovers
         .map((p) => escapeIgn(p.ignUsed ?? "Unknown Player"))
@@ -707,6 +747,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
   }
 
   public async handleUnregister(discordSnowflake: string): Promise<void> {
+    if (this.state !== "inProgress") return;
     let removedFromTeams = false;
     const teams: Array<Team | "UNDECIDED"> = ["RED", "BLUE", "UNDECIDED"];
 
@@ -730,7 +771,9 @@ export class DraftTeamPickingSession extends TeamPickingSession {
 
     this.syncLateDraftableWindow();
     if (this.embedMessage) {
-      await this.embedMessage.edit(this.createDraftEmbed(false));
+      await withObsoleteMessageGuard("edit", this.embedMessage, () =>
+        this.embedMessage!.edit(this.createDraftEmbed(false))
+      );
     }
   }
 }

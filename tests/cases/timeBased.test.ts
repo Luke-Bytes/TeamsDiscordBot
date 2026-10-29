@@ -64,6 +64,7 @@ function stubTeamPickingChannel(
 fastTest("Captain 20m reminder posts to game-feed", async () => {
   const game = CurrentGameManager.getCurrentGame();
   game.reset();
+  game.announced = true;
   const base = Date.now();
   game.startTime = new Date(base + 20 * 60 * 1000 + 10);
 
@@ -113,6 +114,7 @@ fastTest(
   async () => {
     const game = CurrentGameManager.getCurrentGame();
     game.reset();
+    game.announced = true;
     const base = Date.now();
     game.startTime = new Date(base + 20 * 60 * 1000 + 10);
 
@@ -367,6 +369,7 @@ fastTest(
     const base = Date.now();
     const game = CurrentGameManager.getCurrentGame();
     game.reset();
+    game.announced = true;
     // Registered players with ELO and presences
     const guild = new FakeGuild() as any;
     const p1 = new FakeGuildMember("u1050") as any;
@@ -385,6 +388,11 @@ fastTest(
         { discordSnowflake: "u1050", ignUsed: "P1050", elo: 1050 },
         { discordSnowflake: "u1060", ignUsed: "P1060", elo: 1060 },
         { discordSnowflake: "u1070", ignUsed: "P1070", elo: 1070 },
+        ...Array.from({ length: 12 }, (_, idx) => {
+          const id = `reserve-${idx}`;
+          guild.addMember(new FakeGuildMember(id));
+          return { discordSnowflake: id, ignUsed: id, elo: 900 };
+        }),
       ],
     };
 
@@ -444,6 +452,7 @@ fastTest(
     const base = Date.now();
     const game = CurrentGameManager.getCurrentGame();
     game.reset();
+    game.announced = true;
 
     const redCap = {
       discordSnowflake: "R-CAP",
@@ -463,6 +472,9 @@ fastTest(
       UNDECIDED: [
         mkPlayer("U1", "UndecidedOne"),
         mkPlayer("U2", "UndecidedTwo"),
+        ...Array.from({ length: 12 }, (_, idx) =>
+          mkPlayer(`reserve-${idx}`, `Reserve${idx}`)
+        ),
       ],
     };
 
@@ -476,6 +488,9 @@ fastTest(
     };
 
     const guild = new FakeGuild() as any;
+    for (const player of game.getPlayers()) {
+      guild.addMember(new FakeGuildMember(player.discordSnowflake));
+    }
     const origNow = Date.now;
     game.startTime = new Date(base + 15 * 60 * 1000 + 10);
     (Date as any).now = () => base;
@@ -526,6 +541,7 @@ fastTest(
     const base = Date.now();
     const game = CurrentGameManager.getCurrentGame();
     game.reset();
+    game.announced = true;
 
     const redCap = {
       discordSnowflake: "R-CAP",
@@ -542,7 +558,12 @@ fastTest(
     (game as any).teams = {
       RED: [redCap],
       BLUE: [blueCap],
-      UNDECIDED: [mkPlayer("U1", "UndecidedOne")],
+      UNDECIDED: [
+        mkPlayer("U1", "UndecidedOne"),
+        ...Array.from({ length: 12 }, (_, idx) =>
+          mkPlayer(`reserve-${idx}`, `Reserve${idx}`)
+        ),
+      ],
     };
     game.lastRegisteredSnowflake = "U1";
 
@@ -556,6 +577,9 @@ fastTest(
     };
 
     const guild = new FakeGuild() as any;
+    for (const player of game.getPlayers()) {
+      guild.addMember(new FakeGuildMember(player.discordSnowflake));
+    }
     const origNow = Date.now;
     game.startTime = new Date(base + 15 * 60 * 1000 + 10);
     (Date as any).now = () => base;

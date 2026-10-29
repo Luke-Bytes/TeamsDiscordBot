@@ -1,9 +1,10 @@
-import { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import { ChatInputCommandInteraction, Guild, SlashCommandBuilder } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import { DiscordUtil } from "../util/DiscordUtil.js";
 import { PermissionsUtil } from "../util/PermissionsUtil.js";
 import { prismaClient } from "../database/prismaClient.js";
 import { MojangAPI } from "../api/MojangAPI.js";
+import { fetchGuildMember } from "../util/DiscordFailures";
 import { escapeText } from "../util/Utils";
 
 export default class VerifyCommand implements Command {
@@ -44,9 +45,19 @@ export default class VerifyCommand implements Command {
       return;
     }
 
+    await interaction.deferReply();
     const namesInput = interaction.options.getString("names", true);
     const ping = interaction.options.getBoolean("pingplayers") ?? false;
-    const names = namesInput.split(/\s+/).filter((n) => n.length > 0);
+    const allNames = namesInput.split(/\s+/).filter((n) => n.length > 0);
+    const names = [...new Map(allNames.map((name) => [name.toLowerCase(), name])).values()];
+    if (names.length > 25) {
+      await interaction.editReply("Please verify no more than 25 distinct names per request.");
+      return;
+    }
+    if (names.some((name) => name.length > 16)) {
+      await interaction.editReply("Minecraft usernames must be no longer than 16 characters.");
+      return;
+    }
 
     const results: string[] = [];
     const mentionableUserIds: string[] = [];
@@ -54,8 +65,16 @@ export default class VerifyCommand implements Command {
     for (const name of names) {
       const escapedName = escapeText(name);
 
-      const uuid = await MojangAPI.usernameToUUID(name);
-      if (!uuid) {
+      const lookup = await MojangAPI.lookupUsername(name);
+      if (lookup.status === "invalid") {
+        results.push(`❌ **${escapedName}** – Invalid Minecraft username format`);
+        continue;
+      }
+      if (lookup.status === "unavailable") {
+        results.push(`⚠️ **${escapedName}** – Verification service unavailable; account status is unknown`);
+        continue;
+      }
+      if (lookup.status === "notFound") {
         const possible = await prismaClient.player.findMany({
           where: { minecraftAccounts: { has: name } },
         });
@@ -75,36 +94,21 @@ export default class VerifyCommand implements Command {
               "Unknown IGN";
             const safeCurrentName = escapeText(currentName);
 
-            let authorTag: string;
-            if (ping) {
-              authorTag = `<@${match.discordSnowflake}>`;
-              mentionableUserIds.push(match.discordSnowflake);
-            } else {
-              try {
-                const fetched = await interaction.guild?.members.fetch(
-                  match.discordSnowflake
-                );
-                authorTag = fetched
-                  ? `@${fetched.user.tag}`
-                  : `@${match.discordSnowflake}`;
-              } catch {
-                authorTag = `@${match.discordSnowflake}`;
-              }
-              authorTag = escapeText(authorTag);
-            }
-
+            const authorTag = await this.memberLabel(
+              interaction.guild, match.discordSnowflake, ping, mentionableUserIds
+            );
             results.push(
-              `❓ **${escapedName}** – Invalid username; Did you mean ${authorTag} - latest IGN: **${safeCurrentName}** ?`
+              `❓ **${escapedName}** – Username not found on Mojang; historical match: ${authorTag}, latest IGN: **${safeCurrentName}**`
             );
           }
         } else {
-          results.push(`❌ **${escapedName}** – Invalid username`);
+          results.push(`❓ **${escapedName}** – Username not found on Mojang`);
         }
         continue;
       }
 
       const player = await prismaClient.player.findFirst({
-        where: { primaryMinecraftAccount: uuid },
+        where: { primaryMinecraftAccount: lookup.uuid },
       });
 
       if (!player) {
@@ -114,23 +118,9 @@ export default class VerifyCommand implements Command {
         continue;
       }
 
-      let authorTag: string;
-      if (ping) {
-        authorTag = `<@${player.discordSnowflake}>`;
-        mentionableUserIds.push(player.discordSnowflake);
-      } else {
-        try {
-          const fetched = await interaction.guild?.members.fetch(
-            player.discordSnowflake
-          );
-          authorTag = fetched
-            ? `@${fetched.user.tag}`
-            : `@${player.discordSnowflake}`;
-        } catch {
-          authorTag = `@${player.discordSnowflake}`;
-        }
-        authorTag = escapeText(authorTag);
-      }
+      const authorTag = await this.memberLabel(
+        interaction.guild, player.discordSnowflake, ping, mentionableUserIds
+      );
 
       const latest = player.latestIGN;
       const escapedLatest = latest ? escapeText(latest) : latest;
@@ -143,10 +133,41 @@ export default class VerifyCommand implements Command {
       }
     }
 
-    const content = `**Verification Results**:\n\n${results.join("\n")}`;
-    await interaction.reply({
-      content,
-      allowedMentions: { users: mentionableUserIds },
+    const header = "**Verification Results**:\n\n";
+    const lines: string[] = [];
+    let length = header.length;
+    for (const result of results) {
+      if (length + result.length + 1 > 1800) {
+        lines.push("… Additional results omitted to stay within Discord's message limit.");
+        break;
+      }
+      lines.push(result);
+      length += result.length + 1;
+    }
+    await interaction.editReply({
+      content: header + lines.join("\n"),
+      allowedMentions: { users: [...new Set(mentionableUserIds)] },
     });
+  }
+
+  private async memberLabel(
+    guild: Guild | null,
+    id: string,
+    ping: boolean,
+    mentions: string[]
+  ): Promise<string> {
+    if (!guild) return escapeText(`@${id} (guild membership unknown)`);
+    try {
+      const member = await fetchGuildMember(guild, id);
+      if (!member) return escapeText(`@${id} (no longer in server)`);
+      if (ping) {
+        mentions.push(id);
+        return `<@${id}>`;
+      }
+      return escapeText(`@${member.user.tag}`);
+    } catch (error) {
+      console.warn(`Verify could not confirm guild membership member=${id}`, error);
+      return escapeText(`@${id} (membership unverified)`);
+    }
   }
 }

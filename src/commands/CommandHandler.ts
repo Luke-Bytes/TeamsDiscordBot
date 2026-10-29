@@ -51,6 +51,7 @@ import VcCommand from "../commands/VcCommand";
 import TierListCommand from "../commands/TierListCommand";
 import CaptainPlanDMManager from "../logic/CaptainPlanDMManager";
 import { InteractionGuard } from "../util/InteractionGuard";
+import { isUnknownInteraction, discordErrorCode } from "../util/DiscordFailures";
 
 export class CommandHandler {
   commands: Command[] = [];
@@ -182,9 +183,9 @@ export class CommandHandler {
               )?.options || []
             : chatInteraction.options.data;
 
-          const optionsLog = options
-            .map((opt) => `${opt.name}: ${opt.value}`)
-            .join(" ");
+          // Only log option names: free-form values may contain accidentally
+          // pasted credentials, URLs or personal data.
+          const optionsLog = options.map((opt) => opt.name).join(",");
 
           console.log(
             `[${chatInteraction.user.tag}] ran /${chatInteraction.commandName}` +
@@ -245,34 +246,28 @@ export class CommandHandler {
         }
       }
     } catch (error: unknown) {
-      console.error("Error handling interaction:", error);
+      // Never print requestBody: interaction tokens can be embedded in it.
+      console.error(
+        `Interaction failed command=${"commandName" in interaction ? interaction.commandName : "component"} guild=${interaction.guildId ?? "dm"} code=${discordErrorCode(error) ?? "other"}`,
+        error instanceof Error ? error.message : String(error)
+      );
+      if (!interaction.isRepliable() || isUnknownInteraction(error)) return;
 
-      if (typeof error === "object" && error !== null) {
-        const err = error as Record<string, unknown>;
-
-        if ("rawError" in err) {
-          console.error("Raw Error:", err["rawError"]);
-        }
-
-        if ("requestBody" in err) {
-          console.error(
-            "Request Body:",
-            JSON.stringify(err["requestBody"], null, 2)
-          );
-        }
-      }
-
-      if (
-        interaction.isRepliable() &&
-        !interaction.replied &&
-        !interaction.deferred
-      ) {
-        try {
+      try {
+        if (interaction.deferred || interaction.replied) {
+          await interaction.editReply({
+            content: "The command encountered an error. Some changes may already have been applied; check the current game before retrying.",
+          });
+        } else {
           await interaction.reply({
             content: "Oops, something has gone wrong! This is a bug.",
           });
-        } catch (replyError) {
-          console.error("Failed to send error reply:", replyError);
+        }
+      } catch (replyError) {
+        if (!isUnknownInteraction(replyError)) {
+          console.error(`Error response failed code=${discordErrorCode(replyError) ?? "other"}`);
+        } else {
+          console.warn("Interaction expired before error response (10062)");
         }
       }
     }

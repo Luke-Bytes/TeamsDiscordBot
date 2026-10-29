@@ -17,6 +17,7 @@ import { PlayerInstance } from "../database/PlayerInstance";
 import { escapeText } from "../util/Utils";
 import { ConfigManager } from "../ConfigManager";
 import { DiscordUtil } from "../util/DiscordUtil";
+import TeamCommand from "./TeamCommand";
 
 type ExtendedTeam = Team | "UNDECIDED";
 
@@ -127,7 +128,32 @@ export default class PlayerCommand implements Command {
       return;
     }
 
+    await interaction.deferReply();
+    // Share team generation/registration/departure serialisation. Without this
+    // organiser mutations can cross a game-start or draft boundary mid-fetch.
+    const perform = () => this.executeUnlocked(interaction);
+    if (TeamCommand.instance) {
+      await TeamCommand.instance.runRosterOperation(perform);
+    } else {
+      await perform();
+    }
+  }
+
+  private async executeUnlocked(interaction: ChatInputCommandInteraction) {
     const game = CurrentGameManager.getCurrentGame();
+    if (!game.announced || game.isFinished || game.isRestarting ||
+        game.getGameStartStatus() !== "idle") {
+      await interaction.editReply(
+        "Player roster edits are only allowed before the game starts."
+      );
+      return;
+    }
+    if (TeamCommand.instance?.isTeamPickingSessionActive()) {
+      await interaction.editReply(
+        "Cancel or complete the active team-picking session before editing the roster."
+      );
+      return;
+    }
     const beforeRosters = this.captureTeamRosters(game);
     const subcommand = interaction.options.getSubcommand();
 
@@ -169,7 +195,7 @@ export default class PlayerCommand implements Command {
           subcommand === "remove") &&
         resolvedPlayers.length === 0
       ) {
-        await interaction.reply(
+        await interaction.editReply(
           "No players provided. Supply one or more names separated by spaces."
         );
         return;
@@ -230,7 +256,7 @@ export default class PlayerCommand implements Command {
               )}**. Ensure they are currently in **${fromTeam.toUpperCase()}** and the move is valid.`
             : "";
 
-          await interaction.reply(
+          await interaction.editReply(
             [successMessage, failureMessage].filter(Boolean).join("\n")
           );
           if (moved.length > 0) {
@@ -267,7 +293,7 @@ export default class PlayerCommand implements Command {
               )}**. Ensure the player is registered with \`/register\`.`
             : "";
 
-          await interaction.reply(
+          await interaction.editReply(
             [successMessage, failureMessage].filter(Boolean).join("\n")
           );
           if (added.length > 0) {
@@ -307,7 +333,7 @@ export default class PlayerCommand implements Command {
               )}**. The player could not be found in any team.`
             : "";
 
-          await interaction.reply(
+          await interaction.editReply(
             [successMessage, failureMessage].filter(Boolean).join("\n")
           );
           if (removed.length > 0) {
@@ -322,7 +348,7 @@ export default class PlayerCommand implements Command {
             targetPlayerName,
             interaction.guild
           );
-          await interaction.reply(
+          await interaction.editReply(
             success
               ? `Successfully replaced **${safeOldPlayerName}** with **${safeTargetPlayerName}** in their current team.`
               : `Failed to replace **${safeOldPlayerName}**. Ensure both players are correctly registered and in the appropriate teams.`
@@ -334,14 +360,14 @@ export default class PlayerCommand implements Command {
         }
 
         default: {
-          await interaction.reply("Unknown subcommand. Please try again.");
+          await interaction.editReply("Unknown subcommand. Please try again.");
           break;
         }
       }
     } catch (error) {
-      console.error(error);
-      await interaction.reply(
-        "An unexpected error occurred while managing players."
+      console.error(`Player command failed guild=${interaction.guild?.id ?? "unknown"} subcommand=${subcommand}`, error);
+      await interaction.editReply(
+        "An error occurred managing players. Some changes may have succeeded; check the roster and Discord roles before retrying."
       );
     }
   }

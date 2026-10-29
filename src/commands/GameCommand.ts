@@ -33,6 +33,8 @@ import {
   TIMESTAMP_TIMEZONES,
 } from "../util/TimestampUtil";
 import { setTimeout as delay } from "timers/promises";
+import { fetchGuildMember } from "../util/DiscordFailures";
+import TeamCommand from "./TeamCommand";
 
 export const GAME_START_BUTTON_ID = "game-start-confirm";
 
@@ -166,31 +168,22 @@ export default class GameCommand implements Command {
     switch (subCommand) {
       case "start":
         {
-          const attempt = gameInstance.tryBeginGameStart();
-          if (attempt !== "acquired") {
-            await interaction.reply(this.getStartRejectionMessage(attempt));
-            return;
-          }
-
+          await interaction.deferReply();
           try {
-            await interaction.deferReply();
-            await this.runGameStartWorkflow(
-              guild,
-              interaction.client,
-              gameInstance
+            const attempt = await this.startGameWithRosterLock(
+              guild, interaction.client, gameInstance
+            );
+            await interaction.editReply(
+              attempt === "acquired"
+                ? "Game will begin soon! Roles assigned and players moved to VCs."
+                : this.getStartRejectionMessage(attempt)
             );
           } catch (error) {
-            gameInstance.releaseGameStart();
-            console.error("Error starting the game: ", error);
+            console.error("Error starting the game:", error);
             await interaction.editReply({
-              content: "Failed to start the game. Please try again.",
+              content: "Failed to start the game. Some Discord operations may have succeeded; check roles and channels before retrying.",
             });
-            return;
           }
-          gameInstance.completeGameStart();
-          await interaction.editReply(
-            "Game will begin soon! Roles assigned and players moved to VCs."
-          );
         }
         break;
 
@@ -286,6 +279,32 @@ export default class GameCommand implements Command {
       default:
         await interaction.reply("Invalid subcommand.");
     }
+  }
+
+  private async startGameWithRosterLock(
+    guild: Guild,
+    client: Client,
+    game: GameInstance
+  ): Promise<"acquired" | "inProgress" | "alreadyStarted"> {
+    const attemptStart = async () => {
+      const attempt = game.tryBeginGameStart();
+      if (attempt !== "acquired") return attempt;
+      const token = game.getLifecycleToken();
+      try {
+        await this.runGameStartWorkflow(guild, client, game);
+        if (game.getLifecycleToken() !== token) {
+          throw new Error("The game changed during the start workflow.");
+        }
+        game.completeGameStart();
+        return "acquired" as const;
+      } catch (error) {
+        if (game.getLifecycleToken() === token) game.releaseGameStart();
+        throw error;
+      }
+    };
+    return TeamCommand.instance
+      ? TeamCommand.instance.runRosterOperation(attemptStart)
+      : attemptStart();
   }
 
   private async runGameStartWorkflow(
@@ -441,38 +460,26 @@ export default class GameCommand implements Command {
     }
 
     const gameInstance = GameInstance.getInstance();
-    const attempt = gameInstance.tryBeginGameStart();
-    if (attempt !== "acquired") {
-      await interaction.reply({
-        content: this.getStartRejectionMessage(attempt),
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
-    try {
-      await interaction.update({
-        content: "Starting game…",
-        components: [],
-      });
-      await this.runGameStartWorkflow(
-        interaction.guild,
-        interaction.client,
-        gameInstance
-      );
-    } catch (error) {
-      gameInstance.releaseGameStart();
-      console.error("Error starting the game: ", error);
-      await interaction.editReply(
-        createGameStartPrompt("Failed to start the game. Please try again.")
-      );
-      return;
-    }
-    gameInstance.completeGameStart();
-    await interaction.editReply({
-      content: "Game will begin soon! Roles assigned and players moved to VCs.",
+    await interaction.update({
+      content: "Starting game…",
       components: [],
     });
+    try {
+      const attempt = await this.startGameWithRosterLock(
+        interaction.guild, interaction.client, gameInstance
+      );
+      await interaction.editReply({
+        content: attempt === "acquired"
+          ? "Game will begin soon! Roles assigned and players moved to VCs."
+          : this.getStartRejectionMessage(attempt),
+        components: [],
+      });
+    } catch (error) {
+      console.error("Error starting the game:", error);
+      await interaction.editReply(
+        createGameStartPrompt("Failed to start the game. Some Discord operations may have succeeded; check roles and channels before retrying.")
+      );
+    }
   }
 
   async handleAutocomplete(
@@ -733,29 +740,25 @@ export async function assignTeamRolesAfterPicking(
     for (let i = 0; i < players.length; i += BATCH_SIZE) {
       const batch = players.slice(i, i + BATCH_SIZE);
 
-      await Promise.allSettled(
+      await Promise.all(
         batch.map(async (player) => {
           const member = await getCachedMember(
             guild,
             cache,
             player.discordSnowflake
           );
-          if (!member) return;
+          if (!member) throw new Error(`Cannot assign game role to departed member ${player.discordSnowflake}`);
           await DiscordUtil.assignRole(member, roleId);
         })
       );
     }
   }
 
-  try {
-    await Promise.all([
-      assignRolesForTeam("RED", redTeamRoleId),
-      assignRolesForTeam("BLUE", blueTeamRoleId),
-    ]);
-    console.log("Roles assigned successfully for both teams.");
-  } catch (error) {
-    console.error("Error assigning roles after team picking:", error);
-  }
+  await Promise.all([
+    assignRolesForTeam("RED", redTeamRoleId),
+    assignRolesForTeam("BLUE", blueTeamRoleId),
+  ]);
+  console.log("Roles assigned successfully for both teams.");
 }
 
 export async function movePlayersToTeamPickingAfterGameEnd(guild: Guild) {
@@ -812,27 +815,16 @@ async function buildMemberCache(
     return cache;
   }
 
-  const missing: string[] = [];
-  for (const id of uniqueIds) {
-    const cached = guild.members.cache.get(id);
-    if (cached) {
-      cache.set(id, cached);
-    } else {
-      missing.push(id);
-    }
-  }
-
+  // The cache cannot prove a member is still in the guild. Validate everyone
+  // before starting; 10007 and uncertain failures must both abort the start.
   const BATCH_SIZE = 10;
-  for (let i = 0; i < missing.length; i += BATCH_SIZE) {
-    const chunk = missing.slice(i, i + BATCH_SIZE);
-    await Promise.allSettled(
-      chunk.map(async (id) => {
-        const member = await fetchMemberWithTimeout(guild, id);
-        if (member) {
-          cache.set(id, member);
-        }
-      })
-    );
+  for (let i = 0; i < uniqueIds.length; i += BATCH_SIZE) {
+    const chunk = uniqueIds.slice(i, i + BATCH_SIZE);
+    await Promise.all(chunk.map(async (id) => {
+      const member = await fetchGuildMember(guild, id);
+      if (!member) throw new Error(`Cannot start game: member ${id} left the server.`);
+      cache.set(id, member);
+    }));
   }
 
   return cache;
@@ -849,39 +841,7 @@ async function getCachedMember(
     return cached;
   }
 
-  const member = await fetchMemberWithTimeout(guild, id);
-  if (member) {
-    cache.set(id, member);
-    return member;
-  } else {
-    return null;
-  }
-}
-
-async function fetchMemberWithTimeout(
-  guild: Guild,
-  id: string,
-  timeoutMs = 3000
-): Promise<GuildMember | null> {
-  let timer: NodeJS.Timeout | null = null;
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      reject(new Error(`fetch timeout for ${id}`));
-    }, timeoutMs);
-  });
-
-  try {
-    const member = (await Promise.race([
-      guild.members.fetch(id),
-      timeoutPromise,
-    ])) as GuildMember;
-    return member;
-  } catch (error) {
-    console.warn(`Failed to fetch member ${id} within ${timeoutMs}ms`, error);
-    return null;
-  } finally {
-    if (timer) {
-      clearTimeout(timer);
-    }
-  }
+  const member = await fetchGuildMember(guild, id);
+  if (member) cache.set(id, member);
+  return member;
 }

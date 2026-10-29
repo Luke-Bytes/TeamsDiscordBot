@@ -3,6 +3,7 @@ import {
   ChatInputCommandInteraction,
   EmbedBuilder,
   Guild,
+  Message,
   GuildMemberRoleManager,
   SlashCommandBuilder,
   SlashCommandSubcommandsOnlyBuilder,
@@ -20,6 +21,8 @@ import { DiscordUtil } from "../util/DiscordUtil";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { escapeText } from "../util/Utils";
 import { createGameStartPrompt } from "./GameCommand";
+import { GuildMembership } from "../logic/GuildMembership";
+import { withObsoleteMessageGuard, discordErrorCode, fetchGuildMember } from "../util/DiscordFailures";
 
 export default class TeamCommand implements Command {
   static instance?: TeamCommand;
@@ -35,6 +38,83 @@ export default class TeamCommand implements Command {
   ];
 
   teamPickingSession?: TeamPickingSession;
+  private serialTail: Promise<void> = Promise.resolve();
+
+  private async serialise<T>(task: () => Promise<T>): Promise<T> {
+    const previous = this.serialTail;
+    let release!: () => void;
+    this.serialTail = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    try { return await task(); }
+    finally { release(); }
+  }
+
+  async runRosterOperation<T>(task: () => Promise<T>): Promise<T> {
+    return this.serialise(task);
+  }
+
+  /** Automatic starts use the same roster lock and reconciliation as /team generate. */
+  async startAutomaticDraft(guild: Guild): Promise<boolean> {
+    return this.serialise(async () => {
+      const game = CurrentGameManager.getCurrentGame();
+      const token = game.getLifecycleToken();
+      if (!game.announced || game.isFinished || game.getGameStartStatus() !== "idle" ||
+          game.teamsDecidedBy || this.teamPickingSession) return false;
+
+      try {
+        await GuildMembership.reconcile(guild, this);
+      } catch (error) {
+        console.error("Automatic draft blocked by uncertain guild membership", error);
+        return false;
+      }
+      if (game.getLifecycleToken() !== token || !game.announced ||
+          game.getGameStartStatus() !== "idle" || game.isFinished ||
+          !game.getCaptainOfTeam("RED") || !game.getCaptainOfTeam("BLUE") ||
+          game.getPlayersOfTeam("UNDECIDED").length % 2 !== 0) return false;
+
+      const session = new DraftTeamPickingSession("snake");
+      this.teamPickingSession = session;
+      const interaction = {
+        editReply: async (_: unknown) => {},
+        guild,
+      } as unknown as ChatInputCommandInteraction;
+      try {
+        await session.initialize(interaction);
+        if (game.getLifecycleToken() !== token ||
+            session.getState() !== "inProgress") {
+          await this.resetTeamPickingSession();
+          return false;
+        }
+        return true;
+      } catch (error) {
+        await this.resetTeamPickingSession();
+        throw error;
+      }
+    });
+  }
+
+  async handleGuildDeparture(userId: string): Promise<boolean> {
+    return this.serialise(() => GuildMembership.handleDeparture(userId, this));
+  }
+
+  async handleTeamPickingMessage(message: Message<boolean>): Promise<void> {
+    await this.serialise(async () => {
+      const session = this.teamPickingSession;
+      if (session?.getState() === "inProgress") {
+        await session.handleMessage(message);
+      }
+    });
+  }
+
+  async execute(interaction: ChatInputCommandInteraction): Promise<void> {
+    const subcommand = interaction.options.getSubcommand();
+    if (["generate", "reset", "cancel"].includes(subcommand)) {
+      await interaction.deferReply();
+      await this.serialise(() => this.executeUnlocked(interaction));
+    } else {
+      await this.executeUnlocked(interaction);
+    }
+  }
 
   constructor() {
     TeamCommand.instance = this;
@@ -72,7 +152,7 @@ export default class TeamCommand implements Command {
       );
   }
 
-  async execute(interaction: ChatInputCommandInteraction): Promise<void> {
+  private async executeUnlocked(interaction: ChatInputCommandInteraction): Promise<void> {
     const config = ConfigManager.getConfig();
     const subcommand = interaction.options.getSubcommand();
     const member = DiscordUtil.getGuildMember(interaction);
@@ -83,6 +163,11 @@ export default class TeamCommand implements Command {
     const game = CurrentGameManager.getCurrentGame();
 
     try {
+      if (["generate", "reset", "cancel"].includes(subcommand) &&
+          (game.getGameStartStatus() !== "idle" || game.isFinished)) {
+        await DiscordUtil.reply(interaction, "Teams cannot be changed after the game starts.");
+        return;
+      }
       switch (subcommand) {
         case "generate": {
           if (!isOrganiser) {
@@ -108,6 +193,22 @@ export default class TeamCommand implements Command {
             );
             return;
           }
+          if (!interaction.guild) {
+            await DiscordUtil.reply(interaction, "This command requires a guild.");
+            return;
+          }
+          try {
+            const departed = await GuildMembership.reconcile(interaction.guild, this);
+            if (departed.length) console.warn(`Removed ${departed.length} absent players before generation`);
+          } catch (error) {
+            console.error("Team generation blocked by uncertain member lookup", error);
+            await DiscordUtil.reply(interaction, "Could not verify the roster with Discord. No teams were generated; please retry.");
+            return;
+          }
+          if (game.getPlayers().length < 2) {
+            await DiscordUtil.reply(interaction, "At least two present, registered players are required to generate teams.");
+            return;
+          }
           const method = interaction.options.getString("method");
           if (
             (method === "draft" || method === "snake") &&
@@ -130,8 +231,6 @@ export default class TeamCommand implements Command {
               return;
             }
           }
-
-          await interaction.deferReply();
 
           const teamPickingChannelIds = [config.channels.teamPickingChat];
           try {
@@ -169,8 +268,9 @@ export default class TeamCommand implements Command {
               break;
           }
 
-          const redTeam = game.getPlayersOfTeam("RED");
-          const blueTeam = game.getPlayersOfTeam("BLUE");
+          const redTeam = [...game.getPlayersOfTeam("RED")];
+          const blueTeam = [...game.getPlayersOfTeam("BLUE")];
+          const roleWarnings: string[] = [];
 
           for (const player of redTeam) {
             if (
@@ -192,11 +292,11 @@ export default class TeamCommand implements Command {
                 await discordUser.roles.add(config.roles.redTeamRole);
               }
             } catch (error) {
-              if (!PermissionsUtil.isDebugEnabled()) {
-                console.error(
-                  `Failed to assign role for ${player.discordSnowflake}:`,
-                  error
-                );
+              console.error(`Role sync failed guild=${interaction.guild.id} member=${player.discordSnowflake} team=RED code=${discordErrorCode(error) ?? "other"}`, error);
+              if (discordErrorCode(error) === 10007) {
+                await GuildMembership.handleDeparture(player.discordSnowflake, this);
+              } else {
+                roleWarnings.push(player.ignUsed ?? player.discordSnowflake);
               }
             }
           }
@@ -221,17 +321,21 @@ export default class TeamCommand implements Command {
                 await discordUser.roles.add(config.roles.blueTeamRole);
               }
             } catch (error) {
-              if (!PermissionsUtil.isDebugEnabled()) {
-                console.error(
-                  `Failed to assign role for ${player.discordSnowflake}:`,
-                  error
-                );
+              console.error(`Role sync failed guild=${interaction.guild.id} member=${player.discordSnowflake} team=BLUE code=${discordErrorCode(error) ?? "other"}`, error);
+              if (discordErrorCode(error) === 10007) {
+                await GuildMembership.handleDeparture(player.discordSnowflake, this);
+              } else {
+                roleWarnings.push(player.ignUsed ?? player.discordSnowflake);
               }
             }
           }
 
           await DiscordUtil.editReply(interaction, {
-            content: `Team picking now in progress..`,
+            content: !this.teamPickingSession || this.teamPickingSession.state === "cancelled"
+              ? "Team generation was cancelled because the roster changed."
+              : roleWarnings.length
+                ? `Team picking started, but role changes failed for ${roleWarnings.length} player(s). Check Discord roles before starting the match.`
+                : "Team picking now in progress.",
           });
           break;
         }
@@ -245,10 +349,10 @@ export default class TeamCommand implements Command {
             return;
           }
 
-          await interaction.deferReply();
+          await this.resetTeamPickingSession();
           game.changeHowTeamsDecided(null);
           game.resetTeams();
-          this.resetTeamPickingSession();
+          let rolesIncomplete = false;
           try {
             const members = await interaction.guild?.members.fetch();
 
@@ -263,12 +367,13 @@ export default class TeamCommand implements Command {
               }
             }
           } catch (error) {
-            if (!PermissionsUtil.isDebugEnabled()) {
-              console.error(`Failed to remove roles from members:`, error);
-            }
+            rolesIncomplete = true;
+            console.error(`Team reset completed but Discord role cleanup failed guild=${interaction.guild?.id}`, error);
           }
           await DiscordUtil.editReply(interaction, {
-            content: "Teams have been reset!",
+            content: rolesIncomplete
+              ? "Teams were reset in the game, but Discord roles could not be completely cleaned up. Check roles before continuing."
+              : "Teams have been reset!",
           });
           break;
         }
@@ -304,7 +409,7 @@ export default class TeamCommand implements Command {
             return;
           }
 
-          this.resetTeamPickingSession();
+          await this.resetTeamPickingSession();
           game.changeHowTeamsDecided(null);
           await DiscordUtil.reply(
             interaction,
@@ -316,25 +421,26 @@ export default class TeamCommand implements Command {
 
         default:
           await DiscordUtil.reply(interaction, "Invalid subcommand!");
-
-          if (!game.announced) {
-            await interaction.reply({
-              content:
-                "A game has not been announced yet. Please use `/announce start`.",
-              flags: MessageFlags.Ephemeral,
-            });
-            return;
-          }
+          return;
       }
     } catch (error) {
-      console.error(
-        `Error occurred while running ${interaction.commandName}: ${error}`
-      );
-      if (!interaction.replied && !interaction.deferred) {
-        await DiscordUtil.reply(
-          interaction,
-          "An error occurred while executing this command."
-        );
+      console.error(`Team command failed subcommand=${subcommand} guild=${interaction.guild?.id ?? "unknown"} code=${discordErrorCode(error) ?? "other"}`, error);
+      // A response failure must not roll back an otherwise successful mutation.
+      if (discordErrorCode(error) === 10062) {
+        console.warn("Team command response expired; check actual game state before retrying");
+        return;
+      }
+      if (subcommand === "generate" && this.teamPickingSession?.state === "inProgress") {
+        try {
+          await this.resetTeamPickingSession();
+        } catch (cleanupError) {
+          console.error("Failed to cancel incomplete team-generation session", cleanupError);
+        }
+      }
+      try {
+        await DiscordUtil.reply(interaction, "The team operation failed. Some Discord changes may have been applied; check teams and roles before retrying.");
+      } catch (replyError) {
+        console.warn(`Cannot deliver team command error response code=${discordErrorCode(replyError) ?? "other"}`);
       }
     }
   }
@@ -406,43 +512,98 @@ export default class TeamCommand implements Command {
     }
   }
 
+  /** Role changes are a recoverable projection of finalized game state. */
+  private async syncFinalizedTeamRoles(guild: Guild): Promise<string[]> {
+    const warnings: string[] = [];
+    const game = CurrentGameManager.getCurrentGame();
+    const config = ConfigManager.getConfig();
+    for (const team of ["RED", "BLUE"] as const) {
+      for (const player of [...game.getPlayersOfTeam(team)]) {
+        try {
+          const member = await fetchGuildMember(guild, player.discordSnowflake);
+          if (!member) {
+            await GuildMembership.handleDeparture(player.discordSnowflake, this);
+            warnings.push(`${player.ignUsed ?? player.discordSnowflake} left the guild`);
+            continue;
+          }
+          const wrongRole = team === "RED" ? config.roles.blueTeamRole : config.roles.redTeamRole;
+          const correctRole = team === "RED" ? config.roles.redTeamRole : config.roles.blueTeamRole;
+          await member.roles.remove(wrongRole);
+          await member.roles.add(correctRole);
+        } catch (error) {
+          if (discordErrorCode(error) === 10007) {
+            await GuildMembership.handleDeparture(player.discordSnowflake, this);
+          }
+          console.error(`Final role sync failed guild=${guild.id} member=${player.discordSnowflake} team=${team} code=${discordErrorCode(error) ?? "other"}`, error);
+          warnings.push(player.ignUsed ?? player.discordSnowflake);
+        }
+      }
+    }
+    return warnings;
+  }
+
   public async handleButtonPress(interaction: ButtonInteraction) {
-    if (!interaction.guild) return;
-    if (this.teamPickingSession) {
-      const previousState = this.teamPickingSession.getState();
-      await this.teamPickingSession.handleInteraction(interaction);
-      const state = this.teamPickingSession.getState();
+    await this.serialise(async () => {
+    const session = this.teamPickingSession;
+    if (!interaction.guild || !session || session.getState() !== "inProgress") {
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.reply({ content: "This team-picking session has expired.", flags: MessageFlags.Ephemeral });
+      }
+      return;
+    }
+    const ownedIds = [session.embedMessage?.id, session instanceof DraftTeamPickingSession ? session.finalizeMessage?.id : undefined].filter(Boolean);
+    if (interaction.message?.id && ownedIds.length && !ownedIds.includes(interaction.message.id)) {
+      await interaction.reply({ content: "That button belongs to an old team-picking session.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+    {
+      const previousState = session.getState();
+      await session.handleInteraction(interaction);
+      const state = session.getState();
       switch (state) {
         case "finalized":
           //FIXME should update original "Team picking in progress.." message to say something else too
-          if (this.teamPickingSession.embedMessage) {
+          if (session.embedMessage?.embeds?.[0]) {
             const updatedEmbed = EmbedBuilder.from(
-              this.teamPickingSession.embedMessage.embeds[0]
+              session.embedMessage.embeds[0]
             ).setFooter({ text: "Teams have been locked." });
-
-            await this.teamPickingSession.embedMessage.edit({
-              embeds: [updatedEmbed],
-              components: [],
-            });
+            await withObsoleteMessageGuard("edit", session.embedMessage, () =>
+              session.embedMessage!.edit({ embeds: [updatedEmbed], components: [] })
+            );
           }
           if (previousState !== "finalized") {
-            await interaction.followUp(
-              createGameStartPrompt("Teams have been selected! Start game?")
-            );
+            const warnings = session instanceof RandomTeamPickingSession ||
+              session instanceof DraftTeamPickingSession
+              ? await this.syncFinalizedTeamRoles(interaction.guild)
+              : [];
+            if (warnings.length || !CurrentGameManager.getCurrentGame().teamsDecidedBy && (session instanceof RandomTeamPickingSession || session instanceof DraftTeamPickingSession)) {
+              await interaction.followUp({
+                content: `Teams were selected, but ${warnings.length} Discord role/member change(s) need attention. Do not start the game until roles and roster are checked. Use /team reset to recover.`,
+              });
+            } else {
+              await interaction.followUp(
+                createGameStartPrompt("Teams have been selected! Start game?")
+              );
+            }
           }
           break;
         case "cancelled":
-          this.resetTeamPickingSession();
+          await this.resetTeamPickingSession();
           break;
       }
     }
+    });
   }
 
-  public resetTeamPickingSession(): void {
-    if (this.teamPickingSession?.cancelSession) {
-      void this.teamPickingSession.cancelSession();
+  public async resetTeamPickingSession(): Promise<void> {
+    const session = this.teamPickingSession;
+    if (!session) return;
+    session.state = "cancelled";
+    try {
+      await session.cancelSession?.();
+    } finally {
+      if (this.teamPickingSession === session) this.teamPickingSession = undefined;
     }
-    this.teamPickingSession = undefined;
   }
 
   public isTeamPickingSessionActive(): boolean {

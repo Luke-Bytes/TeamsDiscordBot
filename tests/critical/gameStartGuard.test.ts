@@ -41,15 +41,18 @@ test("team finalization publishes one shared start-game prompt", async () => {
     },
   } as any;
   command.teamPickingSession = session;
+  const staleReplies: any[] = [];
   const interaction = {
     guild: {},
     followUp: async (payload: any) => followUps.push(payload),
+    reply: async (payload: any) => staleReplies.push(payload),
   } as any;
 
   await command.handleButtonPress(interaction);
   await command.handleButtonPress(interaction);
 
   assertEqual(followUps.length, 1, "Prompt should be published once");
+  assertEqual(staleReplies.length, 1, "Repeat click should be acknowledged as stale");
   assert(
     followUps[0].components[0].components[0].data.custom_id ===
       GAME_START_BUTTON_ID,
@@ -133,10 +136,11 @@ test("simultaneous slash and button starts execute the workflow once", async () 
     await command.handleButtonPress(later);
     assertEqual(workflowCalls, 1, "Later click should not rerun workflow");
     assert(
-      String(later.replies[0]?.payload?.content).includes(
-        "already been started"
+      later.replies.some(
+        (entry: any) => entry.type === "editReply" &&
+          String(entry.payload?.content).includes("already been started")
       ),
-      "Later click should explain that the game already started"
+      "Later click should explain that the game already started after acknowledgement"
     );
   } finally {
     (PermissionsUtil as any).isUserAuthorised = originalAuth;

@@ -8,9 +8,8 @@ import { PermissionsUtil } from "../util/PermissionsUtil.js";
 import { CurrentGameManager } from "../logic/CurrentGameManager.js";
 import { Team } from "@prisma/client";
 import TeamCommand from "../commands/TeamCommand";
-import { DraftTeamPickingSession } from "../logic/teams/DraftTeamPickingSession";
 import { ConfigManager } from "../ConfigManager";
-import { DiscordUtil } from "../util/DiscordUtil";
+import { discordErrorCode } from "../util/DiscordFailures";
 
 export default class UnregisterCommand implements Command {
   public data: SlashCommandBuilder;
@@ -82,6 +81,8 @@ export default class UnregisterCommand implements Command {
       return;
     }
 
+    await interaction.deferReply();
+
     const now = new Date();
     const startTime = game.startTime || now;
     const isLate =
@@ -89,8 +90,8 @@ export default class UnregisterCommand implements Command {
       (game.teamsDecidedBy &&
         now.getTime() - startTime.getTime() > 30 * 60 * 1000);
 
-    if (isLate) {
-      await interaction.reply({
+    if (isLate || game.getGameStartStatus() !== "idle") {
+      await interaction.editReply({
         content:
           "The game has already started, it's too late to unregister now!",
       });
@@ -103,54 +104,65 @@ export default class UnregisterCommand implements Command {
       )
     );
 
-    if (this.teamCommand.isTeamPickingSessionActive()) {
-      await interaction.reply({
-        content: `${discordUserName} has been unregistered but will be punished for unregistering while teams were being drafted.`,
-      });
-      //   TODO remove player from draft embed
-    }
+    // Penalty warnings do not create a punishment record: leave discipline
+    // to the established organiser workflow, not a misleading promise.
+    const policyWarning = this.teamCommand.isTeamPickingSessionActive()
+      ? " This was during team picking and may be reviewed by organisers."
+      : userTeam && userTeam !== "UNDECIDED" && game.teamsDecidedBy
+        ? " Teams were already decided; organisers may review this withdrawal."
+        : "";
 
-    if (userTeam && userTeam !== "UNDECIDED" && game.teamsDecidedBy) {
-      await interaction.reply({
-        content: `${discordUserName} has been unregistered but will be punished for unregistering after teams were decided.`,
-      });
-    }
-
-    const result =
-      await CurrentGameManager.getCurrentGame().removePlayerByDiscordId(
-        discordUserId
-      );
-
-    if (!result?.error) {
-      const member = await interaction.guild?.members
-        .fetch(discordUserId)
-        .catch(() => null);
-      if (member) {
-        const roles = ConfigManager.getConfig().roles;
-        const roleIds = [
-          roles.captainRole,
-          roles.redTeamRole,
-          roles.blueTeamRole,
-        ].filter(Boolean);
-        for (const roleId of roleIds) {
-          await DiscordUtil.removeRole(member, roleId);
+    let draftSyncFailed = false;
+    const result = await this.teamCommand.runRosterOperation(async () => {
+      const removed = await game.removePlayerByDiscordId(discordUserId);
+      if (!removed?.error) {
+        const session = this.teamCommand.teamPickingSession;
+        try {
+          await session?.handleUnregister?.(discordUserId);
+        } catch (error) {
+          draftSyncFailed = true;
+          console.error(`Unregister draft sync failed member=${discordUserId}`, error);
         }
       }
+      return removed;
+    });
 
-      const session = this.teamCommand.teamPickingSession;
-      if (session instanceof DraftTeamPickingSession) {
-        await session.handleUnregister(discordUserId);
+    if (!result?.error) {
+      const warnings: string[] = draftSyncFailed
+        ? ["The team-picking display could not be updated; ask an organiser to check it."]
+        : [];
+      try {
+        const member = await interaction.guild?.members.fetch(discordUserId);
+        if (member) {
+          const roles = ConfigManager.getConfig().roles;
+          for (const roleId of [
+            roles.captainRole,
+            roles.redTeamRole,
+            roles.blueTeamRole,
+          ].filter(Boolean)) {
+            try {
+              await member.roles.remove(roleId);
+            } catch (error) {
+              console.error(`Unregister role cleanup failed member=${discordUserId} role=${roleId}`, error);
+              warnings.push("Discord roles could not be fully cleaned up.");
+            }
+          }
+        }
+      } catch (error) {
+        if (discordErrorCode(error) !== 10007) {
+          console.warn(`Unregister member lookup failed member=${discordUserId}`, error);
+          warnings.push("Discord member/role cleanup was unavailable.");
+        }
       }
       const message = PermissionsUtil.isSameUser(interaction, targetUser.id)
-        ? `You have successfully unregistered from the game!`
+        ? "You have successfully unregistered from the game!"
         : `${discordUserName} has been successfully unregistered.`;
-
-      await interaction.reply({
-        content: message,
+      await interaction.editReply({
+        content: [message + policyWarning, ...new Set(warnings)].join(" "),
       });
     } else {
-      await interaction.reply({
-        content: result?.error || `An unexpected error occurred.`,
+      await interaction.editReply({
+        content: result?.error || "An unexpected error occurred.",
       });
     }
   }

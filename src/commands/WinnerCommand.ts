@@ -20,7 +20,7 @@ export default class WinnerCommand implements Command {
   buttonIds = ["winner_confirm_yes", "winner_confirm_no"];
   private pendingConfirmations = new Map<
     string,
-    { userId: string; team: "RED" | "BLUE" }
+    { userId: string; team: "RED" | "BLUE"; lifecycleToken: string }
   >();
 
   data = new SlashCommandBuilder()
@@ -58,6 +58,10 @@ export default class WinnerCommand implements Command {
 
     try {
       const game = CurrentGameManager.getCurrentGame();
+      if (!game.announced || game.isRestarting) {
+        await interaction.reply({ content: "No active game can accept a winner right now.", flags: MessageFlags.Ephemeral });
+        return;
+      }
       const redCaptain = game.getCaptainOfTeam("RED");
       const blueCaptain = game.getCaptainOfTeam("BLUE");
       const redPlayers = game.getPlayersOfTeam("RED").slice(0, 3);
@@ -124,6 +128,7 @@ export default class WinnerCommand implements Command {
       this.pendingConfirmations.set(message.id, {
         userId: interaction.user.id,
         team: team as "RED" | "BLUE",
+        lifecycleToken: game.getLifecycleToken(),
       });
     } catch (error) {
       console.error("Failed to set game winner: ", error);
@@ -150,8 +155,21 @@ export default class WinnerCommand implements Command {
       return;
     }
 
-    if (interaction.customId === "winner_confirm_no") {
+    const game = CurrentGameManager.getCurrentGame();
+    if (game.getLifecycleToken() !== pending.lifecycleToken ||
+        !game.announced || game.isRestarting) {
       this.pendingConfirmations.delete(interaction.message.id);
+      await interaction.reply({
+        content: "This winner confirmation has expired or the game is shutting down.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    // Consume confirmation before awaiting: two rapid button presses cannot
+    // both mutate game state, even if Discord's response subsequently expires.
+    this.pendingConfirmations.delete(interaction.message.id);
+    if (interaction.customId === "winner_confirm_no") {
       await interaction.update({
         content: "Winner set cancelled.",
         embeds: [],
@@ -161,20 +179,24 @@ export default class WinnerCommand implements Command {
     }
 
     try {
-      await CurrentGameManager.getCurrentGame().setGameWinner(pending.team);
-      this.pendingConfirmations.delete(interaction.message.id);
+      await game.setGameWinner(pending.team);
+    } catch (error) {
+      console.error("Failed to set game winner:", error);
+      await interaction.update({
+        content: "An error occurred while setting the winner.",
+        embeds: [],
+        components: [],
+      });
+      return;
+    }
+    try {
       await interaction.update({
         content: `The winning team has been set to **${pending.team}**!`,
         embeds: [],
         components: [],
       });
     } catch (error) {
-      console.error("Failed to set game winner: ", error);
-      await interaction.update({
-        content: "An error occurred while setting the winner.",
-        embeds: [],
-        components: [],
-      });
+      console.warn("Winner was set, but confirmation response failed; do not retry blindly", error);
     }
   }
 }

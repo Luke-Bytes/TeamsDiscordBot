@@ -87,12 +87,14 @@ test("Captain nomination end-to-end flow", async () => {
     guild.addMember(nominatedMember);
 
     // Click Set Captain as organiser
+    const buttonId = last.components![0].components[0].data.custom_id;
     const button = createButtonInteraction(
-      "captainnominate-set",
+      buttonId,
       last.content,
       "2000",
       guild as any
     );
+    (button as any).editReply = async (_payload: any) => {};
     await (command as any).handleButtonPress(button);
 
     // Verify captain set for the team without a captain (prefer player's team if applicable)

@@ -8,6 +8,7 @@ import { PermissionsUtil } from "../util/PermissionsUtil.js";
 import { CurrentGameManager } from "../logic/CurrentGameManager.js";
 import { prismaClient } from "../database/prismaClient";
 import { MojangAPI } from "../api/MojangAPI";
+import { fetchGuildMember } from "../util/DiscordFailures";
 import TeamCommand from "../commands/TeamCommand";
 import { DraftTeamPickingSession } from "../logic/teams/DraftTeamPickingSession";
 import { escapeText } from "../util/Utils";
@@ -56,6 +57,14 @@ export default class RegisterCommand implements Command {
       return;
     }
 
+    await interaction.deferReply();
+
+    const game = CurrentGameManager.getCurrentGame();
+    if (game.getGameStartStatus() !== "idle" || game.isFinished) {
+      await interaction.editReply({ content: "Registration is closed because the game has started." });
+      return;
+    }
+
     await PrismaUtils.updatePunishmentsForExpiry();
 
     const inGameNameOption = interaction.options.getString("ingamename");
@@ -66,8 +75,6 @@ export default class RegisterCommand implements Command {
     const safeDiscordUserName = escapeText(discordUserName);
 
     const member = interaction.guild?.members.cache.get(interaction.user.id);
-    await interaction.deferReply();
-
     if (
       !PermissionsUtil.hasRole(member, "organiserRole") &&
       !PermissionsUtil.isSameUser(interaction, targetUser.id)
@@ -75,6 +82,21 @@ export default class RegisterCommand implements Command {
       await interaction.editReply({
         content: "You do not have permission to register other users.",
       });
+      return;
+    }
+
+    if (!interaction.guild) {
+      await interaction.editReply({ content: "Registration requires a Discord server." });
+      return;
+    }
+    try {
+      if (!(await fetchGuildMember(interaction.guild, discordUserId))) {
+        await interaction.editReply({ content: "That user is no longer a member of this server." });
+        return;
+      }
+    } catch (error) {
+      console.error(`Registration membership check failed member=${discordUserId}`, error);
+      await interaction.editReply({ content: "Cannot verify Discord membership right now. Please retry." });
       return;
     }
 
@@ -125,21 +147,27 @@ export default class RegisterCommand implements Command {
       uuid = player.primaryMinecraftAccount;
       resolvedUsername = await MojangAPI.uuidToUsername(uuid);
 
-      //  If Mojang lookup fails, tell user to specify ingamename manually
+      // Keep a previously verified identity during external outages; never invent one.
+      if (!resolvedUsername && MojangAPI.validUUID(uuid) &&
+          player.latestIGN && MojangAPI.validateUsername(player.latestIGN)) {
+        resolvedUsername = player.latestIGN;
+      }
       if (!resolvedUsername) {
-        await interaction.editReply({
-          content:
-            "Error retrieving your username from the Mojang API. Please specify your in-game name manually with `/register <ingamename>`.",
-        });
+        await interaction.editReply({ content: "Unable to retrieve a verified Minecraft username. Please retry later." });
         return;
       }
     } else {
       // Validate ign if provided by converting it to a UUID
       uuid = await MojangAPI.usernameToUUID(inGameNameOption);
+      if (!uuid && player && MojangAPI.validUUID(player.primaryMinecraftAccount) &&
+          (player.latestIGN?.toLowerCase() === inGameNameOption.toLowerCase() ||
+            player.minecraftAccounts?.some((name) => name.toLowerCase() === inGameNameOption.toLowerCase()))) {
+        uuid = player.primaryMinecraftAccount;
+      }
       if (!uuid) {
         await interaction.editReply({
           content:
-            "That Minecraft username does not exist. Please check the spelling!",
+            "Could not verify that Minecraft username. Check its spelling or retry when the identity service is available.",
         });
         return;
       }
@@ -159,12 +187,9 @@ export default class RegisterCommand implements Command {
       resolvedUsername = inGameNameOption;
     }
 
-    if (!uuid || !resolvedUsername) {
-      console.warn("Invalid UUID/Resolved Username but continuing anyway..");
-      await interaction.editReply({
-        content:
-          "We could not resolve a valid Minecraft UUID and username probably due to an API issue, continuing anyway..",
-      });
+    if (!MojangAPI.validUUID(uuid) || !resolvedUsername) {
+      await interaction.editReply({ content: "Could not verify your Minecraft account. No registration was created." });
+      return;
     }
 
     // Check if this user/UUID is already registered for the announced game
@@ -183,12 +208,31 @@ export default class RegisterCommand implements Command {
       return;
     }
 
-    const result =
-      await CurrentGameManager.getCurrentGame().addPlayerByDiscordId(
-        discordUserId,
-        resolvedUsername,
-        uuid
-      );
+    let result;
+    let registrationCommitted = false;
+    try {
+      result = await this.teamCommand.runRosterOperation(async () => {
+        // Recheck immediately before committing after Mojang/DB I/O.
+        if (!(await fetchGuildMember(interaction.guild!, discordUserId))) {
+          return { error: "That user left the server before registration completed." } as const;
+        }
+        const added = await CurrentGameManager.getCurrentGame().addPlayerByDiscordId(
+          discordUserId, resolvedUsername, uuid
+        );
+        const session = this.teamCommand.teamPickingSession;
+        if (!added.error) registrationCommitted = true;
+        if (!added.error && session instanceof DraftTeamPickingSession && !session.latePickingStarted) {
+          await session.registerLateSignup(added.playerInstance);
+        }
+        return added;
+      });
+    } catch (error) {
+      console.error(`Registration workflow failed member=${discordUserId} committed=${registrationCommitted}`, error);
+      await interaction.editReply({ content: registrationCommitted
+        ? "Registration succeeded, but the draft display could not be updated. Ask an organiser to check the team-picking session."
+        : "Unable to verify membership or save registration right now. Check current registrations before retrying." });
+      return;
+    }
 
     if (result.error) {
       await interaction.editReply({
@@ -207,13 +251,6 @@ export default class RegisterCommand implements Command {
       : "";
 
     if (this.teamCommand.isTeamPickingSessionActive()) {
-      const session = this.teamCommand.teamPickingSession;
-      if (session && session instanceof DraftTeamPickingSession) {
-        // Only add to late pool if late picking hasn't started
-        if (!(session as DraftTeamPickingSession).latePickingStarted) {
-          await session.registerLateSignup(result.playerInstance);
-        }
-      }
       if (PermissionsUtil.isSameUser(interaction, targetUser.id)) {
         await interaction.editReply({
           content: `You have successfully registered as \`${resolvedUsername}\` but please note this is a late sign-up as team picking is currently ongoing. You may be unable to play.${ignNudge}`,

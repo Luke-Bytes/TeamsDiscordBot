@@ -2024,6 +2024,12 @@ test("Tier-list final command announces the phase switch clearly", async () => {
   const originalTierList = config.tierList;
   config.tierList = { image: { enabled: false } };
   const command = new TierListCommand() as any;
+  // This is a Discord phase-switch test, not an Ollama integration test.
+  // Explicitly mock final review and verdict to keep the suite offline.
+  command.tierJudge = {
+    reviewFinalTier: async () => ({ source: "fallback", reason: "offline test" }),
+    finalVerdict: async () => ({ source: "fallback", reason: "offline test" }),
+  };
   const state = command.manager.start(
     assignStatisticalBands(syntheticDossierDrafts(2))
   );
@@ -2060,6 +2066,10 @@ test("Tier-list final command labels the completed final image", async () => {
   const originalTierList = config.tierList;
   config.tierList = { image: { enabled: false } };
   const command = new TierListCommand() as any;
+  command.tierJudge = {
+    reviewFinalTier: async () => ({ source: "fallback", reason: "offline test" }),
+    finalVerdict: async () => ({ source: "fallback", reason: "offline test" }),
+  };
   const state = command.manager.start(
     assignStatisticalBands(syntheticDossierDrafts(2))
   );

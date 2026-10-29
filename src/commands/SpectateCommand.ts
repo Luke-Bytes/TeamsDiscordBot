@@ -363,10 +363,19 @@ export default class SpectateCommand implements Command {
     }
 
     const spectatorRoleId = ConfigManager.getConfig().roles.spectatorRole;
-    await DiscordUtil.assignRole(requesterMember, spectatorRoleId);
-    await requesterMember.voice.setMute(true).catch(() => {});
-    await requesterMember.voice.setDeaf(true).catch(() => {});
-    await requesterMember.voice.setChannel(targetChannelId).catch(() => {});
+    try {
+      await DiscordUtil.assignRole(requesterMember, spectatorRoleId);
+      await requesterMember.voice.setMute(true);
+      await requesterMember.voice.setDeaf(true);
+      await requesterMember.voice.setChannel(targetChannelId);
+    } catch (error) {
+      console.error("Spectate accept could not complete Discord voice operations", error);
+      await interaction.reply({
+        content: "Spectate setup failed. Some roles or mute/deaf settings may have changed; check the user's voice state before retrying.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
 
     this.pendingRequests.delete(pending.requestId);
     this.activeSpectates.set(pending.requesterId, {
@@ -422,10 +431,20 @@ export default class SpectateCommand implements Command {
     }
 
     const spectatorRoleId = ConfigManager.getConfig().roles.spectatorRole;
-    await DiscordUtil.assignRole(member, spectatorRoleId);
-    await member.voice.setMute(true).catch(() => {});
-    await member.voice.setDeaf(true).catch(() => {});
-    await member.voice.setChannel(active.channelId).catch(() => {});
+    try {
+      await DiscordUtil.assignRole(member, spectatorRoleId);
+      await member.voice.setMute(true);
+      await member.voice.setDeaf(true);
+      await member.voice.setChannel(active.channelId);
+    } catch (error) {
+      console.error("Spectate rejoin partially failed", error);
+      await DiscordUtil.reply(
+        interaction,
+        "Could not complete spectate rejoin. Some Discord role or voice changes may have succeeded; please contact an organiser.",
+        true
+      );
+      return;
+    }
 
     await DiscordUtil.reply(
       interaction,
@@ -458,9 +477,19 @@ export default class SpectateCommand implements Command {
       return;
     }
 
-    await member.voice.setMute(false).catch(() => {});
-    await member.voice.setDeaf(false).catch(() => {});
-    await DiscordUtil.removeRole(member, spectatorRoleId);
+    try {
+      await member.voice.setMute(false);
+      await member.voice.setDeaf(false);
+      await DiscordUtil.removeRole(member, spectatorRoleId);
+    } catch (error) {
+      console.error("Spectate stop partially failed", error);
+      await DiscordUtil.reply(
+        interaction,
+        "Spectate stop was incomplete; ask an organiser to check your mute/deaf and role state before retrying.",
+        true
+      );
+      return;
+    }
     this.activeSpectates.delete(interaction.user.id);
 
     await DiscordUtil.reply(interaction, "Spectating stopped.", true);

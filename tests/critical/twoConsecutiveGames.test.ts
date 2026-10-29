@@ -48,7 +48,7 @@ function stubPrismaAndMojang() {
   const idToPlayer = new Map<string, any>();
 
   (MojangAPI as any).usernameToUUID = async (name: string) => {
-    const uuid = `uuid-${name}`;
+    const uuid = Buffer.from(name).toString("hex").padEnd(32, "0").slice(0, 32);
     nameToUUID.set(name, uuid);
     return uuid;
   };

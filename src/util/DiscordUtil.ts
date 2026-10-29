@@ -15,6 +15,7 @@ import {
 } from "discord.js";
 import { Channels } from "../Channels";
 import { setTimeout as delay } from "timers/promises";
+import { withObsoleteMessageGuard, isUnknownMessage } from "./DiscordFailures";
 
 export class DiscordUtil {
   static getGuildMember(
@@ -34,7 +35,11 @@ export class DiscordUtil {
       content,
       ...(ephemeral ? { flags: MessageFlags.Ephemeral } : {}),
     };
-    await interaction.reply(options);
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply({ content });
+    } else {
+      await interaction.reply(options);
+    }
   }
 
   static async replyWithMessage(
@@ -76,6 +81,7 @@ export class DiscordUtil {
         `Failed to assign role ${roleId} to ${member.user.tag}: `,
         error
       );
+      throw error;
     }
   }
 
@@ -85,9 +91,10 @@ export class DiscordUtil {
       console.log(`Remove role ${roleId} from ${member.user.tag}`);
     } catch (error) {
       console.error(
-        `Failed to remove role ${roleId} from ${member.user.tag} (may be expected): `,
+        `Failed to remove role ${roleId} from ${member.user.tag}:`,
         error
       );
+      throw error;
     }
   }
 
@@ -289,14 +296,14 @@ export class DiscordUtil {
     channelIds: string[],
     messageAgeDays = 14
   ): Promise<void> {
-    try {
-      for (const channelId of channelIds) {
-        const channel = guild.channels.cache.get(channelId) as TextChannel;
-        if (!channel?.isTextBased()) continue;
+    for (const channelId of channelIds) {
+      const channel = guild.channels.cache.get(channelId) as TextChannel;
+      if (!channel?.isTextBased()) continue;
 
-        while (true) {
-          try {
-            const messages = await channel.messages.fetch({ limit: 100 });
+      // Bound cleanup work even if moderators continuously post new messages.
+      for (let batch = 0; batch < 20; batch++) {
+        try {
+          const messages = await channel.messages.fetch({ limit: 100 });
             if (messages.size === 0) break;
 
             const recentMessages: string[] = [];
@@ -314,28 +321,27 @@ export class DiscordUtil {
             });
 
             if (recentMessages.length > 0) {
-              await channel.bulkDelete(recentMessages, true);
+              try {
+                await channel.bulkDelete(recentMessages, true);
+              } catch (error) {
+                if (!isUnknownMessage(error)) throw error;
+                console.warn(`Messages already removed during cleanup channel=${channelId} code=10008`);
+              }
               console.log(
                 `Cleared ${recentMessages.length} recent messages in ${channel.name}`
               );
             }
 
             for (const msg of oldMessages) {
-              await msg.delete();
-              console.log(`Deleted old message ${msg.id} in ${channel.name}`);
+              await withObsoleteMessageGuard("delete", msg, () => msg.delete());
+              console.log(`Cleanup processed old message ${msg.id} in ${channel.name}`);
             }
-          } catch (error) {
-            console.error(
-              `Error cleaning messages in ${channel?.name || "unknown channel"}:`,
-              error
-            );
-            break;
-          }
+        } catch (error) {
+          console.error(`Message cleanup failed guild=${guild.id} channel=${channelId}`, error);
+          throw error;
         }
       }
-      console.log("Completed cleaning up messages.");
-    } catch (error) {
-      console.error("Failed to clean up messages:", error);
     }
+    console.log("Completed cleaning up messages.");
   }
 }

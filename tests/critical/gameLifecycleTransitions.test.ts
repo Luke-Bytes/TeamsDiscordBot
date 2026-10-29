@@ -331,7 +331,7 @@ test("accidental game end cannot poison registration after a new announcement", 
   (prismaClient as any).playerPunishment.updateMany = async () => ({
     count: 0,
   });
-  (MojangAPI as any).usernameToUUID = async () => "uuid-registration-player";
+  (MojangAPI as any).usernameToUUID = async () => "0123456789abcdef0123456789abcdef";
   (game as any).addPlayerByDiscordId = async (id: string, ign: string) => {
     const registered = player(id);
     registered.ignUsed = ign;

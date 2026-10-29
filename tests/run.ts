@@ -51,6 +51,12 @@ import "./cases/punishExpungeCommand.test";
 import "./critical/teamGenerationFlows.test";
 import "./critical/teamGenerationConcurrency.test";
 import "./critical/teamGenerationUserErrors.test";
+import "./critical/productionEdgeCases.test";
+import "./critical/productionEdgeConcurrency.test";
+import "./critical/followupReliability.test";
+import "./critical/staleResultControls.test";
+import "./critical/lifecycleMutationRaces.test";
+import "./critical/minecraftLookupStatus.test";
 import { runAll } from "./framework/test";
 
 runAll();

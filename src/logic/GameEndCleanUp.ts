@@ -71,7 +71,7 @@ export async function cleanUpAfterGame(guild: Guild) {
 
   // Ensure any lingering sessions/timers/feeds are cleared
   try {
-    TeamCommand.instance?.resetTeamPickingSession();
+    await TeamCommand.instance?.resetTeamPickingSession();
   } catch (e) {
     void e;
   }

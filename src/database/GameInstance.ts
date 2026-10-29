@@ -1,4 +1,5 @@
 import { $Enums, AnniMap, Team } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 import {
   CacheType,
   CacheTypeReducer,
@@ -9,6 +10,7 @@ import {
 import { PlayerInstance } from "./PlayerInstance";
 import { MapVoteManager } from "../logic/MapVoteManager";
 import { MojangAPI } from "../api/MojangAPI";
+import { fetchGuildMember } from "../util/DiscordFailures";
 import { MinerushVoteManager } from "../logic/MinerushVoteManager";
 import { prismaClient } from "./prismaClient";
 import { ConfigManager } from "../ConfigManager";
@@ -40,6 +42,8 @@ export class GameInstance {
   isRelaxedSeason = false;
   noElo = false;
   private gameStartStatus: GameStartStatus = "idle";
+  private lifecycleVersion = 0;
+  private lifecycleToken = randomUUID();
   startTime?: Date;
   endTime?: Date;
   settings: {
@@ -125,6 +129,8 @@ export class GameInstance {
   }
 
   public reset() {
+    this.lifecycleVersion += 1;
+    this.lifecycleToken = randomUUID();
     this.gameId = undefined;
     this.isFinished = undefined;
     this.announced = false;
@@ -184,6 +190,15 @@ export class GameInstance {
     );
   }
 
+  public getLifecycleVersion(): number {
+    return this.lifecycleVersion;
+  }
+
+  /** Distinct across resets and process restarts; scopes persistent Discord buttons. */
+  public getLifecycleToken(): string {
+    return this.lifecycleToken;
+  }
+
   public getGameStartStatus(): GameStartStatus {
     return this.gameStartStatus;
   }
@@ -208,6 +223,8 @@ export class GameInstance {
   }
 
   public beginConfirmedAnnouncement(): void {
+    this.lifecycleVersion += 1;
+    this.lifecycleToken = randomUUID();
     this.gameId = undefined;
     this.isFinished = false;
     this.announced = true;
@@ -375,49 +392,44 @@ export class GameInstance {
     ignUsed: string,
     uuid?: string
   ) {
-    const player = await PlayerInstance.byDiscordSnowflake(discordSnowflake);
-
+    if (this.getPlayers().some((p) => p.discordSnowflake === discordSnowflake)) {
+      return { error: "This player is already registered." } as const;
+    }
+    // Read any existing profile without creating one. Unavailable identity
+    // providers must not create empty player/stats records.
+    const existing = await prismaClient.player.byDiscordSnowflake(discordSnowflake);
     if (!uuid) {
-      if (ignUsed === "") {
-        uuid = player.primaryMinecraftAccount ?? undefined;
-      } else {
-        const fetchedUuid = await MojangAPI.usernameToUUID(ignUsed);
-        if (fetchedUuid) {
-          uuid = fetchedUuid;
-        } else {
-          console.warn(
-            `No UUID found for IGN ${ignUsed}. Proceeding with fallback.`
-          );
-        }
+      if (
+        existing?.primaryMinecraftAccount &&
+        (ignUsed === "" ||
+          ignUsed.toLowerCase() === existing.latestIGN?.toLowerCase() ||
+          existing.minecraftAccounts.some((name) => name.toLowerCase() === ignUsed.toLowerCase()))
+      ) {
+        uuid = existing.primaryMinecraftAccount;
+      } else if (MojangAPI.validateUsername(ignUsed)) {
+        uuid = (await MojangAPI.usernameToUUID(ignUsed)) ?? undefined;
       }
     }
 
-    let ign: string | null = ignUsed;
-    if (uuid) {
-      const resolvedIgn = await MojangAPI.uuidToUsername(uuid);
-      if (resolvedIgn) {
-        ign = resolvedIgn;
-      } else {
-        console.warn(`UUID ${uuid} does not resolve to a valid IGN.`);
-      }
-    }
-
-    if (!uuid || !ign) {
-      console.warn(
-        `Fallback triggered for player ${discordSnowflake} with IGN ${ignUsed}.`
-      );
-
-      player.ignUsed = ignUsed;
-
-      this.teams["UNDECIDED"].push(player);
-
+    if (!MojangAPI.validUUID(uuid)) {
       return {
-        error: false,
-        playerInstance: player,
-        fallback: true,
+        error: "Unable to verify this Minecraft account. Please retry when the identity service is available.",
       } as const;
     }
 
+    const resolvedIgn = await MojangAPI.uuidToUsername(uuid);
+    const ign = resolvedIgn ?? (MojangAPI.validateUsername(ignUsed) ? ignUsed : existing?.latestIGN);
+    if (!ign || !MojangAPI.validateUsername(ign)) {
+      return { error: "Unable to verify a Minecraft username for this account." } as const;
+    }
+
+    // An overlapping registration may have completed during the awaits above.
+    if (this.getPlayers().some((p) => p.discordSnowflake === discordSnowflake ||
+        p.primaryMinecraftAccount === uuid)) {
+      return { error: "This player or Minecraft account is already registered." } as const;
+    }
+
+    const player = await PlayerInstance.byDiscordSnowflake(discordSnowflake);
     if (uuid && !player.primaryMinecraftAccount) {
       await prismaClient.player.update({
         where: { id: player.playerId },
@@ -456,6 +468,10 @@ export class GameInstance {
       player.ignUsed = ign;
     }
 
+    // Check again after database writes in case an overlapping call succeeded.
+    if (this.getPlayers().some((p) => p.discordSnowflake === discordSnowflake)) {
+      return { error: "This player is already registered." } as const;
+    }
     this.teams["UNDECIDED"].push(player);
     this.lastRegisteredSnowflake = discordSnowflake;
 
@@ -466,21 +482,19 @@ export class GameInstance {
   }
 
   public async removePlayerByDiscordId(discordSnowflake: Snowflake) {
-    const playerIndex = Object.keys(this.teams).find((team) =>
-      this.teams[team as Team].some(
-        (player) => player.discordSnowflake === discordSnowflake
-      )
+    const found = this.getPlayers().some(
+      (player) => player.discordSnowflake === discordSnowflake
     );
-
-    if (!playerIndex) {
-      return {
-        error: "Player not found in any team.",
-      } as const;
+    if (!found) {
+      return { error: "Player not found in any team." } as const;
     }
-
-    this.teams[playerIndex as Team] = this.teams[playerIndex as Team].filter(
-      (player) => player.discordSnowflake !== discordSnowflake
-    );
+    for (const team of ["RED", "BLUE", "UNDECIDED"] as const) {
+      this.teams[team] = this.teams[team].filter(
+        (player) => player.discordSnowflake !== discordSnowflake
+      );
+    }
+    this.lateSignups.delete(discordSnowflake);
+    this.captainNominations.delete(discordSnowflake);
     if (this.lastRegisteredSnowflake === discordSnowflake) {
       this.lastRegisteredSnowflake = undefined;
     }
@@ -495,12 +509,11 @@ export class GameInstance {
   }
 
   public resetTeams() {
-    const combined = new Set([
-      ...this.teams["UNDECIDED"],
-      ...this.teams["RED"],
-      ...this.teams["BLUE"],
-    ]);
-    this.teams["UNDECIDED"] = Array.from(combined);
+    const combined = new Map(
+      [...this.teams["UNDECIDED"], ...this.teams["RED"], ...this.teams["BLUE"]]
+        .map((player) => [player.discordSnowflake, player])
+    );
+    this.teams["UNDECIDED"] = Array.from(combined.values());
     this.teams["RED"] = [];
     this.teams["BLUE"] = [];
   }
@@ -530,8 +543,12 @@ export class GameInstance {
   }
 
   public simulateShuffledTeams(): Record<Team, PlayerInstance[]> {
-    const undecidedPlayers = Array.from(this.getPlayersOfTeam("UNDECIDED"));
-    const shuffled = undecidedPlayers.sort(() => Math.random() - 0.5);
+    // Regenerate from the whole active roster; previously assigned players
+    // must not disappear from a new random preview.
+    const registeredPlayers = [...new Map(
+      this.getPlayers().map((player) => [player.discordSnowflake, player])
+    ).values()];
+    const shuffled = registeredPlayers.sort(() => Math.random() - 0.5);
     const half = Math.ceil(shuffled.length / 2);
 
     return {
@@ -541,11 +558,9 @@ export class GameInstance {
   }
 
   public simulateEloTeams(): Record<Team, PlayerInstance[]> {
-    const players = [
-      ...this.getPlayersOfTeam("RED"),
-      ...this.getPlayersOfTeam("BLUE"),
-      ...this.getPlayersOfTeam("UNDECIDED"),
-    ];
+    const players = [...new Map(
+      this.getPlayers().map((player) => [player.discordSnowflake, player])
+    ).values()];
 
     players.forEach((p) => {
       p.captain = false;
@@ -572,11 +587,9 @@ export class GameInstance {
   }
 
   public simulateBalancedTeams(): Record<Team, PlayerInstance[]> {
-    const players = [
-      ...this.getPlayersOfTeam("RED"),
-      ...this.getPlayersOfTeam("BLUE"),
-      ...this.getPlayersOfTeam("UNDECIDED"),
-    ];
+    const players = [...new Map(
+      this.getPlayers().map((player) => [player.discordSnowflake, player])
+    ).values()];
 
     players.forEach((p) => {
       p.captain = false;
@@ -589,6 +602,10 @@ export class GameInstance {
     const sorted = players.sort((a, b) => (b.elo ?? 0) - (a.elo ?? 0));
     const firstIdx = Math.floor(Math.random() * sorted.length);
     const firstCaptain = sorted.splice(firstIdx, 1)[0];
+    if (sorted.length === 0) {
+      firstCaptain.captain = true;
+      return { BLUE: [firstCaptain], RED: [] };
+    }
     let secondCaptain = sorted[0];
     let closestDiff = Math.abs(
       (firstCaptain.elo ?? 0) - (secondCaptain?.elo ?? 0)
@@ -773,24 +790,32 @@ export class GameInstance {
     console.info(`[GAME] Final team state:`, this.teams);
   }
 
+  /** Abort an in-flight roster edit if reset/start/shutdown changes ownership. */
+  private canCompleteRosterMutation(token: string): boolean {
+    return token === this.getLifecycleToken() &&
+      this.getGameStartStatus() === "idle" && !this.isFinished && !this.isRestarting;
+  }
+
   public async addPlayerByNameOrDiscord(
     identifier: string,
     team: Team | "UNDECIDED",
     guild: CacheTypeReducer<CacheType, Guild, null>
   ): Promise<boolean> {
+    const token = this.getLifecycleToken();
     const player = await this.findPlayerByNameOrDiscord(identifier);
-    if (!player || !this.isPlayerInUndecided(player)) return false;
+    if (!this.canCompleteRosterMutation(token) ||
+        !player || !this.isPlayerInUndecided(player)) return false;
 
-    this.removePlayerFromAllTeams(player);
     if (!guild) {
       console.error(`Guild not found for ID: ${player.discordSnowflake}`);
       return false;
     }
-    const member = await guild.members
-      .fetch(player.discordSnowflake)
-      .catch(() => null);
+    const member = await fetchGuildMember(guild, player.discordSnowflake);
     if (!member) {
-      console.error(`GuildMember not found for ID: ${player.discordSnowflake}`);
+      console.warn(`Cannot add departed member ${player.discordSnowflake} to a team`);
+      return false;
+    }
+    if (!this.canCompleteRosterMutation(token) || !this.isPlayerInUndecided(player)) {
       return false;
     }
 
@@ -810,6 +835,8 @@ export class GameInstance {
       await DiscordUtil.assignRole(member, redTeamRoleId);
     }
 
+    if (!this.canCompleteRosterMutation(token) || !this.isPlayerInUndecided(player)) return false;
+    this.removePlayerFromAllTeams(player);
     this.teams[team].push(player);
     return true;
   }
@@ -818,34 +845,25 @@ export class GameInstance {
     identifier: string,
     guild: CacheTypeReducer<CacheType, Guild, null>
   ): Promise<boolean> {
+    const token = this.getLifecycleToken();
     const player = await this.findPlayerByNameOrDiscord(identifier);
-    if (!player) return false;
+    if (!this.canCompleteRosterMutation(token) || !player) return false;
 
+    if (!guild) return false;
+    const member = await fetchGuildMember(guild, player.discordSnowflake);
+    if (!this.canCompleteRosterMutation(token)) return false;
+    if (member) {
+      const roles = ConfigManager.getConfig().roles;
+      if (member.roles.cache.has(roles.blueTeamRole)) {
+        await DiscordUtil.removeRole(member, roles.blueTeamRole);
+      }
+      if (member.roles.cache.has(roles.redTeamRole)) {
+        await DiscordUtil.removeRole(member, roles.redTeamRole);
+      }
+    }
+    // A confirmed 10007 is not a reason to keep the departed player in the roster.
+    if (!this.canCompleteRosterMutation(token)) return false;
     this.removePlayerFromAllTeams(player);
-
-    if (!guild) {
-      console.error(`Guild not found for ID: ${player.discordSnowflake}`);
-      return false;
-    }
-
-    const member = await guild.members
-      .fetch(player.discordSnowflake)
-      .catch(() => null);
-    if (!member) {
-      console.error(`GuildMember not found for ID: ${player.discordSnowflake}`);
-      return false;
-    }
-
-    const config = ConfigManager.getConfig();
-    const blueTeamRoleId = config.roles.blueTeamRole;
-    const redTeamRoleId = config.roles.redTeamRole;
-
-    if (member.roles.cache.has(blueTeamRoleId)) {
-      await DiscordUtil.removeRole(member, blueTeamRoleId);
-    }
-    if (member.roles.cache.has(redTeamRoleId)) {
-      await DiscordUtil.removeRole(member, redTeamRoleId);
-    }
     return true;
   }
 
@@ -883,10 +901,12 @@ export class GameInstance {
     newIdentifier: string,
     guild: CacheTypeReducer<CacheType, Guild, null>
   ): Promise<boolean> {
+    const token = this.getLifecycleToken();
     const oldPlayer = await this.findPlayerByNameOrDiscord(oldIdentifier);
     const newPlayer = await this.findPlayerByNameOrDiscord(newIdentifier);
 
     if (
+      !this.canCompleteRosterMutation(token) ||
       !oldPlayer ||
       !newPlayer ||
       this.isPlayerInUndecided(oldPlayer) ||
@@ -907,12 +927,8 @@ export class GameInstance {
       return false;
     }
 
-    const oldMember = await guild.members
-      .fetch(oldPlayer.discordSnowflake)
-      .catch(() => null);
-    const newMember = await guild.members
-      .fetch(newPlayer.discordSnowflake)
-      .catch(() => null);
+    const oldMember = await fetchGuildMember(guild, oldPlayer.discordSnowflake);
+    const newMember = await fetchGuildMember(guild, newPlayer.discordSnowflake);
 
     if (!oldMember || !newMember) {
       console.error(
@@ -920,6 +936,9 @@ export class GameInstance {
       );
       return false;
     }
+    if (!this.canCompleteRosterMutation(token) ||
+        this.getPlayersTeam(oldPlayer) !== oldPlayerTeam ||
+        !this.isPlayerInUndecided(newPlayer)) return false;
 
     const config = ConfigManager.getConfig();
     const blueTeamRoleId = config.roles.blueTeamRole;
@@ -945,6 +964,9 @@ export class GameInstance {
       await DiscordUtil.assignRole(newMember, redTeamRoleId);
     }
 
+    if (!this.canCompleteRosterMutation(token) ||
+        this.getPlayersTeam(oldPlayer) !== oldPlayerTeam ||
+        !this.isPlayerInUndecided(newPlayer)) return false;
     this.removePlayerFromAllTeams(oldPlayer);
     this.removePlayerFromAllTeams(newPlayer);
     this.teams[oldPlayerTeam].push(newPlayer);
@@ -966,6 +988,7 @@ export class GameInstance {
     toTeam: Team | "UNDECIDED",
     guild: CacheTypeReducer<CacheType, Guild, null>
   ): Promise<boolean> {
+    const token = this.getLifecycleToken();
     if (
       !["RED", "BLUE", "UNDECIDED"].includes(fromTeam) ||
       !["RED", "BLUE", "UNDECIDED"].includes(toTeam)
@@ -975,7 +998,8 @@ export class GameInstance {
     }
 
     const player = await this.findPlayerByNameOrDiscord(playerName);
-    if (!player || this.getPlayersTeam(player) !== fromTeam) {
+    if (!this.canCompleteRosterMutation(token) ||
+        !player || this.getPlayersTeam(player) !== fromTeam) {
       console.error("Player lookup failed or team mismatch:", {
         playerName,
         fromTeam,
@@ -990,15 +1014,15 @@ export class GameInstance {
       return false;
     }
 
-    const member = await guild.members
-      .fetch(player.discordSnowflake)
-      .catch(() => null);
+    const member = await fetchGuildMember(guild, player.discordSnowflake);
     if (!member) {
-      console.error(
-        `GuildMember not found for moving player: ${player.discordSnowflake}`
+      console.warn(
+        `Cannot move departed member: ${player.discordSnowflake}`
       );
       return false;
     }
+    if (!this.canCompleteRosterMutation(token) ||
+        this.getPlayersTeam(player) !== fromTeam) return false;
 
     const config = ConfigManager.getConfig();
     const blueTeamRoleId = config.roles.blueTeamRole;
@@ -1026,6 +1050,8 @@ export class GameInstance {
       await DiscordUtil.assignRole(member, redTeamRoleId);
     }
 
+    if (!this.canCompleteRosterMutation(token) ||
+        this.getPlayersTeam(player) !== fromTeam) return false;
     this.removePlayerFromAllTeams(player);
     this.teams[toTeam].push(player);
     console.info(

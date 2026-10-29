@@ -369,6 +369,56 @@ test("/spectate stop removes role and unmutes", async () => {
   });
 });
 
+test("spectate accept reports a failed voice move without creating an active session", async () => {
+  await withConfig(async () => {
+    const command = new SpectateCommand();
+    const captain = makeMember("CAP-FAIL", [ROLE_IDS.captain], "vc-1");
+    const requester = makeMember("REQ-FAIL", [], "vc-2");
+    requester.voice.setChannel = async () => {
+      throw Object.assign(new Error("missing permissions"), { code: 50013 });
+    };
+    const guild = makeGuild([captain, requester]);
+    (command as any).pendingRequests.set("REQ-FAIL-ID", {
+      requestId: "REQ-FAIL-ID", requesterId: requester.id, targetId: captain.id,
+      expiresAt: Date.now() + 10000,
+    });
+    const responses: any[] = [];
+    await command.handleButtonPress({
+      customId: "spectate-accept:REQ-FAIL-ID",
+      user: { id: captain.id }, guild,
+      reply: async (response: any) => responses.push(response),
+    } as any);
+    assert(responses.some((response) => String(response.content).includes("setup failed")),
+      "Partial Discord failure must be reported rather than success");
+    assert(!(command as any).activeSpectates.has(requester.id),
+      "Failed voice move must not be considered active");
+    assert((command as any).pendingRequests.has("REQ-FAIL-ID"),
+      "A failed request remains inspectable for recovery");
+  });
+});
+
+test("spectate rejoin reports incomplete mute or move operations", async () => {
+  await withConfig(async () => {
+    const command = new SpectateCommand();
+    const member = makeMember("REJOIN-FAIL", [], "vc-x");
+    member.voice.setMute = async () => {
+      throw Object.assign(new Error("missing permissions"), { code: 50013 });
+    };
+    const guild = makeGuild([member]);
+    (command as any).activeSpectates.set(member.id, {
+      targetId: "CAP", channelId: "vc-target", expiresAt: Date.now() + 10000,
+    });
+    const interaction = createChatInputInteraction(member.id, {
+      guild, strings: { action: "rejoin" },
+    }) as any;
+    interaction.inGuild = () => true;
+    await command.execute(interaction);
+    assert(interaction.replies.some((reply: any) =>
+      String(reply.payload?.content).includes("Could not complete")),
+      "Rejoin failure must not be reported as successful");
+  });
+});
+
 test("Multiple requests handled without cross-contamination", async () => {
   await withConfig(async () => {
     const cmd = new SpectateCommand();

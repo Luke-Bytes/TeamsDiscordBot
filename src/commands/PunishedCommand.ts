@@ -1,10 +1,9 @@
 import { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
 import { Command } from "./CommandInterface.js";
-import { PrismaClient } from "@prisma/client";
+import { prismaClient } from "../database/prismaClient";
 import { PrismaUtils } from "../util/PrismaUtils";
 import { escapeIgn, escapeText } from "../util/Utils";
 
-const prisma = new PrismaClient();
 
 export default class PunishedCommand implements Command {
   data = new SlashCommandBuilder()
@@ -40,7 +39,7 @@ export default class PunishedCommand implements Command {
           return;
         }
 
-        const punishments = await prisma.playerPunishment.findMany({
+        const punishments = await prismaClient.playerPunishment.findMany({
           where: { playerId: player.id },
         });
 
@@ -76,7 +75,7 @@ export default class PunishedCommand implements Command {
           `📋 **Punishment record for ${safeUserInput}:**\n\n${punishmentDetails.join("\n\n")}`
         );
       } else {
-        const punishedUsers = await prisma.playerPunishment.findMany({
+        const punishedUsers = await prismaClient.playerPunishment.findMany({
           where: {
             punishmentExpiry: { not: null },
           },
