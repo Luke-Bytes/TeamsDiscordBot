@@ -14,6 +14,10 @@ import { SeasonService } from "./database/SeasonService";
 import { prismaClient } from "./database/prismaClient";
 import { MatchCleanupState } from "@prisma/client";
 import { MatchRecoveryGate } from "./logic/MatchRecoveryGate";
+import { GameInstance } from "./database/GameInstance";
+import { GameRecoveryCoordinator, GameSnapshotStore, recoverPendingGame, GameSnapshot } from "./logic/ActiveGameRecovery";
+import { DiscordUtil } from "./util/DiscordUtil";
+import { Message, TextChannel } from "discord.js";
 
 export class TeamsBot {
   client: Client;
@@ -26,6 +30,7 @@ export class TeamsBot {
 
   constructor() {
     MatchRecoveryGate.markUnchecked();
+    GameRecoveryCoordinator.beginStartup();
     this.client = new Client({
       intents: [
         GatewayIntentBits.Guilds,
@@ -91,6 +96,64 @@ export class TeamsBot {
     });
   }
 
+  private async fetchRecoveryMessage(
+    ref: { id: string; channelId: string } | null,
+    timeoutMs = 3000
+  ): Promise<Message<boolean> | null> {
+    if (!ref) return null;
+    let timeout: NodeJS.Timeout | undefined;
+    try {
+      const operation = async () => {
+        const channel = await this.client.channels.fetch(ref.channelId);
+        if (!channel || !("messages" in channel)) throw new Error("Original message channel unavailable");
+        return (channel as TextChannel).messages.fetch(ref.id) as Promise<Message<boolean>>;
+      };
+      return await Promise.race([
+        operation(),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(() => reject(new Error("Discord message fetch timed out")), timeoutMs);
+        }),
+      ]);
+    } catch (error) {
+      console.warn(`[game-recovery] Original Discord message not verified channel=${ref.channelId} id=${ref.id}`, error);
+      return null;
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  }
+
+  private async restorePendingActiveGame(): Promise<void> {
+    try {
+      const snapshot: GameSnapshot | null = await recoverPendingGame(
+        new GameSnapshotStore(),
+        GameInstance.getInstance(),
+        MatchRecoveryGate.getBlockReason()
+      );
+      if (!snapshot) {
+        GameRecoveryCoordinator.finishStartup(null);
+        return;
+      }
+      // Re-fetch only; these requests must not recreate announcements, pings or roles.
+      const refs = snapshot.workflows;
+      const announcement = await this.fetchRecoveryMessage(refs.announcementMessage);
+      if (announcement) this.commandHandler.announcementCommand.attachRecoveredAnnouncementMessage(announcement);
+      GameInstance.getInstance().announcementPingMessage =
+        (await this.fetchRecoveryMessage(refs.announcementPingMessage)) ?? undefined;
+      GameInstance.getInstance().announcementPreviewMessage =
+        (await this.fetchRecoveryMessage(refs.announcementPreviewMessage)) ?? undefined;
+      const total = GameInstance.getInstance().getRegisteredPlayerCount();
+      console.info(`[game-recovery] Restored game=${snapshot.gameId} players=${total}; paused=${refs.paused.join("; ")}`);
+      GameRecoveryCoordinator.finishStartup(null);
+      await DiscordUtil.sendMessage("gameFeed",
+        `Active game recovered after restart: ${total} registered players, original time and teams retained. Automatic timers, votes and unfinished sessions are paused for organiser review. Use /team list to inspect.`
+      ).catch((error) => console.warn("[game-recovery] Could not send recovery notice", error));
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      GameRecoveryCoordinator.finishStartup(`Active-game recovery requires operator intervention: ${reason}`);
+      console.error("[game-recovery] Startup blocked; pending snapshot retained", reason);
+    }
+  }
+
   public async start() {
     this.client.once("ready", async () => {
       console.log = (...args: unknown[]) => logger.info(args.join(" "));
@@ -111,6 +174,13 @@ export class TeamsBot {
         });
         return pending.map((record) => record.id);
       });
+      try {
+        await Channels.initChannels(this.client);
+        await this.restorePendingActiveGame();
+      } catch (error) {
+        console.error("[game-recovery] Cannot initialise configured Discord channels", error);
+        GameRecoveryCoordinator.finishStartup("Discord channel initialisation failed; active game recovery is blocked");
+      }
       this.commandHandler.loadCommands();
       await this.commandHandler.registerCommands();
       await this.commandHandler.vcCommand.manager.recoverActiveChannels(
@@ -145,6 +215,9 @@ export class TeamsBot {
     });
 
     this.client.on("messageCreate", async (msg) => {
+      const done = GameRecoveryCoordinator.enterOperation();
+      if (!done) return;
+      try {
       if (!msg.guild) {
         const awaitingCaptainPlan =
           this.commandHandler.gameCommand.isAwaitingCaptainPlan(msg.author.id);
@@ -185,11 +258,13 @@ export class TeamsBot {
           console.error("Team picking message handling failed: ", error);
         }
       }
+      } finally {
+        done();
+      }
     });
 
     try {
       await this.client.login(process.env.BOT_TOKEN);
-      await Channels.initChannels(this.client);
       console.log("Successfully logged in!");
     } catch (error) {
       console.log(error);

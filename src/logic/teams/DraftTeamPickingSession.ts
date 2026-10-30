@@ -21,6 +21,7 @@ import { EloUtil } from "../../util/EloUtil";
 import { escapeIgn, escapeText } from "../../util/Utils";
 import { PrismaUtils } from "../../util/PrismaUtils";
 import { withObsoleteMessageGuard } from "../../util/DiscordFailures";
+import { GameRecoveryCoordinator } from "../ActiveGameRecovery";
 
 export class DraftTeamPickingSession extends TeamPickingSession {
   state: TeamPickingSessionState = "inProgress";
@@ -58,6 +59,21 @@ export class DraftTeamPickingSession extends TeamPickingSession {
 
   public getState(): TeamPickingSessionState {
     return this.state;
+  }
+
+  /** Uncommitted draft choices survive as a paused, inspectable recovery record. */
+  public exportRecoveryProgress() {
+    const ids = (players: PlayerInstance[]) => players.map((p) => p.discordSnowflake);
+    return {
+      mode: this.mode, turn: this.turn ?? null,
+      proposedTeams: {
+        RED: ids(this.proposedTeams.RED),
+        BLUE: ids(this.proposedTeams.BLUE),
+        UNDECIDED: ids(this.proposedTeams.UNDECIDED),
+      },
+      lateSignups: ids(this.lateSignups),
+      finishedPicking: this.finishedPicking,
+    };
   }
 
   public async initialize(interaction: ChatInputCommandInteraction) {
@@ -517,33 +533,55 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     const duration = isFirstPick ? 2 * 60 * 1000 : 60 * 1000;
 
     if (duration > 15_000) {
-      this.pickWarningTimeout = setTimeout(async () => {
-        if (this.state !== "inProgress" || this.turn !== team || !teamPickingChannel.isSendable()) return;
-        await teamPickingChannel.send(
-          `<@${captain.discordSnowflake}> has 15 seconds remaining before auto-pick for **${team}**.`
-        );
-      }, duration - 15_000);
+      const sendPickWarning = async () => {
+        const done = GameRecoveryCoordinator.enterOperation();
+        if (!done) {
+          GameRecoveryCoordinator.deferUntilCaptureAborts(() => { void sendPickWarning(); });
+          return;
+        }
+        try {
+          if (this.state !== "inProgress" || this.turn !== team || !teamPickingChannel.isSendable()) return;
+          await teamPickingChannel.send(
+            `<@${captain.discordSnowflake}> has 15 seconds remaining before auto-pick for **${team}**.`
+          );
+        } finally { done(); }
+      };
+      this.pickWarningTimeout = setTimeout(sendPickWarning, duration - 15_000);
     }
 
     if (isFirstPick && duration > 60_000) {
-      this.pickDmTimeout = setTimeout(async () => {
-        if (this.state !== "inProgress" || this.turn !== team) return;
-        try {
-          const user = await teamPickingChannel.client.users.fetch(
-            captain.discordSnowflake
-          );
-          await user.send(
-            "⚠️ You have 1 minute remaining to make your opening pick. Please respond in the team picking channel."
-          );
-        } catch {
-          // ignore DM failures
+      const sendPickReminder = async () => {
+        const done = GameRecoveryCoordinator.enterOperation();
+        if (!done) {
+          GameRecoveryCoordinator.deferUntilCaptureAborts(() => { void sendPickReminder(); });
+          return;
         }
-      }, duration - 60_000);
+        try {
+          if (this.state !== "inProgress" || this.turn !== team) return;
+          try {
+            const user = await teamPickingChannel.client.users.fetch(
+              captain.discordSnowflake
+            );
+            await user.send(
+              "⚠️ You have 1 minute remaining to make your opening pick. Please respond in the team picking channel."
+            );
+          } catch {
+            // ignore DM failures
+          }
+        } finally { done(); }
+      };
+      this.pickDmTimeout = setTimeout(sendPickReminder, duration - 60_000);
     }
 
-    this.pickAutoTimeout = setTimeout(() => {
-      void this.executeAutoPick(team);
-    }, duration);
+    const autoPick = () => {
+      const done = GameRecoveryCoordinator.enterOperation();
+      if (!done) {
+        GameRecoveryCoordinator.deferUntilCaptureAborts(autoPick);
+        return;
+      }
+      void this.executeAutoPick(team).finally(done);
+    };
+    this.pickAutoTimeout = setTimeout(autoPick, duration);
   }
 
   private async executeAutoPick(expectedTeam: Team) {

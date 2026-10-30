@@ -45,7 +45,7 @@ export function createGameStartPrompt(content = "Start game?") {
     components: [
       new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
-          .setCustomId(GAME_START_BUTTON_ID)
+          .setCustomId(`${GAME_START_BUTTON_ID}:${GameInstance.getInstance().getLifecycleToken()}`)
           .setLabel("Start Game")
           .setStyle(ButtonStyle.Success)
       ),
@@ -447,7 +447,8 @@ export default class GameCommand implements Command {
   }
 
   async handleButtonPress(interaction: ButtonInteraction) {
-    if (interaction.customId === GAME_START_BUTTON_ID) {
+    if (interaction.customId === GAME_START_BUTTON_ID ||
+        interaction.customId.startsWith(`${GAME_START_BUTTON_ID}:`)) {
       await this.handleStartButton(interaction);
       return;
     }
@@ -465,6 +466,14 @@ export default class GameCommand implements Command {
   private async handleStartButton(
     interaction: ButtonInteraction
   ): Promise<void> {
+    const expectedId = `${GAME_START_BUTTON_ID}:${GameInstance.getInstance().getLifecycleToken()}`;
+    if (interaction.customId !== expectedId) {
+      await interaction.reply({
+        content: "This start-game button belongs to an old or unverified game. Use the current prompt or /game start.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
     const member = interaction.guild?.members.cache.get(interaction.user.id);
     if (
       !interaction.guild ||

@@ -1,3 +1,5 @@
+import { GameRecoveryCoordinator } from "../logic/ActiveGameRecovery";
+
 export class Scheduler {
   private static readonly tasks: Map<string, NodeJS.Timeout> = new Map();
 
@@ -20,17 +22,27 @@ export class Scheduler {
         `Scheduling task '${id}' to run in ${delay / 1000}s at ${targetTime.toISOString()}`
       );
 
-      const timeout = setTimeout(async () => {
+      const execute = async () => {
+        if (this.tasks.get(id) !== timeout) return;
+        const done = GameRecoveryCoordinator.enterOperation();
+        if (!done) {
+          const deferred = GameRecoveryCoordinator.deferUntilCaptureAborts(() => {
+            if (this.tasks.get(id) === timeout) void execute();
+          });
+          if (!deferred && this.tasks.get(id) === timeout) this.tasks.delete(id);
+          return;
+        }
         try {
           await callback();
           console.info(`Task '${id}' executed successfully.`);
         } catch (error) {
           console.error(`Scheduled task '${id}' failed:`, error);
         } finally {
-          this.tasks.delete(id);
+          if (this.tasks.get(id) === timeout) this.tasks.delete(id);
+          done();
         }
-      }, delay);
-
+      };
+      const timeout = setTimeout(execute, delay);
       this.tasks.set(id, timeout);
     } else {
       console.warn(`Task '${id}' not scheduled: Target time already passed.`);

@@ -64,6 +64,12 @@ export default class AnnouncementCommand implements Command {
 
   private announcementPreviewMessage?: Message;
   private announcementMessage?: Message;
+
+  /** Reattach the original Discord-owned message; never announce or ping again. */
+  public attachRecoveredAnnouncementMessage(message: Message<boolean>): void {
+    this.announcementMessage = message;
+    GameInstance.getInstance().announcementMessage = message;
+  }
   private static readonly namesPath = path.resolve(
     process.cwd(),
     "organisers-hosts.json"
@@ -325,10 +331,13 @@ export default class AnnouncementCommand implements Command {
   private async handleAnnouncementStart(
     interaction: ChatInputCommandInteraction
   ) {
+    await interaction.deferReply();
+    if (GameInstance.getInstance().announced) {
+      await interaction.editReply("A game is already announced. Finish or explicitly cancel it before starting another announcement.");
+      return;
+    }
     const organiser = interaction.options.getString("organiser");
     const host = interaction.options.getString("host");
-
-    await interaction.deferReply();
     this.lastModifiersRerollAt = undefined;
 
     if (this.announcementPreviewMessage) {
@@ -468,6 +477,11 @@ export default class AnnouncementCommand implements Command {
   }
 
   private async handleAnnouncementConfirm(guild: Guild, ping: boolean) {
+    // Message fetch failure after recovery must never turn an existing game
+    // into a second announcement or repeat a role ping.
+    if (GameInstance.getInstance().announced) {
+      throw new Error("An active game is already announced; duplicate announcement blocked.");
+    }
     const blocked = MatchRecoveryGate.getBlockReason();
     if (blocked) throw new Error(`Cannot announce a new match: ${blocked}`);
     const embed = this.createGameAnnouncementEmbed(false).embeds?.[0];
@@ -589,6 +603,17 @@ export default class AnnouncementCommand implements Command {
   public async handleButtonPress(
     interaction: ButtonInteraction
   ): Promise<void> {
+    // A recovered announcement whose original Discord message could not be
+    // reattached is still authoritative. Do not replay its stale controls.
+    if (this.buttonIds.includes(interaction.customId) &&
+        GameInstance.getInstance().announced && !this.announcementMessage &&
+        interaction.customId !== "announcement-cancel") {
+      await interaction.reply({
+        content: "The existing announcement could not be verified after recovery. Its old controls are paused; use normal game commands.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
     if (
       interaction.customId === "announcement-custom-save" ||
       interaction.customId === "announcement-custom-reset" ||
@@ -615,7 +640,7 @@ export default class AnnouncementCommand implements Command {
       return;
     }
 
-    const isConfirmed = !!this.announcementMessage;
+    const isConfirmed = !!this.announcementMessage || GameInstance.getInstance().announced;
 
     switch (interaction.customId) {
       case "announcement-cancel":

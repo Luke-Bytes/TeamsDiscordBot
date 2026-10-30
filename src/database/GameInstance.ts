@@ -1,6 +1,7 @@
 import { $Enums, AnniMap, Team } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { MatchRecoveryGate } from "../logic/MatchRecoveryGate";
+import { GameRecoveryCoordinator } from "../logic/ActiveGameRecovery";
 import {
   CacheType,
   CacheTypeReducer,
@@ -38,6 +39,9 @@ export class GameInstance {
   gameId?: string;
   isFinished?: boolean;
   announced = false;
+  /** Recovery-only diagnostics: incomplete workflows are retained but not restarted. */
+  recoveryPausedWorkflows: string[] = [];
+  recoveryDraftProgress?: { mode: "draft" | "snake"; turn: "RED" | "BLUE" | null; proposedTeams: Record<"RED" | "BLUE" | "UNDECIDED", string[]>; lateSignups: string[]; finishedPicking: boolean };
   isRestarting = false;
   isDoubleElo = false;
   isRelaxedSeason = false;
@@ -135,6 +139,8 @@ export class GameInstance {
     this.gameId = undefined;
     this.isFinished = undefined;
     this.announced = false;
+    this.recoveryPausedWorkflows = [];
+    this.recoveryDraftProgress = undefined;
     this.isRestarting = false;
     this.isDoubleElo = false;
     this.isRelaxedSeason = false;
@@ -204,6 +210,32 @@ export class GameInstance {
     return this.gameStartStatus;
   }
 
+  /** Domain-only recovery metadata; no runtime handles or Discord objects. */
+  public exportRecoveryMetadata() {
+    return {
+      captainBanCounts: [...this.captainBanCounts.entries()],
+      captainBanLocked: [...this.captainBanLocked],
+      classBansAnnounced: this.classBansAnnounced,
+    };
+  }
+
+  /** Called only after the complete snapshot has been validated. */
+  public restoreRecoveryMetadata(
+    gameId: string,
+    lifecycleToken: string,
+    metadata: ReturnType<GameInstance["exportRecoveryMetadata"]>
+  ): void {
+    this.lifecycleVersion += 1;
+    this.lifecycleToken = lifecycleToken as ReturnType<typeof randomUUID>;
+    this.gameId = gameId;
+    this.gameStartStatus = "idle";
+    this.captainBanCounts.clear();
+    metadata.captainBanCounts.forEach(([id, count]) => this.captainBanCounts.set(id, count));
+    this.captainBanLocked.clear();
+    metadata.captainBanLocked.forEach((id) => this.captainBanLocked.add(id));
+    this.classBansAnnounced = metadata.classBansAnnounced;
+  }
+
   public tryBeginGameStart(): GameStartAttempt {
     if (this.gameStartStatus === "starting") return "inProgress";
     if (this.gameStartStatus === "started") return "alreadyStarted";
@@ -224,7 +256,7 @@ export class GameInstance {
   }
 
   public beginConfirmedAnnouncement(): void {
-    const blocked = MatchRecoveryGate.getBlockReason();
+    const blocked = MatchRecoveryGate.getBlockReason() ?? GameRecoveryCoordinator.getBlockReason();
     if (blocked) {
       throw new Error(`Cannot begin announcement while recovery is unresolved: ${blocked}`);
     }
@@ -234,6 +266,8 @@ export class GameInstance {
     this.gameId = this.lifecycleToken;
     this.isFinished = false;
     this.announced = true;
+    this.recoveryPausedWorkflows = [];
+    this.recoveryDraftProgress = undefined;
     this.isRestarting = false;
     this.noElo = false;
     this.gameStartStatus = "idle";
@@ -300,8 +334,12 @@ export class GameInstance {
     if (this.mapVoteManager) {
       this.mapVoteManager.cancelVote();
     }
-    this.mapVoteManager = new MapVoteManager(maps);
-    this.mapVoteManager.on("pollEnd", (winningMap) => {
+    const token = this.getLifecycleToken();
+    const manager = new MapVoteManager(maps);
+    this.mapVoteManager = manager;
+    manager.on("pollEnd", (winningMap) => {
+      if (this.getLifecycleToken() !== token || this.mapVoteManager !== manager ||
+          !this.announced || this.isFinished || GameRecoveryCoordinator.isFrozen()) return;
       this.setMap(winningMap);
     });
   }

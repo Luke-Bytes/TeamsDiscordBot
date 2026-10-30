@@ -60,6 +60,8 @@ import "./critical/minecraftLookupStatus.test";
 import "./critical/matchPersistenceAtomic.test";
 import "./critical/recoveryAndDiscordIntegrity.test";
 import "./critical/identityMutationSafety.test";
+import "./critical/activeGameRecovery.test";
+import "./critical/activeGameRecoveryProcesses.test";
 import { runAll } from "./framework/test";
 
 // Offline reliability suite: any test needing an HTTP response must explicitly

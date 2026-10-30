@@ -9,6 +9,7 @@ import TeamCommand from "../commands/TeamCommand";
 import { AutoCaptainSelector } from "./AutoCaptainSelector";
 import { Scheduler } from "../util/SchedulerUtil";
 import CaptainPlanDMManager from "./CaptainPlanDMManager";
+import { GameRecoveryCoordinator } from "./ActiveGameRecovery";
 
 export class CurrentGameManager {
   private static currentGame?: GameInstance;
@@ -108,6 +109,7 @@ export class CurrentGameManager {
   public static scheduleClassBanTimers(): void {
     const game = this.getCurrentGame();
     if (!game.startTime) return;
+    const token = game.getLifecycleToken();
     if (typeof game.getClassBanLimit !== "function") return;
     if (game.getClassBanLimit() <= 0) return;
 
@@ -118,8 +120,14 @@ export class CurrentGameManager {
     const now = Date.now();
 
     if (warningTime.getTime() > now) {
-      this.classBanWarningTimeout = setTimeout(async () => {
+      const sendClassBanWarning = async () => {
+        const done = GameRecoveryCoordinator.enterOperation();
+        if (!done) {
+          GameRecoveryCoordinator.deferUntilCaptureAborts(() => { void sendClassBanWarning(); });
+          return;
+        }
         try {
+          if (game.getLifecycleToken() !== token) return;
           const redCaptain = game.getCaptainOfTeam("RED");
           const blueCaptain = game.getCaptainOfTeam("BLUE");
           if (
@@ -142,18 +150,26 @@ export class CurrentGameManager {
           }
         } catch (e) {
           console.error("Error sending class ban reminders:", e);
-        }
-      }, warningTime.getTime() - now);
+        } finally { done(); }
+      };
+      this.classBanWarningTimeout = setTimeout(sendClassBanWarning, warningTime.getTime() - now);
     }
 
     if (game.startTime.getTime() > now) {
-      this.classBanDeadlineTimeout = setTimeout(async () => {
+      const enforceClassBan = async () => {
+        const done = GameRecoveryCoordinator.enterOperation();
+        if (!done) {
+          GameRecoveryCoordinator.deferUntilCaptureAborts(() => { void enforceClassBan(); });
+          return;
+        }
         try {
-          await CurrentGameManager.enforceClassBanDeadline();
+          if (game.getLifecycleToken() !== token) return;
+          await CurrentGameManager.enforceClassBanDeadline(token);
         } catch (e) {
           console.error("Error enforcing class ban deadline:", e);
-        }
-      }, game.startTime.getTime() - now);
+        } finally { done(); }
+      };
+      this.classBanDeadlineTimeout = setTimeout(enforceClassBan, game.startTime.getTime() - now);
     }
   }
 
@@ -168,8 +184,9 @@ export class CurrentGameManager {
     }
   }
 
-  public static async enforceClassBanDeadline(): Promise<void> {
+  public static async enforceClassBanDeadline(ownerToken?: string): Promise<void> {
     const game = this.getCurrentGame();
+    if (ownerToken && (game.getLifecycleToken() !== ownerToken || GameRecoveryCoordinator.isFrozen())) return;
     const redCaptain = game.getCaptainOfTeam("RED");
     const blueCaptain = game.getCaptainOfTeam("BLUE");
     const perCapLimit = game.getPerCaptainBanLimit();
@@ -252,7 +269,9 @@ export class CurrentGameManager {
       await DiscordUtil.sendMessage("gameFeed", { embeds: [lockedEmbed] });
       await DiscordUtil.sendMessage("redTeamChat", { embeds: [lockedEmbed] });
       await DiscordUtil.sendMessage("blueTeamChat", { embeds: [lockedEmbed] });
-      game.markClassBansAnnounced();
+      if (!ownerToken || (game.getLifecycleToken() === ownerToken && !GameRecoveryCoordinator.isFrozen())) {
+        game.markClassBansAnnounced();
+      }
     }
   }
 
@@ -268,7 +287,12 @@ export class CurrentGameManager {
     const enforceTime = new Date(game.startTime.getTime() - 15 * 60 * 1000);
 
     if (reminderTime.getTime() > now) {
-      this.captainReminderTimeout = setTimeout(async () => {
+      const remindCaptains = async () => {
+        const done = GameRecoveryCoordinator.enterOperation();
+        if (!done) {
+          GameRecoveryCoordinator.deferUntilCaptureAborts(() => { void remindCaptains(); });
+          return;
+        }
         try {
           if (game.getLifecycleToken() !== token || !game.announced ||
               game.getGameStartStatus() !== "idle" || game.isFinished) return;
@@ -282,12 +306,18 @@ export class CurrentGameManager {
           );
         } catch (e) {
           console.error("Error sending captain reminder:", e);
-        }
-      }, reminderTime.getTime() - now);
+        } finally { done(); }
+      };
+      this.captainReminderTimeout = setTimeout(remindCaptains, reminderTime.getTime() - now);
     }
 
     if (enforceTime.getTime() > now) {
-      this.captainEnforceTimeout = setTimeout(async () => {
+      const autoSelectCaptains = async () => {
+        const done = GameRecoveryCoordinator.enterOperation();
+        if (!done) {
+          GameRecoveryCoordinator.deferUntilCaptureAborts(() => { void autoSelectCaptains(); });
+          return;
+        }
         try {
           if (this.getCurrentGame() !== game || game.getLifecycleToken() !== token ||
               !game.announced || game.getGameStartStatus() !== "idle" || game.isFinished) return;
@@ -324,8 +354,9 @@ export class CurrentGameManager {
           await this.attemptAutoStartDraft(guild);
         } catch (e) {
           console.error("Error enforcing auto-captain selection:", e);
-        }
-      }, enforceTime.getTime() - now);
+        } finally { done(); }
+      };
+      this.captainEnforceTimeout = setTimeout(autoSelectCaptains, enforceTime.getTime() - now);
     }
   }
 
@@ -386,7 +417,13 @@ export class CurrentGameManager {
     if (this.draftAutoStartTimeout) {
       clearTimeout(this.draftAutoStartTimeout);
     }
-    this.draftAutoStartTimeout = setTimeout(async () => {
+    const startDelayedDraft = async () => {
+      const done = GameRecoveryCoordinator.enterOperation();
+      if (!done) {
+        GameRecoveryCoordinator.deferUntilCaptureAborts(() => { void startDelayedDraft(); });
+        return;
+      }
+      try {
       const currentGame = this.getCurrentGame();
       if (currentGame !== game || game.getLifecycleToken() !== token ||
           !game.announced || game.isFinished ||
@@ -436,7 +473,9 @@ export class CurrentGameManager {
       );
 
       await startDraft();
-    }, 60_000);
+      } finally { done(); }
+    };
+    this.draftAutoStartTimeout = setTimeout(startDelayedDraft, 60_000);
   }
 
   private static getAutoBalanceRemovalId(game: GameInstance): string | null {

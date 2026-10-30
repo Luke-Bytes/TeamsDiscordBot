@@ -52,6 +52,7 @@ import TierListCommand from "../commands/TierListCommand";
 import CaptainPlanDMManager from "../logic/CaptainPlanDMManager";
 import { InteractionGuard } from "../util/InteractionGuard";
 import { isUnknownInteraction, discordErrorCode } from "../util/DiscordFailures";
+import { GameRecoveryCoordinator } from "../logic/ActiveGameRecovery";
 
 export class CommandHandler {
   commands: Command[] = [];
@@ -161,6 +162,19 @@ export class CommandHandler {
   }
 
   public async handleInteraction(interaction: Interaction) {
+    const restart = (interaction.isChatInputCommand() && interaction.commandName === "restart") ||
+      (interaction.isButton() && interaction.customId.startsWith("confirm_restart"));
+    const done = restart ? () => {} : GameRecoveryCoordinator.enterOperation();
+    if (!done) {
+      if (interaction.isRepliable()) {
+        try {
+          await interaction.reply({ content: GameRecoveryCoordinator.getBlockReason() ?? "Game recovery is in progress." });
+        } catch (error) {
+          console.warn("Failed to acknowledge blocked interaction", error);
+        }
+      }
+      return;
+    }
     try {
       if (!(await this.interactionGuard.checkRateLimit(interaction))) {
         return;
@@ -270,6 +284,8 @@ export class CommandHandler {
           console.warn("Interaction expired before error response (10062)");
         }
       }
+    } finally {
+      done();
     }
   }
 

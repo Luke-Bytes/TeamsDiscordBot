@@ -13,7 +13,9 @@ async function buildAndRun() {
     target: "node18",
     sourcemap: false,
     format: "cjs",
-    external: ["sharp"],
+    // The real-process integration suite builds a separate worker at runtime.
+    // esbuild itself must stay external because its JS API resolves a native binary.
+    external: ["sharp", "esbuild"],
     logLevel: "info",
     tsconfig: path.resolve(process.cwd(), "tsconfig.json"),
   });

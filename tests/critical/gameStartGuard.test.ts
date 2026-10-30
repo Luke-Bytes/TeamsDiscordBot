@@ -16,7 +16,7 @@ import { PermissionsUtil } from "../../src/util/PermissionsUtil";
 function makeButtonInteraction(guild: any, userId: string) {
   const replies: any[] = [];
   return {
-    customId: GAME_START_BUTTON_ID,
+    customId: `${GAME_START_BUTTON_ID}:${GameInstance.getInstance().getLifecycleToken()}`,
     guild,
     user: { id: userId },
     client: { users: {} },
@@ -55,8 +55,8 @@ test("team finalization publishes one shared start-game prompt", async () => {
   assertEqual(staleReplies.length, 1, "Repeat click should be acknowledged as stale");
   assert(
     followUps[0].components[0].components[0].data.custom_id ===
-      GAME_START_BUTTON_ID,
-    "Prompt should contain the stable start button"
+      `${GAME_START_BUTTON_ID}:${GameInstance.getInstance().getLifecycleToken()}`,
+    "Prompt should contain the game-scoped start button"
   );
   assert(
     followUps[0].components[0].components[0].data.style === 3,
@@ -176,8 +176,8 @@ test("failed button start releases guard and restores retry button", async () =>
   )?.payload;
   assert(
     restored?.components?.[0]?.components?.[0]?.data?.custom_id ===
-      GAME_START_BUTTON_ID,
-    "Failure should restore the retry button"
+      `${GAME_START_BUTTON_ID}:${GameInstance.getInstance().getLifecycleToken()}`,
+    "Failure should restore the same-game retry button"
   );
 
   (command as any).runGameStartWorkflow = async () => {};
@@ -188,6 +188,34 @@ test("failed button start releases guard and restores retry button", async () =>
     "started",
     "Restored button should allow a successful retry"
   );
+  game.reset();
+});
+
+test("Old game and unscoped legacy start buttons cannot begin a newer game", async () => {
+  const game = GameInstance.getInstance();
+  game.reset();
+  const guild = new FakeGuild() as any;
+  const organiserId = "organiser";
+  guild.addMember(new FakeGuildMember(organiserId, [
+    ConfigManager.getConfig().roles.organiserRole,
+  ]));
+  const oldId = `${GAME_START_BUTTON_ID}:${game.getLifecycleToken()}`;
+  game.reset();
+  game.announced = true;
+  game.gameId = game.getLifecycleToken();
+  const command = new GameCommand();
+  let starts = 0;
+  (command as any).runGameStartWorkflow = async () => { starts++; };
+  const oldButton = makeButtonInteraction(guild, organiserId);
+  oldButton.customId = oldId;
+  await command.handleButtonPress(oldButton);
+  assertEqual(starts, 0, "old game button rejected");
+  assert(oldButton.replies.some((entry: any) => String(entry.payload?.content).includes("old or unverified")), "stale button diagnosis");
+  const legacy = makeButtonInteraction(guild, organiserId);
+  legacy.customId = GAME_START_BUTTON_ID;
+  await command.handleButtonPress(legacy);
+  assertEqual(starts, 0, "unscoped old-version button rejected");
+  assertEqual(game.getGameStartStatus(), "idle", "new game untouched");
   game.reset();
 });
 

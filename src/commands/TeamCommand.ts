@@ -22,6 +22,7 @@ import { PermissionsUtil } from "../util/PermissionsUtil";
 import { escapeText } from "../util/Utils";
 import { createGameStartPrompt } from "./GameCommand";
 import { GuildMembership } from "../logic/GuildMembership";
+import { GameRecoveryCoordinator } from "../logic/ActiveGameRecovery";
 import { withObsoleteMessageGuard, discordErrorCode, fetchGuildMember } from "../util/DiscordFailures";
 
 export default class TeamCommand implements Command {
@@ -41,12 +42,19 @@ export default class TeamCommand implements Command {
   private serialTail: Promise<void> = Promise.resolve();
 
   private async serialise<T>(task: () => Promise<T>): Promise<T> {
+    // Register before waiting on the existing queue: capture must not overlook waiters.
+    const done = GameRecoveryCoordinator.enterOperation();
+    if (!done) throw new Error(GameRecoveryCoordinator.getBlockReason() ?? "Game recovery is in progress");
     const previous = this.serialTail;
     let release!: () => void;
     this.serialTail = new Promise<void>((resolve) => { release = resolve; });
-    await previous;
-    try { return await task(); }
-    finally { release(); }
+    try {
+      await previous;
+      return await task();
+    } finally {
+      release();
+      done();
+    }
   }
 
   async runRosterOperation<T>(task: () => Promise<T>): Promise<T> {
@@ -387,7 +395,12 @@ export default class TeamCommand implements Command {
           } else {
             await interaction.deferReply();
             const embed = this.createTeamViewEmbed(game);
-            await DiscordUtil.editReply(interaction, embed);
+            await DiscordUtil.editReply(interaction, {
+              ...embed,
+              ...(game.recoveryPausedWorkflows.length
+                ? { content: `Recovered game: optional workflows paused. ${game.recoveryPausedWorkflows.join("; ").slice(0, 1500)}` }
+                : {}),
+            });
           }
           break;
         }
