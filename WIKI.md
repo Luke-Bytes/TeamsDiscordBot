@@ -57,10 +57,26 @@ Commands (excluding subcommands):
 - `/season view [number]` shows season statistics.
 - `/season status` shows the active type, completed games, limits, calendar
   deadline, next-type policy, pending rollover, and announcement retries.
-- `/season configure [game-limit] [month-limit] [current-type] [next-type]` is
+- `/season configure [game-limit] [month-limit] [start] [current-type] [next-type]` is
   organiser-only. Omitted values stay unchanged; `0` clears a limit and
   `next-type:auto` restores alternating successors. The current type can only
   change before the first finished game.
+  Limits always describe Ranked seasons; Relaxed uses half (30 games / 2 months
+  becomes 15 games / 1 month), and the next Ranked season restores the full
+  limits. Odd game limits round down, with a minimum of one game. Half a calendar
+  month means halfway between the start date and the same date next month
+  (clamped at month end).
+  `start` schedules the first rollover, taking priority over game/month limits
+  until then. Use `YYYY-MM-DD` for midnight UTC, or an ISO timestamp with an
+  explicit timezone, e.g. `2026-11-13T18:00:00Z`. The date must be in the future;
+  `start:off` clears it. The schedule persists across restarts; an overdue
+  schedule runs on startup, waiting if a game is active. It is consumed by the
+  first rollover, and successor seasons then use their game/month limits from
+  their actual start time. `current-type` still changes the current season
+  immediately; use `next-type` to choose the type that starts on the scheduled date.
+  For example, `/season configure start:2026-11-13 game-limit:30 month-limit:2 next-type:RELAXED`
+  schedules the first rollover for Friday 13 November at
+  midnight UTC, followed by a Relaxed season of up to 15 games or 1 month.
 - `/season end [next-type]` confirms a manual close and complete rollover.
 - `/season start [type] [number]` confirms initial bootstrap and is rejected
   while a season is active.

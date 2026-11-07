@@ -17,7 +17,10 @@ model Season {
   type      SeasonType? @default(RANKED)
 
   gameLimit        Int?
-  monthLimit       Int?
+  monthLimit       Float?
+  rankedGameLimit  Int?
+  rankedMonthLimit Float?
+  firstRolloverAt  DateTime?
   rolloverDeadline DateTime?
   rolloverPending  Boolean?    @default(false)
   nextTypeOverride SeasonType?
@@ -255,6 +258,7 @@ enum SeasonClosureReason {
   GAME_LIMIT
   MONTH_LIMIT
   MANUAL
+  SCHEDULED
 }
 
 enum SeasonAnnouncementKind {

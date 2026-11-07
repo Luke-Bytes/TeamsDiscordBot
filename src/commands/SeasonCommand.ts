@@ -59,14 +59,23 @@ export default class SeasonCommand implements Command {
           .addIntegerOption((option) =>
             option
               .setName("game-limit")
-              .setDescription("Finished games; 0 clears")
+              .setDescription("Ranked game limit; Relaxed uses half; 0 clears")
               .setMinValue(0)
           )
           .addIntegerOption((option) =>
             option
               .setName("month-limit")
-              .setDescription("Calendar months; 0 clears")
+              .setDescription(
+                "Ranked calendar months; Relaxed uses half; 0 clears"
+              )
               .setMinValue(0)
+          )
+          .addStringOption((option) =>
+            option
+              .setName("start")
+              .setDescription(
+                "First rollover: YYYY-MM-DD (UTC), ISO timestamp with zone, or off"
+              )
           )
           .addStringOption((option) =>
             option
@@ -128,7 +137,34 @@ export default class SeasonCommand implements Command {
           "current-type"
         ) as SeasonType | null;
         const nextRaw = interaction.options.getString("next-type");
+        const startRaw = interaction.options.getString("start");
+        let firstRolloverAt: Date | null | undefined;
+        if (startRaw !== null) {
+          if (startRaw.toLowerCase() === "off") firstRolloverAt = null;
+          else {
+            const value = startRaw.trim();
+            if (
+              !/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:\d{2}))?$/.test(
+                value
+              )
+            ) {
+              throw new Error(
+                "Use YYYY-MM-DD (midnight UTC), an ISO timestamp with a timezone, or off."
+              );
+            }
+            firstRolloverAt = new Date(value);
+            const datePart = value.slice(0, 10);
+            const parsedDay = new Date(`${datePart}T00:00:00Z`);
+            if (
+              !Number.isFinite(firstRolloverAt.getTime()) ||
+              parsedDay.toISOString().slice(0, 10) !== datePart
+            ) {
+              throw new Error("The start date is not a valid calendar date.");
+            }
+          }
+        }
         const season = await SeasonService.configure({
+          firstRolloverAt,
           gameLimit: gameLimit === null ? undefined : gameLimit || null,
           monthLimit: monthLimit === null ? undefined : monthLimit || null,
           currentType: currentType ?? undefined,
@@ -140,7 +176,7 @@ export default class SeasonCommand implements Command {
                 : (nextRaw as SeasonType),
         });
         await interaction.reply({
-          content: `Season ${season.number} configuration saved.`,
+          content: `Season ${season.number} configuration saved.${season.firstRolloverAt ? ` First rollover scheduled for <t:${Math.floor(season.firstRolloverAt.getTime() / 1000)}:F>; game/month limits apply after that rollover.` : ""} Ranked limits apply in full; Relaxed uses half.`,
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -298,6 +334,16 @@ export default class SeasonCommand implements Command {
             inline: true,
           },
           { name: "Deadline", value: deadline },
+          {
+            name: "First scheduled rollover",
+            value: season.firstRolloverAt
+              ? `<t:${Math.floor(season.firstRolloverAt.getTime() / 1000)}:F> (takes priority over limits)`
+              : "Not scheduled",
+          },
+          {
+            name: "Ranked baseline",
+            value: `${season.rankedGameLimit ?? season.gameLimit ?? "No"} games / ${season.rankedMonthLimit ?? season.monthLimit ?? "No"} months; Relaxed uses half`,
+          },
           {
             name: "Next type",
             value: season.nextTypeOverride ?? "Automatic alternation",

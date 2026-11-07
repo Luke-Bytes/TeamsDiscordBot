@@ -14,12 +14,14 @@ import { DiscordUtil } from "../util/DiscordUtil";
 import { Channels } from "../Channels";
 import { generateSeasonRecap } from "../logic/seasonRecap/SeasonRecap";
 import { TitleService } from "../logic/TitleService";
+import logger from "../util/Logger";
 
 export type SeasonConfiguration = {
   gameLimit?: number | null;
   monthLimit?: number | null;
   currentType?: SeasonType;
   nextTypeOverride?: SeasonType | null;
+  firstRolloverAt?: Date | null;
 };
 
 export type SeasonStatus = {
@@ -63,15 +65,39 @@ export class SeasonService {
     monthLimit: number | null
   ): Date | null {
     if (!monthLimit) return null;
+    const wholeMonths = Math.floor(monthLimit);
+    const fraction = monthLimit - wholeMonths;
     const result = new Date(startDate);
     const originalDay = result.getUTCDate();
     result.setUTCDate(1);
-    result.setUTCMonth(result.getUTCMonth() + monthLimit);
+    result.setUTCMonth(result.getUTCMonth() + wholeMonths);
     const lastDay = new Date(
       Date.UTC(result.getUTCFullYear(), result.getUTCMonth() + 1, 0)
     ).getUTCDate();
     result.setUTCDate(Math.min(originalDay, lastDay));
+    if (fraction) {
+      const next = this.calculateDeadline(startDate, wholeMonths + 1)!;
+      return new Date(
+        result.getTime() + fraction * (next.getTime() - result.getTime())
+      );
+    }
     return result;
+  }
+
+  /** Configured limits always describe Ranked; Relaxed derives from that baseline. */
+  static limitsForType(
+    type: SeasonType,
+    gameLimit: number | null,
+    monthLimit: number | null
+  ): { gameLimit: number | null; monthLimit: number | null } {
+    return {
+      gameLimit:
+        gameLimit && type === SeasonType.RELAXED
+          ? Math.max(1, Math.floor(gameLimit / 2))
+          : gameLimit,
+      monthLimit:
+        monthLimit && type === SeasonType.RELAXED ? monthLimit / 2 : monthLimit,
+    };
   }
 
   static async getStatus(): Promise<SeasonStatus> {
@@ -89,6 +115,13 @@ export class SeasonService {
 
   static async configure(configuration: SeasonConfiguration): Promise<Season> {
     const season = await this.requireActiveSeason();
+    if (
+      configuration.firstRolloverAt &&
+      (!Number.isFinite(configuration.firstRolloverAt.getTime()) ||
+        configuration.firstRolloverAt.getTime() <= Date.now())
+    ) {
+      throw new Error("The start date must be in the future.");
+    }
     for (const [name, value] of [
       ["game limit", configuration.gameLimit],
       ["month limit", configuration.monthLimit],
@@ -117,18 +150,37 @@ export class SeasonService {
       }
     }
 
-    const monthLimit =
+    const rankedGameLimit =
+      configuration.gameLimit === undefined
+        ? (season.rankedGameLimit ?? season.gameLimit)
+        : configuration.gameLimit;
+    const rankedMonthLimit =
       configuration.monthLimit === undefined
-        ? season.monthLimit
+        ? (season.rankedMonthLimit ?? season.monthLimit)
         : configuration.monthLimit;
+    const limits = this.limitsForType(
+      configuration.currentType ?? season.type ?? SeasonType.RANKED,
+      rankedGameLimit,
+      rankedMonthLimit
+    );
     const updated = await prismaClient.season.update({
       where: { id: season.id },
       data: {
-        gameLimit: configuration.gameLimit,
-        monthLimit: configuration.monthLimit,
+        rankedGameLimit,
+        rankedMonthLimit,
+        ...limits,
         type: configuration.currentType,
         nextTypeOverride: configuration.nextTypeOverride,
-        rolloverDeadline: this.calculateDeadline(season.startDate, monthLimit),
+        firstRolloverAt: configuration.firstRolloverAt,
+        ...(configuration.firstRolloverAt !== undefined ||
+        configuration.gameLimit !== undefined ||
+        configuration.monthLimit !== undefined
+          ? { rolloverPending: false, closureReason: null }
+          : {}),
+        rolloverDeadline: this.calculateDeadline(
+          season.startDate,
+          limits.monthLimit
+        ),
       },
     });
     await this.evaluateRollover();
@@ -193,6 +245,8 @@ export class SeasonService {
       await this.evaluateRollover();
       await this.deliverPendingAnnouncements();
       await this.refreshPresence();
+      const active = await this.getActiveSeason();
+      if (active) this.scheduleDeadline(active);
     } catch (error) {
       console.error("Season maintenance failed:", error);
     }
@@ -202,6 +256,14 @@ export class SeasonService {
     const outcome = await this.evaluateRollover(false);
     if (!outcome.closed) {
       const { season, finishedGames } = await this.getStatus();
+      if (season.firstRolloverAt) {
+        await DiscordUtil.sendMessage(
+          "gameFeed",
+          `📅 Season ${season.number}: first rollover scheduled for <t:${Math.floor(season.firstRolloverAt.getTime() / 1000)}:F>.`
+        );
+        await this.refreshPresence();
+        return;
+      }
       const gameText = season.gameLimit
         ? `${Math.max(0, season.gameLimit - finishedGames)} game(s) remaining`
         : "no game limit";
@@ -215,7 +277,7 @@ export class SeasonService {
     } else {
       await DiscordUtil.sendMessage(
         "gameFeed",
-        "📅 The season threshold was reached. The next season is now active."
+        "📅 Season rollover completed. The next season is now active."
       );
     }
     await this.refreshPresence();
@@ -226,6 +288,13 @@ export class SeasonService {
   ): Promise<{ closed: boolean; pending: boolean }> {
     const season = await this.getActiveSeason();
     if (!season) return { closed: false, pending: false };
+    const scheduled = Boolean(season.firstRolloverAt);
+    if (
+      season.firstRolloverAt &&
+      season.firstRolloverAt.getTime() > Date.now()
+    ) {
+      return { closed: false, pending: false };
+    }
     const finishedGames = await prismaClient.game.count({
       where: { seasonId: season.id, finished: true },
     });
@@ -235,14 +304,21 @@ export class SeasonService {
     const monthReached = Boolean(
       season.rolloverDeadline && season.rolloverDeadline.getTime() <= Date.now()
     );
-    if (!gameReached && !monthReached && !season.rolloverPending) {
+    if (
+      !scheduled &&
+      !gameReached &&
+      !monthReached &&
+      !season.rolloverPending
+    ) {
       return { closed: false, pending: false };
     }
-    const reason = gameReached
-      ? SeasonClosureReason.GAME_LIMIT
-      : monthReached
-        ? SeasonClosureReason.MONTH_LIMIT
-        : (season.closureReason ?? SeasonClosureReason.MONTH_LIMIT);
+    const reason = scheduled
+      ? SeasonClosureReason.SCHEDULED
+      : gameReached
+        ? SeasonClosureReason.GAME_LIMIT
+        : monthReached
+          ? SeasonClosureReason.MONTH_LIMIT
+          : (season.closureReason ?? SeasonClosureReason.MONTH_LIMIT);
     if (gameActive) {
       await prismaClient.season.update({
         where: { id: season.id },
@@ -276,6 +352,8 @@ export class SeasonService {
         OR: [
           { lifecycleState: SeasonLifecycleState.ACTIVE },
           { lifecycleState: null },
+          // Legacy MongoDB seasons may predate this field entirely.
+          { lifecycleState: { isSet: false } },
         ],
       },
       data: {
@@ -293,7 +371,12 @@ export class SeasonService {
       if (current?.lifecycleState === SeasonLifecycleState.CLOSING) {
         return this.finishClosure(current.id);
       }
-      throw new Error("Season closure is already in progress.");
+      logger.warn(
+        `Season ${active.number} closure could not be claimed: isActive=${current?.isActive}, lifecycleState=${current?.lifecycleState ?? "unset"}.`
+      );
+      throw new Error(
+        "The season changed before closure could start. Check /season status and try again."
+      );
     }
     return this.finishClosure(active.id);
   }
@@ -338,6 +421,13 @@ export class SeasonService {
         ((closing.type ?? SeasonType.RANKED) === SeasonType.RANKED
           ? SeasonType.RELAXED
           : SeasonType.RANKED);
+      const rankedGameLimit = closing.rankedGameLimit ?? closing.gameLimit;
+      const rankedMonthLimit = closing.rankedMonthLimit ?? closing.monthLimit;
+      const limits = this.limitsForType(
+        successorType,
+        rankedGameLimit,
+        rankedMonthLimit
+      );
       successor = await prismaClient.season.create({
         data: {
           number,
@@ -345,11 +435,12 @@ export class SeasonService {
           startDate: new Date(),
           isActive: true,
           type: successorType,
-          gameLimit: closing.gameLimit,
-          monthLimit: closing.monthLimit,
+          rankedGameLimit,
+          rankedMonthLimit,
+          ...limits,
           rolloverDeadline: this.calculateDeadline(
             new Date(),
-            closing.monthLimit
+            limits.monthLimit
           ),
           lifecycleState: SeasonLifecycleState.ACTIVE,
         },
@@ -590,7 +681,9 @@ export class SeasonService {
     const automated = Boolean(season.gameLimit || season.monthLimit);
     let progress = "";
     if (season.rolloverPending) progress = " • rollover pending";
-    else if (automated) {
+    else if (season.firstRolloverAt) {
+      progress = ` • rollover ${season.firstRolloverAt.toISOString().slice(0, 10)} UTC`;
+    } else if (automated) {
       const bits = [
         season.gameLimit ? `${games}/${season.gameLimit} games` : null,
         season.rolloverDeadline
@@ -607,10 +700,13 @@ export class SeasonService {
 
   private static scheduleDeadline(season: Season): void {
     if (this.deadlineTimer) clearTimeout(this.deadlineTimer);
-    if (!season.rolloverDeadline) return;
+    // A pending rollover waits for game completion, rather than spinning a timer.
+    if (season.rolloverPending) return;
+    const deadline = season.firstRolloverAt ?? season.rolloverDeadline;
+    if (!deadline) return;
     const delay = Math.min(
       2_147_000_000,
-      Math.max(0, season.rolloverDeadline.getTime() - Date.now())
+      Math.max(0, deadline.getTime() - Date.now())
     );
     this.deadlineTimer = setTimeout(
       () => void this.periodicMaintenance(),
