@@ -8,6 +8,11 @@ import {
   SeasonRecapGame,
 } from "../../src/logic/seasonRecap/SeasonRecap";
 import { prismaClient } from "../../src/database/prismaClient";
+import {
+  formatSection,
+  prefixRows,
+  splitDiscordBlocks,
+} from "../../src/logic/seasonRecap/formatting";
 
 const base = new Date("2026-01-01T19:00:00.000Z");
 
@@ -531,7 +536,10 @@ test("season recap loader tolerates orphaned game participation players", async 
       (gp) => gp.playerId === "missing"
     );
 
-    assert(missing?.player === null, "Orphaned participation keeps null player");
+    assert(
+      missing?.player === null,
+      "Orphaned participation keeps null player"
+    );
     assert(
       missing?.ignUsed === "MissingHistoricalIgn",
       "Orphaned participation still keeps historical IGN"
@@ -582,12 +590,46 @@ test("season recap formats ranked stat groups cleanly", () => {
   const output = result.blocks.join("\n");
 
   assert(
+    output.startsWith("## 🎉 Friendly Wars Season 9 Recap\n\n"),
+    "Recap starts with a distinct heading and spaced introduction"
+  );
+  assert(
+    output.includes("\n\n**Most Games Together**\n1."),
+    "Stat groups have breathing room above their labels"
+  );
+
+  assert(
     output.includes("**Most Games Together**\n1."),
     "ranked labels should sit above the numbered rows"
   );
   assert(
     !output.includes("Most Games Together: 1."),
     "ranked labels should not share a line with the first row"
+  );
+});
+
+test("season recap splits long sections without leaving headings behind", () => {
+  const text = formatSection({
+    title: "Highlights",
+    lines: [
+      ...prefixRows("First group", ["A".repeat(70)]),
+      ...prefixRows("Second group", ["B".repeat(70)]),
+    ],
+  });
+  const blocks = splitDiscordBlocks(text, 130);
+  assert(
+    blocks.length > 1 && blocks.every((block) => block.length <= 130),
+    "Sections split within the message limit"
+  );
+  assert(
+    blocks.every((block) => !/(?:^|\n)(?:## .+|\*\*[^\n]+\*\*)$/.test(block)),
+    "A heading never ends a message without its result"
+  );
+  assert(
+    splitDiscordBlocks("x".repeat(300), 130).every(
+      (block) => block.length <= 130
+    ),
+    "Even exceptionally long rows stay within the limit"
   );
 });
 

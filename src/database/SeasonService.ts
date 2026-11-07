@@ -3,11 +3,12 @@ import {
   AnnouncementDeliveryState,
   Season,
   SeasonAnnouncementKind,
+  SeasonAnnouncement,
   SeasonClosureReason,
   SeasonLifecycleState,
   SeasonType,
 } from "@prisma/client";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { prismaClient } from "./prismaClient";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 import { DiscordUtil } from "../util/DiscordUtil";
@@ -553,10 +554,11 @@ export class SeasonService {
       );
     return [
       [
-        `🎉 **Season ${season.number} Relaxed Recap**`,
+        `## 🎉 Season ${season.number} Relaxed Recap`,
+        "",
         `${games} games were played by ${stats.length} players. This season was unranked, so no Elo or placement winner was recorded.`,
         "",
-        "**Activity highlights**",
+        "### Activity highlights",
         ...(active.length ? active : ["No finished games were recorded."]),
       ].join("\n"),
     ];
@@ -577,11 +579,10 @@ export class SeasonService {
   ): Promise<void> {
     for (const [blockIndex, raw] of blocks.entries()) {
       const marker = `〔season:${seasonId}:${kind}:${blockIndex}〕`;
-      const content = `${marker}\n${raw}`;
       await prismaClient.seasonAnnouncement.upsert({
         where: { seasonId_kind_blockIndex: { seasonId, kind, blockIndex } },
         update: {},
-        create: { seasonId, kind, blockIndex, marker, content },
+        create: { seasonId, kind, blockIndex, marker, content: raw },
       });
     }
   }
@@ -622,9 +623,24 @@ export class SeasonService {
         }
       }
       try {
-        const existing = await this.findDeliveredMarker(block.marker);
+        // Also strip the prefix from announcements queued by older versions.
+        const prefix = `${block.marker}\n`;
+        const content = block.content.startsWith(prefix)
+          ? block.content.slice(prefix.length)
+          : block.content;
+        const nonce = createHash("sha256")
+          .update(block.marker)
+          .digest("hex")
+          .slice(0, 24);
+        const existing = await this.findDeliveredAnnouncement(block, content);
         const message =
-          existing ?? (await Channels.announcements.send(block.content));
+          existing ??
+          (await Channels.announcements.send({
+            content,
+            nonce,
+            enforceNonce: true,
+            allowedMentions: { parse: [] },
+          }));
         await prismaClient.seasonAnnouncement.update({
           where: { id: block.id },
           data: {
@@ -653,17 +669,36 @@ export class SeasonService {
     }
   }
 
-  private static async findDeliveredMarker(
-    marker: string
+  private static async findDeliveredAnnouncement(
+    block: SeasonAnnouncement,
+    content: string
   ): Promise<Message | null> {
     const channel = Channels.announcements as TextBasedChannel;
     if (!("messages" in channel) || !channel.messages) return null;
+    if (block.discordMessageId) {
+      const saved = await channel.messages
+        .fetch(block.discordMessageId)
+        .catch(() => null);
+      if (saved) return saved;
+    }
     const messages = await channel.messages
       .fetch({ limit: 100 })
       .catch(() => null);
-    return (
-      messages?.find((message) => message.content.includes(marker)) ?? null
-    );
+    for (const message of messages?.values() ?? []) {
+      if (message.author.id !== channel.client.user?.id) continue;
+      if (message.content.includes(block.marker)) return message;
+      if (
+        message.content !== content ||
+        message.createdTimestamp < block.createdAt.getTime()
+      )
+        continue;
+      // Identical text can belong to a different season or announcement block.
+      const claimed = await prismaClient.seasonAnnouncement.findFirst({
+        where: { discordMessageId: message.id, id: { not: block.id } },
+      });
+      if (!claimed) return message;
+    }
+    return null;
   }
 
   static async refreshPresence(): Promise<void> {

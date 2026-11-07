@@ -33,7 +33,9 @@ export function buildSnapshot(
     title: `🎉 Friendly Wars Season ${seasonNumber} Recap`,
     lines: [
       `Season ${seasonNumber} ran from ${dateRange}, covering ${formatSeasonSpan(games)} of games, drafts, and close calls.`,
+      "",
       `${games.length} games were played by ${playerCount} unique players, with the biggest game reaching ${biggestGamePlayers} players at once.`,
+      "",
       "Check out the stats, patterns, and highlights from the season ⬇️",
     ],
   };

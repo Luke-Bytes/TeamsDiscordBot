@@ -3,6 +3,7 @@ import { prismaClient } from "../database/prismaClient";
 import { TitleStore } from "../util/TitleStore";
 import { formatTitleLabel } from "../util/ProfileUtil";
 import { escapeText } from "../util/Utils";
+import { loadTitleHistory } from "./TitleHistory";
 
 export type NewlyUnlockedTitle = {
   playerId: string;
@@ -30,21 +31,13 @@ export class TitleService {
       awards.set(playerId, playerAwards);
     };
 
-    const [stats, mvps, captains, games, players] = await Promise.all([
+    const [stats, mvps, history, players] = await Promise.all([
       prismaClient.playerStats.findMany(),
       prismaClient.gameParticipation.findMany({
         where: { mvp: true },
         select: { playerId: true },
       }),
-      prismaClient.gameParticipation.findMany({
-        where: { captain: true },
-        select: {
-          playerId: true,
-          team: true,
-          game: { select: { winner: true } },
-        },
-      }),
-      prismaClient.game.findMany({ select: { organiser: true, host: true } }),
+      loadTitleHistory(),
       prismaClient.player.findMany({
         select: { id: true, latestIGN: true, discordSnowflake: true },
       }),
@@ -72,8 +65,7 @@ export class TitleService {
     for (const [playerId, count] of countByPlayer(mvps)) {
       if (count >= 10) award(playerId, "PARAGON");
     }
-    const captainWins = captains.filter((row) => row.team === row.game.winner);
-    for (const [playerId, count] of countByPlayer(captainWins)) {
+    for (const [playerId, count] of countByPlayer(history.captainWins)) {
       if (count >= 10) award(playerId, "COMMODORE");
     }
 
@@ -83,7 +75,7 @@ export class TitleService {
         .map((player) => [player.latestIGN!.toLowerCase(), player.id])
     );
     const hosted = new Map<string, number>();
-    for (const game of games) {
+    for (const game of history.games) {
       for (const name of [game.organiser, game.host]) {
         const playerId = name
           ? playerIdByIgn.get(name.trim().toLowerCase())

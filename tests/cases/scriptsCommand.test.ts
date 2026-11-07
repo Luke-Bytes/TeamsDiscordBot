@@ -55,6 +55,7 @@ test("/scripts titles-update awards earned titles", async () => {
       ],
     };
     (prismaClient as any).gameParticipation = {
+      findRaw: async () => [],
       findMany: async (_args: any) => [
         {
           playerId: "P1",
@@ -138,7 +139,7 @@ test("/scripts titles-update awards earned titles", async () => {
       ],
     };
     (prismaClient as any).game = {
-      findMany: async () => [],
+      findRaw: async () => [],
     };
     (prismaClient as any).profile = {
       findUnique: async () => ({ unlockedTitles: [] }),

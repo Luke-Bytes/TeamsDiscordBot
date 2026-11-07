@@ -9,13 +9,17 @@ import {
 } from "./types";
 
 export function formatSection(section: InsightSection): string {
-  return [`**${section.title}**`, ...section.lines].join("\n");
+  return [`## ${section.title}`, "", ...section.lines]
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 export function splitDiscordBlocks(text: string, maxLength: number): string[] {
   const blocks: string[] = [];
   let current = "";
-  for (const section of text.split("\n\n")) {
+  // Keep complete sections together whenever they fit in a message.
+  for (const section of text.split(/\n\n(?=## )/)) {
     if (!current) {
       current = section;
       continue;
@@ -34,7 +38,7 @@ export function splitDiscordBlocks(text: string, maxLength: number): string[] {
 
 export function prefixRows(label: string, rows: string[]) {
   if (!rows.length) return [];
-  return [`**${label}**`, ...rows.map((row, idx) => `${idx + 1}. ${row}`)];
+  return ["", `**${label}**`, ...rows.map((row, idx) => `${idx + 1}. ${row}`)];
 }
 
 export function playerName(
@@ -155,16 +159,35 @@ function splitOversizedBlock(block: string, maxLength: number) {
 
   const chunks: string[] = [];
   let chunk = "";
-  for (const line of block.split("\n")) {
+  const lines = block.split("\n");
+  for (let index = 0; index < lines.length; index++) {
+    let line = lines[index];
+    // Carry headings and subgroup labels with their first result.
+    while (
+      /^(?:#{1,3} .+|\*\*[^\n]+\*\*|)$/.test(lines[index]) &&
+      index + 1 < lines.length
+    ) {
+      line += `\n${lines[++index]}`;
+    }
+    if (line.length > maxLength) {
+      if (chunk.trim()) chunks.push(chunk.trim());
+      chunk = "";
+      // Exceptionally long rows must still respect Discord's hard limit.
+      for (let offset = 0; offset < line.length; offset += maxLength) {
+        const part = line.slice(offset, offset + maxLength).trim();
+        if (part) chunks.push(part);
+      }
+      continue;
+    }
     if (!chunk) {
       chunk = line;
     } else if (`${chunk}\n${line}`.length <= maxLength) {
       chunk = `${chunk}\n${line}`;
     } else {
-      chunks.push(chunk);
+      if (chunk.trim()) chunks.push(chunk.trim());
       chunk = line;
     }
   }
-  if (chunk) chunks.push(chunk);
+  if (chunk.trim()) chunks.push(chunk.trim());
   return chunks;
 }
