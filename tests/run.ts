@@ -58,6 +58,7 @@ import "./critical/productionEdgeConcurrency.test";
 import "./critical/followupReliability.test";
 import "./critical/staleResultControls.test";
 import "./critical/lifecycleMutationRaces.test";
+import "./critical/lastGameTeamCorrection.test";
 import "./critical/minecraftLookupStatus.test";
 import "./critical/matchPersistenceAtomic.test";
 import "./critical/recoveryAndDiscordIntegrity.test";

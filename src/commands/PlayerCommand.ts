@@ -142,9 +142,9 @@ export default class PlayerCommand implements Command {
   private async executeUnlocked(interaction: ChatInputCommandInteraction) {
     const game = CurrentGameManager.getCurrentGame();
     if (!game.announced || game.isFinished || game.isRestarting ||
-        game.getGameStartStatus() !== "idle") {
+        game.getGameStartStatus() === "starting") {
       await interaction.editReply(
-        "Player roster edits are only allowed before the game starts."
+        "Player roster edits require an active game that is not starting, restarting, or finished."
       );
       return;
     }

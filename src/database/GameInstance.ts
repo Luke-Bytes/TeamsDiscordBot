@@ -834,10 +834,10 @@ export class GameInstance {
     console.info(`[GAME] Final team state:`, this.teams);
   }
 
-  /** Abort an in-flight roster edit if reset/start/shutdown changes ownership. */
+  /** Allow edits before and during play; abort across resets or lifecycle transitions. */
   private canCompleteRosterMutation(token: string): boolean {
     return token === this.getLifecycleToken() &&
-      this.getGameStartStatus() === "idle" && !this.isFinished && !this.isRestarting;
+      this.getGameStartStatus() !== "starting" && !this.isFinished && !this.isRestarting;
   }
 
   public async addPlayerByNameOrDiscord(

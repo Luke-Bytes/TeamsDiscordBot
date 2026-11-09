@@ -2,6 +2,15 @@ import { GameInstance } from "../database/GameInstance";
 import { PlayerInstance } from "../database/PlayerInstance";
 import { ConfigManager } from "../ConfigManager";
 
+export type EloGameContext = Pick<
+  GameInstance,
+  | "getPlayersTeam"
+  | "blueMeanElo"
+  | "redMeanElo"
+  | "blueExpectedScore"
+  | "redExpectedScore"
+>;
+
 const eloEmojis = {
   800: ":skull_crossbones:",
   900: ":black_circle:",
@@ -97,7 +106,7 @@ export const EloUtil = {
   },
 
   calculateEloChange(
-    game: GameInstance,
+    game: EloGameContext,
     player: PlayerInstance,
     isWin: boolean,
     winStreakOverride?: number
@@ -106,7 +115,7 @@ export const EloUtil = {
   },
 
   getEloChangeBreakdown(
-    game: GameInstance,
+    game: EloGameContext,
     player: PlayerInstance,
     isWin: boolean,
     winStreakOverride?: number
@@ -203,7 +212,7 @@ export const EloUtil = {
   },
 
   getPlayerExpectedScore(
-    game: GameInstance,
+    game: EloGameContext,
     player: PlayerInstance
   ): number | undefined {
     const team = game.getPlayersTeam(player);
