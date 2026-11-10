@@ -19,6 +19,7 @@ import { Channels } from "../Channels";
 
 type PendingSeasonRecap = {
   userId: string;
+  messageId: string;
   recap: SeasonRecapResult;
 };
 
@@ -94,15 +95,15 @@ export default class SeasonRecapCommand implements Command {
       components: [row],
     });
 
-    const pending = { userId: interaction.user.id, recap };
+    const previous = this.pendingByUser.get(interaction.user.id);
+    if (previous) this.pendingByMessage.delete(previous.messageId);
+    const pending = { userId: interaction.user.id, messageId: message.id, recap };
     this.pendingByMessage.set(message.id, pending);
     this.pendingByUser.set(interaction.user.id, pending);
   }
 
   async handleButtonPress(interaction: ButtonInteraction): Promise<void> {
-    const pending =
-      this.pendingByMessage.get(interaction.message.id) ??
-      this.pendingByUser.get(interaction.user.id);
+    const pending = this.pendingByMessage.get(interaction.message.id);
 
     if (!pending) {
       await interaction.reply({
@@ -120,8 +121,10 @@ export default class SeasonRecapCommand implements Command {
       return;
     }
 
+    // Consume synchronously, before the first await: concurrent presses cannot publish twice.
+    this.clearPending(pending);
+
     if (interaction.customId === "season-recap-cancel") {
-      this.clearPending(interaction, pending.userId);
       await interaction.update({
         content: "Season recap publish cancelled.",
         components: [],
@@ -134,13 +137,23 @@ export default class SeasonRecapCommand implements Command {
       components: [],
     });
 
-    for (const block of pending.recap.blocks) {
-      await Channels.announcements.send(block);
+    let published = 0;
+    try {
+      for (const block of pending.recap.blocks) {
+        await Channels.announcements.send(block);
+        published++;
+      }
+    } catch (error) {
+      console.error(`Season recap publication failed after ${published} confirmed block(s); manual review required before retrying.`, error);
+      await interaction.editReply({
+        content: `⚠️ Season ${pending.recap.seasonNumber} recap publishing stopped. ${published} of ${pending.recap.blocks.length} block(s) confirmed sent (the failed send may also have succeeded). Check announcements before publishing again; this confirmation cannot be retried.`,
+        components: [],
+      });
+      return;
     }
 
-    this.clearPending(interaction, pending.userId);
     await interaction.editReply({
-      content: `Posted Season ${pending.recap.seasonNumber} recap in ${pending.recap.blocks.length} message block(s).`,
+      content: `Posted Season ${pending.recap.seasonNumber} recap in ${published} message block(s).`,
       components: [],
     });
   }
@@ -176,8 +189,10 @@ export default class SeasonRecapCommand implements Command {
     return content.length > max ? `${content.slice(0, max - 3)}...` : content;
   }
 
-  private clearPending(interaction: ButtonInteraction, userId: string) {
-    this.pendingByMessage.delete(interaction.message.id);
-    this.pendingByUser.delete(userId);
+  private clearPending(pending: PendingSeasonRecap) {
+    this.pendingByMessage.delete(pending.messageId);
+    if (this.pendingByUser.get(pending.userId) === pending) {
+      this.pendingByUser.delete(pending.userId);
+    }
   }
 }

@@ -55,6 +55,7 @@ export class TempVoiceChannelManager {
   private readonly timers = new Map<string, NodeJS.Timeout>();
   private readonly autoLockTimers = new Map<string, NodeJS.Timeout>();
   private readonly scheduledExpiryDelays = new Map<string, number>();
+  private readonly autoLocksInFlight = new Set<string>();
 
   public async create(
     options: CreateTempVoiceOptions
@@ -256,28 +257,41 @@ export class TempVoiceChannelManager {
     this.clearTimers(record.channelId);
     const expiresIn = Math.max(0, record.expiresAt.getTime() - Date.now());
     const expiryTimer = setTimeout(() => {
-      void this.deleteRecord(record, guild);
+      void this.deleteRecord(record, guild).catch((error) =>
+        console.error(`[temp-voice] expiry deletion failed channel=${record.channelId}`, error)
+      );
     }, expiresIn);
     expiryTimer.unref?.();
     this.timers.set(record.channelId, expiryTimer);
     this.scheduledExpiryDelays.set(record.channelId, expiresIn);
 
-    if (
-      record.autoLockAt &&
-      !record.locked &&
-      record.autoLockAt.getTime() > Date.now()
-    ) {
+    if (record.autoLockAt && !record.locked) {
+      // Also process overdue locks recovered after a restart.
       const autoLockTimer = setTimeout(() => {
-        void this.findByOwner(record.guildId, record.ownerId).then(
-          async (latest) => {
-            if (latest && !latest.locked) {
-              await this.lock(latest, guild);
-            }
-          }
+        void this.autoLockIfDue(record, guild).catch((error) =>
+          console.error(`[temp-voice] auto-lock failed channel=${record.channelId}`, error)
         );
-      }, record.autoLockAt.getTime() - Date.now());
+      }, Math.max(0, record.autoLockAt.getTime() - Date.now()));
       autoLockTimer.unref?.();
       this.autoLockTimers.set(record.channelId, autoLockTimer);
+    }
+  }
+
+  private async autoLockIfDue(record: TemporaryVoiceChannelRecord, guild: Guild) {
+    if (this.autoLocksInFlight.has(record.channelId)) return;
+    this.autoLocksInFlight.add(record.channelId);
+    try {
+      const latest = await this.findByOwner(record.guildId, record.ownerId);
+      if (
+        !latest || latest.channelId !== record.channelId || latest.locked ||
+        !latest.autoLockAt || latest.autoLockAt.getTime() > Date.now() ||
+        latest.expiresAt.getTime() <= Date.now()
+      ) return;
+      const channel = await this.fetchVoiceChannel(guild, latest.channelId);
+      if (!channel) return; // Deleted channels are handled by normal recovery/expiry cleanup.
+      await this.lock(latest, guild);
+    } finally {
+      this.autoLocksInFlight.delete(record.channelId);
     }
   }
 

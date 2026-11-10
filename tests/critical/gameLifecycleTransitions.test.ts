@@ -132,13 +132,15 @@ test("/game end rejects every non-playable lifecycle state without side effects"
   }
 });
 
-test("/game end accepts finalized populated RED and BLUE teams", async () => {
+test("/game end accepts a started game with finalized populated RED and BLUE teams", async () => {
   const game = GameInstance.getInstance();
   game.reset();
   game.announced = true;
   game.teamsDecidedBy = "RANDOMISED";
   game.teams.RED.push(player("red"));
   game.teams.BLUE.push(player("blue"));
+  game.tryBeginGameStart();
+  game.completeGameStart();
 
   const originalSend = DiscordUtil.sendMessage;
   (DiscordUtil as any).sendMessage = async () => {};

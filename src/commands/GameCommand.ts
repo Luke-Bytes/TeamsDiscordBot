@@ -216,6 +216,12 @@ export default class GameCommand implements Command {
           });
           return;
         }
+        if (gameInstance.getGameStartStatus() !== "started") {
+          await interaction.reply({
+            content: "This game has not started yet. Start the game before using `/game end`, or cancel the announcement if appropriate.",
+          });
+          return;
+        }
 
         gameInstance.endTime ??= new Date();
         gameInstance.isFinished = true;

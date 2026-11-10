@@ -229,15 +229,16 @@ export default class LeaderboardsCommand implements Command {
       );
       userState.messageId = leaderboardMessage?.id;
 
-      if (interaction.channelId !== botCommandsChannelId) {
+      if (interaction.channelId !== botCommandsChannelId && leaderboardMessage?.id) {
+        const messageId = leaderboardMessage.id;
         setTimeout(
           async () => {
             try {
               const channel = interaction.channel;
-              if (!channel || !userState.messageId) return;
+              if (!channel || !("messages" in channel)) return;
 
               const message = await channel.messages
-                .fetch(userState.messageId)
+                .fetch(messageId)
                 .catch(() => null);
               if (message) {
                 await message.delete();

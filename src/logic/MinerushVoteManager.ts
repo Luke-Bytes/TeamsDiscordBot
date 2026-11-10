@@ -10,15 +10,21 @@ interface MinerushVoteManagerEvents {
 
 export class MinerushVoteManager extends EventEmitter<MinerushVoteManagerEvents> {
   pollMessage?: Message;
+  private starting = false;
+  private closed = false;
 
   constructor() {
     super();
   }
 
   async finalizeVotes() {
-    if (!this.pollMessage) return;
+    if (!this.pollMessage || this.closed) return;
+    this.closed = true; // Claim before awaiting Discord, including concurrent manual closures.
+    Scheduler.cancel("minerushVote");
 
-    this.pollMessage.poll?.end();
+    await this.pollMessage.poll?.end().catch((error) => {
+      console.error("Unable to end minerush poll on Discord:", error);
+    });
 
     const answers = this.pollMessage.poll?.answers;
     if (!answers || answers.size === 0) {
@@ -63,6 +69,18 @@ export class MinerushVoteManager extends EventEmitter<MinerushVoteManagerEvents>
   }
 
   async startMinerushVote() {
+    if (this.closed || this.starting || this.pollMessage) return;
+    const gameStartTime = GameInstance.getInstance().startTime;
+    if (!gameStartTime) {
+      console.error("Game start time is not set.");
+      return;
+    }
+    const deadline = new Date(gameStartTime.getTime() - 5 * 60 * 1000);
+    if (deadline.getTime() <= Date.now() + 1000) {
+      console.warn("Minerush vote window has expired or is too short; poll not opened.");
+      return;
+    }
+
     const channel = Channels.announcements;
 
     if (!channel || !channel.isSendable()) {
@@ -70,53 +88,38 @@ export class MinerushVoteManager extends EventEmitter<MinerushVoteManagerEvents>
       return;
     }
 
-    this.pollMessage = await channel.send({
-      poll: {
-        question: { text: "Minerushing Vote" },
-        answers: [
-          { text: "Yes", emoji: "✅" },
-          { text: "No", emoji: "❌" },
-        ],
-        duration: 48,
-        allowMultiselect: false,
-      },
-    });
-
-    const gameStartTime = GameInstance.getInstance().startTime;
-    if (!gameStartTime) {
-      console.error("Game start time is not set.");
-      return;
-    }
-
-    const fiveMinutesBeforeStart = new Date(
-      gameStartTime.getTime() - 5 * 60 * 1000
-    );
-    const now = new Date();
-
-    if (fiveMinutesBeforeStart > now) {
-      const delay = fiveMinutesBeforeStart.getTime() - now.getTime();
-      console.info(
-        `Scheduling minerush poll closure in ${delay / 1000}s at ${fiveMinutesBeforeStart.toISOString()}`
-      );
-
-      Scheduler.schedule(
-        "minerushVote",
-        async () => {
-          console.info(
-            `Finalizing minerush vote at ${new Date().toISOString()}`
-          );
-          await this.finalizeVotes();
+    this.starting = true;
+    try {
+      this.pollMessage = await channel.send({
+        poll: {
+          question: { text: "Minerushing Vote" },
+          answers: [
+            { text: "Yes", emoji: "✅" },
+            { text: "No", emoji: "❌" },
+          ],
+          duration: 48,
+          allowMultiselect: false,
         },
-        fiveMinutesBeforeStart
-      );
-    } else {
-      console.warn(
-        "[WARN] Game start time already passed or is within 5 minutes."
-      );
+      });
+      if (this.closed) {
+        await this.pollMessage.delete().catch((error) => console.error("Failed to remove cancelled minerush poll:", error));
+        this.pollMessage = undefined;
+        return;
+      }
+      if (deadline.getTime() <= Date.now() + 1000) {
+        await this.finalizeVotes();
+      } else {
+        Scheduler.schedule("minerushVote", async () => {
+          await this.finalizeVotes();
+        }, deadline);
+      }
+    } finally {
+      this.starting = false;
     }
   }
 
   async cancelVote() {
+    this.closed = true;
     Scheduler.cancel("minerushVote");
     if (this.pollMessage) {
       await this.pollMessage.delete().catch(() => {});
@@ -126,10 +129,14 @@ export class MinerushVoteManager extends EventEmitter<MinerushVoteManagerEvents>
   }
 
   async stopVote() {
+    if (this.closed) return;
+    this.closed = true;
     Scheduler.cancel("minerushVote");
     if (this.pollMessage) {
       console.info("Minerush voting has been ended.");
-      this.pollMessage.poll?.end();
+      await this.pollMessage.poll?.end().catch((error) =>
+        console.error("Unable to stop minerush poll on Discord:", error)
+      );
     }
   }
 }

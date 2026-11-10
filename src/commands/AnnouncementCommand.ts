@@ -1178,7 +1178,15 @@ export default class AnnouncementCommand implements Command {
     }
   }
 
+  private isCollectorGameCurrent(token: string, previewMessage: Message<boolean> | undefined) {
+    const game = CurrentGameManager.getCurrentGame();
+    return game.getLifecycleToken() === token && !game.isRestarting &&
+      !game.isFinished && this.announcementPreviewMessage === previewMessage;
+  }
+
   private async handleEditTime(interaction: ButtonInteraction) {
+    const token = CurrentGameManager.getCurrentGame().getLifecycleToken();
+    const previewMessage = this.announcementPreviewMessage;
     await interaction.editReply(
       "Please enter the new time in your next message."
     );
@@ -1199,6 +1207,11 @@ export default class AnnouncementCommand implements Command {
     });
 
     collector.on("collect", async (msg) => {
+      if (!this.isCollectorGameCurrent(token, previewMessage)) {
+        collector.stop();
+        await interaction.followUp("This announcement input has expired; the game has changed.");
+        return;
+      }
       const date = parseDate(msg.content, undefined, { forwardDate: true });
 
       if (!date) {
@@ -1210,8 +1223,10 @@ export default class AnnouncementCommand implements Command {
       const game = CurrentGameManager.getCurrentGame();
       game.startTime = date;
       await game.mapVoteManager?.rescheduleFinalization();
+      if (!this.isCollectorGameCurrent(token, previewMessage)) return;
 
       await this.updateAnnouncementMessages();
+      if (!this.isCollectorGameCurrent(token, previewMessage)) return;
 
       CurrentGameManager.scheduleClassBanTimers();
       CurrentGameManager.scheduleCaptainTimers(interaction.guild!);
@@ -1229,6 +1244,8 @@ export default class AnnouncementCommand implements Command {
   }
 
   private async handleEditMap(interaction: ButtonInteraction) {
+    const token = CurrentGameManager.getCurrentGame().getLifecycleToken();
+    const previewMessage = this.announcementPreviewMessage;
     await interaction.editReply(
       "Please enter the new map in your next message."
     );
@@ -1249,6 +1266,11 @@ export default class AnnouncementCommand implements Command {
     });
 
     collector.on("collect", async (msg) => {
+      if (!this.isCollectorGameCurrent(token, previewMessage)) {
+        collector.stop();
+        await interaction.followUp("This announcement input has expired; the game has changed.");
+        return;
+      }
       const chosenMap = this.getMap(msg.content);
 
       if (chosenMap.error) {
@@ -1281,6 +1303,8 @@ export default class AnnouncementCommand implements Command {
   }
 
   private async handleEditBannedClasses(interaction: ButtonInteraction) {
+    const token = CurrentGameManager.getCurrentGame().getLifecycleToken();
+    const previewMessage = this.announcementPreviewMessage;
     await interaction.editReply(
       "Please enter the new banned classes separated by commas, or type `none` for no banned classes."
     );
@@ -1301,6 +1325,11 @@ export default class AnnouncementCommand implements Command {
     });
 
     collector.on("collect", async (msg) => {
+      if (!this.isCollectorGameCurrent(token, previewMessage)) {
+        collector.stop();
+        await interaction.followUp("This announcement input has expired; the game has changed.");
+        return;
+      }
       const bannedClasses = this.getBannedClasses(msg.content);
 
       if (bannedClasses.error) {
