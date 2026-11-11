@@ -14,6 +14,11 @@ function makeOrganiserInteraction(userId: string) {
   }) as any;
   i.inGuild = () => true;
   i.guild = { members: { cache: new Map([[userId, { id: userId }]]) } } as any;
+  i.guildId = "guild";
+  i.editReply = async (payload: any) => {
+    i.replies.push({ type: "editReply", payload });
+    return { id: "expunge-msg" };
+  };
   return i;
 }
 
@@ -162,6 +167,7 @@ test("/punish expunge removes selected entry", async () => {
     const selectInteraction: any = {
       customId: "punish-expunge-select",
       user: { id: "ORG" },
+      member: {}, guildId: "guild", message: { id: "expunge-msg" },
       values: ["idx:0"],
       update: async (payload: any) => {
         selectInteraction.payload = payload;
@@ -276,6 +282,7 @@ test("/punish expunge cancel leaves record unchanged", async () => {
     const selectInteraction: any = {
       customId: "punish-expunge-select",
       user: { id: "ORG" },
+      member: {}, guildId: "guild", message: { id: "expunge-msg" },
       values: ["cancel"],
       update: async (payload: any) => {
         selectInteraction.payload = payload;
@@ -296,6 +303,8 @@ test("/punish expunge removes latest clears expiry", async () => {
   const cmd = new PunishCommand();
   const origFindPun = (prismaClient as any).playerPunishment.findFirst;
   const origUpdate = (prismaClient as any).playerPunishment.update;
+  const origRole = PermissionsUtil.hasRole;
+  (PermissionsUtil as any).hasRole = () => true;
 
   (prismaClient as any).playerPunishment.findFirst = async () => ({
     id: "pp1",
@@ -313,6 +322,7 @@ test("/punish expunge removes latest clears expiry", async () => {
   const interaction: any = {
     customId: "punish-expunge-select",
     user: { id: "ORG" },
+    member: {}, guildId: "guild", message: { id: "expunge-msg" },
     values: ["idx:1"],
     update: async (_payload: any) => {},
     reply: async (_payload: any) => {},
@@ -322,6 +332,7 @@ test("/punish expunge removes latest clears expiry", async () => {
     playerId: "P1",
     userId: "ORG",
     createdAt: Date.now(),
+    messageId: "expunge-msg",
   });
 
   await cmd.handleSelectMenu!(interaction);
@@ -329,6 +340,7 @@ test("/punish expunge removes latest clears expiry", async () => {
   assert(!!updated, "Should update punishment record");
   assert(updated.data.punishmentExpiry === null, "Should clear expiry");
 
+  (PermissionsUtil as any).hasRole = origRole;
   (prismaClient as any).playerPunishment.findFirst = origFindPun;
   (prismaClient as any).playerPunishment.update = origUpdate;
 });
@@ -337,6 +349,8 @@ test("/punish expunge removes last entry deletes record", async () => {
   const cmd = new PunishCommand();
   const origFindPun = (prismaClient as any).playerPunishment.findFirst;
   const origDelete = (prismaClient as any).playerPunishment.delete;
+  const origRole = PermissionsUtil.hasRole;
+  (PermissionsUtil as any).hasRole = () => true;
 
   (prismaClient as any).playerPunishment.findFirst = async () => ({
     id: "pp1",
@@ -354,6 +368,7 @@ test("/punish expunge removes last entry deletes record", async () => {
   const interaction: any = {
     customId: "punish-expunge-select",
     user: { id: "ORG" },
+    member: {}, guildId: "guild", message: { id: "expunge-msg" },
     values: ["idx:0"],
     update: async (_payload: any) => {},
     reply: async (_payload: any) => {},
@@ -363,12 +378,14 @@ test("/punish expunge removes last entry deletes record", async () => {
     playerId: "P1",
     userId: "ORG",
     createdAt: Date.now(),
+    messageId: "expunge-msg",
   });
 
   await cmd.handleSelectMenu!(interaction);
 
   assert(deleted, "Should delete record when last entry removed");
 
+  (PermissionsUtil as any).hasRole = origRole;
   (prismaClient as any).playerPunishment.findFirst = origFindPun;
   (prismaClient as any).playerPunishment.delete = origDelete;
 });

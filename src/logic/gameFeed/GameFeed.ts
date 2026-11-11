@@ -4,6 +4,8 @@ type FeedMessage = {
   id?: string;
   type: string;
   updateFn: () => Promise<EmbedBuilder>;
+  /** Last successful Discord publication; scoped to this in-memory feed entry. */
+  published?: string;
 };
 
 class GameFeed {
@@ -33,12 +35,27 @@ class GameFeed {
             ? await channel.messages.fetch(feed.id).catch(() => null)
             : null;
           if (!isCurrent()) break;
+          // Compare the serialized Discord payload, not EmbedBuilder identity.
+          const content = JSON.stringify(embed.toJSON());
+          if (!this.feedMessages.get(channel.id)?.includes(feed)) break;
           if (message) {
+            if (feed.published === content) continue;
             await message.edit({ embeds: [embed] });
+            if (isCurrent() && this.feedMessages.get(channel.id)?.includes(feed)) {
+              feed.published = content;
+            }
           } else {
+            // A missing/deleted message invalidates the last published content.
+            feed.id = undefined;
+            feed.published = undefined;
             const newMessage = await channel.send({ embeds: [embed] });
             if (isCurrent()) {
+              if (!this.feedMessages.get(channel.id)?.includes(feed)) {
+                await newMessage.delete().catch(() => {});
+                break;
+              }
               feed.id = newMessage.id;
+              feed.published = content;
             } else {
               // Stop occurred while Discord was sending. Remove the orphan if possible.
               await newMessage.delete().catch((error) =>

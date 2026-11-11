@@ -2,6 +2,9 @@
 
 Welcome to the official documentation for **Teams Bot**, a Discord bot built with TypeScript, Discord.js, and Prisma! Use this guide to navigate the bot's features, setup, and development process.
 
+For organiser diagnostics, lifecycle logs, and confirmation behaviour, see the
+[operations guide](docs/operations.md).
+
 ---
 
 ## 📜 Table of Contents

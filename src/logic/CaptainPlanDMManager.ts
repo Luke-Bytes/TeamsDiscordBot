@@ -1,3 +1,4 @@
+import { CurrentGameManager } from "./CurrentGameManager";
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -154,6 +155,43 @@ export default class CaptainPlanDMManager {
     this.buttonIdSet.delete(`plan-confirm-all:${captainId}`);
     this.buttonIdSet.delete(`plan-confirm-new:${captainId}`);
     this.buttonIdSet.delete(`plan-resend:${captainId}`);
+  }
+
+  public async replaceCaptainDuringPlay(
+    client: Client,
+    team: TeamKey,
+    previousId: string | undefined,
+    captainId: string
+  ): Promise<void> {
+    if (previousId === captainId) return;
+    if (previousId) {
+      this.sessions.delete(previousId);
+      for (const id of [...this.buttonIdSet]) {
+        if (id.endsWith(":" + previousId)) this.buttonIdSet.delete(id);
+      }
+    }
+    const members = CurrentGameManager.getCurrentGame()
+      .getPlayersOfTeam(team)
+      .map((p) => ({
+        id: p.discordSnowflake,
+        ign: p.ignUsed ?? p.latestIGN ?? "Unknown",
+      }));
+    try {
+      await this.startForCaptain({
+        client,
+        captainId,
+        team,
+        members,
+        teamList: members.map((p) => p.ign).join("\n"),
+      });
+    } catch (error) {
+      // The captain and roles are already committed. Notification failure must
+      // never report that assignment failed or invite repeating the mutation.
+      console.warn(
+        "Captain changed, but the replacement plan DM could not be sent",
+        error
+      );
+    }
   }
 
   public async startForCaptain({

@@ -1,3 +1,4 @@
+import CaptainPlanDMManager from "./CaptainPlanDMManager";
 import { Guild, GuildMember } from "discord.js";
 import { CurrentGameManager } from "./CurrentGameManager";
 import { PlayerInstance } from "../database/PlayerInstance";
@@ -19,11 +20,21 @@ export class AutoCaptainSelector {
     autoStartDraft = false
   ): Promise<SelectionResult> {
     const game = CurrentGameManager.getCurrentGame();
-    if (!game.announced || game.getGameStartStatus() !== "idle" || game.isFinished) {
-      return { error: "Captains cannot be selected after the game has started or ended." };
+    if (
+      !game.announced ||
+      game.isRestarting ||
+      game.getGameStartStatus() === "starting" ||
+      game.isFinished
+    ) {
+      return {
+        error:
+          "Captains cannot be selected before announcement, during transitions, or after finishing.",
+      };
     }
     if (TeamCommand.instance?.isTeamPickingSessionActive()) {
-      return { error: "Captains cannot be changed while team picking is in progress." };
+      return {
+        error: "Captains cannot be changed while team picking is in progress.",
+      };
     }
 
     const token = game.getLifecycleToken();
@@ -34,8 +45,14 @@ export class AutoCaptainSelector {
         : await this.selectEligibleCaptains(guild, game.getPlayers());
 
       if ("error" in selection) return selection;
-      if (game.getLifecycleToken() !== token || game.getGameStartStatus() !== "idle") {
-        return { error: "Game changed during captain eligibility lookup; no captains were selected." };
+      if (
+        game.getLifecycleToken() !== token ||
+        game.getGameStartStatus() === "starting"
+      ) {
+        return {
+          error:
+            "Game changed during captain eligibility lookup; no captains were selected.",
+        };
       }
       const { first, second } = selection;
       const roles = PermissionsUtil.config.roles;
@@ -43,16 +60,23 @@ export class AutoCaptainSelector {
       // A 10007 means the person cannot be selected; other lookup failures
       // are uncertain and must abort without changing the game roster.
       const firstMember = await fetchGuildMember(guild, first.discordSnowflake);
-      const secondMember = await fetchGuildMember(guild, second.discordSnowflake);
+      const secondMember = await fetchGuildMember(
+        guild,
+        second.discordSnowflake
+      );
       if (!firstMember || !secondMember) {
-        return { error: "A selected captain is no longer in the server. No captains were changed." };
+        return {
+          error:
+            "A selected captain is no longer in the server. No captains were changed.",
+        };
       }
 
       const previousBlue = game.getCaptainOfTeam("BLUE");
       const previousRed = game.getCaptainOfTeam("RED");
       const replaced = [previousBlue, previousRed].filter(
         (p): p is PlayerInstance =>
-          !!p && p.discordSnowflake !== first.discordSnowflake &&
+          !!p &&
+          p.discordSnowflake !== first.discordSnowflake &&
           p.discordSnowflake !== second.discordSnowflake
       );
       const oldMembers: GuildMember[] = [];
@@ -61,8 +85,14 @@ export class AutoCaptainSelector {
         if (member) oldMembers.push(member);
       }
 
-      if (game.getLifecycleToken() !== token || game.getGameStartStatus() !== "idle") {
-        return { error: "Game changed during captain member verification; no captains were selected." };
+      if (
+        game.getLifecycleToken() !== token ||
+        game.getGameStartStatus() === "starting"
+      ) {
+        return {
+          error:
+            "Game changed during captain member verification; no captains were selected.",
+        };
       }
       // Roles are a recoverable external projection. If any operation fails,
       // never commit a new authoritative captain; report possible partial roles.
@@ -71,8 +101,12 @@ export class AutoCaptainSelector {
         [secondMember, "RED"],
       ] as const) {
         await member.roles.add(roles.captainRole);
-        await member.roles.add(team === "BLUE" ? roles.blueTeamRole : roles.redTeamRole);
-        await member.roles.remove(team === "BLUE" ? roles.redTeamRole : roles.blueTeamRole);
+        await member.roles.add(
+          team === "BLUE" ? roles.blueTeamRole : roles.redTeamRole
+        );
+        await member.roles.remove(
+          team === "BLUE" ? roles.redTeamRole : roles.blueTeamRole
+        );
       }
       for (const member of oldMembers) {
         await member.roles.remove(roles.captainRole);
@@ -82,8 +116,14 @@ export class AutoCaptainSelector {
         }
       }
 
-      if (game.getLifecycleToken() !== token || game.getGameStartStatus() !== "idle") {
-        return { error: "Game changed while assigning Discord roles. No captain change was committed; inspect partial roles." };
+      if (
+        game.getLifecycleToken() !== token ||
+        game.getGameStartStatus() === "starting"
+      ) {
+        return {
+          error:
+            "Game changed while assigning Discord roles. No captain change was committed; inspect partial roles.",
+        };
       }
       if (teamsDecided) {
         if (previousBlue) previousBlue.captain = false;
@@ -95,15 +135,33 @@ export class AutoCaptainSelector {
         game.setTeamCaptain("RED", second);
       }
 
+      if (game.getGameStartStatus() === "started") {
+        await CaptainPlanDMManager.instance?.replaceCaptainDuringPlay(
+          guild.client,
+          "BLUE",
+          previousBlue?.discordSnowflake,
+          first.discordSnowflake
+        );
+        await CaptainPlanDMManager.instance?.replaceCaptainDuringPlay(
+          guild.client,
+          "RED",
+          previousRed?.discordSnowflake,
+          second.discordSnowflake
+        );
+      }
       if (autoStartDraft) {
         await CurrentGameManager.attemptAutoStartDraft(guild);
       }
 
       return { blue: first, red: second };
     } catch (error) {
-      console.error("Automatic captain assignment failed; captain state was not committed", error);
+      console.error(
+        "Automatic captain assignment failed; captain state was not committed",
+        error
+      );
       return {
-        error: "Cannot verify or assign captains with Discord right now. No captain change was committed; check for partial role changes before retrying.",
+        error:
+          "Cannot verify or assign captains with Discord right now. No captain change was committed; check for partial role changes before retrying.",
       };
     }
   }
@@ -129,7 +187,9 @@ export class AutoCaptainSelector {
   private static async selectEligibleCaptains(
     guild: Guild,
     players: PlayerInstance[]
-  ): Promise<{ first: PlayerInstance; second: PlayerInstance } | { error: string }> {
+  ): Promise<
+    { first: PlayerInstance; second: PlayerInstance } | { error: string }
+  > {
     const eligible = await this.eligiblePlayers(guild, players);
     if (eligible.length < 2) return { error: this.eligibilityError };
 
@@ -149,9 +209,14 @@ export class AutoCaptainSelector {
 
   private static async selectEligibleCaptainsFromTeams(
     guild: Guild
-  ): Promise<{ first: PlayerInstance; second: PlayerInstance } | { error: string }> {
+  ): Promise<
+    { first: PlayerInstance; second: PlayerInstance } | { error: string }
+  > {
     const game = CurrentGameManager.getCurrentGame();
-    const blue = await this.eligiblePlayers(guild, game.getPlayersOfTeam("BLUE"));
+    const blue = await this.eligiblePlayers(
+      guild,
+      game.getPlayersOfTeam("BLUE")
+    );
     const red = await this.eligiblePlayers(guild, game.getPlayersOfTeam("RED"));
     if (!blue.length || !red.length) return { error: this.eligibilityError };
     return {

@@ -19,6 +19,8 @@ export class MinerushVoteManager extends EventEmitter<MinerushVoteManagerEvents>
 
   async finalizeVotes() {
     if (!this.pollMessage || this.closed) return;
+    const startedAt = Date.now();
+    const gameId = GameInstance.getInstance().getLifecycleToken();
     this.closed = true; // Claim before awaiting Discord, including concurrent manual closures.
     Scheduler.cancel("minerushVote");
 
@@ -28,24 +30,11 @@ export class MinerushVoteManager extends EventEmitter<MinerushVoteManagerEvents>
 
     const answers = this.pollMessage.poll?.answers;
     if (!answers || answers.size === 0) {
-      console.log("No answers found.");
+      console.info(`event=vote.minerush.finalize game=${gameId} outcome=skipped reason=no_answers`);
       return;
     }
 
     const answersArray = Array.from(answers.entries());
-    console.log(
-      JSON.stringify(
-        answersArray.map(([key, value]) => ({
-          Key: key,
-          Text: value?.text ?? "N/A",
-          VoteCount: value?.voteCount ?? 0,
-          RawData: JSON.stringify(value),
-        })),
-        null,
-        2
-      )
-    );
-
     const winningEntry = answersArray.reduce(
       (prev, current) =>
         current[1].voteCount > prev[1].voteCount ? current : prev,
@@ -54,18 +43,8 @@ export class MinerushVoteManager extends EventEmitter<MinerushVoteManagerEvents>
 
     const answer = winningEntry[1]?.text === "Yes";
 
-    console.log(
-      JSON.stringify(
-        {
-          Minerushing: winningEntry ?? "None found",
-          VoteCount: winningEntry[1].voteCount,
-        },
-        null,
-        2
-      )
-    );
-
     this.emit("pollEnd", answer);
+    console.info(`event=vote.minerush.finalize game=${gameId} outcome=succeeded result=${answer} duration_ms=${Date.now() - startedAt}`);
   }
 
   async startMinerushVote() {

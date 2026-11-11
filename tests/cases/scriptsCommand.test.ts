@@ -171,6 +171,8 @@ test("/scripts titles-update awards earned titles", async () => {
       customId: "scripts-confirm:titles-update",
       message: { id: messageId },
       user: { id: "ORG" },
+      member: organiser,
+      guildId: "guild",
       update: async (_payload: any) => ({}),
       editReply: async (_payload: any) => ({}),
       reply: async (_payload: any) => ({}),

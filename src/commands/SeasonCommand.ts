@@ -5,6 +5,7 @@ import {
   ButtonStyle,
   ChatInputCommandInteraction,
   EmbedBuilder,
+  GuildMember,
   MessageFlags,
   SlashCommandBuilder,
   SlashCommandSubcommandsOnlyBuilder,
@@ -17,9 +18,10 @@ import { PermissionsUtil } from "../util/PermissionsUtil";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { Channels } from "../Channels";
 
-type PendingOperation =
+type PendingOperation = (
   | { kind: "end"; userId: string; nextType?: SeasonType }
-  | { kind: "start"; userId: string; type: SeasonType; number?: number };
+  | { kind: "start"; userId: string; type: SeasonType; number?: number }
+) & { messageId?: string; expiresAt?: number };
 
 const typeChoices = [
   { name: "Ranked", value: SeasonType.RANKED },
@@ -32,7 +34,7 @@ export default class SeasonCommand implements Command {
   public data: SlashCommandSubcommandsOnlyBuilder;
   public buttonIds = ["season-confirm", "season-cancel"];
   private readonly pendingByMessage = new Map<string, PendingOperation>();
-  private readonly pendingByUser = new Map<string, PendingOperation>();
+  private readonly pendingByUser = new Map<string, string>();
 
   constructor() {
     this.data = new SlashCommandBuilder()
@@ -246,14 +248,22 @@ export default class SeasonCommand implements Command {
       components: [row],
       flags: MessageFlags.Ephemeral,
     });
-    if (message?.id) this.pendingByMessage.set(message.id, pending);
-    this.pendingByUser.set(interaction.user.id, pending);
+    const oldId = this.pendingByUser.get(interaction.user.id);
+    if (oldId) this.pendingByMessage.delete(oldId);
+    this.pendingByUser.delete(interaction.user.id);
+    if (!message?.id) {
+      console.warn("event=season.confirm outcome=skipped reason=missing_message_id");
+      return; // Fail closed: a confirmation without a message ID cannot be claimed safely.
+    }
+    pending.messageId = message.id;
+    pending.expiresAt = Date.now() + 5 * 60_000;
+    this.pendingByMessage.set(message.id, pending);
+    this.pendingByUser.set(interaction.user.id, message.id);
   }
 
   async handleButtonPress(interaction: ButtonInteraction): Promise<void> {
-    const pending =
-      this.pendingByMessage.get(interaction.message.id) ??
-      this.pendingByUser.get(interaction.user.id);
+    const messageId = interaction.message?.id;
+    const pending = messageId ? this.pendingByMessage.get(messageId) : undefined;
     if (!pending) {
       await interaction.reply({
         content: "This confirmation expired.",
@@ -261,13 +271,21 @@ export default class SeasonCommand implements Command {
       });
       return;
     }
-    if (pending.userId !== interaction.user.id) {
+    if (pending.userId !== interaction.user.id ||
+        !PermissionsUtil.hasRole(interaction.member as GuildMember, "organiserRole") || !interaction.guildId) {
       await interaction.reply({
         content: "Only the organiser who requested this may confirm.",
         flags: MessageFlags.Ephemeral,
       });
       return;
     }
+    if (pending.expiresAt! < Date.now() || pending.messageId !== interaction.message.id ||
+        this.pendingByUser.get(interaction.user.id) !== interaction.message.id) {
+      this.pendingByMessage.delete(interaction.message.id);
+      await interaction.reply({ content: "This confirmation has expired or was replaced.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+    // Claim synchronously, before acknowledging or making external changes.
     this.pendingByMessage.delete(interaction.message.id);
     this.pendingByUser.delete(interaction.user.id);
     if (interaction.customId === "season-cancel") {
@@ -291,13 +309,14 @@ export default class SeasonCommand implements Command {
               pending.nextType
             )
           : await SeasonService.bootstrap(pending.type, pending.number);
+      console.info(`event=season.operation outcome=succeeded kind=${pending.kind} season=${season.number}`);
       await interaction.editReply({
         content: `Season ${season.number} is active (${(season.type ?? SeasonType.RANKED).toLowerCase()}).`,
       });
     } catch (error) {
+      console.error(`event=season.operation outcome=failed kind=${pending.kind} error_type=${error instanceof Error ? error.name : "unknown"}`);
       await interaction.editReply({
-        content:
-          error instanceof Error ? error.message : "Season operation failed.",
+        content: "Season operation failed; it may have partially completed. Check /season status before making a new request.",
       });
     }
   }

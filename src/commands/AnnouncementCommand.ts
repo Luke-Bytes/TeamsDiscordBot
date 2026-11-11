@@ -488,6 +488,9 @@ export default class AnnouncementCommand implements Command {
     if (!Channels.announcements.isSendable()) return;
 
     GameInstance.getInstance().beginConfirmedAnnouncement();
+    const announcedAt = Date.now();
+    const lifecycle = GameInstance.getInstance().getLifecycleToken();
+    console.info(`event=game.announcement game=${lifecycle} outcome=started`);
     this.customModifierSessions.clear();
 
     this.announcementMessage = await Channels.announcements.send({
@@ -534,6 +537,7 @@ export default class AnnouncementCommand implements Command {
         components: this.getEditComponents(true),
       });
     }
+    console.info(`event=game.announcement game=${lifecycle} outcome=succeeded duration_ms=${Date.now() - announcedAt}`);
   }
 
   private getEditComponents(isConfirmed: boolean) {

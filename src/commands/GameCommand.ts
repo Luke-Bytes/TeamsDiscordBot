@@ -20,6 +20,7 @@ import { PermissionsUtil } from "../util/PermissionsUtil";
 import { GameInstance } from "../database/GameInstance";
 import { cleanUpAfterGame } from "../logic/GameEndCleanUp";
 import { MatchRecoveryGate } from "../logic/MatchRecoveryGate";
+import { formatGameDiagnostics } from "../logic/GameDiagnostics";
 import { DiscordUtil } from "../util/DiscordUtil";
 import { prismaClient } from "../database/prismaClient";
 import { checkMissingPlayersInVC, formatTeamIGNs } from "../util/Utils";
@@ -59,6 +60,9 @@ export default class GameCommand implements Command {
     .setDescription("Manage game sessions")
     .addSubcommand((sub) =>
       sub.setName("start").setDescription("Move players to team vcs")
+    )
+    .addSubcommand((sub) =>
+      sub.setName("diagnostics").setDescription("Organiser-only, read-only game status")
     )
     .addSubcommand((sub) =>
       sub
@@ -167,6 +171,13 @@ export default class GameCommand implements Command {
     const guild = interaction.guild!;
     const gameInstance = GameInstance.getInstance();
     switch (subCommand) {
+      case "diagnostics":
+        await interaction.reply({
+          content: formatGameDiagnostics(gameInstance),
+          flags: MessageFlags.Ephemeral,
+        });
+        break;
+
       case "start":
         {
           await interaction.deferReply();
@@ -284,10 +295,7 @@ export default class GameCommand implements Command {
         try {
           await cleanUpAfterGame(guild);
         } catch (error) {
-          console.error(
-            `[match-shutdown] failed stage=save-or-cleanup match=${gameInstance.gameId ?? gameInstance.getLifecycleToken()} lifecycle=${gameInstance.getLifecycleToken()}`,
-            error
-          );
+          console.error(`event=match.cleanup game=${gameInstance.gameId ?? gameInstance.getLifecycleToken()} outcome=failed stage=save-or-cleanup error_type=${error instanceof Error ? error.name : "unknown"}`);
           // Block new announcements in this process as well as on restart
           // (where persisted PENDING cleanup is discovered at startup).
           MatchRecoveryGate.block(
@@ -312,17 +320,24 @@ export default class GameCommand implements Command {
   ): Promise<"acquired" | "inProgress" | "alreadyStarted"> {
     const attemptStart = async () => {
       const attempt = game.tryBeginGameStart();
-      if (attempt !== "acquired") return attempt;
       const token = game.getLifecycleToken();
+      if (attempt !== "acquired") {
+        console.info(`event=game.start game=${token} outcome=skipped reason=${attempt}`);
+        return attempt;
+      }
+      const startedAt = Date.now();
+      console.info(`event=game.start game=${token} outcome=started`);
       try {
         await this.runGameStartWorkflow(guild, client, game);
         if (game.getLifecycleToken() !== token) {
           throw new Error("The game changed during the start workflow.");
         }
         game.completeGameStart();
+        console.info(`event=game.start game=${token} outcome=succeeded duration_ms=${Date.now() - startedAt}`);
         return "acquired" as const;
       } catch (error) {
         if (game.getLifecycleToken() === token) game.releaseGameStart();
+        console.error(`event=game.start game=${token} outcome=failed duration_ms=${Date.now() - startedAt} error_type=${error instanceof Error ? error.name : "unknown"}`);
         throw error;
       }
     };
@@ -347,8 +362,12 @@ export default class GameCommand implements Command {
       ].map((player) => player.discordSnowflake)
     );
 
+    const voiceStart = Date.now();
     await assignTeamVCAfterPicking(guild, memberCache);
+    console.info(`event=game.voice.assign game=${gameInstance.getLifecycleToken()} outcome=succeeded duration_ms=${Date.now() - voiceStart} players=${activePlayerCount}`);
+    const rolesStart = Date.now();
     await assignTeamRolesAfterPicking(guild, memberCache);
+    console.info(`event=game.roles.assign game=${gameInstance.getLifecycleToken()} outcome=succeeded duration_ms=${Date.now() - rolesStart} players=${activePlayerCount}`);
 
     if (gameInstance.noElo) {
       const noEloMessage = `⚠️ This is a **no elo game** due to low player count (${activePlayerCount} players; minimum ${GameInstance.MIN_ELO_PLAYER_COUNT} required).`;

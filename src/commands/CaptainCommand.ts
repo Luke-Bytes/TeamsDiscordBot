@@ -1,3 +1,4 @@
+import CaptainPlanDMManager from "../logic/CaptainPlanDMManager";
 import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
@@ -69,8 +70,13 @@ export default class CaptainCommand implements Command {
     try {
       member = await fetchGuildMember(interaction.guild, interaction.user.id);
     } catch (error) {
-      console.error("Captain command could not verify organiser membership", error);
-      await interaction.editReply("Cannot verify organiser permissions with Discord right now.");
+      console.error(
+        "Captain command could not verify organiser membership",
+        error
+      );
+      await interaction.editReply(
+        "Cannot verify organiser permissions with Discord right now."
+      );
       return;
     }
     if (!PermissionsUtil.hasRole(member ?? undefined, "organiserRole")) {
@@ -82,13 +88,22 @@ export default class CaptainCommand implements Command {
 
     const game = CurrentGameManager.getCurrentGame();
 
-    if (!game.announced || game.getGameStartStatus() !== "idle" || game.isFinished) {
-      await interaction.editReply("Captains cannot be changed outside an announced, unstarted game.");
+    if (
+      !game.announced ||
+      game.isRestarting ||
+      game.getGameStartStatus() === "starting" ||
+      game.isFinished
+    ) {
+      await interaction.editReply(
+        "Captains cannot be changed before announcement, during transitions, or after finishing."
+      );
       return;
     }
 
     if (this.teamCommand.isTeamPickingSessionActive()) {
-      await interaction.editReply("You can't change captains while team picking is in progress!");
+      await interaction.editReply(
+        "You can't change captains while team picking is in progress!"
+      );
       return;
     }
     const gameToken = game.getLifecycleToken();
@@ -116,7 +131,9 @@ export default class CaptainCommand implements Command {
     const resolvedPlayer = await PrismaUtils.findPlayer(input);
 
     if (!resolvedPlayer) {
-      await interaction.editReply("No player found with that name. Have they registered?");
+      await interaction.editReply(
+        "No player found with that name. Have they registered?"
+      );
       return;
     }
 
@@ -136,31 +153,56 @@ export default class CaptainCommand implements Command {
       currentTeam !== "RED" &&
       currentTeam !== "BLUE"
     ) {
-      await interaction.editReply("The player must be in RED, BLUE or UNDECIDED to be assigned as captain.");
+      await interaction.editReply(
+        "The player must be in RED, BLUE or UNDECIDED to be assigned as captain."
+      );
       return;
     }
 
+    if (game.getGameStartStatus() === "started" && currentTeam !== teamColor) {
+      await interaction.editReply(
+        "During play, select a captain already on the requested team."
+      );
+      return;
+    }
     let resultMessage: string;
     try {
       resultMessage = await this.teamCommand.runRosterOperation(async () => {
-        if (!game.announced || game.isFinished || game.isRestarting ||
-            game.getGameStartStatus() !== "idle" ||
-            game.getLifecycleToken() !== gameToken ||
-            this.teamCommand.isTeamPickingSessionActive()) {
+        if (
+          !game.announced ||
+          game.isFinished ||
+          game.isRestarting ||
+          game.getGameStartStatus() === "starting" ||
+          game.getLifecycleToken() !== gameToken ||
+          this.teamCommand.isTeamPickingSessionActive()
+        ) {
           return "The game or drafting state changed; no captain was selected.";
         }
-        const current = game.getPlayers().find((p) =>
-          p.discordSnowflake === resolvedPlayer.discordSnowflake
-        );
+        const current = game
+          .getPlayers()
+          .find((p) => p.discordSnowflake === resolvedPlayer.discordSnowflake);
         if (!current) return "The selected player is no longer registered.";
-        const newCaptainMember = await fetchGuildMember(interaction.guild!, current.discordSnowflake);
+        if (
+          game.getGameStartStatus() === "started" &&
+          game.getPlayersTeam(current) !== teamColor
+        ) {
+          return "During play, select a captain already on the requested team.";
+        }
+        const newCaptainMember = await fetchGuildMember(
+          interaction.guild!,
+          current.discordSnowflake
+        );
         if (!newCaptainMember) return "That user is no longer in the server.";
 
         const previousCaptain = game.getCaptainOfTeam(teamColor);
-        const oldMember = previousCaptain &&
+        const oldMember =
+          previousCaptain &&
           previousCaptain.discordSnowflake !== current.discordSnowflake
-          ? await fetchGuildMember(interaction.guild!, previousCaptain.discordSnowflake)
-          : null;
+            ? await fetchGuildMember(
+                interaction.guild!,
+                previousCaptain.discordSnowflake
+              )
+            : null;
 
         const roles = PermissionsUtil.config.roles;
         // Validate external member state and complete role changes before
@@ -174,15 +216,37 @@ export default class CaptainCommand implements Command {
         );
         if (oldMember) await oldMember.roles.remove(roles.captainRole);
 
-        if (game.getLifecycleToken() !== gameToken || game.getGameStartStatus() !== "idle") {
+        if (
+          game.getLifecycleToken() !== gameToken ||
+          game.isFinished ||
+          game.isRestarting ||
+          game.getGameStartStatus() === "starting"
+        ) {
           return "The game changed while Discord roles were being updated. Captain state was not changed.";
         }
-        game.setTeamCaptain(teamColor, current);
+        if (game.getGameStartStatus() === "started") {
+          if (previousCaptain) previousCaptain.captain = false;
+          current.captain = true;
+        } else {
+          game.setTeamCaptain(teamColor, current);
+        }
+        if (game.getGameStartStatus() === "started") {
+          await CaptainPlanDMManager.instance?.replaceCaptainDuringPlay(
+            interaction.client,
+            teamColor,
+            previousCaptain?.discordSnowflake,
+            current.discordSnowflake
+          );
+        }
         return `Successfully set captain of team **${teamColor.toLowerCase()}** to **${escapeIgn(current.ignUsed ?? "Unknown Player")}**.`;
       });
     } catch (error) {
-      console.error(`Captain role update failed guild=${interaction.guild.id} player=${resolvedPlayer.discordSnowflake}`, error);
-      resultMessage = "Discord role updates failed; captain assignment was not committed. Check roles before retrying.";
+      console.error(
+        `Captain role update failed guild=${interaction.guild.id} player=${resolvedPlayer.discordSnowflake}`,
+        error
+      );
+      resultMessage =
+        "Discord role updates failed; captain assignment was not committed. Check roles before retrying.";
     }
     await interaction.editReply({ content: resultMessage });
   }

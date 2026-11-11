@@ -15,11 +15,13 @@ export async function cleanUpAfterGame(guild: Guild) {
   const game = CurrentGameManager.getCurrentGame();
   const token = game.getLifecycleToken();
   const matchId = game.gameId ?? token;
+  const cleanupStartedAt = Date.now();
+  console.info(`event=match.cleanup game=${matchId} outcome=started`);
   // Authoritative DB commitment must precede potentially partial Discord cleanup.
   // A failed/uncertain commit leaves the in-memory result intact for inspection.
   await game.countMVPVotes();
   await prismaClient.game.saveGameFromInstance(game);
-  console.info(`[match-shutdown] persistence committed match=${game.gameId ?? token}`);
+  console.info(`event=match.persist game=${matchId} outcome=succeeded duration_ms=${Date.now() - cleanupStartedAt}`);
   Scheduler.cancel("mapVote");
   Scheduler.cancel("minerushVote");
   const config = ConfigManager.getConfig();
@@ -155,7 +157,7 @@ export async function cleanUpAfterGame(guild: Guild) {
     }
   }
   await CurrentGameManager.resetCurrentGame();
-  console.info(`[match-shutdown] cleanup complete match=${matchId}`);
+  console.info(`event=match.cleanup game=${matchId} outcome=succeeded duration_ms=${Date.now() - cleanupStartedAt}`);
   await new Promise((resolve) => setTimeout(resolve, 10 * 1000));
   const restartCommand = new RestartCommand();
   restartCommand.restartBot();

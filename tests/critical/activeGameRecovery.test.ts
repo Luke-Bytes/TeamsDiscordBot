@@ -86,13 +86,12 @@ async function withStore(fn: (store: GameSnapshotStore, directory: string) => Pr
   }
 }
 
-test("Recovery rejects absent, starting, started and finished games", () => {
+test("Recovery rejects absent, starting and finished games", () => {
   const game = setup(0);
   game.announced = false;
   for (const configure of [
     () => { game.announced = false; },
     () => { game.announced = true; game.tryBeginGameStart(); },
-    () => { game.tryBeginGameStart(); game.completeGameStart(); },
     () => { game.releaseGameStart(); game.isFinished = true; },
   ]) {
     game.reset();
@@ -591,14 +590,14 @@ test("Full preserve-restart command snapshots then startup restores the same 20-
     const chat = {
       member: {}, user: { id: "organiser" }, guildId: "guild",
       options: { getBoolean: () => true },
-      reply: async (payload: any) => { replies.push(payload); },
+      reply: async (payload: any) => { replies.push(payload); return { resource: { message: { id: "restart-one" } } }; },
     } as any;
     try {
       await command.execute(chat);
       const buttonId = replies[0].components[0].components[0].data.custom_id;
       const button = {
         customId: buttonId, member: {}, user: { id: "organiser" },
-        guildId: "guild", update: async () => {}, editReply: async () => {},
+        guildId: "guild", message: { id: "restart-one" }, update: async () => {}, editReply: async () => {},
         reply: async () => { throw new Error("unexpected denial"); },
       } as any;
       await command.handleButtonPress(button);
@@ -634,11 +633,11 @@ test("Preserved restart refuses to exit when its actual snapshot file cannot be 
       await command.execute({
         member: {}, user: { id: "organiser" }, guildId: "guild",
         options: { getBoolean: () => true },
-        reply: async (payload: any) => { replies.push(payload); },
+        reply: async (payload: any) => { replies.push(payload); return { resource: { message: { id: "restart-two" } } }; },
       } as any);
       const button = {
         customId: replies[0].components[0].components[0].data.custom_id,
-        member: {}, user: { id: "organiser" }, guildId: "guild",
+        member: {}, user: { id: "organiser" }, guildId: "guild", message: { id: "restart-two" },
         update: async () => {},
         editReply: async () => {},
       } as any;
@@ -664,12 +663,12 @@ test("Restart confirmation rejects a different user without exiting", async () =
     await command.execute({
       member: {}, user: { id: "original" }, guildId: "guild",
       options: { getBoolean: () => false },
-      reply: async (payload: any) => { replies.push(payload); },
+      reply: async (payload: any) => { replies.push(payload); return { resource: { message: { id: "restart-three" } } }; },
     } as any);
     let rejection = "";
     await command.handleButtonPress({
       customId: replies[0].components[0].components[0].data.custom_id,
-      member: {}, user: { id: "other" }, guildId: "guild",
+      member: {}, user: { id: "other" }, guildId: "guild", message: { id: "restart-three" },
       reply: async (payload: any) => { rejection = payload.content; },
     } as any);
     assert(rejection.includes("belongs to another"), "different organiser denied");
@@ -711,7 +710,7 @@ test("Default restart still exits through existing method, preserve failure does
     const chat = {
       member: {}, user: { id: "organiser" }, guildId: "guild",
       options: { getBoolean: () => preserve },
-      reply: async (payload: any) => { replies.push(payload); },
+      reply: async (payload: any) => { replies.push(payload); return { resource: { message: { id: `restart-${replies.length}` } } }; },
     } as any;
     return { chat, replies };
   }
@@ -722,7 +721,7 @@ test("Default restart still exits through existing method, preserve failure does
     const normalId = normal.replies[0].components[0].components[0].data.custom_id;
     const normalBtn = {
       customId: normalId, member: {}, user: { id: "organiser" },
-      guildId: "guild", update: async () => {},
+      guildId: "guild", message: { id: "restart-1" }, update: async () => {},
       editReply: async () => {}, reply: async () => { throw new Error("unexpected denial"); },
     } as any;
     await command.handleButtonPress(normalBtn);
@@ -739,4 +738,42 @@ test("Default restart still exits through existing method, preserve failure does
     GameInstance.getInstance().reset();
     GameRecoveryCoordinator.resetForTests();
   }
+});
+
+
+test("Recovery restores a running match without allowing it to start twice", () => {
+  const game = setup();
+  game.tryBeginGameStart();
+  game.completeGameStart();
+  const snapshot = createGameSnapshot(game);
+  game.reset();
+  restoreGameSnapshot(snapshot, game);
+  assertEqual(game.getGameStartStatus(), "started", "running status restored");
+  assertEqual(game.tryBeginGameStart(), "alreadyStarted", "duplicate start prevented");
+  game.reset();
+});
+
+test("Legacy snapshots without start status restore as pre-game", () => {
+  const game = setup();
+  const snapshot = createGameSnapshot(game);
+  delete snapshot.game.gameStartStatus;
+  const { checksum: _checksum, ...payload } = snapshot;
+  snapshot.checksum = createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+  game.reset();
+  restoreGameSnapshot(snapshot, game);
+  assertEqual(game.getGameStartStatus(), "idle", "legacy pre-game default");
+  game.reset();
+});
+
+
+test("Recovery retains historical class bans after a captain leaves the roster", () => {
+  const game = setup();
+  game.markCaptainHasBanned("departed-captain");
+  game.lockCaptainBan("departed-captain");
+  const snapshot = createGameSnapshot(game);
+  game.reset();
+  restoreGameSnapshot(snapshot, game);
+  assertEqual(game.getCaptainBanCount("departed-captain"), 1, "historical ban count retained");
+  assert(game.isCaptainBanLocked("departed-captain"), "historical lock retained");
+  game.reset();
 });

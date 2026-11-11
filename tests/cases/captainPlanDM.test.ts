@@ -359,3 +359,12 @@ test("CaptainPlanDMManager coalesces multiple late joiners into one prompt", asy
     "Existing teammates should only have the initial send"
   );
 });
+
+
+test("Replacement captain notification failure does not reject a committed assignment", async () => {
+  const manager = new CaptainPlanDMManager();
+  (manager as any).sessions.set("old-captain", { team: "RED" });
+  (manager as any).startForCaptain = async () => { throw new Error("DM unavailable"); };
+  await manager.replaceCaptainDuringPlay({} as Client, "RED", "old-captain", "new-captain");
+  assert(!manager.hasPendingSession("old-captain"), "former captain session invalidated");
+});

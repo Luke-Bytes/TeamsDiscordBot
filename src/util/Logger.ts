@@ -15,6 +15,7 @@ const logger = createLogger({
 
     new DailyRotateFile({
       filename: "logs/teams_bot-%DATE%.log",
+      auditFile: "logs/.rotation-audit.json",
       datePattern: "YYYY-MM-DD",
       zippedArchive: false, // May make true later
       maxSize: "20m",

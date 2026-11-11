@@ -44,6 +44,11 @@ games, records, streaks, captains, and MVPs but never change Elo, write Elo
 history, or produce ranked leaderboards. Successor types alternate unless an
 organiser sets a one-time override.
 
+## Documentation
+
+- [Command and setup wiki](WIKI.md)
+- [Operations guide](docs/operations.md): organiser diagnostics, lifecycle logs, confirmations, and game-feed behaviour.
+
 ## Known Issues
 
 -

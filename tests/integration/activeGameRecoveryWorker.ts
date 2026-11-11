@@ -189,6 +189,7 @@ async function run() {
       options: { getBoolean: () => true },
       reply: async (payload: any) => {
         buttonId = payload.components[0].components[0].data.custom_id;
+        return { resource: { message: { id: "worker-restart" } } };
       },
     };
     await command.execute(fakeSlash as any);
@@ -202,6 +203,7 @@ async function run() {
     };
     await command.handleButtonPress({
       customId: buttonId,
+      message: { id: "worker-restart" },
       member: {},
       user: { id: "local-test-organiser" },
       guildId: "dev-test",
@@ -291,10 +293,12 @@ async function run() {
       options: { getBoolean: () => true },
       reply: async (payload: any) => {
         buttonId = payload.components[0].components[0].data.custom_id;
+        return { resource: { message: { id: "worker-restart" } } };
       },
     } as any);
     await command.handleButtonPress({
       customId: buttonId,
+      message: { id: "worker-restart" },
       member: {},
       user: { id: "local-test-organiser" },
       guildId: "dev-test",

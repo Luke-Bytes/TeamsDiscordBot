@@ -18,6 +18,8 @@ async function buildAndRun() {
     external: ["sharp", "esbuild"],
     logLevel: "info",
     tsconfig: path.resolve(process.cwd(), "tsconfig.json"),
+    // Allow isolated worktrees to reuse an explicitly supplied dependency tree.
+    nodePaths: process.env.NODE_PATH?.split(path.delimiter).filter(Boolean) ?? [],
   });
   require(outfile);
 }

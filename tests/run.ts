@@ -66,6 +66,8 @@ import "./critical/identityMutationSafety.test";
 import "./critical/activeGameRecovery.test";
 import "./critical/activeGameRecoveryProcesses.test";
 import "./critical/targetedReliability.test";
+import "./critical/operationsImprovements.test";
+import "./critical/singleUseOperations.test";
 import { runAll } from "./framework/test";
 
 // Offline reliability suite: any test needing an HTTP response must explicitly

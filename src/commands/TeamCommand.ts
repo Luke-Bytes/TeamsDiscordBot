@@ -116,7 +116,7 @@ export default class TeamCommand implements Command {
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const subcommand = interaction.options.getSubcommand();
-    if (["generate", "reset", "cancel"].includes(subcommand)) {
+    if (["generate", "reset"].includes(subcommand)) {
       await interaction.deferReply();
       await this.serialise(() => this.executeUnlocked(interaction));
     } else {
@@ -171,7 +171,7 @@ export default class TeamCommand implements Command {
     const game = CurrentGameManager.getCurrentGame();
 
     try {
-      if (["generate", "reset", "cancel"].includes(subcommand) &&
+      if (["generate", "reset"].includes(subcommand) &&
           (game.getGameStartStatus() !== "idle" || game.isFinished)) {
         await DiscordUtil.reply(interaction, "Teams cannot be changed after the game starts.");
         return;
@@ -194,13 +194,14 @@ export default class TeamCommand implements Command {
             return;
           }
 
-          if (this.teamPickingSession) {
+          if (this.isTeamPickingSessionActive()) {
             await DiscordUtil.reply(
               interaction,
               "A team picking session is already in process. Cancel that one before creating another."
             );
             return;
           }
+          if (this.teamPickingSession) this.teamPickingSession = undefined;
           if (!interaction.guild) {
             await DiscordUtil.reply(interaction, "This command requires a guild.");
             return;
@@ -387,12 +388,7 @@ export default class TeamCommand implements Command {
         }
 
         case "list": {
-          if (!game.announced) {
-            await DiscordUtil.reply(
-              interaction,
-              "No game has been announced yet."
-            );
-          } else {
+          {
             await interaction.deferReply();
             const embed = this.createTeamViewEmbed(game);
             await DiscordUtil.editReply(interaction, {
@@ -414,7 +410,7 @@ export default class TeamCommand implements Command {
             return;
           }
 
-          if (!this.teamPickingSession) {
+          if (!this.isTeamPickingSessionActive()) {
             await DiscordUtil.reply(
               interaction,
               "No team picking session is currently active."
@@ -422,8 +418,11 @@ export default class TeamCommand implements Command {
             return;
           }
 
+          if (game.isRestarting || game.isFinished || game.getGameStartStatus() === "starting") {
+            await DiscordUtil.reply(interaction, "Cannot cancel picking during a game transition or after finishing.");
+            return;
+          }
           await this.resetTeamPickingSession();
-          game.changeHowTeamsDecided(null);
           await DiscordUtil.reply(
             interaction,
             "The current team picking session has been cancelled.",
@@ -589,6 +588,8 @@ export default class TeamCommand implements Command {
               session instanceof DraftTeamPickingSession
               ? await this.syncFinalizedTeamRoles(interaction.guild)
               : [];
+            const finalizedGame = CurrentGameManager.getCurrentGame();
+            console.info(`event=team.finalize game=${finalizedGame.getLifecycleToken()} outcome=${warnings.length || !finalizedGame.hasFinalizedPlayableTeams() ? "failed" : "succeeded"} method=${finalizedGame.teamsDecidedBy ?? "unknown"} role_warnings=${warnings.length}`);
             if (warnings.length || !CurrentGameManager.getCurrentGame().teamsDecidedBy && (session instanceof RandomTeamPickingSession || session instanceof DraftTeamPickingSession)) {
               await interaction.followUp({
                 content: `Teams were selected, but ${warnings.length} Discord role/member change(s) need attention. Do not start the game until roles and roster are checked. Use /team reset to recover.`,
@@ -620,6 +621,6 @@ export default class TeamCommand implements Command {
   }
 
   public isTeamPickingSessionActive(): boolean {
-    return this.teamPickingSession !== undefined;
+    return this.teamPickingSession?.getState() === "inProgress";
   }
 }

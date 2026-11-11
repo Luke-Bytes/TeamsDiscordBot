@@ -18,6 +18,7 @@ type RestartRequest = {
   userId: string;
   guildId: string | null;
   preserve: boolean;
+  messageId?: string;
   expiresAt: number;
 };
 
@@ -65,12 +66,16 @@ export default class RestartCommand implements Command {
       expiresAt: Date.now() + 120_000,
     });
     try {
-      await interaction.reply({
+      const response = await interaction.reply({
+        withResponse: true,
         content: preserve
           ? "⚠️ Confirm a preserved restart. If the game cannot be saved safely, no restart will occur. Optional workflows will be paused for review."
           : "⚠️ **Warning:** Are you sure you want to restart the bot?",
         components: [actionRow],
       });
+      const messageId = response.resource?.message?.id;
+      if (messageId) this.requests.get(id)!.messageId = messageId;
+      else this.requests.delete(id); // Never accept a button without its source message identity.
     } catch (error) {
       this.requests.delete(id);
       throw error;
@@ -82,6 +87,7 @@ export default class RestartCommand implements Command {
     const request = this.requests.get(id);
     const member = interaction.member as GuildMember;
     if (!request || request.expiresAt < Date.now() ||
+      !request.messageId || request.messageId !== interaction.message?.id ||
       request.userId !== interaction.user.id ||
       request.guildId !== interaction.guildId ||
       !member || !PermissionsUtil.hasRole(member, "organiserRole")) {

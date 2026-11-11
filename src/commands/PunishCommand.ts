@@ -1,6 +1,7 @@
 import {
   ActionRowBuilder,
   ChatInputCommandInteraction,
+  GuildMember,
   MessageFlags,
   SlashCommandBuilder,
   StringSelectMenuBuilder,
@@ -15,6 +16,7 @@ type ExpungeSession = {
   playerId: string;
   userId: string;
   createdAt: number;
+  messageId: string;
 };
 
 export default class PunishCommand implements Command {
@@ -209,16 +211,18 @@ export default class PunishCommand implements Command {
           .setMaxValues(1)
       );
 
-      this.expungeSessions.set(interaction.user.id, {
-        playerId: player.id,
-        userId: interaction.user.id,
-        createdAt: Date.now(),
-      });
-
-      await interaction.editReply({
+      const message = await interaction.editReply({
         content: `Select a punishment entry to expunge for **${playerInput}**.`,
         components: [row],
       });
+      if (message?.id) {
+        this.expungeSessions.set(interaction.user.id, {
+          playerId: player.id,
+          userId: interaction.user.id,
+          createdAt: Date.now(),
+          messageId: message.id,
+        });
+      }
     }
   }
 
@@ -227,11 +231,17 @@ export default class PunishCommand implements Command {
   ): Promise<void> {
     if (interaction.customId !== "punish-expunge-select") return;
     const session = this.expungeSessions.get(interaction.user.id);
-    if (!session || session.userId !== interaction.user.id) {
+    if (!session || session.userId !== interaction.user.id ||
+        session.messageId !== interaction.message?.id) {
       await interaction.reply({
         content: "This expunge session has expired.",
         flags: MessageFlags.Ephemeral,
       });
+      return;
+    }
+
+    if (!PermissionsUtil.hasRole(interaction.member as GuildMember, "organiserRole") || !interaction.guildId) {
+      await interaction.reply({ content: "Only an authorised organiser may expunge punishments.", flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -264,44 +274,55 @@ export default class PunishCommand implements Command {
       return;
     }
 
-    const existing = await prismaClient.playerPunishment.findFirst({
-      where: { playerId: session.playerId },
-    });
+    // Consume before any asynchronous DB access. A failed or ambiguous write
+    // must not permit replay without a fresh review of the record.
+    this.expungeSessions.delete(interaction.user.id);
+    try {
+      const existing = await prismaClient.playerPunishment.findFirst({
+        where: { playerId: session.playerId },
+      });
 
-    if (!existing || !existing.reasons[idx]) {
+      if (!existing || !existing.reasons[idx]) {
+        await interaction.reply({
+          content: "Punishment entry not found.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      const newReasons = existing.reasons.filter((_, i) => i !== idx);
+      const newDates = existing.punishmentDates.filter((_, i) => i !== idx);
+      const newStrikeCount = Math.max(0, newReasons.length);
+      const removedLatest = idx === existing.reasons.length - 1;
+
+      if (newReasons.length === 0) {
+        await prismaClient.playerPunishment.delete({
+          where: { id: existing.id },
+        });
+      } else {
+        await prismaClient.playerPunishment.update({
+          where: { id: existing.id },
+          data: {
+            reasons: newReasons,
+            punishmentDates: newDates,
+            strikeCount: newStrikeCount,
+            punishmentExpiry: removedLatest ? null : existing.punishmentExpiry,
+          },
+        });
+      }
+
+      console.info("event=punish.expunge outcome=succeeded");
+      await interaction.update({
+        content: "Punishment entry removed.",
+        components: [],
+      });
+    } catch (error) {
+      console.error(`event=punish.expunge outcome=failed error_type=${error instanceof Error ? error.name : "unknown"}`);
       await interaction.reply({
-        content: "Punishment entry not found.",
+        content: "Expunge status is uncertain. Inspect the punishment record before submitting another request.",
         flags: MessageFlags.Ephemeral,
       });
-      return;
     }
-
-    const newReasons = existing.reasons.filter((_, i) => i !== idx);
-    const newDates = existing.punishmentDates.filter((_, i) => i !== idx);
-    const newStrikeCount = Math.max(0, newReasons.length);
-    const removedLatest = idx === existing.reasons.length - 1;
-
-    if (newReasons.length === 0) {
-      await prismaClient.playerPunishment.delete({
-        where: { id: existing.id },
-      });
-    } else {
-      await prismaClient.playerPunishment.update({
-        where: { id: existing.id },
-        data: {
-          reasons: newReasons,
-          punishmentDates: newDates,
-          strikeCount: newStrikeCount,
-          punishmentExpiry: removedLatest ? null : existing.punishmentExpiry,
-        },
-      });
-    }
-
-    this.expungeSessions.delete(interaction.user.id);
-    await interaction.update({
-      content: "Punishment entry removed.",
-      components: [],
-    });
   }
 
   private computeExpiryDate(duration: string): Date | null {

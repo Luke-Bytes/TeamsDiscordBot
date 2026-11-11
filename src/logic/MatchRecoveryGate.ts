@@ -32,7 +32,9 @@ export class MatchRecoveryGate {
       this.block("Cannot verify incomplete match cleanup against the database");
     }
     if (this.reason) {
-      console.error(`[match-recovery] New announcements blocked: ${this.reason}`);
+      console.error(`event=recovery.inspect outcome=failed block=true reason=${this.reason}`);
+    } else {
+      console.info("event=recovery.inspect outcome=succeeded block=false");
     }
   }
 }

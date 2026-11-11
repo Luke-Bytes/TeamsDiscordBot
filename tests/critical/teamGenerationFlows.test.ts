@@ -256,7 +256,7 @@ test("Confirm random teams, then cancel and generate balance", () =>
       assertRosterMatches(game, ids);
       assertRolesMatchTeams(guild, game);
 
-      // Attempt to generate again should be blocked until cancel
+      // Finalization must allow a fresh generation without cancelling committed teams
       const blocked = createChatInputInteraction(organiser.id, {
         guild,
         member: guild.members.cache.get(organiser.id),
@@ -266,13 +266,9 @@ test("Confirm random teams, then cancel and generate balance", () =>
       blocked.inGuild = () => true;
       blocked.guild = guild;
       await teamCmd.execute(blocked);
-      const blockedReply = blocked.replies.find((r: any) => r.type === "editReply");
-      assert(
-        blocked.deferred &&
-          blocked.replies.filter((r: any) => r.type === "reply").length === 0 &&
-          String(blockedReply?.payload?.content || "").includes("already in process"),
-        "Should defer once, then block new generation while session active"
-      );
+      assert(teamCmd.isTeamPickingSessionActive(), "New generation starts after finalization");
+      assertNoDuplicates(game);
+      assertRosterMatches(game, ids);
 
       // Cancel session and regenerate
       const cancelInteraction = createChatInputInteraction(organiser.id, {

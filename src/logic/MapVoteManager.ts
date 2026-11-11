@@ -93,6 +93,8 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
 
   async finalizeVotes() {
     if (!this.pollMessage) return;
+    const startedAt = Date.now();
+    const gameId = GameInstance.getInstance().getLifecycleToken();
 
     const current = this.pollMessage!;
     const freshMsg: Message = await current.fetch(true).catch(() => current);
@@ -100,7 +102,7 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
 
     const poll = freshMsg.poll;
     if (!poll?.answers || poll.answers.size === 0) {
-      console.log("No answers found.");
+      console.info(`event=vote.map.finalize game=${gameId} outcome=skipped reason=no_answers`);
       return;
     }
 
@@ -230,9 +232,10 @@ export class MapVoteManager extends EventEmitter<MapVoteManagerEvents> {
 
     if (officialTop.length === 1 && officialTop[0].mapEnum) {
       this.emit("pollEnd", officialTop[0].mapEnum as AnniMap);
+      console.info(`event=vote.map.finalize game=${gameId} outcome=succeeded result=${officialTop[0].mapEnum} duration_ms=${Date.now() - startedAt}`);
     } else {
       console.error(
-        "No single official winner could be determined. Manual tiebreaker required."
+        `event=vote.map.finalize game=${gameId} outcome=failed reason=no_unique_winner duration_ms=${Date.now() - startedAt}`
       );
     }
   }

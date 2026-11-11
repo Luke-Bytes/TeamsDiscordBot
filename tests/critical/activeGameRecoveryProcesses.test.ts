@@ -30,6 +30,8 @@ function prepareWorker(): Promise<void> {
       target: "node18",
       format: "cjs",
       external: ["sharp"],
+      // Reuse an explicitly configured dependency tree for isolated worktrees.
+      nodePaths: process.env.NODE_PATH?.split(path.delimiter).filter(Boolean) ?? [],
       logLevel: "silent",
     }).then(() => {});
   }

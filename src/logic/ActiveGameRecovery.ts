@@ -31,6 +31,7 @@ type SerializedPlan = Omit<TeamPlanRecord, "capturedAt" | "raw"> & {
 
 type GameState = {
   announced: true;
+  gameStartStatus?: "idle" | "started";
   startTime: string;
   organiser: string | null;
   host: string | null;
@@ -130,8 +131,8 @@ const serializePlayer = (p: PlayerInstance): SerializedPlayer => ({
 
 export function createGameSnapshot(game: GameInstance, teamCommand?: TeamCommand): GameSnapshot {
   requireCondition(game.announced && !!game.gameId && !!game.startTime, "no complete announced game");
-  requireCondition(game.getGameStartStatus() === "idle" && !game.isFinished &&
-    !game.isRestarting && !game.gameWinner && !game.endTime, "game is starting, started or finished");
+  requireCondition(game.getGameStartStatus() !== "starting" && !game.isFinished &&
+    !game.isRestarting && !game.gameWinner && !game.endTime, "game is starting, restarting or finished");
   requireCondition(game.gameId === game.getLifecycleToken(), "game and lifecycle identity differ");
   const metadata = game.exportRecoveryMetadata();
   const session = teamCommand?.teamPickingSession;
@@ -155,7 +156,7 @@ export function createGameSnapshot(game: GameInstance, teamCommand?: TeamCommand
       registrationChannelId: config.channels.registration,
       guildId: config.dev.enabled ? config.dev.guildId : null },
     game: {
-      announced: true as const, startTime: game.startTime!.toISOString(),
+      gameStartStatus: game.getGameStartStatus() as "idle" | "started", announced: true as const, startTime: game.startTime!.toISOString(),
       organiser: game.organiser ?? null, host: game.host ?? null,
       teams: { RED: game.teams.RED.map(serializePlayer), BLUE: game.teams.BLUE.map(serializePlayer),
         UNDECIDED: game.teams.UNDECIDED.map(serializePlayer) },
@@ -214,6 +215,7 @@ export function validateGameSnapshot(input: unknown): asserts input is GameSnaps
     nullableStr(input.environment.guildId), "environment");
   const g = input.game;
   requireCondition(record(g) && keys(g, [
+    ...(record(g) && Object.prototype.hasOwnProperty.call(g, "gameStartStatus") ? ["gameStartStatus"] : []),
     "announced", "startTime", "organiser", "host", "teams", "lateSignups", "captainNominations",
     "lastRegisteredSnowflake", "teamsDecidedBy", "settings", "classBanMode", "classBanLimit",
     "captainBanCounts", "captainBanLocked", "classBansAnnounced", "isDoubleElo",
@@ -221,6 +223,7 @@ export function validateGameSnapshot(input: unknown): asserts input is GameSnaps
     "redTeamPlan", "blueTeamPlan",
   ]) && g.announced === true && validDate(g.startTime) &&
     nullableStr(g.organiser) && nullableStr(g.host) && nullableStr(g.lastRegisteredSnowflake), "game fields");
+  requireCondition(g.gameStartStatus === undefined || g.gameStartStatus === "idle" || g.gameStartStatus === "started", "game start status");
   requireCondition(record(g.teams) && keys(g.teams, teamKeys), "teams");
   const ids = new Set<string>();
   for (const team of teamKeys) {
@@ -261,8 +264,8 @@ export function validateGameSnapshot(input: unknown): asserts input is GameSnaps
     listOf(s.modifiers, (v) => record(v) && keys(v, ["category", "name"]) && str(v.category) && str(v.name)) &&
     Number.isSafeInteger(s.delayedBan) && (s.delayedBan as number) >= 0, "game settings");
   requireCondition(listOf(g.captainBanCounts, (entry) => Array.isArray(entry) && entry.length === 2 &&
-    str(entry[0]) && ids.has(entry[0]) && Number.isSafeInteger(entry[1]) && entry[1] >= 0) &&
-    idList(g.captainBanLocked), "ban counters and locks");
+    str(entry[0]) && Number.isSafeInteger(entry[1]) && entry[1] >= 0) &&
+    idList(g.captainBanLocked, false), "ban counters and locks");
   for (const name of ["redTeamPlan", "blueTeamPlan"] as const) {
     const plan = g[name];
     requireCondition(plan === null || (record(plan) &&
@@ -357,6 +360,10 @@ export function restoreGameSnapshot(snapshot: GameSnapshot, game: GameInstance):
     captainBanLocked: s.captainBanLocked,
     classBansAnnounced: s.classBansAnnounced,
   });
+  if (s.gameStartStatus === "started") {
+    game.tryBeginGameStart();
+    game.completeGameStart();
+  }
 }
 
 /** Install and consume with no external side effects. Failed install leaves pending untouched. */

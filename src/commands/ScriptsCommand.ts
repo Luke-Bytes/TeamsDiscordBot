@@ -4,6 +4,7 @@ import {
   ButtonInteraction,
   ButtonStyle,
   ChatInputCommandInteraction,
+  GuildMember,
   MessageFlags,
   SlashCommandBuilder,
 } from "discord.js";
@@ -26,12 +27,11 @@ export default class ScriptsCommand implements Command {
         .setName("titles-update")
         .setDescription("Reconcile lifetime and ranked placement titles")
     );
-  private readonly pendingUsers = new Set<string>();
+  private readonly requests = new Map<string, { userId: string; expiresAt: number }>();
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     if (!(await PermissionsUtil.isUserAuthorised(interaction))) return;
-    this.pendingUsers.add(interaction.user.id);
-    await DiscordUtil.replyWithMessage(interaction, {
+    const message = await DiscordUtil.replyWithMessage(interaction, {
       content:
         "Reconcile all lifetime titles and placement titles from completed ranked seasons?",
       flags: MessageFlags.Ephemeral,
@@ -48,17 +48,32 @@ export default class ScriptsCommand implements Command {
         ),
       ],
     });
+    // A missing message identity is not a valid confirmation.
+    if (message?.id) {
+      for (const [id, request] of this.requests) {
+        if (request.userId === interaction.user.id || request.expiresAt <= Date.now()) this.requests.delete(id);
+      }
+      this.requests.set(message.id, { userId: interaction.user.id, expiresAt: Date.now() + 5 * 60_000 });
+    }
   }
 
   async handleButtonPress(interaction: ButtonInteraction): Promise<void> {
-    if (!this.pendingUsers.has(interaction.user.id)) {
+    const messageId = interaction.message?.id;
+    const request = messageId ? this.requests.get(messageId) : undefined;
+    if (!request || request.expiresAt <= Date.now()) {
       await interaction.reply({
         content: "This confirmation expired.",
         flags: MessageFlags.Ephemeral,
       });
       return;
     }
-    this.pendingUsers.delete(interaction.user.id);
+    if (request.userId !== interaction.user.id ||
+        !PermissionsUtil.hasRole(interaction.member as GuildMember, "organiserRole") || !interaction.guildId) {
+      await interaction.reply({ content: "Only the authorised organiser who requested this may confirm.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+    // Claim before the first await, including cancellation and acknowledgement.
+    this.requests.delete(interaction.message.id);
     if (interaction.customId === "scripts-cancel") {
       await interaction.update({
         content: "Title reconciliation cancelled.",
@@ -70,12 +85,18 @@ export default class ScriptsCommand implements Command {
       content: "Reconciling titles...",
       components: [],
     });
-    const result = await TitleService.reconcile();
-    for (const block of result.blocks) await Channels.announcements.send(block);
-    await interaction.editReply({
-      content: result.newlyUnlocked.length
-        ? `Reconciled titles for ${result.newlyUnlocked.length} player(s) and posted the new unlocks.`
-        : "Titles are already reconciled; no new unlocks were found.",
-    });
+    try {
+      const result = await TitleService.reconcile();
+      for (const block of result.blocks) await Channels.announcements.send(block);
+      console.info(`event=scripts.titles_reconcile outcome=succeeded unlocked=${result.newlyUnlocked.length} announcements=${result.blocks.length}`);
+      await interaction.editReply({
+        content: result.newlyUnlocked.length
+          ? `Reconciled titles for ${result.newlyUnlocked.length} player(s) and posted the new unlocks.`
+          : "Titles are already reconciled; no new unlocks were found.",
+      });
+    } catch (error) {
+      console.error(`event=scripts.titles_reconcile outcome=failed error_type=${error instanceof Error ? error.name : "unknown"}`);
+      await interaction.editReply({ content: "Title reconciliation may have partially completed; inspect titles and announcements before submitting a new request." });
+    }
   }
 }
