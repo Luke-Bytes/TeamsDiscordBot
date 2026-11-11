@@ -66,7 +66,9 @@ function fixture() {
   const prior: any[] = [];
   const histories: any[] = [];
   const writes: Array<{ model: string; args: any }> = [];
+  const players: any[] = [];
   const tx = {
+    player: { findMany: async () => players },
     season: { findFirst: async () => season, count: async () => 1 },
     game: {
       findFirst: async () => game,
@@ -76,6 +78,9 @@ function fixture() {
       },
     },
     gameParticipation: {
+      create: async (args: any) => {
+        writes.push({ model: "part-create", args });
+      },
       findMany: async () => prior,
       update: async (args: any) => {
         writes.push({ model: "part", args });
@@ -85,6 +90,9 @@ function fixture() {
       },
     },
     eloHistory: {
+      create: async (args: any) => {
+        writes.push({ model: "history-create", args });
+      },
       findMany: async () => histories,
       update: async (args: any) => {
         writes.push({ model: "history", args });
@@ -94,6 +102,9 @@ function fixture() {
       },
     },
     playerStats: {
+      create: async (args: any) => {
+        writes.push({ model: "stats-create", args });
+      },
       findMany: async () => stats,
       updateMany: async (args: any) => {
         writes.push({ model: "stats", args });
@@ -101,7 +112,7 @@ function fixture() {
       },
     },
   } as unknown as Prisma.TransactionClient;
-  return { tx, game, season, stats, prior, histories, writes };
+  return { tx, game, season, stats, prior, histories, writes, players };
 }
 
 // Seed authoritative older records and materialize the existing (uncorrected) stats.
@@ -951,4 +962,184 @@ test("automatic selection refuses ambiguous seasons and equally dated latest gam
     "identical timestamps"
   );
   assertEqual(f.writes.length, 0, "Ambiguous selection never writes");
+});
+
+function addRegisteredPlayer(f: ReturnType<typeof fixture>) {
+  f.players.push({ id: "Eve", latestIGN: "Eve", discordSnowflake: "104" });
+}
+
+test("adding a missing player creates participation, default seasonal stats and rated history", async () => {
+  const f = fixture();
+  addRegisteredPlayer(f);
+  const options = { addPlayers: [{ identifier: "Eve", team: Team.RED }] };
+  const plan = await loadTeamCorrection(f.tx, [], options);
+  const added = plan.updates.find((u) => u.playerId === "Eve")!;
+  assertEqual(added.from, null, "Preview identifies addition");
+  assertEqual(added.next.wins, 1, "Added winner gets one win");
+  assertEqual(added.mvp, false, "No MVP invented");
+  assertEqual(added.captain, false, "No captain invented");
+  assertEqual(added.votedForAMVP, false, "No vote invented");
+  assertEqual(f.writes.length, 0, "Preview is read-only");
+  await applyTeamCorrection(f.tx, plan, [], options);
+  for (const model of ["part-create", "stats-create", "history-create"])
+    assertEqual(f.writes.filter((w) => w.model === model).length, 1, model);
+  assertEqual(
+    f.writes.filter((w) => w.model === "history").length,
+    4,
+    "Existing Elo recalculated"
+  );
+  const roster = f.writes.find((w) => w.model === "game")!.args.data
+    .participantsIGNs;
+  assertEqual(
+    roster.join(),
+    "Alice,Bob,Cara,Dan,Eve",
+    "Display roster extended"
+  );
+  assertEqual(
+    f.writes.find((w) => w.model === "history-create")!.args.data.createdAt,
+    f.game.endTime,
+    "Historical timestamp uses game end"
+  );
+});
+
+test("added player uses prior stats and contributes pre-game Elo to team expectations", async () => {
+  const f = fixture();
+  addRegisteredPlayer(f);
+  addPriorResult(f, "Eve", "prior-eve", new Date(1000), 1800);
+  f.stats.push({ ...f.stats[0], id: "stats-eve", playerId: "Eve", elo: 1800 });
+  const options = { addPlayers: [{ identifier: "104", team: Team.BLUE }] };
+  const plan = await loadTeamCorrection(f.tx, [], options);
+  const eve = plan.updates.find((u) => u.playerId === "Eve")!;
+  assertEqual(eve.next.wins, 1, "Prior win retained");
+  assertEqual(eve.next.losses, 1, "New loss added");
+  assertEqual(eve.next.loseStreak, 1, "Streak recalculated");
+  const comparison = fixture();
+  addRegisteredPlayer(comparison);
+  const baseline = await loadTeamCorrection(comparison.tx, [], options);
+  assert(
+    plan.updates.find((u) => u.playerId === "Alice")!.next.elo !==
+      baseline.updates.find((u) => u.playerId === "Alice")!.next.elo,
+    "Added player's Elo affects other players"
+  );
+  await applyTeamCorrection(f.tx, plan, [], options);
+  assertEqual(
+    f.writes.filter((w) => w.model === "stats-create").length,
+    0,
+    "Existing seasonal stats updated"
+  );
+});
+
+test("unrated additions award results without Elo history", async () => {
+  const f = fixture();
+  addRegisteredPlayer(f);
+  f.game.eloRated = false;
+  f.game.eloHistories = [];
+  syncCurrentStats(f);
+  const options = { addPlayers: [{ identifier: "Eve", team: Team.BLUE }] };
+  const plan = await loadTeamCorrection(f.tx, [], options);
+  const eve = plan.updates.find((u) => u.playerId === "Eve")!;
+  assertEqual(eve.next.elo, 1000, "Unrated Elo remains default");
+  assertEqual(eve.next.losses, 1, "Unrated loss counted");
+  await applyTeamCorrection(f.tx, plan, [], options);
+  assertEqual(
+    f.writes.filter((w) => w.model === "history-create").length,
+    0,
+    "No unrated history"
+  );
+});
+
+test("additions refuse unknown, ambiguous, duplicate, existing, unsafe and drifting players", async () => {
+  for (const scenario of [
+    "unknown",
+    "ambiguous",
+    "duplicate",
+    "existing",
+    "later",
+    "drift",
+    "missing stats",
+    "blank",
+    "team",
+  ]) {
+    const f = fixture();
+    addRegisteredPlayer(f);
+    const options = { addPlayers: [{ identifier: "Eve", team: Team.RED }] };
+    let expected = "";
+    if (scenario === "unknown") {
+      f.players.length = 0;
+      expected = "missing or ambiguous";
+    }
+    if (scenario === "ambiguous") {
+      f.players.push({ ...f.players[0], id: "other" });
+      expected = "missing or ambiguous";
+    }
+    if (scenario === "duplicate") {
+      options.addPlayers.push({ ...options.addPlayers[0] });
+      expected = "more than once";
+    }
+    if (scenario === "existing") {
+      f.players[0] = f.game.gameParticipations[0].player;
+      expected = "already in the roster";
+    }
+    if (scenario === "later") {
+      addPriorResult(f, "Eve", "later", f.game.endTime, 1200);
+      expected = "Last-game correction is unsafe";
+    }
+    if (scenario === "drift") {
+      f.stats.push({ ...f.stats[0], id: "eve-stats", playerId: "Eve" });
+      expected = "Current stats do not match";
+    }
+    if (scenario === "missing stats") {
+      addPriorResult(f, "Eve", "prior", new Date(1000), 1200);
+      expected = "Missing seasonal stats";
+    }
+    if (scenario === "blank") {
+      options.addPlayers[0].identifier = " ";
+      expected = "identifier cannot be empty";
+    }
+    if (scenario === "team") {
+      options.addPlayers[0].team =
+        "INVALID" as (typeof options.addPlayers)[0]["team"];
+      expected = "Destination";
+    }
+    await rejects(() => loadTeamCorrection(f.tx, [], options), expected);
+    assertEqual(f.writes.length, 0, "Invalid addition writes nothing");
+  }
+});
+
+test("addition preview detects changed account names before writes", async () => {
+  const f = fixture();
+  addRegisteredPlayer(f);
+  const options = { addPlayers: [{ identifier: "104", team: Team.RED }] };
+  const plan = await loadTeamCorrection(f.tx, [], options);
+  f.players[0].latestIGN = "Renamed";
+  await rejects(
+    () => applyTeamCorrection(f.tx, plan, [], options),
+    "changed since preview"
+  );
+  assertEqual(f.writes.length, 0, "Stale addition writes nothing");
+});
+
+test("CLI accepts repeated additions and mixed roster changes", async () => {
+  const parsed = parseTeamCorrectionArgs([
+    "--add",
+    "Adlys=red",
+    "--add",
+    "DantePeulis=RED",
+    "--add",
+    "ALLDOWN=RED",
+    "--move",
+    "Alice=BLUE",
+    "--remove",
+    "Dan",
+    "--apply",
+  ]);
+  assertEqual(parsed.options.addPlayers!.length, 3, "All additions parsed");
+  assertEqual(parsed.options.addPlayers![0].team, Team.RED, "Case normalized");
+  assertEqual(parsed.apply, true, "Apply retained");
+  for (const args of [["--add"], ["--add", "=RED"], ["--add", "Eve=GREEN"]]) {
+    await rejects(
+      async () => parseTeamCorrectionArgs(args),
+      args.length === 1 ? "Missing value" : "Use --add"
+    );
+  }
 });

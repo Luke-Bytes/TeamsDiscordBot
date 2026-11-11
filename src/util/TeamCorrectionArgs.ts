@@ -7,19 +7,29 @@ import type {
 /** Pure CLI parsing, so invalid requests can be tested without executing a script. */
 export function parseTeamCorrectionArgs(args: string[]) {
   const moves: TeamMove[] = [];
-  const options: CorrectionOptions = { removePlayers: [] };
+  const options: CorrectionOptions = { removePlayers: [], addPlayers: [] };
   const seen = new Set<string>();
   let apply = false;
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
     if (
-      !["--move", "--remove", "--season", "--double-elo", "--apply"].includes(
-        flag
-      )
+      ![
+        "--move",
+        "--add",
+        "--remove",
+        "--season",
+        "--double-elo",
+        "--apply",
+      ].includes(flag)
     ) {
       throw new Error(`Unknown option ${flag}.`);
     }
-    if (flag !== "--move" && flag !== "--remove" && seen.has(flag)) {
+    if (
+      flag !== "--move" &&
+      flag !== "--add" &&
+      flag !== "--remove" &&
+      seen.has(flag)
+    ) {
       throw new Error(`Option ${flag} specified more than once.`);
     }
     seen.add(flag);
@@ -30,11 +40,13 @@ export function parseTeamCorrectionArgs(args: string[]) {
     const value = args[++i]?.trim();
     if (!value || value.startsWith("--"))
       throw new Error(`Missing value for ${flag}.`);
-    if (flag === "--move") {
+    if (flag === "--move" || flag === "--add") {
       const match = /^([^=]+)=(RED|BLUE)$/i.exec(value);
       if (!match || !match[1].trim())
-        throw new Error("Use --move PlayerName=RED or --move PlayerName=BLUE.");
-      moves.push({
+        throw new Error(
+          `Use ${flag} PlayerName=RED or ${flag} PlayerName=BLUE.`
+        );
+      (flag === "--add" ? options.addPlayers! : moves).push({
         identifier: match[1].trim(),
         team: match[2].toUpperCase() as Team,
       });
@@ -52,9 +64,13 @@ export function parseTeamCorrectionArgs(args: string[]) {
       options.legacyDoubleElo = value === "yes";
     }
   }
-  if (!moves.length && !options.removePlayers!.length) {
+  if (
+    !moves.length &&
+    !options.removePlayers!.length &&
+    !options.addPlayers!.length
+  ) {
     throw new Error(
-      "Specify at least one --move Player=TEAM or --remove Player."
+      "Specify at least one --move Player=TEAM or --add Player=TEAM or --remove Player."
     );
   }
   return { moves, options, apply };

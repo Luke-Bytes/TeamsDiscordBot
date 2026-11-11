@@ -11,6 +11,7 @@ import {
 import { parseTeamCorrectionArgs } from "../src/util/TeamCorrectionArgs";
 
 // Example: npx tsx scripts/fix-last-game-teams.ts --move Alice=RED --move Bob=BLUE
+// Add missing registered players: --add Alice=RED --add Bob=BLUE
 // Optional: --remove PlayerName; --season 3; legacy games: --double-elo yes|no.
 // Preview is read-only. --apply enables a yes/no confirmation of the shown game.
 async function main() {
@@ -35,19 +36,19 @@ async function main() {
     plan.updates.map((u) => ({
       player: u.ign,
       playerId: u.playerId,
-      from: u.from,
+      from: u.from ?? "ADDED",
       to: u.to ?? "REMOVED",
       mvp: u.mvp,
       captain: u.captain,
       votedForAMVP: u.votedForAMVP,
-      oldElo: u.old.elo,
+      oldElo: (u.old ?? u.before).elo,
       newElo: u.next.elo,
-      wins: `${u.old.wins} -> ${u.next.wins}`,
-      losses: `${u.old.losses} -> ${u.next.losses}`,
-      winStreak: `${u.old.winStreak} -> ${u.next.winStreak}`,
-      loseStreak: `${u.old.loseStreak} -> ${u.next.loseStreak}`,
-      biggestWinStreak: `${u.old.biggestWinStreak} -> ${u.next.biggestWinStreak}`,
-      biggestLosingStreak: `${u.old.biggestLosingStreak} -> ${u.next.biggestLosingStreak}`,
+      wins: `${(u.old ?? u.before).wins} -> ${u.next.wins}`,
+      losses: `${(u.old ?? u.before).losses} -> ${u.next.losses}`,
+      winStreak: `${(u.old ?? u.before).winStreak} -> ${u.next.winStreak}`,
+      loseStreak: `${(u.old ?? u.before).loseStreak} -> ${u.next.loseStreak}`,
+      biggestWinStreak: `${(u.old ?? u.before).biggestWinStreak} -> ${u.next.biggestWinStreak}`,
+      biggestLosingStreak: `${(u.old ?? u.before).biggestLosingStreak} -> ${u.next.biggestLosingStreak}`,
     }))
   );
   if (!apply) {

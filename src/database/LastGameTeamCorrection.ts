@@ -8,6 +8,7 @@ export type TeamMove = { identifier: string; team: Team };
 export type CorrectionOptions = {
   seasonNumber?: number;
   removePlayers?: string[];
+  addPlayers?: TeamMove[];
   // Legacy games did not store this flag. Never silently assume its value.
   legacyDoubleElo?: boolean;
 };
@@ -132,7 +133,7 @@ export async function loadTeamCorrection(
     );
   }
   const removals = options.removePlayers ?? [];
-  if (!moves.length && !removals.length)
+  if (!moves.length && !removals.length && !options.addPlayers?.length)
     throw new Error("Specify at least one player move or removal.");
   const parts = game.gameParticipations;
   if (
@@ -201,7 +202,61 @@ export async function loadTeamCorrection(
     }
     changedTeams.set(part.playerId, move.team);
   }
+  // Resolve additions against registered accounts, never create account identities.
+  const additions: typeof parts = [];
+  for (const addition of options.addPlayers ?? []) {
+    const identifier = addition.identifier.trim();
+    if (!identifier) throw new Error("Player identifier cannot be empty.");
+    if (addition.team !== Team.RED && addition.team !== Team.BLUE)
+      throw new Error("Destination must be RED or BLUE.");
+    const matches = await tx.player.findMany({
+      where: {
+        OR: [
+          { id: identifier },
+          { discordSnowflake: identifier },
+          { latestIGN: { equals: identifier, mode: "insensitive" } },
+        ],
+      },
+      orderBy: { id: "asc" },
+    });
+    if (matches.length !== 1)
+      throw new Error(
+        `Player '${identifier}' is missing or ambiguous among registered players. Use their player ID.`
+      );
+    const player = matches[0];
+    if (!player.discordSnowflake || !player.latestIGN?.trim())
+      throw new Error(
+        "Added player must have a Discord identity and latestIGN."
+      );
+    if (
+      parts.some((p) => p.playerId === player.id) ||
+      additions.some((p) => p.playerId === player.id)
+    )
+      throw new Error(
+        "Added player is already in the roster or specified more than once (including move/remove conflicts)."
+      );
+    additions.push({
+      id: "",
+      playerId: player.id,
+      gameId: game.id,
+      seasonId: season.id,
+      ignUsed: player.latestIGN,
+      team: addition.team,
+      mvp: false,
+      captain: false,
+      votedForAMVP: false,
+      draftSlotPlacement: null,
+      player,
+    });
+  }
+  const allParts = [...parts, ...additions];
   if (
+    new Set(allParts.map((p) => p.player.discordSnowflake)).size !==
+    allParts.length
+  )
+    throw new Error("Corrected roster has duplicate Discord identities.");
+  if (
+    !additions.length &&
     !parts.some(
       (p) =>
         changedTeams.has(p.playerId) && changedTeams.get(p.playerId) !== p.team
@@ -209,7 +264,7 @@ export async function loadTeamCorrection(
   ) {
     throw new Error("The requested changes already match the saved teams.");
   }
-  const playerIds = parts.map((p) => p.playerId);
+  const playerIds = allParts.map((p) => p.playerId);
   const removedParts = parts.filter(
     (p) => changedTeams.has(p.playerId) && changedTeams.get(p.playerId) === null
   );
@@ -231,6 +286,7 @@ export async function loadTeamCorrection(
       );
     participantsIGNs.splice(index, 1);
   }
+  participantsIGNs.push(...additions.map((p) => p.ignUsed));
   const otherParts = await tx.gameParticipation.findMany({
     where: {
       seasonId: season.id,
@@ -308,8 +364,8 @@ export async function loadTeamCorrection(
     orderBy: { id: "asc" },
   });
   if (
-    currentStats.length !== parts.length ||
-    new Set(currentStats.map((s) => s.playerId)).size !== parts.length ||
+    parts.some((p) => !currentStats.some((s) => s.playerId === p.playerId)) ||
+    new Set(currentStats.map((s) => s.playerId)).size !== currentStats.length ||
     currentStats.some(
       (s) => !playerIds.includes(s.playerId) || s.seasonId !== season.id
     )
@@ -328,7 +384,7 @@ export async function loadTeamCorrection(
       game.eloHistories.length ||
     game.eloHistories.some(
       (h) =>
-        !playerIds.includes(h.playerId) ||
+        !parts.some((p) => p.playerId === h.playerId) ||
         h.seasonId !== season.id ||
         h.gameId !== game.id ||
         !Number.isInteger(h.elo) ||
@@ -346,7 +402,8 @@ export async function loadTeamCorrection(
       "Legacy game has no doubleElo flag. Specify --double-elo yes or --double-elo no."
     );
   }
-  const bases = parts.map((part) => {
+  const bases = allParts.map((part) => {
+    const added = additions.includes(part);
     const prior = otherParts
       .filter((p) => p.playerId === part.playerId)
       .sort(
@@ -395,18 +452,26 @@ export async function loadTeamCorrection(
     for (const p of prior) {
       Object.assign(before, afterResult(before, p.team === p.game.winner));
     }
-    const stored = currentStats.find((s) => s.playerId === part.playerId)!;
-    const expected = afterResult(before, part.team === game.winner);
-    expected.elo = rated
-      ? game.eloHistories.find((h) => h.playerId === part.playerId)!.elo
-      : before.elo;
-    if (statKeys.some((key) => stored[key] !== expected[key])) {
+    const stored = currentStats.find((s) => s.playerId === part.playerId);
+    if (!stored && prior.length)
+      throw new Error(
+        `Missing seasonal stats for added player ${part.ignUsed} with prior games.`
+      );
+    const expected = added
+      ? { ...before }
+      : afterResult(before, part.team === game.winner);
+    expected.elo =
+      rated && !added
+        ? game.eloHistories.find((h) => h.playerId === part.playerId)!.elo
+        : before.elo;
+    if (stored && statKeys.some((key) => stored[key] !== expected[key])) {
       throw new Error(
         `Current stats do not match saved results for ${part.ignUsed}; refusing to overwrite unrelated or missing changes.`
       );
     }
     return {
       part,
+      added,
       before,
       team: changedTeams.has(part.playerId)
         ? (changedTeams.get(part.playerId) ?? null)
@@ -458,7 +523,7 @@ export async function loadTeamCorrection(
       "Elo bonuses and multipliers must be finite, nonnegative numbers."
     );
   }
-  const updates = bases.map(({ part, before, team, player }) => {
+  const updates = bases.map(({ part, added, before, team, player }) => {
     const removed = team === null;
     const won = team === game.winner;
     const winStreak = removed
@@ -489,12 +554,13 @@ export async function loadTeamCorrection(
       participationId: part.id,
       playerId: part.playerId,
       ign: part.ignUsed,
-      from: part.team,
+      from: added ? null : part.team,
       to: team,
       mvp: part.mvp,
       captain: part.captain,
       votedForAMVP: part.votedForAMVP,
-      old: currentStats.find((s) => s.playerId === part.playerId)!,
+      old: currentStats.find((s) => s.playerId === part.playerId),
+      before,
       history: game.eloHistories.find((h) => h.playerId === part.playerId),
       next: {
         elo,
@@ -518,6 +584,7 @@ export async function loadTeamCorrection(
         otherParts,
         histories,
         currentStats,
+        additions,
         updates,
         eloConfig,
       })
@@ -583,23 +650,58 @@ export async function applyTeamCorrection(
       await tx.gameParticipation.delete({
         where: { id: update.participationId },
       });
+    } else if (update.from === null) {
+      await tx.gameParticipation.create({
+        data: {
+          playerId: update.playerId,
+          gameId: plan.game.id,
+          seasonId: plan.season.id,
+          ignUsed: update.ign,
+          team: update.to,
+          mvp: false,
+          captain: false,
+          votedForAMVP: false,
+        },
+      });
     } else if (update.from !== update.to) {
       await tx.gameParticipation.update({
         where: { id: update.participationId },
         data: { team: update.to },
       });
     }
-    const changed = await tx.playerStats.updateMany({
-      where: {
-        id: update.old.id,
-        ...Object.fromEntries(statKeys.map((key) => [key, update.old[key]])),
-      },
-      data: update.next,
-    });
-    if (changed.count !== 1)
-      throw new Error(
-        `Concurrent stats change for ${update.ign}; transaction must roll back.`
-      );
+    if (!update.old) {
+      await tx.playerStats.create({
+        data: {
+          playerId: update.playerId,
+          seasonId: plan.season.id,
+          ...update.next,
+        },
+      });
+    } else {
+      const old = update.old;
+      const changed = await tx.playerStats.updateMany({
+        where: {
+          id: old.id,
+          ...Object.fromEntries(statKeys.map((key) => [key, old[key]])),
+        },
+        data: update.next,
+      });
+      if (changed.count !== 1)
+        throw new Error(
+          `Concurrent stats change for ${update.ign}; transaction must roll back.`
+        );
+    }
+    if (update.to !== null && plan.rated && !update.history) {
+      await tx.eloHistory.create({
+        data: {
+          playerId: update.playerId,
+          seasonId: plan.season.id,
+          gameId: plan.game.id,
+          elo: update.next.elo,
+          createdAt: plan.game.endTime,
+        },
+      });
+    }
     if (update.to !== null && plan.rated && update.history) {
       await tx.eloHistory.update({
         where: { id: update.history.id },
@@ -607,7 +709,7 @@ export async function applyTeamCorrection(
       });
     }
   }
-  if (plan.updates.some((u) => u.to === null)) {
+  if (plan.updates.some((u) => u.to === null || u.from === null)) {
     await tx.game.update({
       where: { id: plan.game.id },
       data: { participantsIGNs: plan.participantsIGNs },

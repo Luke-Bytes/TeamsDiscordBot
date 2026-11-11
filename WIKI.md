@@ -339,3 +339,28 @@ The order of the classes discussed will roughly follow how game operation flows.
 -LatestIGN is used when presenting an account, it's updated everytime a player registers but actual internal checks done against UUID
 
 ---
+
+### Correcting the latest saved roster
+
+`scripts/fix-last-game-teams.ts` supports `--move Player=RED|BLUE`,
+`--remove Player`, and `--add Player=RED|BLUE`. Additions must be existing
+registered players absent from the saved game. Identify them by latest IGN
+(case-insensitive), Discord ID, or player ID; use an ID if names are ambiguous.
+
+For example, from the repository root:
+
+```bash
+npx tsx scripts/fix-last-game-teams.ts --add Adlys=RED --add DantePeulis=RED --add ALLDOWN=RED
+```
+
+This previews the latest finished game in the active season. Add `--apply`
+and answer `yes` to commit the reviewed changes. Use `--season N` to select
+a season explicitly. Legacy rated games without a stored double-Elo flag
+also require `--double-elo yes|no`.
+
+Additions receive no MVP, captain, or voting bonuses. The correction rebuilds
+results and streaks from prior games, recalculates the whole corrected roster's
+Elo using the current configured formula, and creates missing seasonal stats
+only when there are no prior games. Unrated games count wins/losses without
+awarding Elo. The saved winner and rating remain unchanged. Unsafe history,
+unrelated stat changes, and changes since preview prevent application.
