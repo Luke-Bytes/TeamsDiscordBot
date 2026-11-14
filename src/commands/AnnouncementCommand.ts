@@ -1096,7 +1096,7 @@ export default class AnnouncementCommand implements Command {
         {
           name: "🕒 **TIME**",
           value: game.startTime
-            ? `**${formatTimestamp(game.startTime)}**`
+            ? `**${formatTimestamp(game.startTime)}** (<t:${Math.round(game.startTime.getTime() / 1000)}:R>)`
             : "TBD",
           inline: true,
         },

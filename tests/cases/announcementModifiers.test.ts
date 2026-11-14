@@ -87,6 +87,47 @@ async function chooseCustomModifier(
   );
 }
 
+test("Announcement timestamps stay in sync when preview and posted messages are edited", async () => {
+  const { command, game, previewEdits } = prepareCustomCommand();
+  const postedEdits: any[] = [];
+  command.announcementMessage = {
+    edit: async (payload: any) => {
+      postedEdits.push(payload);
+    },
+  };
+  const timeValue = (payload: any) =>
+    payload.embeds[0]
+      .toJSON()
+      .fields.find((field: any) => field.name.includes("TIME")).value;
+
+  try {
+    game.startTime = undefined;
+    assertEqual(
+      timeValue(command.createGameAnnouncementEmbed(true)),
+      "TBD",
+      "Missing time stays TBD"
+    );
+    game.startTime = new Date("2030-01-01T15:00:00Z");
+    assertEqual(
+      timeValue(command.createGameAnnouncementEmbed(false)),
+      "**<t:1893510000:f>** (<t:1893510000:R>)",
+      "Posted announcement includes date and countdown"
+    );
+
+    game.startTime = new Date("2030-01-01T18:00:00Z");
+    await command.updateAnnouncementMessages();
+    for (const edits of [previewEdits, postedEdits]) {
+      assertEqual(
+        timeValue(edits[0]),
+        "**<t:1893520800:f>** (<t:1893520800:R>)",
+        "Editing updates both timestamps"
+      );
+    }
+  } finally {
+    game.reset();
+  }
+});
+
 test("Announcement exposes exactly the four modifier modes", () => {
   const command = new AnnouncementCommand();
   const json = command.data.toJSON() as any;
