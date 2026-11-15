@@ -1,3 +1,5 @@
+import EventCommand from "./EventCommand";
+import SignCommand from "./SignCommand";
 import NeedCommand from "./NeedCommand";
 import { REST, Routes, Interaction } from "discord.js";
 import { Command } from "./CommandInterface.js";
@@ -60,6 +62,8 @@ import { GameRecoveryCoordinator } from "../logic/ActiveGameRecovery";
 
 export class CommandHandler {
   commands: Command[] = [];
+  eventCommand = new EventCommand();
+  signCommand = new SignCommand();
 
   //todo: just make these singletons.
   captainPlanDMManager = new CaptainPlanDMManager();
@@ -116,6 +120,8 @@ export class CommandHandler {
 
   public loadCommands() {
     this.commands = [
+      this.eventCommand,
+      this.signCommand,
       this.announcementCommand,
       this.ignsCommand,
       this.leaderboardsCommand,
@@ -173,7 +179,19 @@ export class CommandHandler {
         interaction.commandName === "restart") ||
       (interaction.isButton() &&
         interaction.customId.startsWith("confirm_restart"));
-    const done = restart ? () => {} : GameRecoveryCoordinator.enterOperation();
+    const eventInteraction =
+      (interaction.isChatInputCommand() &&
+        ["event", "sign"].includes(interaction.commandName)) ||
+      (interaction.isAutocomplete() && interaction.commandName === "event") ||
+      ((interaction.isButton() ||
+        interaction.isStringSelectMenu() ||
+        interaction.isModalSubmit()) &&
+        (interaction.customId.startsWith("sign_") ||
+          interaction.customId.startsWith("event_")));
+    const done =
+      restart || eventInteraction
+        ? () => {}
+        : GameRecoveryCoordinator.enterOperation();
     if (!done) {
       if (interaction.isRepliable()) {
         try {
@@ -189,7 +207,17 @@ export class CommandHandler {
       return;
     }
     try {
-      if (!(await this.interactionGuard.checkRateLimit(interaction))) {
+      // Sign forms enforce their own user-bound session throttle so normal
+      // multi-step navigation does not exhaust the generic command limiter.
+      const signComponent =
+        (interaction.isButton() ||
+          interaction.isStringSelectMenu() ||
+          interaction.isModalSubmit()) &&
+        interaction.customId.startsWith("sign_");
+      if (
+        !signComponent &&
+        !(await this.interactionGuard.checkRateLimit(interaction))
+      ) {
         return;
       }
       if (!(await this.interactionGuard.checkInputSafety(interaction))) {

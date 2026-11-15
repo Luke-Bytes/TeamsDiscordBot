@@ -43,6 +43,7 @@ For users adding the bot to their server:
 - Automatic team generation with role/VC assignment.
 - Elo tracking for competitive play.
 - Customisable game settings.
+- Standalone event sign-ups with configurable questions, terms, and reserves.
 
 ---
 
@@ -54,6 +55,14 @@ Commands (excluding subcommands):
 `/captain` `/test` `/cleanup` `/scenario` `/registered` `/unregister`
 `/restart` `/player` `/winner` `/performance` `/mvp` `/game` `/missing`
 `/captainNominate` `/teamless` `/plan` `/massRegister`
+
+### Standalone event controls
+
+Use `/event` to configure, open, close, and finish one-off events, inspect private
+applications, and export a roster. Players use `/sign up`, `/sign edit`,
+`/sign view`, and `/sign withdraw` in the configured event sign-up channel.
+See the [standalone events guide](docs/events.md) for configuration, reserve
+promotion rules, and the complete organiser workflow.
 
 ### Season controls
 

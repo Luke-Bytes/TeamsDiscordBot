@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { startEventDiscordSync, syncEventDiscord } from "./logic/EventDiscordSync";
 import { Client, GatewayIntentBits, Partials } from "discord.js";
 import { CommandHandler } from "./commands/CommandHandler";
 import { MessageHandler } from "./interactions/MessageHandler";
@@ -187,6 +188,7 @@ export class TeamsBot {
         this.client
       );
       MaintenanceLoggingUtil.startLogging();
+      startEventDiscordSync(this.client);
 
       const updatedCount = await PrismaUtils.updatePunishmentsForExpiry();
       if (updatedCount > 0) {
@@ -198,6 +200,19 @@ export class TeamsBot {
         await SeasonService.initialize(this.client);
       } catch (error) {
         console.error("Failed to initialise season lifecycle:", error);
+      }
+    });
+
+    this.client.on("guildMemberAdd", async (member) => {
+      if (!ConfigManager.getConfig().roles.eventParticipantRole) return;
+      try {
+        await prismaClient.eventSignup.updateMany({
+          where: { discordUserId: member.id, event: { guildId: member.guild.id } },
+          data: { roleSyncPending: true },
+        });
+        await syncEventDiscord(this.client, member.guild.id);
+      } catch {
+        console.warn(`[events] Returning-member role sync pending guild=${member.guild.id}`);
       }
     });
 

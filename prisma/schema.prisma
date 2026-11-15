@@ -7,6 +7,61 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Independent of games, seasons and Elo. Form JSON uses stable question IDs.
+model StandaloneEvent {
+  id String @id @default(uuid()) @map("_id")
+  guildId String
+  title String
+  description String
+  startsAt DateTime?
+  terms String
+  questions Json
+  formRevision Int @default(0)
+  revision Int @default(0)
+  state String @default("DRAFT")
+  capacity Int?
+  signupDeadline DateTime?
+  openedAt DateTime?
+  finishedAt DateTime?
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  signups EventSignup[]
+
+  @@index([guildId, createdAt])
+}
+
+model EventSignup {
+  id String @id @default(uuid()) @map("_id")
+  eventId String
+  event StandaloneEvent @relation(fields: [eventId], references: [id])
+  discordUserId String
+  minecraftUUID String
+  minecraftUsername String
+  answers Json
+  acceptedFormRevision Int
+  acceptedTermsAt DateTime
+  status String
+  queuedAt DateTime
+  confirmedAt DateTime?
+  withdrawnAt DateTime?
+  roleSyncPending Boolean @default(true)
+  promotionPending Boolean @default(false)
+  promotionNotifiedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventId, discordUserId])
+  @@index([eventId, status, queuedAt])
+}
+
+model EventGuildState {
+  id String @id @default(uuid()) @map("_id")
+  guildId String @unique
+  currentEventId String?
+  revision Int @default(0)
+}
+
 model Season {
   id        String      @id @default(uuid()) @map("_id")
   number    Int         @unique

@@ -3,6 +3,7 @@
   "captainBonus": 5,
   "underdogMultiplier": 1.5,
   "roles": {
+    "eventParticipantRole": "",
     "blueTeamRole": "",
     "redTeamRole": "",
     "captainRole": "",
@@ -12,6 +13,7 @@
     "gameNotify": ""
   },
   "channels": {
+    "eventSignUps": "",
     "registration": "",
     "announcements": "",
     "gameFeed": "",

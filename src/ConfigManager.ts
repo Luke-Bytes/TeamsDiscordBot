@@ -105,6 +105,7 @@ export type Config = {
   captainBonus: number;
   underdogMultiplier: number;
   roles: {
+    eventParticipantRole?: string;
     blueTeamRole: string;
     redTeamRole: string;
     captainRole: string;
@@ -114,6 +115,7 @@ export type Config = {
     gameNotify: string;
   };
   channels: {
+    eventSignUps?: string;
     registration: string;
     announcements: string;
     gameFeed: string;

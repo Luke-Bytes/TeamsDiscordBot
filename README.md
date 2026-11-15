@@ -29,6 +29,7 @@ or
 - Manage announcements and polls
 - Record game and player data into a database
 - Run Ranked and Relaxed seasons with automatic game/month rollovers
+- Manage standalone event forms, participant roles, and FIFO reserve sign-ups
 
 ## Season management
 
@@ -48,6 +49,7 @@ organiser sets a one-time override.
 
 - [Command and setup wiki](WIKI.md)
 - [Operations guide](docs/operations.md): organiser diagnostics, lifecycle logs, confirmations, and game-feed behaviour.
+- [Standalone events](docs/events.md): event setup, forms, reserves, participant roles, and deployment.
 
 ## Known Issues
 
