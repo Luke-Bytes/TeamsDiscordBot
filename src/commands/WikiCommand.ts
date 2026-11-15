@@ -1,6 +1,6 @@
 import {
   ChatInputCommandInteraction,
-  EmbedBuilder,
+  AutocompleteInteraction,
   SlashCommandBuilder,
 } from "discord.js";
 import { Command } from "./CommandInterface";
@@ -29,7 +29,11 @@ export default class WikiCommand implements Command {
         )
     )
     .addStringOption((opt) =>
-      opt.setName("name").setDescription("Map/Class name").setRequired(false)
+      opt
+        .setName("name")
+        .setDescription("Map/Class name")
+        .setRequired(false)
+        .setAutocomplete(true)
     );
 
   public async execute(
@@ -54,44 +58,45 @@ export default class WikiCommand implements Command {
       return;
     }
 
-    const normalizedInput = this.normalize(name);
-    if (type === "map") {
-      const map = this.findEnumMatch(AnniMap, normalizedInput);
-      if (!map) {
-        await DiscordUtil.reply(
-          interaction,
-          `Unknown map: ${escapeText(name)}.`,
-          true
-        );
-        return;
-      }
-      const mapTitle = this.formatWikiTitle(map);
-      const mapUrl = `https://wiki.shotbow.net/${mapTitle}`;
-      // TODO: Attach local map images from config.wiki.mapImageDir when available.
-      const imageUrl = await this.fetchMapImageUrl(mapTitle);
-      const embed = imageUrl
-        ? new EmbedBuilder().setTitle(escapeText(mapTitle)).setImage(imageUrl)
-        : null;
-      await interaction.reply({
-        content: `↗ ${mapUrl}`,
-        embeds: embed ? [embed] : [],
-      });
-      return;
-    }
-
-    const klass = this.findEnumMatch(AnniClass, normalizedInput);
-    if (!klass) {
+    const match = this.findEnumMatch(
+      type === "map" ? AnniMap : AnniClass,
+      this.normalize(name)
+    );
+    if (!match) {
       await DiscordUtil.reply(
         interaction,
-        `Unknown class: ${escapeText(name)}.`,
+        `Unknown ${type}: ${escapeText(name)}.`,
         true
       );
       return;
     }
-    const classTitle = this.formatWikiTitle(klass);
+    const title = this.formatWikiTitle(match);
+    // TODO: Add locally stored top-down map images and compact class summaries,
+    // keyed by the bot enums with source article URLs. Avoid live wiki requests:
+    // Cloudflare challenges prevent reliable unattended access.
     await interaction.reply({
-      content: `↗ https://wiki.shotbow.net/${classTitle}`,
+      content: `↗ https://wiki.shotbow.net/${encodeURIComponent(title)}`,
+      allowedMentions: { parse: [] },
     });
+  }
+
+  async handleAutocomplete(
+    interaction: AutocompleteInteraction
+  ): Promise<void> {
+    const type = interaction.options.getString("type");
+    const names =
+      type === "map"
+        ? Object.values(AnniMap)
+        : type === "class"
+          ? Object.values(AnniClass)
+          : [...Object.values(AnniMap), ...Object.values(AnniClass)];
+    const query = this.normalize(String(interaction.options.getFocused()));
+    await interaction.respond(
+      names
+        .filter((name) => this.normalize(name).includes(query))
+        .slice(0, 25)
+        .map((name) => ({ name: this.formatWikiTitle(name), value: name }))
+    );
   }
 
   private normalize(value: string): string {
@@ -111,71 +116,9 @@ export default class WikiCommand implements Command {
     return null;
   }
 
-  private async fetchMapImageUrl(mapTitle: string): Promise<string | null> {
-    try {
-      const apiUrl = `https://wiki.shotbow.net/api.php?action=query&titles=File:${encodeURIComponent(
-        mapTitle
-      )}.png&prop=imageinfo&iiprop=url&format=json`;
-      console.log(`[WikiCommand] Fetching map image via API: ${apiUrl}`);
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 3000);
-      const res = await fetch(apiUrl, {
-        signal: controller.signal,
-        headers: {
-          "User-Agent": "TeamsDiscordBot/1.0 (+https://anniwars.win/)",
-          Accept: "application/json",
-        },
-      });
-      clearTimeout(timeout);
-      console.log(`[WikiCommand] API status for ${mapTitle}: ${res.status}`);
-      const text = await res.text().catch(() => "");
-      const data = ((): {
-        query?: {
-          pages?: Record<
-            string,
-            { imageinfo?: Array<{ url?: string | null }> }
-          >;
-        };
-      } | null => {
-        try {
-          return text ? JSON.parse(text) : null;
-        } catch {
-          return null;
-        }
-      })();
-      if (!res.ok) {
-        // Some configs return 403 with a usable JSON payload.
-        if (!data) {
-          const snippet = text?.slice(0, 300).replace(/\s+/g, " ");
-          console.log(
-            `[WikiCommand] Failed to parse API body for ${mapTitle}: ${snippet}`
-          );
-          return null;
-        }
-      }
-      const pages = data?.query?.pages;
-      const firstPage = pages ? Object.values(pages)[0] : null;
-      let url = firstPage?.imageinfo?.[0]?.url ?? null;
-      if (!url && text) {
-        const match = text.match(/"url":"([^"]+\.png)"/i);
-        url = match?.[1] ?? null;
-      }
-      console.log(
-        `[WikiCommand] Image match for ${mapTitle}: ${url ?? "none"}`
-      );
-      if (!url) return null;
-      return url;
-    } catch {
-      console.log(`[WikiCommand] Failed to fetch image for ${mapTitle}`);
-      return null;
-    }
-  }
-
   private formatWikiTitle(value: string): string {
     const lower = value.toLowerCase();
     if (!lower) return value;
     return lower[0].toUpperCase() + lower.slice(1);
   }
-
-  // TODO: Support local map image attachments once we decide on storage.
 }
