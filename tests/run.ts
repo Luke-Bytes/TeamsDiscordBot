@@ -1,3 +1,4 @@
+import "./cases/needCommand.test";
 // Simple test runner that executes all test cases in sequence
 import "./cases/captainNominate.test";
 import "./cases/basicCommands.test";

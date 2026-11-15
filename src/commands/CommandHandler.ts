@@ -1,3 +1,4 @@
+import NeedCommand from "./NeedCommand";
 import { REST, Routes, Interaction } from "discord.js";
 import { Command } from "./CommandInterface.js";
 import "dotenv/config";
@@ -51,7 +52,10 @@ import VcCommand from "../commands/VcCommand";
 import TierListCommand from "../commands/TierListCommand";
 import CaptainPlanDMManager from "../logic/CaptainPlanDMManager";
 import { InteractionGuard } from "../util/InteractionGuard";
-import { isUnknownInteraction, discordErrorCode } from "../util/DiscordFailures";
+import {
+  isUnknownInteraction,
+  discordErrorCode,
+} from "../util/DiscordFailures";
 import { GameRecoveryCoordinator } from "../logic/ActiveGameRecovery";
 
 export class CommandHandler {
@@ -64,6 +68,7 @@ export class CommandHandler {
   leaderboardsCommand = new LeaderboardsCommand();
   statsCommand = new StatsCommand();
   teamCommand = new TeamCommand();
+  needCommand = new NeedCommand(this.teamCommand, this.captainPlanDMManager);
   captainCommand = new CaptainCommand(this.teamCommand);
   testCommand = new TestCommand();
   cleanupCommand = new CleanupCommand();
@@ -115,6 +120,7 @@ export class CommandHandler {
       this.ignsCommand,
       this.leaderboardsCommand,
       this.registerCommand,
+      this.needCommand,
       this.statsCommand,
       this.teamCommand,
       this.captainCommand,
@@ -162,13 +168,20 @@ export class CommandHandler {
   }
 
   public async handleInteraction(interaction: Interaction) {
-    const restart = (interaction.isChatInputCommand() && interaction.commandName === "restart") ||
-      (interaction.isButton() && interaction.customId.startsWith("confirm_restart"));
+    const restart =
+      (interaction.isChatInputCommand() &&
+        interaction.commandName === "restart") ||
+      (interaction.isButton() &&
+        interaction.customId.startsWith("confirm_restart"));
     const done = restart ? () => {} : GameRecoveryCoordinator.enterOperation();
     if (!done) {
       if (interaction.isRepliable()) {
         try {
-          await interaction.reply({ content: GameRecoveryCoordinator.getBlockReason() ?? "Game recovery is in progress." });
+          await interaction.reply({
+            content:
+              GameRecoveryCoordinator.getBlockReason() ??
+              "Game recovery is in progress.",
+          });
         } catch (error) {
           console.warn("Failed to acknowledge blocked interaction", error);
         }
@@ -270,7 +283,8 @@ export class CommandHandler {
       try {
         if (interaction.deferred || interaction.replied) {
           await interaction.editReply({
-            content: "The command encountered an error. Some changes may already have been applied; check the current game before retrying.",
+            content:
+              "The command encountered an error. Some changes may already have been applied; check the current game before retrying.",
           });
         } else {
           await interaction.reply({
@@ -279,7 +293,9 @@ export class CommandHandler {
         }
       } catch (replyError) {
         if (!isUnknownInteraction(replyError)) {
-          console.error(`Error response failed code=${discordErrorCode(replyError) ?? "other"}`);
+          console.error(
+            `Error response failed code=${discordErrorCode(replyError) ?? "other"}`
+          );
         } else {
           console.warn("Interaction expired before error response (10062)");
         }

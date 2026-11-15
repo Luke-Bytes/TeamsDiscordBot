@@ -1,3 +1,4 @@
+import NeedCommand from "../commands/NeedCommand";
 import { $Enums, AnniMap, Team } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { MatchRecoveryGate } from "../logic/MatchRecoveryGate";
@@ -134,6 +135,7 @@ export class GameInstance {
   }
 
   public reset() {
+    void NeedCommand.instance?.expireAll();
     this.lifecycleVersion += 1;
     this.lifecycleToken = randomUUID();
     this.gameId = undefined;
@@ -553,6 +555,7 @@ export class GameInstance {
   }
 
   public resetTeams() {
+    void NeedCommand.instance?.expireAll();
     const combined = new Map(
       [...this.teams["UNDECIDED"], ...this.teams["RED"], ...this.teams["BLUE"]]
         .map((player) => [player.discordSnowflake, player])
@@ -1105,6 +1108,7 @@ export class GameInstance {
   }
 
   public async setGameWinner(team: Team) {
+    void NeedCommand.instance?.expireAll();
     this.gameWinner = team;
   }
 
