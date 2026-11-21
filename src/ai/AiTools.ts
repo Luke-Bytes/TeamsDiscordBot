@@ -1,7 +1,7 @@
 import { SeasonType } from "@prisma/client";
 import { prismaClient } from "../database/prismaClient";
 import { SeasonService } from "../database/SeasonService";
-import { AiFunctionTool } from "./GroqClient";
+import { AiFunctionTool } from "./AiProvider";
 import {
   getCurrentGameStateSnapshot,
   getOrganiserGameSnapshot,

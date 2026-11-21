@@ -930,30 +930,60 @@ test("TEMP recover: linked message outside game period rejected", () =>
       "another game period"
     );
   }));
-test("TEMP recover: Discord game-end in team chat blocks recovery", () =>
+test("TEMP recover: /game end without database save restores post-game state", () =>
   withFixture(async (f) => {
     f.populate();
-    f.message(
+    const end = f.message(
       CHANNELS.redTeamChat,
       [],
       "The game has now ended, voting for the team MVP is now open!",
       f.now - 1000
     );
-    await reject(
-      () => buildDiscordRecovery(f.guild, f.options()),
-      "game-end/MVP"
+    const proposal = await buildDiscordRecovery(f.guild, f.options("started"));
+    expected(
+      proposal.recoveredEndTime?.getTime(),
+      end.createdTimestamp,
+      "End time"
     );
+    assert(
+      proposal.warnings.some((w) => w.includes("MVP votes")),
+      "Lost MVP votes warning"
+    );
+    assert(
+      proposal.sourceSummary.some((s) => s.includes(end.url)),
+      "End evidence displayed"
+    );
+    installDiscordRecovery(proposal);
+    const game = GameInstance.getInstance();
+    assert(game.isFinished, "Recovered game remains ended");
+    expected(
+      game.endTime?.getTime(),
+      end.createdTimestamp,
+      "Restored end time"
+    );
+    expected(
+      game.getGameStartStatus(),
+      "started",
+      "Started lifecycle retained"
+    );
+    assert(
+      game.redExpectedScore !== undefined,
+      "Post-game ELO expectations restored"
+    );
+    expected(f.state.writes, 0, "No database writes during recovery");
   }));
-test("TEMP recover: Discord game-over in feed blocks recovery", () =>
+test("TEMP recover: game-over feed without persisted match is reviewable", () =>
   withFixture(async (f) => {
     f.populate();
     f.message(CHANNELS.gameFeed, [], "🎉 The Game is Over! 🎉", f.now - 1000);
-    await reject(
-      () => buildDiscordRecovery(f.guild, f.options()),
-      "game-end/MVP"
+    const proposal = await buildDiscordRecovery(f.guild, f.options("started"));
+    assert(!!proposal.recoveredEndTime, "Post-game state is recognised");
+    assert(
+      proposal.warnings.some((w) => w.includes("no saved match")),
+      "Unsaved status warned"
     );
   }));
-test("TEMP recover: Discord postgame announcement in admin chat blocks recovery", () =>
+test("TEMP recover: cleanup announcement still defers to database commitment", () =>
   withFixture(async (f) => {
     f.populate();
     f.message(
@@ -962,11 +992,95 @@ test("TEMP recover: Discord postgame announcement in admin chat blocks recovery"
       "Beginning post game clean up",
       f.now - 1000
     );
+    const proposal = await buildDiscordRecovery(f.guild, f.options("started"));
+    assert(!!proposal.recoveredEndTime, "Uncommitted cleanup is recoverable");
+    f.state.existing = true;
     await reject(
-      () => buildDiscordRecovery(f.guild, f.options()),
-      "game-end/MVP"
+      () => buildDiscordRecovery(f.guild, f.options("started")),
+      "already stored"
     );
   }));
+test("TEMP recover: member-authored game-end text cannot change recovery phase", () =>
+  withFixture(async (f) => {
+    f.populate();
+    f.message(
+      CHANNELS.redTeamChat,
+      [],
+      "The game has now ended, voting for the team MVP is now open!",
+      f.now - 1000,
+      OTHER_ID
+    );
+    const proposal = await buildDiscordRecovery(f.guild, f.options("teams"));
+    expected(proposal.recoveredEndTime, undefined, "Untrusted message ignored");
+  }));
+
+test("TEMP recover: later game's end signal is not attributed to linked game", () =>
+  withFixture(async (f) => {
+    f.populate();
+    f.announce(); // New announcement after the linked game's evidence.
+    const laterAnnouncement = f.messages.get(CHANNELS.announcements)!.at(-1)!;
+    laterAnnouncement.createdTimestamp = f.now - 1500;
+    f.message(CHANNELS.gameFeed, [], "The game has now ended", f.now - 1000);
+    const proposal = await buildDiscordRecovery(f.guild, {
+      ...f.options("started"),
+      announcementLink: f.refs.announcement!.url,
+    });
+    expected(proposal.recoveredEndTime, undefined, "Later game ignored");
+  }));
+
+test("TEMP recover: game-end message edited after preview must be approved again", () =>
+  withFixture(async (f) => {
+    f.populate();
+    const ended = f.message(
+      CHANNELS.redTeamChat,
+      [],
+      "The game has now ended, voting for the team MVP is now open!",
+      f.now - 1000
+    );
+    const command = f.command();
+    const request = f.slash(f.options("started"));
+    await command.execute(request.i);
+    ended.content += " Please vote again.";
+    await command.handleButtonPress(
+      f.button(f.getButtonId(request.responses)).i
+    );
+    assert(
+      !GameInstance.getInstance().announced,
+      "Edited end evidence invalidates preview"
+    );
+  }));
+
+test("TEMP recover: ended and unsaved game confirms into post-game lifecycle", () =>
+  withFixture(async (f) => {
+    f.populate();
+    f.message(
+      CHANNELS.blueTeamChat,
+      [],
+      "The game has now ended",
+      f.now - 1000
+    );
+    const command = f.command();
+    const request = f.slash(f.options("started"));
+    await command.execute(request.i);
+    const preview = request.responses.find(
+      ([kind, payload]: any[]) => kind === "edit" && payload.embeds?.length
+    );
+    assert(!!preview, "Ended game has a recoverable preview");
+    assert(
+      preview[1].embeds[0].data.description.includes(
+        "already ended; not saved"
+      ),
+      "Organiser sees ended state before confirmation"
+    );
+    await command.handleButtonPress(
+      f.button(f.getButtonId(request.responses)).i
+    );
+    assert(
+      GameInstance.getInstance().isFinished,
+      "Recovery confirmed as ended"
+    );
+  }));
+
 test("TEMP recover: unreadable optional channel produces warning without inventing plans", () =>
   withFixture(async (f) => {
     f.populate();
@@ -1916,16 +2030,19 @@ test("TEMP permissions: role revoked after initial confirmation check blocks ins
     );
   }));
 
-test("TEMP integrity: an early game-end signal after announcement still blocks recovery", () =>
+test("TEMP integrity: an early game-end signal still requires the started phase", () =>
   withFixture(async (f) => {
     f.populate();
     const later = f.startTime.getTime() + 4 * 60 * 60_000;
     f.refs.announcement!.embeds[0].fields[0].value = `<t:${Math.floor(later / 1000)}:F>`;
     f.message(CHANNELS.gameFeed, [], "The game is over", f.now - 2000);
-    await reject(() => buildDiscordRecovery(f.guild, f.options()), "game-end");
+    await reject(
+      () => buildDiscordRecovery(f.guild, f.options()),
+      "Choose phase 'started'"
+    );
   }));
 
-test("TEMP integrity: a game-end signal days after scheduled time still blocks recovery", () =>
+test("TEMP integrity: a delayed game-end signal is recognised for unsaved games", () =>
   withFixture(async (f) => {
     f.populate();
     const oldStart = f.now - 3 * 86_400_000;
@@ -1934,14 +2051,20 @@ test("TEMP integrity: a game-end signal days after scheduled time still blocks r
     f.refs.registration!.createdTimestamp = oldStart + 5 * 60_000;
     f.refs.teams!.createdTimestamp = oldStart + 6 * 60_000;
     f.refs.draft!.createdTimestamp = oldStart + 6 * 60_000;
-    f.message(CHANNELS.gameFeed, [], "The game is over", f.now - 60_000);
-    await reject(
-      () =>
-        buildDiscordRecovery(f.guild, {
-          ...f.options(),
-          announcementLink: f.refs.announcement!.url,
-        }),
-      "game-end"
+    const ended = f.message(
+      CHANNELS.gameFeed,
+      [],
+      "The game is over",
+      f.now - 60_000
+    );
+    const proposal = await buildDiscordRecovery(f.guild, {
+      ...f.options("started"),
+      announcementLink: f.refs.announcement!.url,
+    });
+    expected(
+      proposal.recoveredEndTime?.getTime(),
+      ended.createdTimestamp,
+      "Late ending timestamp"
     );
   }));
 

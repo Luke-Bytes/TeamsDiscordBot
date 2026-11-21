@@ -7,11 +7,11 @@ import {
 import { Command } from "./CommandInterface";
 import { ConfigManager } from "../ConfigManager";
 import { PermissionsUtil } from "../util/PermissionsUtil";
-import { getAiSettings } from "../ai/AiConfig";
+import { AiSettings, getAiSettings } from "../ai/AiConfig";
+import { selectAiProvider } from "../ai/AiProviderSelection";
 import { AiAdmission } from "../ai/Admission";
 import { answerAiQuestion, safeDiscordText } from "../ai/AiAssistant";
 import { AiCaller } from "../ai/AiTools";
-import { createGroqInference } from "../ai/GroqClient";
 import { buildApprovedKnowledge, KnowledgeChunk } from "../ai/Knowledge";
 
 const SAFE_QUESTION =
@@ -40,8 +40,10 @@ export default class AskCommand implements Command {
   private admission = new AiAdmission(getAiSettings().dailyRequestLimit);
   private knowledge?: KnowledgeChunk[];
 
+  constructor(private readonly injectedSettings?: AiSettings) {}
+
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const config = getAiSettings();
+    const config = this.injectedSettings ?? getAiSettings();
     if (!config.enabled) {
       await interaction.reply({
         content:
@@ -118,6 +120,17 @@ export default class AskCommand implements Command {
         });
         return;
       }
+      const selected = selectAiProvider({ settings: config });
+      if (!selected.ok) {
+        await interaction.editReply({
+          content:
+            selected.reason === "cloudflare-account"
+              ? "AI setup is incomplete: ask an administrator to set ai.cloudflareAccountId for Cloudflare Workers AI."
+              : "No AI provider is configured. Ask an administrator to add a Groq, Gemini or Cloudflare credential.",
+          allowedMentions: { parse: [] },
+        });
+        return;
+      }
       this.knowledge ??= buildApprovedKnowledge(process.cwd());
       const result = await answerAiQuestion({
         question,
@@ -128,7 +141,7 @@ export default class AskCommand implements Command {
           verifyMembership,
         },
         knowledge: this.knowledge,
-        infer: createGroqInference({ model: config.model }),
+        infer: selected.infer,
       });
       const citations = result.sources.length
         ? `\n\nSources: ${result.sources.slice(0, 3).join("; ")}`

@@ -47,47 +47,40 @@ function fakeGroq(status: number, response: unknown) {
   return { inference, requests: () => requests };
 }
 
-test("AI settings fail closed without egress consent, channels or model", () => {
+test("AI defaults disabled and only the configured bot-command channel is allowed", () => {
+  const channels = { botCommands: "1234567890123456" } as any;
+  assert(!getAiSettings({ channels }).enabled, "Absent AI setting is off");
+  assert(!getAiSettings({ channels, ai: { enabled: false } }).enabled, "Explicitly off");
+  const enabled = getAiSettings({ channels, ai: { enabled: true } });
+  assert(enabled.enabled, "Single boolean enables the feature");
   assert(
-    !getAiSettings({ TEAMS_AI_ENABLED: "true" }).enabled,
-    "No egress without consent"
-  );
-  assert(
-    !getAiSettings({
-      TEAMS_AI_ENABLED: "true",
-      TEAMS_AI_EGRESS_APPROVED: "true",
-      TEAMS_AI_CHANNEL_IDS: "1234567890123456",
-      TEAMS_AI_GROQ_MODEL: "../other",
-    }).enabled,
-    "Invalid model fails closed"
+    enabled.channelIds.has("1234567890123456") &&
+      !enabled.channelIds.has("9999999999999999") &&
+      enabled.dailyRequestLimit === 50,
+    "Existing command channel and daily cap are defaults"
   );
   assert(
     getAiSettings({
-      TEAMS_AI_ENABLED: "true",
-      TEAMS_AI_EGRESS_APPROVED: "true",
-      TEAMS_AI_CHANNEL_IDS: "1234567890123456",
-      TEAMS_AI_GROQ_MODEL: "openai/example-model",
-    }).enabled,
-    "Explicit safe setup"
+      channels: { botCommands: "" } as any,
+      ai: { enabled: true },
+    }).channelIds.size === 0,
+    "Missing channel fails closed"
   );
 });
 
 test("Disabled /ask never reads credentials or performs provider calls", async () => {
-  const previous = process.env.TEAMS_AI_ENABLED;
-  process.env.TEAMS_AI_ENABLED = "false";
   const replies: any[] = [];
-  try {
-    await new AskCommand().execute({
-      reply: async (options: any) => replies.push(options),
-    } as any);
-    assert(
-      replies.length === 1 && replies[0].content.includes("not enabled"),
-      "Disabled reply is safe"
-    );
-  } finally {
-    if (previous === undefined) delete process.env.TEAMS_AI_ENABLED;
-    else process.env.TEAMS_AI_ENABLED = previous;
-  }
+  await new AskCommand({
+    enabled: false,
+    channelIds: new Set(),
+    dailyRequestLimit: 50,
+  }).execute({
+    reply: async (options: any) => replies.push(options),
+  } as any);
+  assert(
+    replies.length === 1 && replies[0].content.includes("not enabled"),
+    "Disabled reply is safe"
+  );
 });
 
 test("Groq offline transport handles text, tools and fixed wire contract", async () => {
@@ -491,36 +484,25 @@ test("Groq aborts stalled requests at the configured deadline", async () => {
 });
 
 test("Enabled /ask refuses unauthorized guild channels before any provider access", async () => {
-  const names = [
-    "TEAMS_AI_ENABLED",
-    "TEAMS_AI_EGRESS_APPROVED",
-    "TEAMS_AI_CHANNEL_IDS",
-    "TEAMS_AI_GROQ_MODEL",
-  ] as const;
-  const before = names.map((name) => process.env[name]);
   const replies: any[] = [];
-  try {
-    process.env.TEAMS_AI_ENABLED = "true";
-    process.env.TEAMS_AI_EGRESS_APPROVED = "true";
-    process.env.TEAMS_AI_CHANNEL_IDS = "111111111111111111";
-    process.env.TEAMS_AI_GROQ_MODEL = "offline-test-model";
-    await new AskCommand().execute({
-      guild: { id: "guild" },
-      guildId: "guild",
-      channelId: "222222222222222222",
+  const command = new AskCommand({
+    enabled: true,
+    channelIds: new Set(["111111111111111111"]),
+    dailyRequestLimit: 50,
+  });
+  for (const guildId of ["guild", null]) {
+    await command.execute({
+      guild: guildId ? { id: guildId } : null,
+      guildId,
+      channelId: guildId ? "222222222222222222" : "111111111111111111",
       reply: async (options: any) => replies.push(options),
     } as any);
-    assert(
-      replies.length === 1 &&
-        replies[0].content.includes("approved server channels"),
-      "Channel fail-closed before credentials or inference"
-    );
-  } finally {
-    names.forEach((name, index) => {
-      if (before[index] === undefined) delete process.env[name];
-      else process.env[name] = before[index];
-    });
   }
+  assert(
+    replies.length === 2 &&
+      replies.every((reply) => reply.content.includes("approved server channels")),
+    "Channel and DM fail closed before credentials or inference"
+  );
 });
 
 test("Stalled read-only tool yields a verified-data-unavailable answer", async () => {

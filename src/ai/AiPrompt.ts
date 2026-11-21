@@ -1,5 +1,5 @@
 import { permittedAiTools } from "./AiTools";
-import { AiFunctionTool, AiMessage } from "./GroqClient";
+import { AiFunctionTool, AiMessage } from "./AiProvider";
 import { KnowledgeChunk } from "./Knowledge";
 
 /** Instruction text only; permissions and citation provenance are enforced by code. */

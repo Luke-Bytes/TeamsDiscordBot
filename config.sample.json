@@ -30,6 +30,9 @@
     "enabled": false,
     "guildId": ""
   },
+  "ai": {
+    "enabled": false
+  },
   "wiki": {
     "mapImageBaseUrl": "",
     "mapImageDir": ""

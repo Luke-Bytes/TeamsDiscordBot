@@ -140,6 +140,12 @@ export type Config = {
   llm?: {
     ollama?: OllamaConfig;
   };
+  /** Enabling /ask acknowledges external provider egress of approved question/context data. */
+  ai?: {
+    enabled?: boolean;
+    /** Required only for Cloudflare Workers AI; never an API token. */
+    cloudflareAccountId?: string;
+  };
 };
 
 export class ConfigManager {

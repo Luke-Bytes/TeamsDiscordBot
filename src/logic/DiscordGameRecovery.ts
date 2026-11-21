@@ -55,6 +55,8 @@ export type RecoveryProposal = {
   doubleElo: boolean;
   relaxed: boolean;
   phase: RecoveryPhase;
+  /** Discord /game end is not a persisted match; keep its post-game state. */
+  recoveredEndTime?: Date;
   teamsDecidedBy: GameInstance["teamsDecidedBy"];
   teams: Record<TeamKey, PlayerInstance[]>;
   lateSignups: string[];
@@ -445,24 +447,22 @@ function isDraftConfirmed(
   return !!draftFinalisationSignal(draft, picking);
 }
 
-function assertNoFinishedSignals(messages: Message[]): void {
-  // The candidate messages have already been scoped to this announcement.
-  // A game can be cancelled/ended well before its scheduled start time.
-  if (
-    messages.some(
+function postGameSignals(messages: Message<true>[]): Message<true>[] {
+  // /game end opens MVP voting but does not persist anything. /game shutdown
+  // performs the save; only the database check can establish that it committed.
+  // Trust bot-authored evidence only, scoped to this announcement.
+  return messages
+    .filter(
       (msg) =>
-        /(?:the game has now ended|the game is over|voting for the team MVP is now open|beginning post game clean up)/i.test(
+        msg.author.id === msg.client.user?.id &&
+        (/(?:the game has now ended|the game is over|voting for the team MVP is now open|beginning post game clean up)/i.test(
           msg.content
         ) ||
-        msg.embeds.some((embed) =>
-          /game over|match result/i.test(embed.title ?? "")
-        )
+          msg.embeds.some((embed) =>
+            /game over|match result/i.test(embed.title ?? "")
+          ))
     )
-  ) {
-    throw new Error(
-      "Discord contains a game-end/MVP-voting message for this period. Recovery of an ended game is unsafe."
-    );
-  }
+    .sort((a, b) => a.createdTimestamp - b.createdTimestamp);
 }
 
 /** An unannounced but partially prepared or crashed game is still an active claim. */
@@ -686,6 +686,18 @@ export async function buildDiscordRecovery(
   const registration = inPeriod(registrationHistory);
   // End-of-game evidence can arrive days after the scheduled start, even
   // though registration/team selection is scoped to the original game day.
+  // Do not attribute messages from a later announcement to this game.
+  const nextAnnouncementTime = [...announceHistory, ...adminHistory]
+    .filter(
+      (msg) =>
+        msg.author.id === guild.client.user?.id &&
+        isAnnouncement(msg) &&
+        msg.createdTimestamp >
+          (announcementMessage?.createdTimestamp ?? startTime.getTime())
+    )
+    .sort(
+      (a, b) => a.createdTimestamp - b.createdTimestamp
+    )[0]?.createdTimestamp;
   const laterGameHistory = (messages: Message<true>[]) =>
     messages.filter(
       (msg) =>
@@ -693,15 +705,31 @@ export async function buildDiscordRecovery(
           Math.max(
             after,
             (announcementMessage?.createdTimestamp ?? after) - 60_000
-          ) && msg.createdTimestamp <= Date.now()
+          ) &&
+        msg.createdTimestamp <= Date.now() &&
+        (nextAnnouncementTime === undefined ||
+          msg.createdTimestamp < nextAnnouncementTime)
     );
-  assertNoFinishedSignals([
+  const endSignals = postGameSignals([
     ...laterGameHistory(feedHistory),
     ...laterGameHistory(pickingHistory),
     ...laterGameHistory(adminHistory),
     ...laterGameHistory(redHistory),
     ...laterGameHistory(blueHistory),
   ]);
+  if (endSignals.length && options.phase !== "started") {
+    throw new Error(
+      "Discord shows this game reached /game end. Choose phase 'started' to recover the ended but unsaved game."
+    );
+  }
+  const recoveredEndTime = endSignals.length
+    ? new Date(Math.max(startTime.getTime(), endSignals[0].createdTimestamp))
+    : undefined;
+  if (recoveredEndTime) {
+    warnings.push(
+      "Discord shows /game end or post-game activity, but no saved match was found. The game will be restored as ended with an approximate end time; prior MVP votes cannot be reconstructed and must be recast before shutdown."
+    );
+  }
 
   if (
     announcementMessage &&
@@ -1000,6 +1028,7 @@ export async function buildDiscordRecovery(
     `Registration: ${registeredMessage?.url ?? "team roster only"}`,
     `Teams: ${teamsMessage?.url ?? "not yet picked"}`,
     `Draft approval: ${approvalEvidence?.url ?? (draftUsed && /Teams have been finalised|Teams have been locked/i.test(draftUsed.content) ? draftUsed.url : "not independently verified")}`,
+    `Game end: ${endSignals[0]?.url ?? "not found"}`,
     `Red plan: ${redPlanEvidence?.url ?? "none"}${redPlanEvidence ? ` (author ${redPlanEvidence.authorId})` : ""}`,
     `Blue plan: ${bluePlanEvidence?.url ?? "none"}${bluePlanEvidence ? ` (author ${bluePlanEvidence.authorId})` : ""}`,
   ];
@@ -1023,6 +1052,17 @@ export async function buildDiscordRecovery(
     doubleElo,
     relaxed,
     phase: options.phase,
+    recoveredEndTime: recoveredEndTime?.toISOString(),
+    endSignals: endSignals.map((msg) => ({
+      channelId: msg.channelId,
+      id: msg.id,
+      createdTimestamp: msg.createdTimestamp,
+      editedTimestamp: msg.editedTimestamp,
+      content: msg.content,
+      embeds: msg.embeds.map((embed) =>
+        embed.toJSON ? embed.toJSON() : embed
+      ),
+    })),
     method,
     ids: Object.fromEntries(
       Object.entries(resolved).map(([team, roster]) => [
@@ -1084,6 +1124,7 @@ export async function buildDiscordRecovery(
     doubleElo,
     relaxed,
     phase: options.phase,
+    recoveredEndTime,
     teamsDecidedBy: method,
     teams: resolved,
     lateSignups,
@@ -1128,5 +1169,10 @@ export function installDiscordRecovery(proposal: RecoveryProposal): void {
   if (proposal.phase === "started") {
     game.tryBeginGameStart();
     game.completeGameStart();
+    if (proposal.recoveredEndTime) {
+      game.isFinished = true;
+      game.endTime = new Date(proposal.recoveredEndTime);
+      game.calculateMeanEloAndExpectedScore();
+    }
   }
 }

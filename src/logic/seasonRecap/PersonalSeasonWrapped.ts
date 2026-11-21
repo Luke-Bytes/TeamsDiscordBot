@@ -1,4 +1,3 @@
-import { Team } from "@prisma/client";
 import { escapeIgn } from "../../util/Utils";
 import { buildSeasonRecapModel } from "./model";
 import { loadSeasonRecapData } from "./SeasonRecap";

@@ -872,7 +872,8 @@ function findNearestComparables(
 }
 
 function publicDossier(dossier: PlayerTierDossier) {
-  const { playerId: _playerId, ...safe } = dossier;
+  const { playerId, ...safe } = dossier;
+  void playerId;
   return safe;
 }
 

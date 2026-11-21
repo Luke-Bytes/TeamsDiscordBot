@@ -1,5 +1,11 @@
 # Navi `/ask` context and prompt audit
 
+> **Provider update (2026-11-21):** The transport and activation rows below describe
+> the original prompt-audit baseline. Current `/ask` uses `ai.enabled` in
+> `config.json` and the Groq, Gemini and Cloudflare Workers AI adapters
+> described in [ai-assistant.md](ai-assistant.md). The prompt/tool audience
+> boundaries and server-generated citations are unchanged.
+
 **Date:** 2026-11-21  
 **Scope:** Source-level, offline review of TeamsDiscordBot `/ask`. No provider, Discord, MongoDB or REST_API calls. This is not a hosted-model answer-quality evaluation. The audited changes were transferred to the original repository checkout without editing concurrently maintained `docs/ai/*`, `Knowledge.ts` or `AiTools.ts`. At transfer, the original checkout was on `season-recap-refactor`; no local `main` branch existed.
 

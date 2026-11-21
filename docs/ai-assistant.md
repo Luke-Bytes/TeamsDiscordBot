@@ -1,46 +1,82 @@
-# Optional Discord AI assistant (offline implementation)
+# Optional Discord AI assistant
 
 The bot exposes `/ask question:<text>` as an **ephemeral**, opt-in assistant. It does
 not listen to regular messages, invoke maintenance scripts, edit records or
 perform Discord actions on behalf of a model. The built-in Discord commands
 continue working if AI is disabled or its provider is unavailable.
 
-## Activation prerequisites (not performed by this change)
+## Minimal setup
 
-**Off by default.** A deployment operator must explicitly review hosted data
-egress/privacy policy, select a real entitled model, allocate a shared-account
-budget and allowlist Discord channel IDs. Configure these **only after** test
-guild approval and a deliberate live preflight:
+**Off by default.** `ai.enabled` is `false` when omitted. To use Navi:
 
-| Variable                                                  | Meaning                                                               |
-| --------------------------------------------------------- | --------------------------------------------------------------------- |
-| `TEAMS_AI_ENABLED=true`                                   | Explicit feature switch; omit/false disables                          |
-| `TEAMS_AI_EGRESS_APPROVED=true`                           | Separate acknowledgement of external egress                           |
-| `TEAMS_AI_CHANNEL_IDS=123...,456...`                      | Comma-separated Discord channel snowflakes, required                  |
-| `TEAMS_AI_GROQ_MODEL=operator-approved-id`                | Required provider model ID; not selected from chat                    |
-| `TEAMS_AI_DAILY_REQUESTS=50`                              | Optional per-process daily admission cap (1–200)                      |
-| `TEAMS_AI_HISTORICAL_ENABLED=true`                        | Separate historical HTTP feature opt-in; false by default             |
-| `TEAMS_AI_REST_API_ORIGIN=http://127.0.0.1:3000`          | Historical API origin (illustrative; use the actual approved address) |
-| `TEAMS_AI_REST_API_APPROVED_ORIGIN=http://127.0.0.1:3000` | Independent exact-origin approval, including scheme and port          |
+1. Add **one** credential to the bot's private, uncommitted `.env` (or use the
+   existing supported systemd credential mechanism). The only AI variables
+   needed in `.env` are provider keys:
 
-No sample model ID confirms real entitlement. The provider endpoint is fixed
-at the official Groq HTTPS chat-completions route; the assistant cannot use a
-user-supplied model, URL or arbitrary HTTP tool. No other provider is active
-in this MVP. A provider error never triggers automatic cross-provider fallback.
+   ```dotenv
+   # Choose whichever providers you intend to use
+   MC_AI_GROQ_KEY=...
+   MC_AI_GEMINI_KEY=...
+   MC_AI_CLOUDFLARE_KEY=...
+   ```
 
-### Credentials and HiveOps independence
+2. In `config.json`, set:
 
-Teams uses the **same existing provider account/key** without modifying HiveOps
-or touching its gateway/socket, filesystem permissions, deployment or quota
-ledger. With a separately supervised systemd Teams service, the operator can
-reference the existing protected _source_ secret through Teams' own credential
-copy, e.g. `LoadCredential=ai-groq:/operator-confirmed/secure/groq-key`.
-The process looks up `$CREDENTIALS_DIRECTORY/ai-groq` lazily and refuses a
-symlink/non-file; do not assume this path or service arrangement exists. For a
-PM2-managed service, the operator must arrange a private `MC_AI_GROQ_KEY`
-environment injection using the actual process-manager lifecycle. Do **not**
-put keys in `config.json`, committed `.env` or process command lines.
-No credentials are checked or logged when the assistant is disabled.
+   ```json
+   "ai": { "enabled": true }
+   ```
+
+   The existing `channels.botCommands` **must already be a valid Discord
+   channel ID**; there is no separate AI channel allowlist. DMs and other
+   channels remain denied. For Cloudflare-only setup, also set
+   `"cloudflareAccountId": "YOUR_32_HEX_ACCOUNT_ID"` inside `"ai"`.
+3. Restart TeamsDiscordBot, then use `/ask` in the configured bot-command
+   channel.
+
+Setting `ai.enabled=true` **is the explicit administrator acknowledgement**
+that the question, approved role-filtered documentation excerpts, advertised
+read-only tool definitions, and safe projected tool results may be sent to an
+external provider. Review the community's privacy and hosted egress policy,
+service quota, and account entitlement before enabling. To disable, set
+`ai.enabled=false` (or remove the `ai` block) and restart. No AI credential
+is read and no provider request is made while disabled.
+
+### Provider selection and credentials
+
+Providers are selected **once per question**, in fixed priority order:
+
+| Priority | Provider | Default model | Credential |
+| --- | --- | --- | --- |
+| 1 | Groq | `openai/gpt-oss-20b` | `MC_AI_GROQ_KEY` |
+| 2 | Google Gemini | `gemini-2.5-flash` | `MC_AI_GEMINI_KEY` |
+| 3 | Cloudflare Workers AI (direct REST) | `@cf/qwen/qwen3-30b-a3b-fp8` | `MC_AI_CLOUDFLARE_KEY` |
+
+`MC_AI_CLOUDFLARE_API_TOKEN` is also accepted as a compatibility alias.
+A provider without a valid credential is skipped. **Cloudflare Workers AI
+requires a real account ID**, not derivable from its token: set
+`ai.cloudflareAccountId` to your own 32-character hexadecimal Cloudflare
+account ID. The token must have Workers AI permissions (typically Workers AI
+Write). It uses `POST https://api.cloudflare.com/client/v4/accounts/{accountId}/ai/run/@cf/qwen/qwen3-30b-a3b-fp8`;
+no AI Gateway ID, gateway URL or model override is used. Invalid/missing
+Cloudflare account setup is skipped, and an administrator-facing explanation
+is returned when there is no other usable provider.
+
+For systemd, the bot also supports fixed per-service files
+`$CREDENTIALS_DIRECTORY/ai-groq`, `ai-gemini` and `ai-cloudflare`.
+Existing `LoadCredential=ai-groq:...` provisioning remains compatible.
+Files are read lazily, refuse symlinks/invalid content, and take precedence
+over environment keys if present. Inject tokens privately for PM2 or a local
+uncommitted `.env`; never store real credentials in `config.json`, docs,
+commits or command lines. TeamsDiscordBot does not read HiveOps secrets or
+depend on HiveOps' gateway and quotas.
+
+Model defaults, provider origins, output/timeout/temperature and rate limits
+are central code constants. Providers receive native tool schemas; Gemini
+retains opaque thought signatures in signed tool-call history, and Workers AI
+uses its reviewed model-specific function calling. A model is never allowed
+to select a URL or execute a tool itself. **There is no automatic retry or
+cross-provider switch after a failed live request.** If a provider responds
+with an error, that question fails safely, with no unexpected second egress.
 
 Separate direct clients do **not** share HiveOps' usage ledger. Default caps
 allow 50 accepted questions per UTC day, 2 concurrent total, 2 per guild,
@@ -58,7 +94,7 @@ cross-process quota coordination.
 
 ## Data and permissions
 
-Only allowlisted guild channels are eligible. DMs fail closed. In dev mode,
+Only the configured `channels.botCommands` guild channel is eligible. DMs fail closed. In dev mode,
 only the configured dev guild is eligible. Each tool independently checks
 fresh guild membership, and organiser-only `get_organiser_status` also
 checks the configured organiser role. The `get_my_stats` query binds to
@@ -111,8 +147,11 @@ channel policy still need an operator privacy review before activation.
 
 ## Historical REST_API integration (read-only, disabled by default)
 
-Set all three `TEAMS_AI_HISTORICAL_*` and `TEAMS_AI_REST_API_*`
-settings shown above **only after** reviewing the actual deployment
+Historical access is a separate advanced opt-in: supply
+`TEAMS_AI_HISTORICAL_ENABLED=true`, `TEAMS_AI_REST_API_ORIGIN` and
+`TEAMS_AI_REST_API_APPROVED_ORIGIN` through a reviewed deployment configuration
+(not needed for ordinary `/ask`). These are deliberately **not** enabled by
+`ai.enabled=true`. Set them **only after** reviewing the actual deployment
 destination, transport and data egress. The origin and its separate approved
 origin must match exactly, including `http:` versus `https:` and port.
 Only canonical IP-literal origins with no credentials, path, query or fragment
@@ -185,7 +224,7 @@ Discord message delivery, open poll status or timer execution.
 
 **Disable/rollback:** Set `TEAMS_AI_HISTORICAL_ENABLED=false` (or remove
 either REST_API origin approval) to disable history requests without disabling
-other AI functions. Set `TEAMS_AI_ENABLED=false` to turn off the entire
+other AI functions. Set `ai.enabled=false` in `config.json` to turn off the entire
 `/ask` command. No migrations, scheduled jobs, production config or
 REST_API project changes are involved.
 
@@ -193,7 +232,7 @@ REST_API project changes are involved.
 
 `npm run typecheck` and `npm run tests` validate TypeScript and a fully
 offline custom-runner suite (with globally blocked network fetch). New tests
-cover provider fake HTTP text/function replies, invalid/oversize/401/429/5xx
+cover Groq, Gemini and Cloudflare fake HTTP text/function replies, invalid/oversize/401/429/5xx
 responses, cancellation, bounded admission, read-only tool validation,
 role denial, caller identity, REST_API fixture parsing, historical response
 bounds, read budgets, redirects, origin approval, Ranked/Relaxed semantics, vetted sources,
@@ -213,5 +252,5 @@ channels/test guild; hosted data egress consent (questions, vetted public
 context, public player statistics, and organiser-only counts); entitled
 model/key delivery; provider account spending and capacity reservation;
 end-to-end guild permissions; reliable error responses and rollback via
-`TEAMS_AI_ENABLED=false`. Future work may add Gemini with validated thought
-signature continuation, shared quotas and explicit citation-quality review.
+`ai.enabled=false`. Future work may add shared quotas and further
+citation-quality review.

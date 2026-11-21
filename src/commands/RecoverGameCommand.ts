@@ -192,7 +192,7 @@ export default class RecoverGameCommand implements Command {
       .setColor(0xf59e0b)
       .setTitle("⚠️ Game recovery — review before confirming")
       .setDescription(
-        `Phase: **${result.phase}** · Season: **${result.seasonNumber}** (${result.relaxed ? "Relaxed" : "Ranked"})\nTime: <t:${Math.floor(result.startTime.getTime() / 1000)}:F>\n` +
+        `Phase: **${result.phase}**${result.recoveredEndTime ? " (already ended; not saved)" : ""} · Season: **${result.seasonNumber}** (${result.relaxed ? "Relaxed" : "Ranked"})\nTime: <t:${Math.floor(result.startTime.getTime() / 1000)}:F>\n` +
           `Map: **${result.map}** · Double ELO: **${result.doubleElo ? "Yes" : "No"}**\n` +
           `Method: **${result.teamsDecidedBy ?? "Not picked"}** · ` +
           `Rated: **${
@@ -395,7 +395,7 @@ export default class RecoverGameCommand implements Command {
       );
       await interaction.editReply({
         content:
-          `✅ Game reconstructed in memory (${current.phase}, ${Object.values(current.teams).flat().length} players). ` +
+          `✅ Game reconstructed in memory (${current.phase}${current.recoveredEndTime ? ", ended pending save" : ""}, ${Object.values(current.teams).flat().length} players). ` +
           "No messages, Discord roles or VCs were recreated. Inspect /team list and /game diagnostics before continuing. " +
           "Timers, vote sessions and game feeds remain paused. The reconstructed game will still be lost if the process crashes again.",
         embeds: [],

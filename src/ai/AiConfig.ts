@@ -1,37 +1,43 @@
-/** Opt-in settings, independent of HiveOps. No provider keys are read on startup. */
+import { Config, ConfigManager } from "../ConfigManager";
+
+/** No model IDs, channel lists, limits or feature switches are read from .env. */
+export const AI_DEFAULTS = {
+  dailyRequestLimit: 50,
+  requestTimeoutMs: 20_000,
+  maxResponseBytes: 64 * 1024,
+  maxOutputTokens: 500,
+  maxToolCalls: 4,
+  maxToolRounds: 2,
+  temperature: 0.1,
+  models: {
+    groq: "openai/gpt-oss-20b",
+    gemini: "gemini-2.5-flash",
+    cloudflare: "@cf/qwen/qwen3-30b-a3b-fp8",
+  },
+  /** The first provider with usable credentials and prerequisites wins. */
+  providerPriority: ["groq", "gemini", "cloudflare"] as const,
+} as const;
+
 export type AiSettings = {
   enabled: boolean;
   channelIds: ReadonlySet<string>;
-  model: string;
   dailyRequestLimit: number;
+  cloudflareAccountId?: string;
 };
 
 export function getAiSettings(
-  env: NodeJS.ProcessEnv = process.env
+  config: Pick<Config, "ai" | "channels"> = ConfigManager.getConfig()
 ): AiSettings {
-  const channels = (env.TEAMS_AI_CHANNEL_IDS ?? "")
-    .split(",")
-    .map((id) => id.trim())
-    .filter(Boolean);
-  const model = env.TEAMS_AI_GROQ_MODEL ?? "";
-  const validChannels =
-    channels.length > 0 && channels.every((id) => /^\d{8,25}$/.test(id));
-  // Model is an operator-supplied ID, never selected by Discord users or tools.
-  const validModel =
-    /^[a-zA-Z0-9][a-zA-Z0-9._/-]{1,100}$/.test(model) && !model.includes("..");
-  const desiredCap = Number(env.TEAMS_AI_DAILY_REQUESTS ?? "50");
-  const dailyRequestLimit =
-    Number.isInteger(desiredCap) && desiredCap >= 1 && desiredCap <= 200
-      ? desiredCap
-      : 50;
+  const commands = config.channels.botCommands;
   return {
-    enabled:
-      env.TEAMS_AI_ENABLED === "true" &&
-      env.TEAMS_AI_EGRESS_APPROVED === "true" &&
-      validChannels &&
-      validModel,
-    channelIds: new Set(validChannels ? channels : []),
-    model: validModel ? model : "",
-    dailyRequestLimit,
+    enabled: config.ai?.enabled === true,
+    // A missing/invalid bot-command channel is never an invitation to run everywhere.
+    channelIds: new Set(
+      typeof commands === "string" && /^\d{8,25}$/.test(commands)
+        ? [commands]
+        : []
+    ),
+    dailyRequestLimit: AI_DEFAULTS.dailyRequestLimit,
+    cloudflareAccountId: config.ai?.cloudflareAccountId,
   };
 }

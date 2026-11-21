@@ -12,9 +12,9 @@ npx esbuild tests/temporary/run-recover-game.ts --bundle --platform=node --targe
 node dist/tests/recover-game-temporary.js
 ```
 
-As of 21 November 2026 the suite covers **105 scenarios (105/105 passing)**:
+As of 21 November 2026 the suite covers **109 scenarios (109/109 passing)**:
 the original 75 (previously 68 passing and 7 failing), plus 30 additional
-adversarial cases. A nonzero exit code now indicates a regression.
+adversarial cases and four post-game recovery guards. A nonzero exit code now indicates a regression.
 
 The unaffected normal suite is run with `npm run tests`. These temporary
 tests are not imported by the normal runner. The mock state and monkey
@@ -64,7 +64,8 @@ been weakened.
   source content/plan metadata/player accounts/season settings, overlong
   preview fields, an unannounced but partially populated game, organiser
   role revocation during verification, early and delayed game-end signals,
-  and exclusive recovery admission with deterministic barriers
+  unsaved /game end restoration, spoofed/cross-game end evidence, preview
+  integrity and exclusive recovery admission with deterministic barriers
 
 ## Recovery limitations and controlled rollout
 
@@ -73,8 +74,12 @@ old UUID or restart Discord roles, voice moves, feeds, team selection timers,
 votes, or other incomplete workflows. The organiser must explicitly choose
 the correct phase and verify the private preview, including captain inference,
 plans, late sign-ups and season rules. Recovery rejects ambiguous or truncated
-evidence and blocks when the game, snapshot, database cleanup or confirmation
-lock is unresolved. Missing optional team-chat history is warned about, not
+evidence and blocks when the game, snapshot, matching saved game, database
+cleanup or confirmation lock is unresolved. A /game end/MVP message alone is
+not proof of persistence: with no matching saved game, selecting the started
+phase restores the ended state and an approximate end timestamp. ELO
+expectations are recalculated; previous MVP votes must be recast before
+/game shutdown. Missing optional team-chat history is warned about, not
 recreated. Avoid proceeding when an unreadable optional channel could conceal
 post-game activity.
 

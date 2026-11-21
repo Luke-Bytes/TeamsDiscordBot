@@ -1,5 +1,6 @@
 import { AiCaller, AiToolDenied, executeAiTool } from "./AiTools";
-import { AiInference, AiTransportError } from "./GroqClient";
+import { AiInference, AiTransportError } from "./AiProvider";
+import { AI_DEFAULTS } from "./AiConfig";
 import { KnowledgeChunk, retrieveApprovedKnowledge } from "./Knowledge";
 import { HistoricalStatsClient } from "./HistoricalStatsClient";
 import { buildNaviMessages, toolsForAsk } from "./AiPrompt";
@@ -79,7 +80,7 @@ export async function answerAiQuestion(options: {
   let result;
   try {
     // Up to two tool rounds, with fixed tool schemas and no concurrent tool execution.
-    for (let round = 0; round <= 2; round++) {
+    for (let round = 0; round <= AI_DEFAULTS.maxToolRounds; round++) {
       // A role lost mid-request must not receive the remaining organiser
       // context or a provider answer based on it.
       const freshMember = await options.caller.verifyMembership();
@@ -90,7 +91,10 @@ export async function answerAiQuestion(options: {
           toolNames: [],
         };
       }
-      result = await options.infer(messages, round < 2 ? offeredTools : []);
+      result = await options.infer(
+        messages,
+        round < AI_DEFAULTS.maxToolRounds ? offeredTools : []
+      );
       const afterInference = await options.caller.verifyMembership();
       if (!afterInference.member || (organiser && !afterInference.organiser)) {
         return {
@@ -99,7 +103,8 @@ export async function answerAiQuestion(options: {
           toolNames: [],
         };
       }
-      if (result.calls.length > 4) throw new AiTransportError("invalid");
+      if (result.calls.length > AI_DEFAULTS.maxToolCalls)
+        throw new AiTransportError("invalid");
       if (result.calls.length === 0) {
         const content = safeDiscordText(result.content);
         return {
@@ -111,11 +116,13 @@ export async function answerAiQuestion(options: {
           toolNames: usedTools,
         };
       }
-      if (round === 2) throw new AiTransportError("invalid");
+      if (round === AI_DEFAULTS.maxToolRounds)
+        throw new AiTransportError("invalid");
       messages.push({
         role: "assistant",
         content: result.content || null,
         tool_calls: result.calls,
+        ...(result.continuation ? { continuation: result.continuation } : {}),
       });
       for (const call of result.calls) {
         let payload: unknown;
