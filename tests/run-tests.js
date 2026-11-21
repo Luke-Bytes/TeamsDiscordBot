@@ -3,7 +3,10 @@ const esbuild = require("esbuild");
 const path = require("path");
 
 async function buildAndRun() {
-  const entry = path.resolve(__dirname, "run.ts");
+  const entry = path.resolve(
+    __dirname,
+    process.env.NAVI_TEST_ONLY === "1" ? "navi-only.ts" : "run.ts"
+  );
   const outfile = path.resolve(__dirname, "../dist/tests/run.js");
   await esbuild.build({
     entryPoints: [entry],
@@ -19,7 +22,8 @@ async function buildAndRun() {
     logLevel: "info",
     tsconfig: path.resolve(process.cwd(), "tsconfig.json"),
     // Allow isolated worktrees to reuse an explicitly supplied dependency tree.
-    nodePaths: process.env.NODE_PATH?.split(path.delimiter).filter(Boolean) ?? [],
+    nodePaths:
+      process.env.NODE_PATH?.split(path.delimiter).filter(Boolean) ?? [],
   });
   require(outfile);
 }

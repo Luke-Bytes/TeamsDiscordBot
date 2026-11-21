@@ -3,6 +3,7 @@ import "./cases/needCommand.test";
 import "./cases/aiAssistant.test";
 import "./cases/aiHistoricalState.test";
 import "./cases/aiKnowledgeQc.test";
+import "./cases/naviPrompt.test";
 // Simple test runner that executes all test cases in sequence
 import "./cases/captainNominate.test";
 import "./cases/basicCommands.test";
