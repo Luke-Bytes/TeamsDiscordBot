@@ -881,8 +881,10 @@ export async function buildDiscordRecovery(
     );
   }
 
-  // Historical IGNs are matched case-insensitively without creating accounts.
-  // Resolve ambiguity rather than guessing which Discord member played.
+  // The current username is more authoritative than a historical alias:
+  // Minecraft usernames can change owners. Only use history when no profile's
+  // latestIGN matches, and fail closed on genuine current-name ambiguity.
+  // The stored primary UUID is a second identity safeguard when available.
   const allPlayers = await prismaClient.player.findMany();
   const resolved: Record<TeamKey, PlayerInstance[]> = {
     RED: [],
@@ -891,16 +893,39 @@ export async function buildDiscordRecovery(
   };
   for (const team of ["RED", "BLUE", "UNDECIDED"] as const) {
     for (const name of names[team]) {
-      const matching = allPlayers.filter((player) =>
-        [player.latestIGN, ...player.minecraftAccounts].some(
-          (ign) => ign?.toLowerCase() === ignKey(name)
-        )
+      const currentMatches = allPlayers.filter(
+        (player) => player.latestIGN?.toLowerCase() === ignKey(name)
       );
+      const matching = currentMatches.length
+        ? currentMatches
+        : allPlayers.filter((player) =>
+            player.minecraftAccounts.some(
+              (ign) => ign.toLowerCase() === ignKey(name)
+            )
+          );
       if (matching.length !== 1)
         throw new Error(
-          `Cannot uniquely match IGN ${name} to a stored Discord player (${matching.length} matches). Correct the database/roster before recovering.`
+          `Cannot uniquely match IGN ${name} to a stored Discord player (${matching.length} ${currentMatches.length ? "current IGN" : "historical"} matches). Correct the database/roster before recovering.`
         );
       const player = matching[0];
+      if (
+        player.primaryMinecraftAccount &&
+        allPlayers.some(
+          (other) =>
+            other.id !== player.id &&
+            other.primaryMinecraftAccount?.toLowerCase() ===
+              player.primaryMinecraftAccount?.toLowerCase()
+        )
+      ) {
+        throw new Error(
+          `Minecraft UUID for IGN ${name} is claimed by multiple Discord players. Resolve the conflicting accounts before recovery.`
+        );
+      }
+      if (!currentMatches.length) {
+        warnings.push(
+          `IGN ${name} was matched only through a historical username for a single stored player. Confirm the current Minecraft account/UUID before proceeding.`
+        );
+      }
       const stats = await prismaClient.playerStats.findUnique({
         where: {
           playerId_seasonId: { playerId: player.id, seasonId: season.id },

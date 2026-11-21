@@ -12,9 +12,9 @@ npx esbuild tests/temporary/run-recover-game.ts --bundle --platform=node --targe
 node dist/tests/recover-game-temporary.js
 ```
 
-As of 21 November 2026 the suite covers **109 scenarios (109/109 passing)**:
+As of 21 November 2026 the suite covers **113 scenarios (113/113 passing)**:
 the original 75 (previously 68 passing and 7 failing), plus 30 additional
-adversarial cases and four post-game recovery guards. A nonzero exit code now indicates a regression.
+adversarial cases, four post-game recovery guards, and four IGN/UUID identity guards. A nonzero exit code now indicates a regression.
 
 The unaffected normal suite is run with `npm run tests`. These temporary
 tests are not imported by the normal runner. The mock state and monkey
@@ -48,8 +48,9 @@ been weakened.
 
 - Full 26-player game; 8-player unranked game; complete and missing
   announcement/registration/team evidence; fully manual reconstruction
-- IGN resolution against current/historical names, unknown/ambiguous users,
-  missing stats, and duplicate players
+- Current IGN precedence over historical aliases, unique historical fallback with
+  an organiser warning, duplicate current names/primary Minecraft UUID rejection,
+  unknown/ambiguous users, missing stats, and duplicate players
 - Discord message links, spoofing, channel access, timestamps, pagination,
   registration counts, wrong phase, malformed settings, and modified sources
 - DB completed-game and pending-cleanup gates, pending restart snapshot,

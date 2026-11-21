@@ -874,13 +874,72 @@ test("TEMP recover: unknown IGN refuses recovery without creating player", () =>
     );
     expected(f.state.writes, 0, "no DB writes");
   }));
-test("TEMP recover: ambiguous historical IGN refuses recovery", () =>
+test("TEMP recover: latest IGN wins over a former owner's historical alias", () =>
   withFixture(async (f) => {
     f.populate();
+    f.state.records[1].minecraftAccounts.push("RedCap");
+    const proposal = await buildDiscordRecovery(f.guild, f.options());
+    expected(proposal.teams.RED[0].playerId, "player-0", "Current IGN owner");
+    expected(
+      proposal.teams.BLUE[0].playerId,
+      "player-4",
+      "Other roster unchanged"
+    );
+    expected(
+      f.state.writes,
+      0,
+      "No database mutation for current IGN resolution"
+    );
+  }));
+
+test("TEMP recover: same current IGN on two Discord users is genuinely ambiguous", () =>
+  withFixture(async (f) => {
+    f.populate();
+    f.state.records[1].latestIGN = "rEdCaP";
+    await reject(
+      () => buildDiscordRecovery(f.guild, f.options()),
+      "Cannot uniquely match"
+    );
+  }));
+
+test("TEMP recover: ambiguous historical aliases without a current owner still block", () =>
+  withFixture(async (f) => {
+    f.populate();
+    f.state.records[0].latestIGN = "FormerRed";
     f.state.records[1].minecraftAccounts.push("RedCap");
     await reject(
       () => buildDiscordRecovery(f.guild, f.options()),
       "Cannot uniquely match"
+    );
+  }));
+
+test("TEMP recover: a unique historical alias can be recovered with a warning", () =>
+  withFixture(async (f) => {
+    f.populate();
+    f.state.records[0].latestIGN = "FormerRed";
+    const proposal = await buildDiscordRecovery(f.guild, f.options());
+    expected(
+      proposal.teams.RED[0].playerId,
+      "player-0",
+      "Unique historical match"
+    );
+    assert(
+      proposal.warnings.some(
+        (message) =>
+          message.includes("RedCap") && message.includes("historical")
+      ),
+      "Historical identity fallback is disclosed for organiser review"
+    );
+  }));
+
+test("TEMP recover: duplicate primary Minecraft UUIDs still block current IGN resolution", () =>
+  withFixture(async (f) => {
+    f.populate();
+    f.state.records[1].primaryMinecraftAccount =
+      f.state.records[0].primaryMinecraftAccount;
+    await reject(
+      () => buildDiscordRecovery(f.guild, f.options()),
+      "Minecraft UUID"
     );
   }));
 test("TEMP recover: missing season stats refuses recovery", () =>
