@@ -50,7 +50,10 @@ function fakeGroq(status: number, response: unknown) {
 test("AI defaults disabled and only the configured bot-command channel is allowed", () => {
   const channels = { botCommands: "1234567890123456" } as any;
   assert(!getAiSettings({ channels }).enabled, "Absent AI setting is off");
-  assert(!getAiSettings({ channels, ai: { enabled: false } }).enabled, "Explicitly off");
+  assert(
+    !getAiSettings({ channels, ai: { enabled: false } }).enabled,
+    "Explicitly off"
+  );
   const enabled = getAiSettings({ channels, ai: { enabled: true } });
   assert(enabled.enabled, "Single boolean enables the feature");
   assert(
@@ -483,7 +486,7 @@ test("Groq aborts stalled requests at the configured deadline", async () => {
   }
 });
 
-test("Enabled /ask refuses unauthorized guild channels before any provider access", async () => {
+test("Enabled /ask refuses disallowed guild channels and unsupported private contexts before provider access", async () => {
   const replies: any[] = [];
   const command = new AskCommand({
     enabled: true,
@@ -500,7 +503,7 @@ test("Enabled /ask refuses unauthorized guild channels before any provider acces
   }
   assert(
     replies.length === 2 &&
-      replies.every((reply) => reply.content.includes("approved server channels")),
+      replies.every((reply) => reply.content.includes("bot-command channel")),
     "Channel and DM fail closed before credentials or inference"
   );
 });

@@ -27,11 +27,16 @@ continue working if AI is disabled or its provider is unavailable.
    ```
 
    The existing `channels.botCommands` **must already be a valid Discord
-   channel ID**; there is no separate AI channel allowlist. DMs and other
-   channels remain denied. For Cloudflare-only setup, also set
+   channel ID**; there is no separate AI channel allowlist. Other guild
+   channels remain denied. Direct messages to the bot are allowed **only
+   for members of the guild owning that configured channel**, with fresh
+   membership and organiser-role verification. For Cloudflare-only setup, also set
    `"cloudflareAccountId": "YOUR_32_HEX_ACCOUNT_ID"` inside `"ai"`.
+
 3. Restart TeamsDiscordBot, then use `/ask` in the configured bot-command
-   channel.
+   channel **or DM the bot** as a verified member. DM availability requires
+   normal global command registration (`dev.enabled=false`); dev-mode
+   guild commands are restricted to the configured dev guild.
 
 Setting `ai.enabled=true` **is the explicit administrator acknowledgement**
 that the question, approved role-filtered documentation excerpts, advertised
@@ -45,11 +50,11 @@ is read and no provider request is made while disabled.
 
 Providers are selected **once per question**, in fixed priority order:
 
-| Priority | Provider | Default model | Credential |
-| --- | --- | --- | --- |
-| 1 | Groq | `openai/gpt-oss-20b` | `MC_AI_GROQ_KEY` |
-| 2 | Google Gemini | `gemini-2.5-flash` | `MC_AI_GEMINI_KEY` |
-| 3 | Cloudflare Workers AI (direct REST) | `@cf/qwen/qwen3-30b-a3b-fp8` | `MC_AI_CLOUDFLARE_KEY` |
+| Priority | Provider                            | Default model                | Credential             |
+| -------- | ----------------------------------- | ---------------------------- | ---------------------- |
+| 1        | Groq                                | `openai/gpt-oss-20b`         | `MC_AI_GROQ_KEY`       |
+| 2        | Google Gemini                       | `gemini-2.5-flash`           | `MC_AI_GEMINI_KEY`     |
+| 3        | Cloudflare Workers AI (direct REST) | `@cf/qwen/qwen3-30b-a3b-fp8` | `MC_AI_CLOUDFLARE_KEY` |
 
 `MC_AI_CLOUDFLARE_API_TOKEN` is also accepted as a compatibility alias.
 A provider without a valid credential is skipped. **Cloudflare Workers AI
@@ -94,8 +99,14 @@ cross-process quota coordination.
 
 ## Data and permissions
 
-Only the configured `channels.botCommands` guild channel is eligible. DMs fail closed. In dev mode,
-only the configured dev guild is eligible. Each tool independently checks
+Guild /ask requests are allowed only in the configured `channels.botCommands`
+channel. Bot DMs are also eligible, but **only for current members of the
+guild owning that configured channel**: the bot resolves that fixed channel
+through Discord, then fetches the DM sender's membership and organiser role
+from the associated guild. Missing channels, failed membership checks, other
+private interaction contexts, and arbitrary mutual guilds fail closed before
+AI egress. In dev mode, only the configured dev guild is eligible; slash
+commands registered to a dev guild cannot be used in DMs. Every tool independently checks
 fresh guild membership, and organiser-only `get_organiser_status` also
 checks the configured organiser role. The `get_my_stats` query binds to
 the actual interaction user's Discord ID. Models cannot supply this ID.
@@ -140,10 +151,18 @@ filesystem browsing tool. Bot-verified citations and the read-only data source
 names are attached separately. Knowledge refresh is on process restart.
 
 The bot replies ephemerally, suppresses Discord mentions, limits output
-length, strips external links, and does not log raw questions, secret
-values, source excerpts or provider bodies. It cannot stop a user from
-voluntarily typing sensitive information, so player/organiser consent and
-channel policy still need an operator privacy review before activation.
+length, strips external links and credential-shaped strings. The **final
+user-visible /ask reply** (including server-generated citations) is logged
+as a single JSON-escaped field **only after a successful Discord edit**,
+alongside provider, DM/guild scope, latency and tool count. The bot does
+not log raw questions, tool JSON, source excerpts, provider bodies or key
+values. A reply log **may contain player-facing stats or other text the
+caller was authorised to see**: PM2 stdout logs must be access-controlled
+and have appropriate retention/rotation, especially when DMs are enabled.
+For a PM2 deployment, inspect these output logs using `pm2 logs` under
+the authorised operator account. It cannot stop a user from voluntarily
+typing sensitive information, so player/organiser consent, data retention
+and channel/DM policy still need an operator privacy review before activation.
 
 ## Historical REST_API integration (read-only, disabled by default)
 

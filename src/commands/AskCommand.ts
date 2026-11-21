@@ -1,5 +1,7 @@
 import {
+  ChannelType,
   ChatInputCommandInteraction,
+  InteractionContextType,
   MessageFlags,
   SlashCommandBuilder,
   SlashCommandOptionsOnlyBuilder,
@@ -25,9 +27,8 @@ export default class AskCommand implements Command {
   public buttonIds: string[] = [];
   public data: SlashCommandOptionsOnlyBuilder = new SlashCommandBuilder()
     .setName("ask")
-    .setDescription(
-      "Ask Navi a Question!"
-    )
+    .setDescription("Ask Navi a Question!")
+    .setContexts(InteractionContextType.Guild, InteractionContextType.BotDM)
     .addStringOption((option) =>
       option
         .setName("question")
@@ -53,16 +54,42 @@ export default class AskCommand implements Command {
       });
       return;
     }
-    const guild = interaction.guild;
+    // DMs carry no guild context. Anchor them exclusively to the guild owning
+    // the configured bot-command channel; never pick an arbitrary mutual guild.
+    const directMessage =
+      !interaction.guildId &&
+      (interaction.context === InteractionContextType.BotDM ||
+        interaction.channel?.type === ChannelType.DM);
+    let guild = interaction.guild;
+    let guildId = interaction.guildId;
+    if (directMessage) {
+      const commandChannelId = config.channelIds.values().next().value;
+      if (commandChannelId) {
+        try {
+          const channel =
+            await interaction.client.channels.fetch(commandChannelId);
+          if (
+            channel?.type === ChannelType.GuildText ||
+            channel?.type === ChannelType.GuildAnnouncement
+          ) {
+            guild = channel.guild;
+            guildId = guild.id;
+          }
+        } catch {
+          // Fail closed on missing or inaccessible configured server channels.
+        }
+      }
+    }
     if (
       !guild ||
-      !interaction.guildId ||
-      !config.channelIds.has(interaction.channelId) ||
+      !guildId ||
+      (!directMessage && !config.channelIds.has(interaction.channelId)) ||
       (ConfigManager.getConfig().dev.enabled &&
-        interaction.guildId !== ConfigManager.getConfig().dev.guildId)
+        guildId !== ConfigManager.getConfig().dev.guildId)
     ) {
       await interaction.reply({
-        content: "AI questions are only available in approved server channels.",
+        content:
+          "AI questions are only available in the bot-command channel or in DMs from verified server members.",
         flags: MessageFlags.Ephemeral,
         allowedMentions: { parse: [] },
       });
@@ -82,10 +109,7 @@ export default class AskCommand implements Command {
       });
       return;
     }
-    const release = this.admission.acquire(
-      interaction.user.id,
-      interaction.guildId
-    );
+    const release = this.admission.acquire(interaction.user.id, guildId);
     if (!release) {
       await interaction.reply({
         content: "AI is busy or rate-limited. Please retry later.",
@@ -137,7 +161,7 @@ export default class AskCommand implements Command {
         organiser: membership.organiser,
         caller: {
           discordUserId: interaction.user.id,
-          guildId: interaction.guildId,
+          guildId,
           verifyMembership,
         },
         knowledge: this.knowledge,
@@ -167,13 +191,16 @@ export default class AskCommand implements Command {
         0,
         1850
       );
+      const delivered = reply || "No verified answer was available.";
       await interaction.editReply({
-        content: reply || "No verified answer was available.",
+        content: delivered,
         allowedMentions: { parse: [] },
       });
-      // Only aggregate outcome/latency. Never log questions, retrieved text, tool JSON or keys.
+      // Log the exact final, sanitised Discord output after successful delivery.
+      // JSON quoting keeps untrusted text on one log line. Never log prompts,
+      // tool payloads, provider bodies, or credentials.
       console.info(
-        `ai.ask outcome=completed duration_ms=${Date.now() - began} tools=${result.toolNames.length}`
+        `ai.ask outcome=completed scope=${directMessage ? "dm" : "guild"} provider=${selected.provider} duration_ms=${Date.now() - began} tools=${result.toolNames.length} reply=${JSON.stringify(delivered)}`
       );
     } catch {
       try {

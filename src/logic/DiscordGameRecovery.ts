@@ -1,5 +1,5 @@
 import { AnniClass, AnniMap, SeasonType } from "@prisma/client";
-import { Collection, Guild, Message } from "discord.js";
+import { Collection, Guild, InteractionType, Message } from "discord.js";
 import { ConfigManager } from "../ConfigManager";
 import { PlayerInstance } from "../database/PlayerInstance";
 import { prismaClient } from "../database/prismaClient";
@@ -42,6 +42,13 @@ type Announcement = {
   organiser?: string;
   host?: string;
 };
+export type RecoveredMvpVote = {
+  team: "RED" | "BLUE";
+  voterId: string;
+  targetId: string;
+  sourceMessageId: string;
+};
+
 export type RecoveryProposal = {
   fingerprint: string;
   sourceSummary: string[];
@@ -60,6 +67,7 @@ export type RecoveryProposal = {
   teamsDecidedBy: GameInstance["teamsDecidedBy"];
   teams: Record<TeamKey, PlayerInstance[]>;
   lateSignups: string[];
+  mvpVotes: RecoveredMvpVote[];
   seasonId: string;
   seasonNumber: number;
   redPlan?: TeamPlanRecord;
@@ -727,7 +735,7 @@ export async function buildDiscordRecovery(
     : undefined;
   if (recoveredEndTime) {
     warnings.push(
-      "Discord shows /game end or post-game activity, but no saved match was found. The game will be restored as ended with an approximate end time; prior MVP votes cannot be reconstructed and must be recast before shutdown."
+      "Discord shows /game end, but no saved match was found; restoring ended state with an approximate end time. Only verifiable MVP interaction replies can restore votes."
     );
   }
 
@@ -970,6 +978,100 @@ export async function buildDiscordRecovery(
       throw new Error(`${team} captain is not a member of that team.`);
     if (member) member.captain = true;
   }
+  // Normal /mvp vote replies are non-ephemeral bot messages. Their
+  // interaction metadata identifies the voter, while the reply text names
+  // the target. Neither alone is sufficient to restore a vote or ELO bonus.
+  const voteMessages = recoveredEndTime
+    ? [...laterGameHistory(redHistory), ...laterGameHistory(blueHistory)]
+        .filter(
+          (msg) =>
+            msg.author.id === guild.client.user?.id &&
+            msg.createdTimestamp >= recoveredEndTime.getTime() &&
+            msg.content.startsWith("Your MVP vote for ")
+        )
+        .sort(
+          (a, b) =>
+            a.createdTimestamp - b.createdTimestamp || a.id.localeCompare(b.id)
+        )
+    : [];
+  const playerById = new Map(
+    Object.values(resolved)
+      .flat()
+      .map((player) => [player.discordSnowflake, player])
+  );
+  const voteAttempts: RecoveredMvpVote[] = [];
+  let skippedVoteMessages = 0;
+  for (const msg of voteMessages) {
+    const team =
+      msg.channelId === config.channels.redTeamChat
+        ? "RED"
+        : msg.channelId === config.channels.blueTeamChat
+          ? "BLUE"
+          : null;
+    const match =
+      /^Your MVP vote for (.+?) has been recorded! Enjoy \+1 elo as a thank you for voting 🙂$/.exec(
+        msg.content.trim()
+      );
+    const targetName = match?.[1].replace(/\\_/g, "_");
+    const metadata = msg.interactionMetadata;
+    const legacy = msg.interaction;
+    const voterId =
+      metadata?.type === InteractionType.ApplicationCommand
+        ? metadata.user.id
+        : legacy?.type === InteractionType.ApplicationCommand &&
+            legacy.commandName === "mvp"
+          ? legacy.user.id
+          : null;
+    if (
+      !team ||
+      !targetName ||
+      !/^[A-Za-z0-9_]{3,16}$/.test(targetName) ||
+      !voterId ||
+      (metadata && metadata.type !== InteractionType.ApplicationCommand) ||
+      (legacy && legacy.commandName !== "mvp") ||
+      (metadata && legacy && metadata.user.id !== legacy.user.id)
+    ) {
+      skippedVoteMessages++;
+      continue;
+    }
+    const voter = playerById.get(voterId);
+    const targets = resolved[team].filter(
+      (player) => ignKey(player.ignUsed ?? "") === ignKey(targetName)
+    );
+    const target = targets.length === 1 ? targets[0] : null;
+    if (
+      !voter ||
+      !resolved[team].includes(voter) ||
+      !target ||
+      target.captain ||
+      voterId === target.discordSnowflake
+    ) {
+      skippedVoteMessages++;
+      continue;
+    }
+    voteAttempts.push({
+      team,
+      voterId,
+      targetId: target.discordSnowflake,
+      sourceMessageId: msg.id,
+    });
+  }
+  const byVoter = new Map<string, RecoveredMvpVote[]>();
+  for (const vote of voteAttempts) {
+    const votes = byVoter.get(vote.voterId) ?? [];
+    votes.push(vote);
+    byVoter.set(vote.voterId, votes);
+  }
+  const mvpVotes = voteAttempts.filter(
+    (vote) => byVoter.get(vote.voterId)?.length === 1
+  );
+  skippedVoteMessages += voteAttempts.length - mvpVotes.length;
+  if (skippedVoteMessages) {
+    warnings.push(
+      `${skippedVoteMessages} MVP confirmation message(s) could not be safely restored (missing metadata, invalid team/target or duplicate voter). Review team chats and recast missing votes.`
+    );
+  }
+
   if (
     options.phase !== "announced" &&
     (!options.redCaptain || !options.blueCaptain)
@@ -999,7 +1101,7 @@ export async function buildDiscordRecovery(
       "Marked as started; /game start will not re-run roles, moves or messages."
     );
   warnings.push(
-    "Original game UUID, draft slots, captain class-ban history, MVP votes and automatic timers cannot be reconstructed."
+    "Original game UUID, draft slots, captain class-ban history and automatic timers cannot be reconstructed. Undiscoverable MVP votes must be recast."
   );
   warnings.push(
     "Discord roles/voice channels and feed messages are NOT modified by recovery."
@@ -1054,6 +1156,7 @@ export async function buildDiscordRecovery(
     `Teams: ${teamsMessage?.url ?? "not yet picked"}`,
     `Draft approval: ${approvalEvidence?.url ?? (draftUsed && /Teams have been finalised|Teams have been locked/i.test(draftUsed.content) ? draftUsed.url : "not independently verified")}`,
     `Game end: ${endSignals[0]?.url ?? "not found"}`,
+    `MVP votes: RED ${mvpVotes.filter((vote) => vote.team === "RED").length} · BLUE ${mvpVotes.filter((vote) => vote.team === "BLUE").length} verified; ${skippedVoteMessages} skipped`,
     `Red plan: ${redPlanEvidence?.url ?? "none"}${redPlanEvidence ? ` (author ${redPlanEvidence.authorId})` : ""}`,
     `Blue plan: ${bluePlanEvidence?.url ?? "none"}${bluePlanEvidence ? ` (author ${bluePlanEvidence.authorId})` : ""}`,
   ];
@@ -1078,6 +1181,18 @@ export async function buildDiscordRecovery(
     relaxed,
     phase: options.phase,
     recoveredEndTime: recoveredEndTime?.toISOString(),
+    mvpVotes,
+    voteMessages: voteMessages.map((msg) => ({
+      id: msg.id,
+      channelId: msg.channelId,
+      createdTimestamp: msg.createdTimestamp,
+      editedTimestamp: msg.editedTimestamp,
+      content: msg.content,
+      authorId: msg.author.id,
+      voterId: msg.interactionMetadata?.user.id ?? msg.interaction?.user.id,
+      interactionType: msg.interactionMetadata?.type ?? msg.interaction?.type,
+      commandName: msg.interaction?.commandName,
+    })),
     endSignals: endSignals.map((msg) => ({
       channelId: msg.channelId,
       id: msg.id,
@@ -1153,6 +1268,7 @@ export async function buildDiscordRecovery(
     teamsDecidedBy: method,
     teams: resolved,
     lateSignups,
+    mvpVotes,
     seasonId: season.id,
     seasonNumber: season.number,
     organiser: options.organiser ?? announcement?.organiser ?? "Unknown",
@@ -1198,6 +1314,14 @@ export function installDiscordRecovery(proposal: RecoveryProposal): void {
       game.isFinished = true;
       game.endTime = new Date(proposal.recoveredEndTime);
       game.calculateMeanEloAndExpectedScore();
+      for (const vote of proposal.mvpVotes) {
+        const result = game.voteMvp(vote.voterId, vote.targetId);
+        if (result.error) {
+          throw new Error(
+            `Verified MVP vote ${vote.sourceMessageId} could not be restored: ${result.error}`
+          );
+        }
+      }
     }
   }
 }

@@ -8,6 +8,7 @@
  * This file deliberately stays out of tests/run.ts.
  */
 import { AnniClass, AnniMap, SeasonType } from "@prisma/client";
+import { InteractionType } from "discord.js";
 import { ConfigManager } from "../../src/ConfigManager";
 import { GameInstance } from "../../src/database/GameInstance";
 import { prismaClient } from "../../src/database/prismaClient";
@@ -76,6 +77,15 @@ type FakeMessage = {
   client: { user: { id: string } };
   guildId: string;
   inGuild(): boolean;
+  interactionMetadata?: {
+    type: InteractionType;
+    user: { id: string };
+  };
+  interaction?: {
+    type: InteractionType;
+    commandName: string;
+    user: { id: string };
+  };
 };
 type Fixture = ReturnType<typeof makeFixture>;
 let nextMessage = 600000000000000001n;
@@ -198,6 +208,24 @@ function makeFixture() {
     };
     msg.author.id = author;
     messages.set(channelId, [...(messages.get(channelId) ?? []), msg]);
+    return msg;
+  };
+  const mvpReply = (
+    team: "RED" | "BLUE",
+    voterId: string,
+    targetIgn: string,
+    timestamp = now - 1000
+  ) => {
+    const msg = message(
+      team === "RED" ? CHANNELS.redTeamChat : CHANNELS.blueTeamChat,
+      [],
+      `Your MVP vote for ${targetIgn.replace(/_/g, "\\_")} has been recorded! Enjoy +1 elo as a thank you for voting 🙂`,
+      timestamp
+    );
+    msg.interactionMetadata = {
+      type: InteractionType.ApplicationCommand,
+      user: { id: voterId },
+    };
     return msg;
   };
   const announce = (mod: any = {}) =>
@@ -446,6 +474,7 @@ function makeFixture() {
     startTime,
     config,
     message,
+    mvpReply,
     announce,
     register,
     teams,
@@ -1137,6 +1166,234 @@ test("TEMP recover: ended and unsaved game confirms into post-game lifecycle", (
     assert(
       GameInstance.getInstance().isFinished,
       "Recovery confirmed as ended"
+    );
+  }));
+
+test("TEMP MVP recovery: restores known voters, targets, and ELO bonus eligibility", () =>
+  withFixture(async (f) => {
+    f.announce();
+    const renamed = [...allNames];
+    renamed[1] = "Chimchar_";
+    f.state.records[1].latestIGN = "Chimchar_";
+    f.state.records[1].minecraftAccounts.push("Chimchar_");
+    f.register(renamed);
+    const red = ["RedCap", "Chimchar_", "RedThree", "RedFour"];
+    f.teams(red, blueNames);
+    f.draft(red, blueNames);
+    f.message(CHANNELS.redTeamChat, [], "The game has now ended", f.now - 4000);
+    const vote1 = f.mvpReply(
+      "RED",
+      f.state.records[2].discordSnowflake,
+      "Chimchar_",
+      f.now - 3000
+    );
+    f.mvpReply("RED", f.state.records[3].discordSnowflake, "Chimchar_");
+    f.mvpReply("BLUE", f.state.records[6].discordSnowflake, "BlueTwo");
+    const proposal = await buildDiscordRecovery(f.guild, f.options("started"));
+    expected(proposal.mvpVotes.length, 3, "All verified votes included");
+    assert(
+      proposal.mvpVotes.some((vote) => vote.sourceMessageId === vote1.id),
+      "Linked vote confirmation retained"
+    );
+    assert(
+      proposal.sourceSummary.some((line) => line.includes("RED 2 · BLUE 1")),
+      "Preview source summary shows team vote counts"
+    );
+    const command = f.command();
+    const slash = f.slash(f.options("started"));
+    await command.execute(slash.i);
+    const embedResponse = slash.responses.find(
+      ([kind, payload]: any[]) => kind === "edit" && payload.embeds?.length
+    );
+    assert(!!embedResponse, "Recovery preview shown");
+    const fields = embedResponse[1].embeds[0].data.fields;
+    assert(
+      fields.some(
+        (field: any) =>
+          field.name.includes("Verified MVP votes (2)") &&
+          field.value.includes("RedThree → Chimchar\\_")
+      ),
+      "Preview identifies recovered voter and escaped target name"
+    );
+    installDiscordRecovery(proposal);
+    const game = GameInstance.getInstance();
+    const targetId = f.state.records[1].discordSnowflake;
+    expected(game.mvpVotes.RED[targetId], 2, "Red target count");
+    expected(
+      game.mvpVotes.BLUE[f.state.records[5].discordSnowflake],
+      1,
+      "Blue target count"
+    );
+    assert(
+      game.hasVotedMvp(f.state.records[2].discordSnowflake),
+      "Verified voter receives MVP voter status"
+    );
+    assert(
+      !game.hasVotedMvp(f.state.records[1].discordSnowflake),
+      "Target did not receive voter status"
+    );
+  }));
+
+test("TEMP MVP recovery: missing voter metadata is skipped with a warning", () =>
+  withFixture(async (f) => {
+    f.populate();
+    f.message(
+      CHANNELS.blueTeamChat,
+      [],
+      "The game has now ended",
+      f.now - 4000
+    );
+    const reply = f.mvpReply(
+      "BLUE",
+      f.state.records[6].discordSnowflake,
+      "BlueTwo"
+    );
+    reply.interactionMetadata = undefined;
+    const proposal = await buildDiscordRecovery(f.guild, f.options("started"));
+    expected(proposal.mvpVotes.length, 0, "Unattributable vote excluded");
+    assert(
+      proposal.warnings.some((warning) =>
+        warning.includes("1 MVP confirmation")
+      ),
+      "Skipped message warned"
+    );
+  }));
+
+test("TEMP MVP recovery: legacy slash metadata identifies the voter", () =>
+  withFixture(async (f) => {
+    f.populate();
+    f.message(
+      CHANNELS.blueTeamChat,
+      [],
+      "The game has now ended",
+      f.now - 4000
+    );
+    const reply = f.mvpReply(
+      "BLUE",
+      f.state.records[6].discordSnowflake,
+      "BlueTwo"
+    );
+    reply.interactionMetadata = undefined;
+    reply.interaction = {
+      type: InteractionType.ApplicationCommand,
+      commandName: "mvp",
+      user: { id: f.state.records[6].discordSnowflake },
+    };
+    const proposal = await buildDiscordRecovery(f.guild, f.options("started"));
+    expected(proposal.mvpVotes.length, 1, "Legacy metadata accepted");
+  }));
+
+test("TEMP MVP recovery: duplicate confirmations for one voter restore neither", () =>
+  withFixture(async (f) => {
+    f.populate();
+    f.message(CHANNELS.redTeamChat, [], "The game has now ended", f.now - 4000);
+    const voter = f.state.records[2].discordSnowflake;
+    f.mvpReply("RED", voter, "RedTwo", f.now - 3000);
+    f.mvpReply("RED", voter, "RedFour", f.now - 2000);
+    const proposal = await buildDiscordRecovery(f.guild, f.options("started"));
+    expected(proposal.mvpVotes.length, 0, "Conflicting repeat votes excluded");
+    assert(
+      proposal.warnings.some((warning) =>
+        warning.includes("2 MVP confirmation")
+      ),
+      "Duplicate replies disclosed"
+    );
+    installDiscordRecovery(proposal);
+    assert(
+      !GameInstance.getInstance().hasVotedMvp(voter),
+      "No false voter bonus"
+    );
+  }));
+
+test("TEMP MVP recovery: invalid team, self votes, and captain targets are excluded", () =>
+  withFixture(async (f) => {
+    f.populate();
+    f.message(CHANNELS.redTeamChat, [], "The game has now ended", f.now - 4000);
+    f.mvpReply("RED", f.state.records[6].discordSnowflake, "RedTwo"); // Blue voter
+    f.mvpReply("RED", f.state.records[2].discordSnowflake, "RedThree"); // Self
+    f.mvpReply("RED", f.state.records[3].discordSnowflake, "RedCap"); // Captain
+    const proposal = await buildDiscordRecovery(f.guild, f.options("started"));
+    expected(proposal.mvpVotes.length, 0, "Invalid votes omitted");
+    assert(
+      proposal.warnings.some((warning) =>
+        warning.includes("3 MVP confirmation")
+      ),
+      "Invalid votes disclosed"
+    );
+  }));
+
+test("TEMP MVP recovery: fake bot replies and unrelated slash commands do not count", () =>
+  withFixture(async (f) => {
+    f.populate();
+    f.message(CHANNELS.redTeamChat, [], "The game has now ended", f.now - 4000);
+    const spoof = f.mvpReply(
+      "RED",
+      f.state.records[2].discordSnowflake,
+      "RedTwo"
+    );
+    spoof.author.id = OTHER_ID;
+    const unrelated = f.mvpReply(
+      "RED",
+      f.state.records[3].discordSnowflake,
+      "RedTwo"
+    );
+    unrelated.interaction = {
+      type: InteractionType.ApplicationCommand,
+      commandName: "winner",
+      user: { id: f.state.records[3].discordSnowflake },
+    };
+    const proposal = await buildDiscordRecovery(f.guild, f.options("started"));
+    expected(
+      proposal.mvpVotes.length,
+      0,
+      "Only verified bot MVP replies count"
+    );
+  }));
+
+test("TEMP MVP recovery: ignores replies before game end and after another announcement", () =>
+  withFixture(async (f) => {
+    f.populate();
+    f.message(CHANNELS.redTeamChat, [], "The game has now ended", f.now - 4000);
+    f.mvpReply(
+      "RED",
+      f.state.records[2].discordSnowflake,
+      "RedTwo",
+      f.now - 5000
+    );
+    const later = f.announce();
+    later.createdTimestamp = f.now - 2000;
+    f.mvpReply(
+      "RED",
+      f.state.records[3].discordSnowflake,
+      "RedTwo",
+      f.now - 1000
+    );
+    const proposal = await buildDiscordRecovery(f.guild, {
+      ...f.options("started"),
+      announcementLink: f.refs.announcement!.url,
+    });
+    expected(proposal.mvpVotes.length, 0, "Out-of-window replies omitted");
+  }));
+
+test("TEMP MVP recovery: changing reply voter after preview blocks confirmation", () =>
+  withFixture(async (f) => {
+    f.populate();
+    f.message(CHANNELS.redTeamChat, [], "The game has now ended", f.now - 4000);
+    const vote = f.mvpReply(
+      "RED",
+      f.state.records[2].discordSnowflake,
+      "RedTwo"
+    );
+    const command = f.command();
+    const request = f.slash(f.options("started"));
+    await command.execute(request.i);
+    vote.interactionMetadata!.user.id = f.state.records[3].discordSnowflake;
+    await command.handleButtonPress(
+      f.button(f.getButtonId(request.responses)).i
+    );
+    assert(
+      !GameInstance.getInstance().announced,
+      "Vote attribution change refused"
     );
   }));
 

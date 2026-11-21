@@ -175,12 +175,31 @@ export default class RecoverGameCommand implements Command {
       return `Mid Blocks:\n${escapeText(plan.midBlocks ?? "(missing)")}\nGame Plan:\n${escapeText(plan.gamePlan ?? "(missing)")}${plan.raw ? `\nRaw:\n${escapeText(plan.raw)}` : ""}`;
     };
     const plans = [planText(result.redPlan), planText(result.bluePlan)];
+    const voteText = (team: "RED" | "BLUE") => {
+      const players = new Map(
+        result.teams[team].map((player) => [
+          player.discordSnowflake,
+          escapeText(player.ignUsed ?? "?"),
+        ])
+      );
+      return (
+        result.mvpVotes
+          .filter((vote) => vote.team === team)
+          .map(
+            (vote) =>
+              `${players.get(vote.voterId) ?? "Unknown"} → ${players.get(vote.targetId) ?? "Unknown"}`
+          )
+          .join("\n") || "No verified votes"
+      );
+    };
     if (
       [
         names("RED"),
         names("BLUE"),
         names("UNDECIDED"),
         ...plans,
+        voteText("RED"),
+        voteText("BLUE"),
         result.sourceSummary.join("\n"),
         result.warnings.join("\n"),
       ].some((item) => item.length > 1024)
@@ -230,6 +249,16 @@ export default class RecoverGameCommand implements Command {
         {
           name: "Limitations / review",
           value: result.warnings.join("\n"),
+        },
+        {
+          name: `🔴 Verified MVP votes (${result.mvpVotes.filter((vote) => vote.team === "RED").length})`,
+          value: voteText("RED"),
+          inline: true,
+        },
+        {
+          name: `🔵 Verified MVP votes (${result.mvpVotes.filter((vote) => vote.team === "BLUE").length})`,
+          value: voteText("BLUE"),
+          inline: true,
         },
         { name: "Red plan (as recovered)", value: plans[0] },
         { name: "Blue plan (as recovered)", value: plans[1] }
@@ -396,6 +425,7 @@ export default class RecoverGameCommand implements Command {
       await interaction.editReply({
         content:
           `✅ Game reconstructed in memory (${current.phase}${current.recoveredEndTime ? ", ended pending save" : ""}, ${Object.values(current.teams).flat().length} players). ` +
+          `${current.mvpVotes.length} verified MVP vote(s) restored; inspect the preview for any skipped or missing votes. ` +
           "No messages, Discord roles or VCs were recreated. Inspect /team list and /game diagnostics before continuing. " +
           "Timers, vote sessions and game feeds remain paused. The reconstructed game will still be lost if the process crashes again.",
         embeds: [],

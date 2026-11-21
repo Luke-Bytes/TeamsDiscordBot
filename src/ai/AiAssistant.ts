@@ -22,20 +22,29 @@ async function boundedTool<T>(operation: Promise<T>): Promise<T> {
 }
 
 export function safeDiscordText(input: string): string {
-  return input
-    .replace(/<@!?\d+>|<@&\d+>|<#\d+>|@everyone|@here/gi, "[mention]")
-    .replace(/https?:\/\/[^\s<>]+/gi, "[link omitted]")
-    .replace(/```/g, "'''")
-    .split("")
-    .filter((character) => {
-      const code = character.charCodeAt(0);
-      return (
-        (code >= 32 && code !== 127) || character === "\n" || character === "\t"
-      );
-    })
-    .join("")
-    .slice(0, 1450)
-    .trim();
+  return (
+    input
+      // Responses (and thus PM2 reply logs) must not echo credential-shaped text.
+      .replace(
+        /(?:gsk_[a-zA-Z0-9_-]{16,}|sk-[a-zA-Z0-9_-]{16,}|AIza[a-zA-Z0-9_-]{20,}|(?:MC_AI_[A-Z0-9_]+|BOT_TOKEN|DATABASE_URL)\s*=\s*\S+)/gi,
+        "[credential omitted]"
+      )
+      .replace(/<@!?\d+>|<@&\d+>|<#\d+>|@everyone|@here/gi, "[mention]")
+      .replace(/https?:\/\/[^\s<>]+/gi, "[link omitted]")
+      .replace(/```/g, "'''")
+      .split("")
+      .filter((character) => {
+        const code = character.charCodeAt(0);
+        return (
+          (code >= 32 && code !== 127) ||
+          character === "\n" ||
+          character === "\t"
+        );
+      })
+      .join("")
+      .slice(0, 1450)
+      .trim()
+  );
 }
 
 export async function answerAiQuestion(options: {

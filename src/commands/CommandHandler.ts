@@ -353,7 +353,14 @@ export class CommandHandler {
     );
     const appId = process.env.APP_ID as string;
 
-    const commandsData = this.commands.map((cmd) => cmd.data.toJSON());
+    const commandsData = this.commands.map((cmd) => {
+      const data = cmd.data.toJSON();
+      // Discord accepts command contexts on global commands, not guild commands.
+      // In dev mode /ask remains guild-scoped until normal global registration.
+      if (config.dev.enabled && cmd.name === "ask" && "contexts" in data)
+        delete data.contexts;
+      return data;
+    });
 
     try {
       if (config.dev.enabled) {
