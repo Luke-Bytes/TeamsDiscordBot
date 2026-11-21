@@ -1,9 +1,13 @@
 # Optional Discord AI assistant
 
-The bot exposes `/ask question:<text>` as an **ephemeral**, opt-in assistant. It does
-not listen to regular messages, invoke maintenance scripts, edit records or
-perform Discord actions on behalf of a model. The built-in Discord commands
-continue working if AI is disabled or its provider is unavailable.
+The bot exposes `/ask question:<text>` as an **ephemeral**, opt-in assistant.
+Navi can chat naturally about herself, her abilities, trivia and general
+subjects, even when no Friendly Wars documentation matches. Friendly
+Wars-specific instructions still use approved guides, and player statistics
+or live server facts require verified read-only data. It does not listen to
+regular messages, invoke maintenance scripts, edit records or perform
+Discord actions on behalf of a model. The built-in Discord commands continue
+working if AI is disabled or its provider is unavailable.
 
 ## Minimal setup
 
@@ -154,15 +158,22 @@ The bot replies ephemerally, suppresses Discord mentions, limits output
 length, strips external links and credential-shaped strings. The **final
 user-visible /ask reply** (including server-generated citations) is logged
 as a single JSON-escaped field **only after a successful Discord edit**,
-alongside provider, DM/guild scope, latency and tool count. The bot does
-not log raw questions, tool JSON, source excerpts, provider bodies or key
-values. A reply log **may contain player-facing stats or other text the
-caller was authorised to see**: PM2 stdout logs must be access-controlled
-and have appropriate retention/rotation, especially when DMs are enabled.
-For a PM2 deployment, inspect these output logs using `pm2 logs` under
-the authorised operator account. It cannot stop a user from voluntarily
-typing sensitive information, so player/organiser consent, data retention
-and channel/DM policy still need an operator privacy review before activation.
+alongside provider, DM/guild scope, latency and tool count. The generic
+slash-command audit also logs the **submitted parameter values**, including
+the `/ask question`, under `args={"question":"..."}`. Subcommand arguments
+retain their full paths, while recognised credentials, secret-named options,
+resolved Discord objects and excessive text are redacted, omitted or capped.
+Context-menu commands log the target ID. Unrecognised free-form secrets or
+personal details **can still enter the logs**: redaction is best-effort, not
+an assurance of privacy. Provider request bodies, read-only tool JSON and
+source excerpts are not logged.
+
+**PM2 stdout now contains user-supplied questions and potentially personal
+command parameters and player-facing answers**, including in DMs. Restrict
+operator access, review player consent/privacy policy, and configure log
+retention and rotation. Inspect output using `pm2 logs` as an authorised
+operator. Avoid posting raw logs publicly. Existing input safety filtering
+still rejects unsafe slash inputs before command execution.
 
 ## Historical REST_API integration (read-only, disabled by default)
 

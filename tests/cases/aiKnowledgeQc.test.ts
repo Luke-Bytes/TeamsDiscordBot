@@ -598,7 +598,7 @@ test("Forty-six role-aware offline question probes retrieve relevant paragraphs"
   }
 });
 
-test("Unrelated requests fail closed without invented document evidence", async () => {
+test("Unrelated general questions may be answered without invented document citations", async () => {
   const chunks = buildApprovedKnowledge(root);
   assert(
     retrieveApprovedKnowledge(
@@ -618,14 +618,14 @@ test("Unrelated requests fail closed without invented document evidence", async 
     },
     knowledge: chunks,
     infer: async () => ({
-      content: "I know the secret answer: 42.",
+      content: "That sounds like a fun science-fiction gardening idea!",
       calls: [],
     }),
   });
   assert(
     result.sources.length === 0 &&
       result.toolNames.length === 0 &&
-      result.text.includes("couldn't find that"),
-    "Without an evidence source the assistant must use the safe fallback"
+      result.text.includes("science-fiction gardening"),
+    "Ordinary conversation is welcome without falsely citing project documents"
   );
 });

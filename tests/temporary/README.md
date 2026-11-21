@@ -12,10 +12,10 @@ npx esbuild tests/temporary/run-recover-game.ts --bundle --platform=node --targe
 node dist/tests/recover-game-temporary.js
 ```
 
-As of 21 November 2026 the suite covers **121 scenarios (121/121 passing)**:
+As of 21 November 2026 the suite covers **125 scenarios (125/125 passing)**:
 the original 75 (previously 68 passing and 7 failing), plus 30 additional
 adversarial cases, four post-game recovery guards, four IGN/UUID identity guards,
-and eight MVP-vote recovery guards. A nonzero exit code now indicates a regression.
+and twelve MVP-vote recovery guards. A nonzero exit code now indicates a regression.
 
 The unaffected normal suite is run with `npm run tests`. These temporary
 tests are not imported by the normal runner. The mock state and monkey
@@ -58,7 +58,10 @@ been weakened.
   in-memory lifecycle conflicts, and read-only previews
 - Verified MVP replies: voter metadata, escaped target IGN, team membership,
   captain/self-vote checks, duplicate rejection, preview fingerprint, and
-  post-game time scoping. Voter-bonus eligibility is reconstructed with votes.
+  post-game time scoping. Both Discord.js legacy command names (`mvp`,
+  `mvp vote`) are accepted; skipped votes report specific rejection reasons.
+  A 24-player, 13-vote scenario verifies both teams and voter bonuses.
+  Voter-bonus eligibility is reconstructed with votes.
 - Organiser authorisation, five-minute expiry, cancellation, stolen controls,
   role revocation, stale source changes, simultaneous confirmation, lost
   response acknowledgement, and single-use buttons

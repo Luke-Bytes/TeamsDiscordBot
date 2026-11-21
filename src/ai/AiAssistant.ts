@@ -7,6 +7,27 @@ import { buildNaviMessages, toolsForAsk } from "./AiPrompt";
 
 export type AiAnswer = { text: string; sources: string[]; toolNames: string[] };
 
+/**
+ * Conversational questions need no server evidence; factual claims about a
+ * specific player's records or the server's live/historical state still do.
+ * The prompt covers ambiguous cases, and this guard blocks common fabricated
+ * server-state answers when the model declined every offered read-only tool.
+ */
+export function needsVerifiedServerData(question: string): boolean {
+  const q = question.trim();
+  return (
+    /\b(?:my|our|their|this|current|latest|today'?s|tonight'?s|recent|previous|last|next|upcoming)\b.{0,60}\b(?:stats?|statistics|wins?|losses?|elo|ranks?|leaderboards?|games?|matches?|seasons?|registrations?|mvps?|captains?|votes?|polls?|scores?|standings?|results?|rosters?|schedules?|status)\b/i.test(
+      q
+    ) ||
+    /\b(?:how many|who won|who is winning|what(?:'s| is) the (?:status|score|result) of|is (?:the|our|my) (?:game|match|season))\b.{0,60}\b(?:games?|matches?|wins?|losses?|players?|seasons?|votes?|mvps?|captains?|registrations?)\b/i.test(
+      q
+    ) ||
+    /\b(?:friendly wars)\b.{0,60}\b(?:rules?|polic(?:y|ies)|dates?|schedules?|scores?|stats?|results?|roles?|permissions?)\b/i.test(
+      q
+    )
+  );
+}
+
 async function boundedTool<T>(operation: Promise<T>): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   try {
@@ -118,9 +139,12 @@ export async function answerAiQuestion(options: {
         const content = safeDiscordText(result.content);
         return {
           text:
-            excerpts.length || usedTools.length
-              ? content || "I couldn't verify that answer."
-              : "I couldn't find that in the approved documentation. Try /help or ask an organiser.",
+            !excerpts.length &&
+            !usedTools.length &&
+            needsVerifiedServerData(options.question)
+              ? "I can't verify those server details without approved data. Try /stats, /leaderboards or ask an organiser."
+              : content ||
+                "I couldn't produce an answer. Please try rephrasing.",
           sources,
           toolNames: usedTools,
         };

@@ -1000,7 +1000,9 @@ export async function buildDiscordRecovery(
       .map((player) => [player.discordSnowflake, player])
   );
   const voteAttempts: RecoveredMvpVote[] = [];
-  let skippedVoteMessages = 0;
+  const skippedVoteReasons = new Map<string, number>();
+  const skipVote = (reason: string) =>
+    skippedVoteReasons.set(reason, (skippedVoteReasons.get(reason) ?? 0) + 1);
   for (const msg of voteMessages) {
     const team =
       msg.channelId === config.channels.redTeamChat
@@ -1019,34 +1021,47 @@ export async function buildDiscordRecovery(
       metadata?.type === InteractionType.ApplicationCommand
         ? metadata.user.id
         : legacy?.type === InteractionType.ApplicationCommand &&
-            legacy.commandName === "mvp"
+            /^mvp(?: vote)?$/i.test(legacy.commandName)
           ? legacy.user.id
           : null;
+    if (!team || !targetName || !/^[A-Za-z0-9_]{3,16}$/.test(targetName)) {
+      skipVote("unrecognised confirmation");
+      continue;
+    }
+    // Discord.js includes subcommands in the deprecated commandName field:
+    // messages created by /mvp vote can report "mvp vote", not just "mvp".
     if (
-      !team ||
-      !targetName ||
-      !/^[A-Za-z0-9_]{3,16}$/.test(targetName) ||
-      !voterId ||
       (metadata && metadata.type !== InteractionType.ApplicationCommand) ||
-      (legacy && legacy.commandName !== "mvp") ||
-      (metadata && legacy && metadata.user.id !== legacy.user.id)
+      (legacy &&
+        (legacy.type !== InteractionType.ApplicationCommand ||
+          !/^mvp(?: vote)?$/i.test(legacy.commandName)))
     ) {
-      skippedVoteMessages++;
+      skipVote("unexpected slash command");
+      continue;
+    }
+    if (metadata && legacy && metadata.user.id !== legacy.user.id) {
+      skipVote("conflicting interaction users");
+      continue;
+    }
+    if (!voterId) {
+      skipVote("missing voter identity");
       continue;
     }
     const voter = playerById.get(voterId);
+    if (!voter || !resolved[team].includes(voter)) {
+      skipVote("voter outside team");
+      continue;
+    }
     const targets = resolved[team].filter(
       (player) => ignKey(player.ignUsed ?? "") === ignKey(targetName)
     );
     const target = targets.length === 1 ? targets[0] : null;
-    if (
-      !voter ||
-      !resolved[team].includes(voter) ||
-      !target ||
-      target.captain ||
-      voterId === target.discordSnowflake
-    ) {
-      skippedVoteMessages++;
+    if (!target) {
+      skipVote("target not on team");
+      continue;
+    }
+    if (target.captain || voterId === target.discordSnowflake) {
+      skipVote("captain/self vote");
       continue;
     }
     voteAttempts.push({
@@ -1065,10 +1080,20 @@ export async function buildDiscordRecovery(
   const mvpVotes = voteAttempts.filter(
     (vote) => byVoter.get(vote.voterId)?.length === 1
   );
-  skippedVoteMessages += voteAttempts.length - mvpVotes.length;
+  for (const vote of voteAttempts) {
+    if ((byVoter.get(vote.voterId)?.length ?? 0) > 1)
+      skipVote("duplicate voter");
+  }
+  const skippedVoteMessages = [...skippedVoteReasons.values()].reduce(
+    (total, count) => total + count,
+    0
+  );
   if (skippedVoteMessages) {
+    const reasons = [...skippedVoteReasons]
+      .map(([reason, count]) => `${count} ${reason}`)
+      .join(", ");
     warnings.push(
-      `${skippedVoteMessages} MVP confirmation message(s) could not be safely restored (missing metadata, invalid team/target or duplicate voter). Review team chats and recast missing votes.`
+      `${skippedVoteMessages} MVP confirmation message(s) could not be safely restored: ${reasons}. Review team chats and recast missing votes.`
     );
   }
 

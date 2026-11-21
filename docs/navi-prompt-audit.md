@@ -5,6 +5,14 @@
 > `config.json` and the Groq, Gemini and Cloudflare Workers AI adapters
 > described in [ai-assistant.md](ai-assistant.md). The prompt/tool audience
 > boundaries and server-generated citations are unchanged.
+>
+> **Conversational and audit-log update (2026-11-21):** The table below is a
+> historical prompt-cost baseline, not a description of current chat or logging.
+> Navi now answers general conversation without a matching document, but still
+> refuses unsupported server-state claims when no approved data was returned.
+> Slash commands log capped, credential-redacted argument values, including
+> /ask questions; final user-visible answers are logged after delivery.
+> Consult [ai-assistant.md](ai-assistant.md) for current privacy and retention guidance.
 
 **Date:** 2026-11-21  
 **Scope:** Source-level, offline review of TeamsDiscordBot `/ask`. No provider, Discord, MongoDB or REST_API calls. This is not a hosted-model answer-quality evaluation. The audited changes were transferred to the original repository checkout without editing concurrently maintained `docs/ai/*`, `Knowledge.ts` or `AiTools.ts`. At transfer, the original checkout was on `season-recap-refactor`; no local `main` branch existed.

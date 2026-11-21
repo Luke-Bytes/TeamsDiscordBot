@@ -59,6 +59,70 @@ test("Navi prompt has compact identity, evidence and safety invariants", () => {
   );
 });
 
+test("Navi answers introductions and everyday questions without requiring server evidence", async () => {
+  for (const [question, modelAnswer] of [
+    [
+      "who are you? what can you do?",
+      "I'm Navi, your Friendly Wars AI helper. I can chat, explain commands and look up permitted stats.",
+    ],
+    ["What is the capital of France?", "Paris is the capital of France."],
+    [
+      "Tell me a short joke",
+      "Why did the creeper cross the road? To get to the other side!",
+    ],
+  ]) {
+    let observedPrompt = "";
+    const result = await answerAiQuestion({
+      question,
+      organiser: false,
+      caller,
+      knowledge: [],
+      infer: async (messages) => {
+        observedPrompt = messages
+          .map((message) => message.content ?? "")
+          .join("\n");
+        return { content: modelAnswer, calls: [] };
+      },
+    });
+    assert(
+      result.text === modelAnswer && result.sources.length === 0,
+      "General chat is returned without fake citations: " + question
+    );
+    assert(
+      observedPrompt.includes("General chat") &&
+        observedPrompt.includes(question),
+      "Model is explicitly allowed to respond naturally to everyday questions"
+    );
+  }
+});
+
+test("Navi still refuses invented player statistics or game state without tools", async () => {
+  for (const question of [
+    "How many wins do I have this season?",
+    "What is my Elo?",
+    "Who won the last game?",
+    "What's the current game status?",
+  ]) {
+    const result = await answerAiQuestion({
+      question,
+      organiser: false,
+      caller,
+      knowledge: [],
+      infer: async () => ({
+        content: "Your Elo is 9000 and your team won.",
+        calls: [],
+      }),
+    });
+    assert(
+      !result.text.includes("9000") &&
+        result.text.includes("can't verify") &&
+        result.sources.length === 0 &&
+        result.toolNames.length === 0,
+      "Unverified server facts are not passed through: " + question
+    );
+  }
+});
+
 test("Navi omits tool schemas only for exact documented command help", async () => {
   const knowledge = buildApprovedKnowledge(process.cwd());
   let sentTools = -1;

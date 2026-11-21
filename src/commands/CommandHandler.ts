@@ -61,6 +61,7 @@ import {
   discordErrorCode,
 } from "../util/DiscordFailures";
 import { GameRecoveryCoordinator } from "../logic/ActiveGameRecovery";
+import { commandAuditLog } from "../util/CommandAuditLog";
 
 export class CommandHandler {
   commands: Command[] = [];
@@ -243,22 +244,14 @@ export class CommandHandler {
         );
 
         if (command) {
-          const subCommand = chatInteraction.options.getSubcommand(false);
-
-          const options = subCommand
-            ? chatInteraction.options.data.find(
-                (option) => option.name === subCommand
-              )?.options || []
-            : chatInteraction.options.data;
-
-          // Only log option names: free-form values may contain accidentally
-          // pasted credentials, URLs or personal data.
-          const optionsLog = options.map((opt) => opt.name).join(",");
-
+          // Include supplied values (and nested subcommand paths), but never
+          // resolved Discord objects, recognisable credentials or raw multiline text.
           console.log(
-            `[${chatInteraction.user.tag}] ran /${chatInteraction.commandName}` +
-              (subCommand ? ` ${subCommand}` : "") +
-              (optionsLog ? ` ${optionsLog}` : "")
+            commandAuditLog(
+              chatInteraction.user.tag,
+              chatInteraction.commandName,
+              chatInteraction.options.data
+            )
           );
 
           await command.execute(chatInteraction);
@@ -270,7 +263,11 @@ export class CommandHandler {
         );
         if (command) {
           console.log(
-            `[${messageInteraction.user.tag}] ran /${messageInteraction.commandName}`
+            commandAuditLog(
+              messageInteraction.user.tag,
+              messageInteraction.commandName,
+              [{ name: "targetId", value: messageInteraction.targetId }]
+            )
           );
           await command.execute(messageInteraction);
         }

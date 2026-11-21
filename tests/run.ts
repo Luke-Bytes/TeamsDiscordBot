@@ -1,6 +1,7 @@
 import "./cases/eventRegression.test";
 import "./cases/needCommand.test";
 import "./cases/aiAssistant.test";
+import "./cases/commandAuditLog.test";
 import "./cases/askDms.test";
 import "./cases/aiProviders.test";
 import "./cases/aiHistoricalState.test";

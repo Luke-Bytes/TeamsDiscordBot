@@ -1283,6 +1283,179 @@ test("TEMP MVP recovery: legacy slash metadata identifies the voter", () =>
     expected(proposal.mvpVotes.length, 1, "Legacy metadata accepted");
   }));
 
+test("TEMP MVP recovery: Discord.js legacy commandName 'mvp vote' is accepted with modern metadata", () =>
+  withFixture(async (f) => {
+    f.populate();
+    f.message(CHANNELS.redTeamChat, [], "The game has now ended", f.now - 4000);
+    const voterId = f.state.records[2].discordSnowflake;
+    const reply = f.mvpReply("RED", voterId, "RedTwo");
+    reply.interaction = {
+      type: InteractionType.ApplicationCommand,
+      commandName: "mvp vote",
+      user: { id: voterId },
+    };
+    const proposal = await buildDiscordRecovery(f.guild, f.options("started"));
+    expected(proposal.mvpVotes.length, 1, "Full slash-command name accepted");
+    expected(proposal.mvpVotes[0].voterId, voterId, "Correct voter retained");
+    assert(
+      !proposal.warnings.some((warning) =>
+        warning.includes("MVP confirmation message(s) could not")
+      ),
+      "No false skipped-vote warning"
+    );
+    installDiscordRecovery(proposal);
+    expected(
+      GameInstance.getInstance().mvpVotes.RED[
+        f.state.records[1].discordSnowflake
+      ],
+      1,
+      "Vote restored despite subcommand in legacy interaction name"
+    );
+    assert(
+      GameInstance.getInstance().hasVotedMvp(voterId),
+      "Voter bonus restored"
+    );
+  }));
+
+test("TEMP MVP recovery: legacy-only 'mvp vote' command name restores voter", () =>
+  withFixture(async (f) => {
+    f.populate();
+    f.message(
+      CHANNELS.blueTeamChat,
+      [],
+      "The game has now ended",
+      f.now - 4000
+    );
+    const voterId = f.state.records[6].discordSnowflake;
+    const reply = f.mvpReply("BLUE", voterId, "BlueTwo");
+    reply.interactionMetadata = undefined;
+    reply.interaction = {
+      type: InteractionType.ApplicationCommand,
+      commandName: "mvp vote",
+      user: { id: voterId },
+    };
+    const proposal = await buildDiscordRecovery(f.guild, f.options("started"));
+    expected(proposal.mvpVotes.length, 1, "Legacy-only subcommand recovered");
+  }));
+
+test("TEMP MVP recovery: thirteen Discord /mvp vote replies restore across both teams", () =>
+  withFixture(async (f) => {
+    const extraRed = Array.from({ length: 8 }, (_, index) => `RedMore${index}`);
+    const extraBlue = Array.from(
+      { length: 8 },
+      (_, index) => `BlueMore${index}`
+    );
+    for (const [index, name] of [...extraRed, ...extraBlue].entries()) {
+      const id = `player-more-${index}`;
+      f.state.records.push({
+        id,
+        discordSnowflake: (800000000000000001n + BigInt(index)).toString(),
+        minecraftAccounts: [name],
+        latestIGN: name,
+        primaryMinecraftAccount: `uuid-more-${index}`,
+      });
+      f.state.stats.set(id, {
+        playerId: id,
+        seasonId: "season",
+        elo: 1000,
+        wins: 0,
+        losses: 0,
+        winStreak: 0,
+        loseStreak: 0,
+        biggestWinStreak: 0,
+        biggestLosingStreak: 0,
+      });
+    }
+    const red = [...redNames, ...extraRed];
+    const blue = [...blueNames, ...extraBlue];
+    f.announce();
+    f.register([...red, ...blue]);
+    f.teams(red, blue);
+    f.draft(red, blue);
+    f.message(CHANNELS.redTeamChat, [], "The game has now ended", f.now - 4000);
+    const redVoters = f.state.records.filter((player: any) =>
+      red.slice(1, 7).includes(player.latestIGN)
+    );
+    const blueVoters = f.state.records.filter((player: any) =>
+      blue.slice(1, 8).includes(player.latestIGN)
+    );
+    for (const [team, voters, target] of [
+      ["RED", redVoters, red[8]],
+      ["BLUE", blueVoters, blue[8]],
+    ] as const) {
+      for (const voter of voters) {
+        const reply = f.mvpReply(team, voter.discordSnowflake, target);
+        reply.interaction = {
+          type: InteractionType.ApplicationCommand,
+          commandName: "mvp vote",
+          user: { id: voter.discordSnowflake },
+        };
+      }
+    }
+    const command = f.command();
+    const request = f.slash(f.options("started"));
+    await command.execute(request.i);
+    const preview = request.responses.find(
+      ([kind, payload]: any[]) => kind === "edit" && payload.embeds?.length
+    );
+    assert(!!preview, "13-vote preview built successfully");
+    assert(
+      preview[1].embeds[0].data.fields.some((field: any) =>
+        field.name.includes("Verified MVP votes (7)")
+      ),
+      "Preview displays all Blue votes"
+    );
+    await command.handleButtonPress(
+      f.button(f.getButtonId(request.responses)).i
+    );
+    const game = GameInstance.getInstance();
+    assert(game.isFinished, "Recovered ended-game lifecycle");
+    expected(
+      Object.values(game.mvpVotes.RED).reduce((sum, count) => sum + count, 0),
+      6,
+      "Six Red MVP votes restored"
+    );
+    expected(
+      Object.values(game.mvpVotes.BLUE).reduce((sum, count) => sum + count, 0),
+      7,
+      "Seven Blue MVP votes restored"
+    );
+    for (const voter of [...redVoters, ...blueVoters]) {
+      assert(
+        game.hasVotedMvp(voter.discordSnowflake),
+        `Voter ${voter.latestIGN} retains +1 ELO eligibility`
+      );
+    }
+  }));
+
+test("TEMP MVP recovery: skip warning identifies the exact rejection cause", () =>
+  withFixture(async (f) => {
+    f.populate();
+    f.message(
+      CHANNELS.blueTeamChat,
+      [],
+      "The game has now ended",
+      f.now - 4000
+    );
+    const reply = f.mvpReply(
+      "BLUE",
+      f.state.records[6].discordSnowflake,
+      "BlueTwo"
+    );
+    reply.interactionMetadata = undefined;
+    const proposal = await buildDiscordRecovery(f.guild, f.options("started"));
+    assert(
+      proposal.warnings.some((warning) =>
+        warning.includes("1 missing voter identity")
+      ),
+      "Preview explains missing interaction identity"
+    );
+    assert(
+      proposal.sourceSummary.some((line) => line.includes("1 skipped")),
+      "Discord evidence shows exact skip count"
+    );
+  }));
+
 test("TEMP MVP recovery: duplicate confirmations for one voter restore neither", () =>
   withFixture(async (f) => {
     f.populate();
@@ -1297,6 +1470,12 @@ test("TEMP MVP recovery: duplicate confirmations for one voter restore neither",
         warning.includes("2 MVP confirmation")
       ),
       "Duplicate replies disclosed"
+    );
+    assert(
+      proposal.warnings.some((warning) =>
+        warning.includes("2 duplicate voter")
+      ),
+      "Duplicate-voter reason is shown"
     );
     installDiscordRecovery(proposal);
     assert(

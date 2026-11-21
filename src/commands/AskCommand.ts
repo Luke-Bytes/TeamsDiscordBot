@@ -23,7 +23,7 @@ const SAFE_QUESTION =
 export default class AskCommand implements Command {
   public name = "ask";
   public description =
-    "Ask about Friendly Wars rules or approved public statistics";
+    "Ask Navi about anything relating to Friendly Wars!";
   public buttonIds: string[] = [];
   public data: SlashCommandOptionsOnlyBuilder = new SlashCommandBuilder()
     .setName("ask")
@@ -32,7 +32,7 @@ export default class AskCommand implements Command {
     .addStringOption((option) =>
       option
         .setName("question")
-        .setDescription("Your question (no passwords or private data)")
+        .setDescription("Ask Navi a Question!")
         .setRequired(true)
         .setMinLength(3)
         .setMaxLength(450)
