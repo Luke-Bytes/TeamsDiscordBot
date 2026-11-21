@@ -293,7 +293,13 @@ export default class GameCommand implements Command {
             : "Beginning post game clean up of channels and calculating elo.."
         );
         try {
-          await cleanUpAfterGame(guild);
+          // Keep persistence and cleanup isolated from late roster changes.
+          // Queued commands can verify the game lifecycle after cleanup completes.
+          if (TeamCommand.instance) {
+            await TeamCommand.instance.runRosterOperation(() => cleanUpAfterGame(guild));
+          } else {
+            await cleanUpAfterGame(guild);
+          }
         } catch (error) {
           console.error(`event=match.cleanup game=${gameInstance.gameId ?? gameInstance.getLifecycleToken()} outcome=failed stage=save-or-cleanup error_type=${error instanceof Error ? error.name : "unknown"}`);
           // Block new announcements in this process as well as on restart

@@ -144,6 +144,70 @@ test("Register late signups message when teams decided", async () => {
   assert(!!edit, "Shows a late signup message when teams decided");
 });
 
+test("Register stays open during game start, play and after finish without joining a team", async () => {
+  const game = CurrentGameManager.getCurrentGame();
+  const cmd = new RegisterCommand(new TeamCommand());
+  const cfg = ConfigManager.getConfig();
+  const originalAddPlayer = game.addPlayerByDiscordId;
+  const originalByDiscord = (prismaClient as any).player.byDiscordSnowflake;
+  const originalFindMany = (prismaClient as any).playerPunishment.findMany;
+  const originalUsernameToUUID = MojangAPI.usernameToUUID;
+
+  (prismaClient as any).player.byDiscordSnowflake = async () => null;
+  (prismaClient as any).playerPunishment.findMany = async () => [];
+  (MojangAPI as any).usernameToUUID = async (name: string) => mockUUID(name);
+  (game as any).addPlayerByDiscordId = async (id: string, ign: string) => {
+    const player = {
+      discordSnowflake: id,
+      ignUsed: ign,
+      primaryMinecraftAccount: mockUUID(ign),
+    };
+    game.teams.UNDECIDED.push(player as any);
+    return { error: false, playerInstance: player };
+  };
+
+  try {
+    for (const status of ["starting", "started", "finished"] as const) {
+      game.reset();
+      game.announced = true;
+      game.teamsDecidedBy = "RANDOMISED";
+      game.tryBeginGameStart();
+      if (status !== "starting") game.completeGameStart();
+      if (status === "finished") game.isFinished = true;
+
+      const guild = new FakeGuild() as any;
+      const userId = `late-${status}`;
+      guild.addMember(new FakeGuildMember(userId));
+      const interaction = createChatInputInteraction(userId, {
+        guild,
+        channelId: cfg.channels.registration,
+        strings: { ingamename: "LatePlayer" },
+      });
+      await cmd.execute(interaction);
+
+      const reply = interaction.replies.find(
+        (entry) => entry.type === "editReply"
+      );
+      assert(
+        /successfully registered/i.test(String(reply?.payload?.content)),
+        `Registration succeeds while game is ${status}`
+      );
+      assert(
+        game.teams.UNDECIDED.length === 1 &&
+          game.teams.RED.length === 0 &&
+          game.teams.BLUE.length === 0,
+        `Registration while ${status} leaves player unassigned`
+      );
+    }
+  } finally {
+    (game as any).addPlayerByDiscordId = originalAddPlayer;
+    (prismaClient as any).player.byDiscordSnowflake = originalByDiscord;
+    (prismaClient as any).playerPunishment.findMany = originalFindMany;
+    (MojangAPI as any).usernameToUUID = originalUsernameToUUID;
+    game.reset();
+  }
+});
+
 test("Register nudges when IGN provided but already known", async () => {
   const teamCmd = new TeamCommand();
   const cmd = new RegisterCommand(teamCmd);

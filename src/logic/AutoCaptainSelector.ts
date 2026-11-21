@@ -23,12 +23,11 @@ export class AutoCaptainSelector {
     if (
       !game.announced ||
       game.isRestarting ||
-      game.getGameStartStatus() === "starting" ||
-      game.isFinished
+      game.getGameStartStatus() === "starting"
     ) {
       return {
         error:
-          "Captains cannot be selected before announcement, during transitions, or after finishing.",
+          "Captains cannot be selected before announcement or during game transitions.",
       };
     }
     if (TeamCommand.instance?.isTeamPickingSessionActive()) {
@@ -135,7 +134,7 @@ export class AutoCaptainSelector {
         game.setTeamCaptain("RED", second);
       }
 
-      if (game.getGameStartStatus() === "started") {
+      if (game.getGameStartStatus() === "started" && !game.isFinished) {
         await CaptainPlanDMManager.instance?.replaceCaptainDuringPlay(
           guild.client,
           "BLUE",

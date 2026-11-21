@@ -3,6 +3,7 @@ import { assert, assertEqual } from "../framework/assert";
 import { FakeGuild, FakeGuildMember, createChatInputInteraction } from "../framework/mocks";
 import { GameInstance } from "../../src/database/GameInstance";
 import PlayerCommand from "../../src/commands/PlayerCommand";
+import CaptainCommand from "../../src/commands/CaptainCommand";
 import TeamCommand from "../../src/commands/TeamCommand";
 import { ConfigManager } from "../../src/ConfigManager";
 import { PrismaUtils } from "../../src/util/PrismaUtils";
@@ -71,31 +72,61 @@ test("a roster edit whose member fetch completes after reset cannot populate the
   game.reset();
 });
 
-test("organiser player command does not change a starting or completed roster", async () => {
+test("organiser player command protects the in-progress start transition", async () => {
   const game = GameInstance.getInstance();
   const guild = new FakeGuild();
   const organiser = guild.addMember(new FakeGuildMember("9000", [
     ConfigManager.getConfig().roles.organiserRole,
   ]));
   const command = new PlayerCommand();
-  for (const finished of [false, true]) {
-    game.reset();
-    game.announced = true;
-    game.teams.UNDECIDED = [{ discordSnowflake: "12345", ignUsed: "Alice" }] as any;
-    game.tryBeginGameStart();
-    if (finished) game.completeGameStart();
-    game.isFinished = finished;
-    const interaction = createChatInputInteraction("9000", {
+  game.reset();
+  game.announced = true;
+  game.teams.UNDECIDED = [{ discordSnowflake: "12345", ignUsed: "Alice" }] as any;
+  game.tryBeginGameStart();
+  const interaction = createChatInputInteraction("9000", {
+    subcommand: "add", strings: { player: "Alice", team: "BLUE" },
+    member: organiser, guild: guild as any,
+  });
+  await command.execute(interaction);
+  assertEqual(game.getPlayersOfTeam("BLUE").length, 0, "Cannot edit a mid-transition roster");
+  game.reset();
+});
+
+test("organiser player command can add players after game end", async () => {
+  const game = GameInstance.getInstance();
+  game.reset();
+  game.announced = true;
+  game.teams.UNDECIDED = [{ discordSnowflake: "12345", ignUsed: "Alice" }] as any;
+  game.tryBeginGameStart();
+  game.completeGameStart();
+  game.isFinished = true;
+
+  const guild = new FakeGuild();
+  const roles = ConfigManager.getConfig().roles;
+  const organiser = guild.addMember(new FakeGuildMember("9000", [roles.organiserRole]));
+  guild.addMember(new FakeGuildMember("12345"));
+  const oldFind = PrismaUtils.findPlayer;
+  const previousTeamCommand = TeamCommand.instance;
+  new TeamCommand();
+  (PrismaUtils as any).findPlayer = async (name: string) => ({ latestIGN: name });
+  try {
+    const interaction = createChatInputInteraction(organiser.id, {
       subcommand: "add", strings: { player: "Alice", team: "BLUE" },
       member: organiser, guild: guild as any,
     });
-    await command.execute(interaction);
-    assertEqual(game.getPlayersOfTeam("BLUE").length, 0, "Cannot edit a starting/finished game");
-    assert(interaction.replies.some((reply) =>
-      reply.type === "editReply" && String(reply.payload).includes("require an active game")),
-      "Guard should explain why edits are rejected");
+    await new PlayerCommand().execute(interaction);
+    assertEqual(game.getPlayersOfTeam("BLUE").length, 1,
+      "Organiser can add to a finished game's roster");
+    assert(
+      interaction.replies.some((r) => r.type === "editReply" &&
+        String(r.payload).includes("Successfully")),
+      "A finished-game edit reports success"
+    );
+  } finally {
+    (PrismaUtils as any).findPlayer = oldFind;
+    TeamCommand.instance = previousTeamCommand;
+    game.reset();
   }
-  game.reset();
 });
 
 test("organisers can add, move, replace and remove players during a started game", async () => {
@@ -145,6 +176,69 @@ test("organisers can add, move, replace and remove players during a started game
   } finally {
     (PrismaUtils as any).findPlayer = oldFind;
     TeamCommand.instance = oldTeamCommand;
+    game.reset();
+  }
+});
+
+test("captain set and randomise work after finishing without moving players", async () => {
+  const game = GameInstance.getInstance();
+  game.reset();
+  game.announced = true;
+  game.teamsDecidedBy = "RANDOMISED";
+  game.teams.BLUE = [
+    { discordSnowflake: "old-blue", ignUsed: "OldBlue", captain: true, elo: 1500 },
+    { discordSnowflake: "new-blue", ignUsed: "NewBlue", captain: false, elo: 1700 },
+  ] as any;
+  game.teams.RED = [
+    { discordSnowflake: "red-captain", ignUsed: "RedCap", captain: true, elo: 1600 },
+  ] as any;
+  game.tryBeginGameStart();
+  game.completeGameStart();
+  game.isFinished = true;
+
+  const guild = new FakeGuild();
+  const roles = ConfigManager.getConfig().roles;
+  const organiser = guild.addMember(new FakeGuildMember("captain-org", [roles.organiserRole]));
+  guild.addMember(new FakeGuildMember("old-blue", [roles.captainRole, roles.blueTeamRole]));
+  guild.addMember(new FakeGuildMember("new-blue", [roles.blueTeamRole]));
+  guild.addMember(new FakeGuildMember("red-captain", [roles.captainRole, roles.redTeamRole]));
+  const previousFind = PrismaUtils.findPlayer;
+  const previousTeamCommand = TeamCommand.instance;
+  const teamCommand = new TeamCommand();
+  (PrismaUtils as any).findPlayer = async () => ({
+    discordSnowflake: "new-blue",
+  });
+  try {
+    const command = new CaptainCommand(teamCommand);
+    const set = createChatInputInteraction(organiser.id, {
+      guild: guild as any, member: organiser, subcommand: "set",
+      strings: { user: "NewBlue", team: "blue" },
+    });
+    await command.execute(set);
+    assert(
+      set.replies.some((r) => r.type === "editReply" &&
+        String(r.payload?.content).includes("Successfully set captain")),
+      "Captain set succeeds after game end"
+    );
+    assert(game.getCaptainOfTeam("BLUE")?.discordSnowflake === "new-blue",
+      "New captain replaces old after game end");
+    assert(game.teams.BLUE.length === 2 && game.teams.RED.length === 1,
+      "Finished game team membership stays unchanged");
+
+    const randomise = createChatInputInteraction(organiser.id, {
+      guild: guild as any, member: organiser, subcommand: "randomise",
+    });
+    await command.execute(randomise);
+    assert(
+      randomise.replies.some((r) => r.type === "editReply" &&
+        String(r.payload).includes("Captains have been selected")),
+      "Captain randomise also works after game end"
+    );
+    assert(game.teams.BLUE.length === 2 && game.teams.RED.length === 1,
+      "Randomised captains do not change completed teams");
+  } finally {
+    (PrismaUtils as any).findPlayer = previousFind;
+    TeamCommand.instance = previousTeamCommand;
     game.reset();
   }
 });

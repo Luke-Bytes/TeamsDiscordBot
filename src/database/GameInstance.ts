@@ -840,7 +840,7 @@ export class GameInstance {
   /** Allow edits before and during play; abort across resets or lifecycle transitions. */
   private canCompleteRosterMutation(token: string): boolean {
     return token === this.getLifecycleToken() &&
-      this.getGameStartStatus() !== "starting" && !this.isFinished && !this.isRestarting;
+      this.getGameStartStatus() !== "starting" && !this.isRestarting;
   }
 
   public async addPlayerByNameOrDiscord(

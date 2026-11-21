@@ -91,11 +91,10 @@ export default class CaptainCommand implements Command {
     if (
       !game.announced ||
       game.isRestarting ||
-      game.getGameStartStatus() === "starting" ||
-      game.isFinished
+      game.getGameStartStatus() === "starting"
     ) {
       await interaction.editReply(
-        "Captains cannot be changed before announcement, during transitions, or after finishing."
+        "Captains cannot be changed before announcement or during game transitions."
       );
       return;
     }
@@ -159,7 +158,8 @@ export default class CaptainCommand implements Command {
       return;
     }
 
-    if (game.getGameStartStatus() === "started" && currentTeam !== teamColor) {
+    if ((game.getGameStartStatus() === "started" || game.isFinished) &&
+        currentTeam !== teamColor) {
       await interaction.editReply(
         "During play, select a captain already on the requested team."
       );
@@ -170,7 +170,6 @@ export default class CaptainCommand implements Command {
       resultMessage = await this.teamCommand.runRosterOperation(async () => {
         if (
           !game.announced ||
-          game.isFinished ||
           game.isRestarting ||
           game.getGameStartStatus() === "starting" ||
           game.getLifecycleToken() !== gameToken ||
@@ -183,7 +182,7 @@ export default class CaptainCommand implements Command {
           .find((p) => p.discordSnowflake === resolvedPlayer.discordSnowflake);
         if (!current) return "The selected player is no longer registered.";
         if (
-          game.getGameStartStatus() === "started" &&
+          (game.getGameStartStatus() === "started" || game.isFinished) &&
           game.getPlayersTeam(current) !== teamColor
         ) {
           return "During play, select a captain already on the requested team.";
@@ -218,19 +217,18 @@ export default class CaptainCommand implements Command {
 
         if (
           game.getLifecycleToken() !== gameToken ||
-          game.isFinished ||
           game.isRestarting ||
           game.getGameStartStatus() === "starting"
         ) {
           return "The game changed while Discord roles were being updated. Captain state was not changed.";
         }
-        if (game.getGameStartStatus() === "started") {
+        if (game.getGameStartStatus() === "started" || game.isFinished) {
           if (previousCaptain) previousCaptain.captain = false;
           current.captain = true;
         } else {
           game.setTeamCaptain(teamColor, current);
         }
-        if (game.getGameStartStatus() === "started") {
+        if (game.getGameStartStatus() === "started" && !game.isFinished) {
           await CaptainPlanDMManager.instance?.replaceCaptainDuringPlay(
             interaction.client,
             teamColor,

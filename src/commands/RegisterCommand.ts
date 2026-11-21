@@ -49,7 +49,8 @@ export default class RegisterCommand implements Command {
       return;
     }
 
-    if (!CurrentGameManager.getCurrentGame().announced) {
+    const game = CurrentGameManager.getCurrentGame();
+    if (!game.announced) {
       await interaction.reply({
         content: "No game has been announced yet!",
         flags: MessageFlags.Ephemeral,
@@ -58,12 +59,7 @@ export default class RegisterCommand implements Command {
     }
 
     await interaction.deferReply();
-
-    const game = CurrentGameManager.getCurrentGame();
-    if (game.getGameStartStatus() !== "idle" || game.isFinished) {
-      await interaction.editReply({ content: "Registration is closed because the game has started." });
-      return;
-    }
+    const gameToken = game.getLifecycleToken();
 
     await PrismaUtils.updatePunishmentsForExpiry();
 
@@ -212,6 +208,10 @@ export default class RegisterCommand implements Command {
     let registrationCommitted = false;
     try {
       result = await this.teamCommand.runRosterOperation(async () => {
+        // I/O or game shutdown may have replaced the announcement while waiting.
+        if (!game.announced || game.getLifecycleToken() !== gameToken) {
+          return { error: "The announced game changed. Please check the roster before registering again." } as const;
+        }
         // Recheck immediately before committing after Mojang/DB I/O.
         if (!(await fetchGuildMember(interaction.guild!, discordUserId))) {
           return { error: "That user left the server before registration completed." } as const;

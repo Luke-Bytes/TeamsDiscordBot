@@ -141,11 +141,8 @@ export default class PlayerCommand implements Command {
 
   private async executeUnlocked(interaction: ChatInputCommandInteraction) {
     const game = CurrentGameManager.getCurrentGame();
-    if (!game.announced || game.isFinished || game.isRestarting ||
-        game.getGameStartStatus() === "starting") {
-      await interaction.editReply(
-        "Player roster edits require an active game that is not starting, restarting, or finished."
-      );
+    if (!game.announced) {
+      await interaction.editReply("No game has been announced yet.");
       return;
     }
     if (TeamCommand.instance?.isTeamPickingSessionActive()) {

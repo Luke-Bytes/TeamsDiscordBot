@@ -83,21 +83,6 @@ export default class UnregisterCommand implements Command {
 
     await interaction.deferReply();
 
-    const now = new Date();
-    const startTime = game.startTime || now;
-    const isLate =
-      game.isFinished ||
-      (game.teamsDecidedBy &&
-        now.getTime() - startTime.getTime() > 30 * 60 * 1000);
-
-    if (isLate || game.getGameStartStatus() !== "idle") {
-      await interaction.editReply({
-        content:
-          "The game has already started, it's too late to unregister now!",
-      });
-      return;
-    }
-
     const userTeam = Object.keys(game.teams).find((team) =>
       game.teams[team as Team].some(
         (player) => player.discordSnowflake === discordUserId
@@ -113,7 +98,11 @@ export default class UnregisterCommand implements Command {
         : "";
 
     let draftSyncFailed = false;
+    const token = game.getLifecycleToken();
     const result = await this.teamCommand.runRosterOperation(async () => {
+      if (!game.announced || game.getLifecycleToken() !== token) {
+        return { error: "The announced game changed before unregistering. Please check the roster." };
+      }
       const removed = await game.removePlayerByDiscordId(discordUserId);
       if (!removed?.error) {
         const session = this.teamCommand.teamPickingSession;

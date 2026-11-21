@@ -158,6 +158,101 @@ test("unregister during draft acknowledges once and synchronises the draft", asy
   game.reset();
 });
 
+test("unregister works during startup, play, and after finishing or the late cutoff", async () => {
+  const game = CurrentGameManager.getCurrentGame();
+  const priorTeamCommand = TeamCommand.instance;
+  const teamCommand = new TeamCommand();
+  const guild = new FakeGuild() as any;
+  const config = ConfigManager.getConfig();
+  try {
+    for (const phase of ["starting", "started", "finished"] as const) {
+      game.reset();
+      game.announced = true;
+      game.teamsDecidedBy = "RANDOMISED";
+      game.startTime = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      const id = `withdraw-${phase}`;
+      guild.addMember(new FakeGuildMember(id));
+      game.teams.RED.push(player(id));
+      game.tryBeginGameStart();
+      if (phase !== "starting") game.completeGameStart();
+      if (phase === "finished") game.isFinished = true;
+
+      const interaction = createChatInputInteraction(id, {
+        guild, channelId: config.channels.registration,
+      });
+      await new UnregisterCommand(teamCommand).execute(interaction);
+      assert(
+        !game.getPlayers().some((p) => p.discordSnowflake === id),
+        `Unregister removes a player during ${phase}`
+      );
+      assert(
+        interaction.replies.some((r) =>
+          r.type === "editReply" &&
+          /successfully unregistered/i.test(String(r.payload?.content))
+        ),
+        `Unregister succeeds during ${phase}`
+      );
+    }
+  } finally {
+    TeamCommand.instance = priorTeamCommand;
+    game.reset();
+  }
+});
+
+test("massregister does not close during startup, play, or after finishing", async () => {
+  const game = CurrentGameManager.getCurrentGame();
+  const previousTeamCommand = TeamCommand.instance;
+  const teamCommand = new TeamCommand();
+  const originalFind = prismaClient.player.findFirst;
+  const originalAdd = game.addPlayerByDiscordId;
+  const guild = new FakeGuild() as any;
+  const organiser = guild.addMember(new FakeGuildMember("mass-organiser", [
+    ConfigManager.getConfig().roles.organiserRole,
+  ]));
+  guild.addMember(new FakeGuildMember("mass-late"));
+  (prismaClient as any).player.findFirst = async () => ({
+    discordSnowflake: "mass-late", latestIGN: "MassLate",
+  });
+  (game as any).addPlayerByDiscordId = async (id: string, ign: string) => {
+    const added = player(id);
+    added.ignUsed = ign;
+    game.teams.UNDECIDED.push(added);
+    return { error: false, playerInstance: added };
+  };
+
+  try {
+    for (const phase of ["starting", "started", "finished"] as const) {
+      game.reset();
+      game.announced = true;
+      game.teamsDecidedBy = "RANDOMISED";
+      game.tryBeginGameStart();
+      if (phase !== "starting") game.completeGameStart();
+      if (phase === "finished") game.isFinished = true;
+      const interaction = createChatInputInteraction(organiser.id, {
+        guild, member: organiser, strings: { playerlist: "MassLate" },
+      });
+      await new MassRegisterCommand().execute(interaction);
+      assert(
+        game.teams.UNDECIDED.length === 1 &&
+        game.teams.RED.length === 0 &&
+        game.teams.BLUE.length === 0,
+        `Massregister during ${phase} leaves the player unassigned`
+      );
+      assert(
+        interaction.replies.some((r) =>
+          r.type === "editReply" && String(r.payload).includes("Registered (1)")
+        ),
+        `Massregister succeeds during ${phase}`
+      );
+    }
+  } finally {
+    (prismaClient as any).player.findFirst = originalFind;
+    (game as any).addPlayerByDiscordId = originalAdd;
+    TeamCommand.instance = previousTeamCommand;
+    game.reset();
+  }
+});
+
 test("old session message buttons cannot affect the new session", async () => {
   const command = new TeamCommand();
   const session = new RandomTeamPickingSession();

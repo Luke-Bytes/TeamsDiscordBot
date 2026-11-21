@@ -75,15 +75,11 @@ export default class MassRegisterCommand implements Command {
     await interaction.deferReply();
 
     const game = GameInstance.getInstance();
-    if (
-      !game.announced ||
-      game.isRestarting ||
-      game.getGameStartStatus() === "starting" ||
-      game.isFinished
-    ) {
-      await interaction.editReply("There is no open game registration.");
+    if (!game.announced) {
+      await interaction.editReply("No game has been announced yet.");
       return;
     }
+    const gameToken = game.getLifecycleToken();
     if (!interaction.guild) {
       await interaction.editReply("This command must be used in a server.");
       return;
@@ -123,17 +119,11 @@ export default class MassRegisterCommand implements Command {
           skipped.push(`${ign} (left server)`);
           continue;
         }
-        if (
-          game.getGameStartStatus() === "starting" ||
-          !game.announced ||
-          game.isRestarting ||
-          game.isFinished
-        ) {
-          skipped.push(`${ign} (registration closed)`);
-          continue;
-        }
         let registeredWithDraftWarning = false;
         const add = async () => {
+          if (!game.announced || game.getLifecycleToken() !== gameToken) {
+            return { error: "The announced game changed. Please check the roster." } as const;
+          }
           const added = await game.addPlayerByDiscordId(
             player.discordSnowflake,
             ign
