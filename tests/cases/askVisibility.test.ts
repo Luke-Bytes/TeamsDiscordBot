@@ -152,6 +152,58 @@ test("Guild /ask replies publicly with verified organiser tools and approved org
   );
 });
 
+test("Players can ask about organiser procedures publicly without receiving privileged tools", async () => {
+  const mock = guildInteraction(
+    "How do I announce a match with /announce start?",
+    false
+  );
+  await withOfflineGroq(
+    async (requests, logs) => {
+      await new AskCommand(settings).execute(mock.interaction as any);
+      assert(
+        mock.deferred.length === 1 &&
+          mock.deferred[0] === undefined &&
+          mock.edits.length === 1,
+        "A regular member can ask about organiser procedures in a public channel"
+      );
+      const payload = JSON.stringify(requests[0]);
+      assert(
+        payload.includes("docs/ai/organiser-game-ops.md") &&
+          payload.includes("only authorised roles can perform"),
+        "Approved organiser instructions are visible while execution remains role-restricted"
+      );
+      assert(
+        requests[0].tools.every(
+          (tool: any) =>
+            tool.function.name !== "get_organiser_status" &&
+            tool.function.name !== "get_game_diagnostics"
+        ),
+        "Organiser-only live tools are still withheld from ordinary players"
+      );
+      assert(
+        mock.edits[0].content.includes("/announce start") &&
+          logs[0]?.includes("outcome=completed scope=guild"),
+        "The public response is delivered and logged"
+      );
+    },
+    () =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              finish_reason: "stop",
+              message: {
+                content:
+                  "An organiser uses /announce start, reviews the preview and confirms it.",
+              },
+            },
+          ],
+        }),
+        { status: 200 }
+      )
+  );
+});
+
 test("Invalid /ask questions still reply privately without AI network access", async () => {
   const mock = guildInteraction("BOT_TOKEN=do-not-post-secret", true);
   const dev = ConfigManager.getConfig().dev;

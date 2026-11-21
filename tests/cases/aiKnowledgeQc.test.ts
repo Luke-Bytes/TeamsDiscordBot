@@ -557,8 +557,12 @@ test("Forty-six role-aware offline question probes retrieve relevant paragraphs"
     const found = retrieveApprovedKnowledge(chunks, item.question, organiser);
     assert(found.length <= 4, "Context ceiling is unchanged");
     assert(
-      found.every((c) => c.scope === "player" || organiser),
-      `Organiser knowledge leaked to player: ${item.question}`
+      found.every((c) =>
+        APPROVED.some(
+          (source) => source.path === c.source && source.scope === c.scope
+        )
+      ),
+      `Unapproved knowledge in response: ${item.question}`
     );
     const expected = found.find(
       (c) =>

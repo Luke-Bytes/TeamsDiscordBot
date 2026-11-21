@@ -318,7 +318,12 @@ export function retrieveApprovedKnowledge(
   if (!queryTerms.size) return [];
   const queryCommands = commands(question);
   const selfQuestion = /\b(my|mine)\b/i.test(question);
-  const scored = chunks.map((chunk) => {
+  const organiserTopic =
+    /\b(?:organis(?:er|ers|e|ing|ation)|admin|announce|recover|shutdown|diagnos(?:e|is|tics)|punish(?:ment|ments)?|rollover|draft|captain|moderation|pending|announcements?)\b|\/(?:announce|punish|event|recover-game|game diagnostics)/i.test(
+      question
+    );
+  const scored = chunks
+    .map((chunk) => {
       const body = terms(chunk.content);
       const title = terms(chunk.heading);
       const titleCommands = commands(chunk.heading);
@@ -337,6 +342,10 @@ export function retrieveApprovedKnowledge(
       // When people ask about "my" archived stats, prefer the documented
       // server-bound self tool over generic historical comparisons.
       if (selfQuestion && chunk.heading.startsWith("get_my_")) score += 7;
+      // Ordinary questions should not get swamped by organiser procedure
+      // paragraphs now that these reviewed guides are community-readable.
+      // Explicit organiser topics still compete by full relevance score.
+      if (chunk.scope === "player" && !organiserTopic && score > 0) score += 5;
       return { chunk, score, matchingTerms };
     })
     .filter(

@@ -107,12 +107,16 @@ cross-process quota coordination.
 ## Data and permissions
 
 Guild /ask requests are allowed only in the configured `channels.botCommands`
-channel. **Every server-channel answer uses player-safe guides and tool
-schemas, even when an organiser invokes the command**, because that answer
-is visible to everyone. Organiser-only explanations and tools are available
-only in a verified organiser's private DM with the bot. Bot DMs are also
-eligible, but **only for current members of the guild owning that configured
-channel**: the bot resolves that fixed channel
+channel, and answers there are public. **All reviewed player and organiser
+workflow guides are community-readable**: any verified member can ask how
+organisers announce, start, end or manage FW games. The organiser label
+describes who performs the action, not who is allowed to learn about it.
+A verified organiser may also request read-only, role-gated live diagnostics
+in the guild channel or in a DM; that filtered answer is visible to the
+channel when asked publicly. Ordinary members are not offered privileged
+live tools, and neither audience can trigger a state-changing action through
+AI. Bot DMs are also eligible, but **only for current members of the guild
+owning that configured channel**: the bot resolves that fixed channel
 through Discord, then fetches the DM sender's membership and organiser role
 from the associated guild. Missing channels, failed membership checks, other
 private interaction contexts, and arbitrary mutual guilds fail closed before
@@ -147,16 +151,18 @@ The knowledge store is built on first authorised request from an explicit,
 heading-level allowlist in `src/ai/Knowledge.ts`. Two short overviews
 (`docs/ai/player-guide.md` and `docs/ai/organiser-guide.md`) link to
 focused player, statistics/tool and organiser workflow guides. Each approved
-file has a single player or organiser audience. Some sensitive sections are
-deliberately excluded even when present on disk; other Markdown, source
-files, private event forms and operational logs are not indexed. Future
-additions require a file-and-heading review, not directory scanning.
+file has a player or organiser **topic tag**, not a secrecy classification.
+All selected headings are reviewed for community visibility; private or
+sensitive sections remain excluded even when present on disk. Other Markdown,
+source files, private event forms and operational logs are not indexed.
+Future additions require a file-and-heading review, not directory scanning.
 
 Retrieval refuses symlinks and files outside the project root, limits chunks
-(maximum four), and records headings, line spans and content hashes. Player
-requests are filtered **before** constructing the model prompt. Organiser-only
-tool schemas are also withheld from players, and every tool rechecks role and
-membership. The assistant rechecks permissions around each provider turn;
+(maximum four), and records headings, line spans and content hashes. It ranks
+the reviewed guidance by question relevance, favouring player instructions
+for general questions so organiser procedures do not crowd them out.
+Organiser-only **live tool schemas** remain withheld from players, and every
+tool rechecks role and membership. The assistant rechecks permissions around each provider turn;
 revocation prevents delivery of a privileged answer. The model has no
 filesystem browsing tool. Bot-verified citations and the read-only data source
 names are attached separately. Knowledge refresh is on process restart.

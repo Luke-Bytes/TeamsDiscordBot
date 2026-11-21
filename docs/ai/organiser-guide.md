@@ -1,6 +1,6 @@
 # Organiser AI knowledge guide
 
-**Verified organisers only.** This short overview distinguishes live bot memory, saved season data and external Discord effects. For concrete commands, see `organiser-game-ops.md` and `organiser-events-and-admin.md`; for read-only tool meaning, see `organiser-ai-tools.md`. `/ask` explains safe checks but never performs operations.
+**Community-readable organiser guidance.** These reviewed explanations are available to any verified server member; the commands and live organiser-only diagnostics still require their usual roles. This short overview distinguishes live bot memory, saved season data and external Discord effects. For concrete commands, see `organiser-game-ops.md` and `organiser-events-and-admin.md`; for read-only tool meaning, see `organiser-ai-tools.md`. `/ask` explains safe checks but never performs operations.
 
 ## How the bot works behind the scenes
 
@@ -18,4 +18,4 @@ When separately enabled, read-only REST_API historical tools can report past sea
 
 ## Organiser privacy and AI boundaries
 
-Organiser access adds approved operational explanations and filtered process counters, not raw logs, private application answers, credentials, internal IDs, arbitrary project files or database access. The assistant cannot start, end, shut down, recover, restart or configure a game. If recovery is blocked, persistence is uncertain, or Discord delivery cannot be verified, stop state-changing retries and involve the trusted operator through established procedures. Do not copy protected records into `/ask`.
+All members may read the reviewed operational explanations. Verified organisers can also use role-gated read-only process counters, but neither audience receives raw logs, private application answers, credentials, internal IDs, arbitrary project files or database access. The assistant cannot start, end, shut down, recover, restart or configure a game. If recovery is blocked, persistence is uncertain, or Discord delivery cannot be verified, stop state-changing retries and involve the trusted operator through established procedures. Do not copy protected records into `/ask`.

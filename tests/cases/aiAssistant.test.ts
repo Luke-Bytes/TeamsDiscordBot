@@ -339,7 +339,7 @@ test("Leaderboard caps database result size and uses Relaxed activity order", as
   }
 });
 
-test("Knowledge retrieval filters organiser-only guides and rejects symlinked source", () => {
+test("Reviewed organiser instructions are readable by members; unsafe sources still fail closed", () => {
   const chunks = buildApprovedKnowledge(process.cwd());
   assert(
     chunks.some((chunk) => chunk.source === "docs/ai/player-guide.md"),
@@ -351,8 +351,8 @@ test("Knowledge retrieval filters organiser-only guides and rejects symlinked so
     false
   );
   assert(
-    !player.some((chunk) => chunk.source === "docs/ai/organiser-guide.md"),
-    "No organiser excerpt to public caller"
+    player.some((chunk) => chunk.source === "docs/ai/organiser-guide.md"),
+    "Public callers may read approved organiser workflow explanations"
   );
   const organiser = retrieveApprovedKnowledge(
     chunks,
@@ -544,7 +544,7 @@ test("Stalled read-only tool yields a verified-data-unavailable answer", async (
   }
 });
 
-test("Player and organiser evidence plus tool schemas are separated before inference", async () => {
+test("Organiser guidance is public but privileged tool schemas still require the verified role", async () => {
   const knowledge = buildApprovedKnowledge(process.cwd());
   assert(knowledge.length > 10, "Human-reviewed AI guides are indexed");
   assert(
@@ -585,8 +585,8 @@ test("Player and organiser evidence plus tool schemas are separated before infer
     },
   });
   assert(
-    !playerPayload.includes("docs/ai/organiser-guide.md"),
-    "Organiser guide excluded even with a forged organiser hint"
+    playerPayload.includes("docs/ai/organiser-"),
+    "Relevant approved organiser workflow guidance is public even without the role"
   );
 
   let organiserPayload = "";
