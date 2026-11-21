@@ -26,7 +26,7 @@ export default class AskCommand implements Command {
   public data: SlashCommandOptionsOnlyBuilder = new SlashCommandBuilder()
     .setName("ask")
     .setDescription(
-      "Ask the optional AI assistant (sends your question to an external provider)"
+      "Ask Navi a Question!"
     )
     .addStringOption((option) =>
       option
