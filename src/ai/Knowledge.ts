@@ -30,6 +30,7 @@ export const APPROVED: readonly ApprovedSource[] = [
     scope: "player",
     headings: [
       "Getting help with commands",
+      "FW game process: announce, register, start, finish",
       "AI assistant privacy and limitations",
     ],
   },
@@ -302,20 +303,22 @@ function commands(text: string): Set<string> {
   );
 }
 
-/** Role filter runs before ranking: the model never sees an unapproved excerpt. */
+/**
+ * All explicitly approved workflow guides are community-readable. The
+ * 'organiser' scope labels who normally performs an operation, not who may
+ * learn how it works. Live organiser-only tools still enforce Discord roles.
+ */
 export function retrieveApprovedKnowledge(
   chunks: readonly KnowledgeChunk[],
   question: string,
-  organiser: boolean,
+  _organiser: boolean,
   limit = 4
 ): KnowledgeChunk[] {
   const queryTerms = terms(question);
   if (!queryTerms.size) return [];
   const queryCommands = commands(question);
   const selfQuestion = /\b(my|mine)\b/i.test(question);
-  const scored = chunks
-    .filter((c) => c.scope === "player" || organiser)
-    .map((chunk) => {
+  const scored = chunks.map((chunk) => {
       const body = terms(chunk.content);
       const title = terms(chunk.heading);
       const titleCommands = commands(chunk.heading);
@@ -344,6 +347,13 @@ export function retrieveApprovedKnowledge(
     .sort(
       (a, b) =>
         b.score - a.score ||
+        // When relevance ties, ordinary player guidance comes first unless
+        // the question itself is better matched by an organiser guide.
+        (a.chunk.scope === b.chunk.scope
+          ? 0
+          : a.chunk.scope === "player"
+            ? -1
+            : 1) ||
         a.chunk.source.localeCompare(b.chunk.source) ||
         a.chunk.startLine - b.chunk.startLine
     );

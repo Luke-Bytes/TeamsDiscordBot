@@ -74,6 +74,7 @@ function mockDm(
     },
   };
   return {
+    guild,
     interaction,
     replies,
     edits,
@@ -128,8 +129,9 @@ test("DM /ask uses its configured guild and logs only the sanitised delivered an
     );
     assert(
       mock.replies.length === 0 &&
-        mock.defers[0].flags === MessageFlags.Ephemeral,
-      "Successful DM uses an ephemeral interaction response"
+        mock.defers.length === 1 &&
+        mock.defers[0] === undefined,
+      "DM works without an ephemeral response flag (the DM channel is private)"
     );
     assert(requests.length === 1, "Exactly one inference request");
     assert(

@@ -5,7 +5,9 @@ export const AI_DEFAULTS = {
   dailyRequestLimit: 50,
   requestTimeoutMs: 20_000,
   maxResponseBytes: 64 * 1024,
-  maxOutputTokens: 500,
+  // GPT-OSS completion tokens also cover internal reasoning before visible text.
+  // Keep a bounded but less truncation-prone allowance; the prompt remains concise.
+  maxOutputTokens: 1024,
   maxToolCalls: 4,
   maxToolRounds: 2,
   temperature: 0.1,

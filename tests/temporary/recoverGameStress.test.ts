@@ -417,7 +417,11 @@ function makeFixture() {
           },
         },
       },
-      options: { getString: (key: string) => values[key] ?? null },
+      options: {
+        getString: (key: string) => values[key] ?? null,
+        getBoolean: (key: string) =>
+          key === "repair_existing" ? (opts.repairExisting ?? false) : null,
+      },
       reply: async (payload: any) => {
         responses.push(["reply", payload]);
         return {};
@@ -1573,6 +1577,197 @@ test("TEMP MVP recovery: changing reply voter after preview blocks confirmation"
     assert(
       !GameInstance.getInstance().announced,
       "Vote attribution change refused"
+    );
+  }));
+
+test("TEMP recovery repair: preserves the current game, restores missing votes and extends plans", () =>
+  withFixture(async (f) => {
+    f.populate();
+    f.message(CHANNELS.redTeamChat, [], "The game has now ended", f.now - 4000);
+    const plan = f.message(
+      CHANNELS.redTeamChat,
+      [],
+      "Mid Blocks Plan\nRedCap = runner\nGame Plan\n" +
+        Array.from({ length: 10 }, (_, index) => `Slot${index} = task`).join(
+          "\n"
+        ),
+      f.now - 3000,
+      ORGANISER_ID
+    );
+    const initial = await buildDiscordRecovery(f.guild, f.options("started"));
+    installDiscordRecovery(initial);
+    const game = GameInstance.getInstance();
+    const gameId = game.gameId;
+    const originalRedPlan = game.redTeamPlan?.gamePlan;
+    assert(originalRedPlan?.includes("Slot9"), "Original plan recorded");
+    assert(!originalRedPlan?.includes("Slot11"), "Original plan incomplete");
+
+    plan.content += "\nSlot10 = repair\nSlot11 = repair";
+    f.mvpReply("RED", f.state.records[2].discordSnowflake, "RedTwo");
+    f.mvpReply("BLUE", f.state.records[6].discordSnowflake, "BlueTwo");
+    const cmd = f.command();
+    const opts = { ...f.options("started"), repairExisting: true };
+    const request = f.slash(opts);
+    await cmd.execute(request.i);
+    const preview = request.responses.find(
+      ([kind, payload]: any[]) => kind === "edit" && payload.embeds?.length
+    );
+    assert(!!preview, "Repair requires an organiser preview");
+    assert(
+      preview[1].embeds[0].data.title.includes("repair existing game"),
+      "Repair clearly labeled"
+    );
+    assert(
+      preview[1].embeds[0].data.description.includes("2 new MVP votes"),
+      "Two verified votes selected for repair"
+    );
+    assert(
+      preview[1].embeds[0].data.description.includes("RED plan extend"),
+      "Extended plan is disclosed"
+    );
+    expected(
+      game.mvpVotes.RED[f.state.records[1].discordSnowflake],
+      undefined,
+      "No mutation before confirmation"
+    );
+    await cmd.handleButtonPress(f.button(f.getButtonId(request.responses)).i);
+    expected(game.gameId, gameId, "Current game identity preserved");
+    expected(
+      game.mvpVotes.RED[f.state.records[1].discordSnowflake],
+      1,
+      "Red vote restored"
+    );
+    expected(
+      game.mvpVotes.BLUE[f.state.records[5].discordSnowflake],
+      1,
+      "Blue vote restored"
+    );
+    assert(
+      game.hasVotedMvp(f.state.records[2].discordSnowflake),
+      "Red voter bonus restored"
+    );
+    assert(
+      game.redTeamPlan?.gamePlan?.includes("Slot11 = repair"),
+      "Full plan restored"
+    );
+    assert(game.isFinished, "Game remains ended");
+    expected(f.state.writes, 0, "No persistence writes");
+
+    const secondRequest = f.slash(opts);
+    await cmd.execute(secondRequest.i);
+    const secondPreview = secondRequest.responses.find(
+      ([kind, payload]: any[]) => kind === "edit" && payload.embeds?.length
+    );
+    assert(
+      secondPreview[1].embeds[0].data.description.includes("0 new MVP votes"),
+      "Repair is idempotent"
+    );
+    await cmd.handleButtonPress(
+      f.button(f.getButtonId(secondRequest.responses)).i
+    );
+    expected(
+      game.mvpVotes.RED[f.state.records[1].discordSnowflake],
+      1,
+      "No double counting"
+    );
+  }));
+
+test("TEMP recovery repair: rejects ordinary active games and saved matches", () =>
+  withFixture(async (f) => {
+    f.populate();
+    await reject(
+      () =>
+        buildDiscordRecovery(
+          f.guild,
+          f.options("started"),
+          false,
+          GameInstance.getInstance()
+        ),
+      "Only an ended"
+    );
+    f.message(CHANNELS.redTeamChat, [], "The game has now ended", f.now - 4000);
+    const proposal = await buildDiscordRecovery(f.guild, f.options("started"));
+    installDiscordRecovery(proposal);
+    f.state.existing = true;
+    await reject(
+      () =>
+        buildDiscordRecovery(
+          f.guild,
+          f.options("started"),
+          false,
+          GameInstance.getInstance()
+        ),
+      "already stored"
+    );
+  }));
+
+test("TEMP recovery repair: stale live state and conflicting rosters cannot be overwritten", () =>
+  withFixture(async (f) => {
+    f.populate();
+    f.message(CHANNELS.redTeamChat, [], "The game has now ended", f.now - 4000);
+    installDiscordRecovery(
+      await buildDiscordRecovery(f.guild, f.options("started"))
+    );
+    const game = GameInstance.getInstance();
+    const opts = { ...f.options("started"), repairExisting: true };
+    const cmd = f.command();
+    const request = f.slash(opts);
+    await cmd.execute(request.i);
+    game.mvpVotes.RED[f.state.records[1].discordSnowflake] = 2;
+    await cmd.handleButtonPress(f.button(f.getButtonId(request.responses)).i);
+    expected(
+      game.mvpVotes.RED[f.state.records[1].discordSnowflake],
+      2,
+      "Stale preview cannot change votes"
+    );
+    const changed = game.teams.RED[1].captain;
+    game.teams.RED[1].captain = true;
+    const second = f.slash(opts);
+    await cmd.execute(second.i);
+    assert(
+      second.responses.some(
+        ([kind, payload]: any[]) =>
+          kind === "edit" &&
+          typeof payload.content === "string" &&
+          payload.content.includes("roster or captains differ")
+      ),
+      "Roster drift prevents repair preview"
+    );
+    game.teams.RED[1].captain = changed;
+  }));
+
+test("TEMP recovery repair: unreviewed plan replacements cannot overwrite existing plans", () =>
+  withFixture(async (f) => {
+    f.populate();
+    f.message(CHANNELS.redTeamChat, [], "The game has now ended", f.now - 4000);
+    const source = f.message(
+      CHANNELS.redTeamChat,
+      [],
+      "Mid Blocks Plan\nRedCap = runner\nGame Plan\nRedCap = gear",
+      f.now - 3000,
+      ORGANISER_ID
+    );
+    installDiscordRecovery(
+      await buildDiscordRecovery(f.guild, f.options("started"))
+    );
+    const game = GameInstance.getInstance();
+    source.content =
+      "Mid Blocks Plan\nRedCap = changed\nGame Plan\nRedCap = replaced";
+    const cmd = f.command();
+    const request = f.slash({ ...f.options("started"), repairExisting: true });
+    await cmd.execute(request.i);
+    const preview = request.responses.find(
+      ([kind, payload]: any[]) => kind === "edit" && payload.embeds?.length
+    );
+    assert(
+      preview?.[1].embeds[0].data.description.includes("RED plan unchanged"),
+      "Conflicting plan does not qualify for automatic replacement"
+    );
+    await cmd.handleButtonPress(f.button(f.getButtonId(request.responses)).i);
+    expected(
+      game.redTeamPlan?.gamePlan,
+      "RedCap = gear",
+      "Manual plan retained"
     );
   }));
 

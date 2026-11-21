@@ -12,6 +12,12 @@
 > refuses unsupported server-state claims when no approved data was returned.
 > Slash commands log capped, credential-redacted argument values, including
 > /ask questions; final user-visible answers are logged after delivery.
+>
+> **Public /ask update (2026-11-21):** Guild answers are now public, with
+> player-safe evidence/tools even for organiser callers; organiser-only context
+> remains available in their private DMs. Navi now knows FW is the Friendly
+> Wars Shotbow Annihilation community and favours brief, direct responses.
+> Provider failures use bounded nonsecret status codes in the operator log.
 > Consult [ai-assistant.md](ai-assistant.md) for current privacy and retention guidance.
 
 **Date:** 2026-11-21  

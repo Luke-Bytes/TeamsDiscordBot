@@ -31,9 +31,12 @@ export async function requestAiJson(
       headers: { "content-type": "application/json", ...headers },
       body: JSON.stringify(payload),
     });
-    if (response.status === 429) throw new AiTransportError("busy");
-    if (response.status === 408) throw new AiTransportError("timeout");
-    if (!response.ok) throw new AiTransportError("unavailable");
+    // HTTP status is safe to log; never log provider error bodies or headers.
+    if (response.status === 429) throw new AiTransportError("busy", "http_429");
+    if (response.status === 408)
+      throw new AiTransportError("timeout", "http_408");
+    if (!response.ok)
+      throw new AiTransportError("unavailable", `http_${response.status}`);
     if (!response.body) throw new AiTransportError("invalid");
     const reader = response.body.getReader();
     const chunks: Uint8Array[] = [];

@@ -19,11 +19,10 @@ import { buildApprovedKnowledge, KnowledgeChunk } from "../ai/Knowledge";
 const SAFE_QUESTION =
   /(?:sk-[a-zA-Z0-9_-]{16,}|AIza[a-zA-Z0-9_-]{20,}|BOT_TOKEN\s*=|DATABASE_URL\s*=|-----BEGIN .*PRIVATE KEY-----)/i;
 
-/** Explicit, ephemeral opt-in command. AI never listens to ordinary messages. */
+/** Explicit opt-in slash command. Server replies are public; DMs stay private. */
 export default class AskCommand implements Command {
   public name = "ask";
-  public description =
-    "Ask Navi about anything relating to Friendly Wars!";
+  public description = "Ask Navi about anything relating to Friendly Wars!";
   public buttonIds: string[] = [];
   public data: SlashCommandOptionsOnlyBuilder = new SlashCommandBuilder()
     .setName("ask")
@@ -120,7 +119,8 @@ export default class AskCommand implements Command {
     }
     const began = Date.now();
     try {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      // Public server-channel reply; a bot DM is private by its channel type.
+      await interaction.deferReply();
       // Force a fresh Discord membership check; never rely on model text or stale role caches.
       const verifyMembership: AiCaller["verifyMembership"] = async () => {
         try {
@@ -158,6 +158,9 @@ export default class AskCommand implements Command {
       this.knowledge ??= buildApprovedKnowledge(process.cwd());
       const result = await answerAiQuestion({
         question,
+        // Audience is based on the caller's verified role, not DM vs guild.
+        // Reviewed workflow descriptions are public; live organiser-only
+        // tools remain role-gated even when a reply appears in a public channel.
         organiser: membership.organiser,
         caller: {
           discordUserId: interaction.user.id,
@@ -200,7 +203,7 @@ export default class AskCommand implements Command {
       // JSON quoting keeps untrusted text on one log line. Never log prompts,
       // tool payloads, provider bodies, or credentials.
       console.info(
-        `ai.ask outcome=completed scope=${directMessage ? "dm" : "guild"} provider=${selected.provider} duration_ms=${Date.now() - began} tools=${result.toolNames.length} reply=${JSON.stringify(delivered)}`
+        `ai.ask outcome=${result.failureKind ? "provider_failed" : "completed"} scope=${directMessage ? "dm" : "guild"} provider=${selected.provider} duration_ms=${Date.now() - began} tools=${result.toolNames.length}${result.failureKind ? ` error_kind=${result.failureKind} error_code=${result.failureCode ?? "unknown"}` : ""} reply=${JSON.stringify(delivered)}`
       );
     } catch {
       try {

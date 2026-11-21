@@ -69,7 +69,10 @@ export function createGroqInference(
       choice.finish_reason !== "stop" &&
       choice.finish_reason !== "tool_calls"
     )
-      throw new AiTransportError("invalid");
+      throw new AiTransportError(
+        "invalid",
+        choice.finish_reason === "length" ? "finish_length" : "finish_other"
+      );
     if (message.content != null && typeof message.content !== "string")
       throw new AiTransportError("invalid");
     if (typeof message.content === "string" && message.content.length > 8000)

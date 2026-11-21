@@ -28,6 +28,8 @@ export type RecoveryOptions = {
   selectionMethod?: GameInstance["teamsDecidedBy"];
   redCaptain?: string;
   blueCaptain?: string;
+  /** Command-only opt-in to repair an existing in-memory recovered game. */
+  repairExisting?: boolean;
 };
 
 type TeamKey = "RED" | "BLUE" | "UNDECIDED";
@@ -500,12 +502,42 @@ function hasUnresolvedGameState(game: GameInstance): boolean {
   );
 }
 
+export function assertRepairableRecoveredGame(game: GameInstance): void {
+  if (
+    GameInstance.getInstance() !== game ||
+    !game.announced ||
+    !game.isFinished ||
+    game.getGameStartStatus() !== "started" ||
+    !game.startTime ||
+    !game.endTime ||
+    !game.hasFinalizedPlayableTeams() ||
+    !game.announcementMessage ||
+    !game.recoveryPausedWorkflows.some((item) =>
+      item.includes("Original timers, polls, feed updates")
+    ) ||
+    game.isRestarting
+  )
+    throw new Error(
+      "Only an ended, in-memory Discord-recovered game can be repaired. The current game was not modified."
+    );
+}
+
 export async function ensureRecoveryAllowed(
   startTime?: Date,
-  underExclusiveLock = false
+  underExclusiveLock = false,
+  repairGame?: GameInstance
 ): Promise<void> {
   const game = GameInstance.getInstance();
-  if (hasUnresolvedGameState(game)) {
+  if (repairGame) {
+    assertRepairableRecoveredGame(repairGame);
+    if (
+      startTime &&
+      Math.abs(startTime.getTime() - repairGame.startTime!.getTime()) > 60_000
+    )
+      throw new Error(
+        "Repair announcement time does not match the current game."
+      );
+  } else if (hasUnresolvedGameState(game)) {
     throw new Error(
       "There is already a current game or unresolved game state. Recovery cannot overwrite it."
     );
@@ -563,9 +595,10 @@ function uniqueNames(names: Names): void {
 export async function buildDiscordRecovery(
   guild: Guild,
   options: RecoveryOptions,
-  underExclusiveLock = false
+  underExclusiveLock = false,
+  repairGame?: GameInstance
 ): Promise<RecoveryProposal> {
-  await ensureRecoveryAllowed(undefined, underExclusiveLock);
+  await ensureRecoveryAllowed(undefined, underExclusiveLock, repairGame);
   const config = ConfigManager.getConfig();
   const warnings: string[] = [];
   const fromInput = options.startTime
@@ -628,7 +661,7 @@ export async function buildDiscordRecovery(
       "Only games scheduled within the last 14 days or next 30 days can be recovered."
     );
   }
-  await ensureRecoveryAllowed(startTime, underExclusiveLock);
+  await ensureRecoveryAllowed(startTime, underExclusiveLock, repairGame);
   const map = options.map
     ? enumValue(options.map, Object.values(AnniMap))
     : announcement?.map;
@@ -1302,6 +1335,125 @@ export async function buildDiscordRecovery(
     bluePlan,
     announcementMessage,
   };
+}
+
+/**
+ * Repair is deliberately narrower than installation: it cannot replace the
+ * game's roster, settings or ELO data. An operator reviews all reconstructed
+ * evidence and only missing verified votes / strictly extended plans are used.
+ */
+export function validateDiscordRecoveryRepair(
+  game: GameInstance,
+  proposal: RecoveryProposal
+): void {
+  assertRepairableRecoveredGame(game);
+  if (
+    proposal.phase !== "started" ||
+    !proposal.recoveredEndTime ||
+    game.startTime!.getTime() !== proposal.startTime.getTime() ||
+    proposal.announcementMessage?.id !== game.announcementMessage?.id ||
+    proposal.announcementMessage?.channelId !==
+      game.announcementMessage?.channelId ||
+    proposal.map !== game.settings.map ||
+    proposal.teamsDecidedBy !== game.teamsDecidedBy ||
+    (proposal.doubleElo && !proposal.relaxed) !== game.isDoubleElo ||
+    JSON.stringify(proposal.bannedClasses) !==
+      JSON.stringify(game.settings.organiserBannedClasses) ||
+    JSON.stringify(proposal.modifiers) !==
+      JSON.stringify(game.settings.modifiers)
+  )
+    throw new Error(
+      "Recovered announcement/settings differ from the existing game. In-place repair refused."
+    );
+  for (const team of ["RED", "BLUE", "UNDECIDED"] as const) {
+    const current = game.teams[team];
+    const incoming = proposal.teams[team];
+    if (
+      current.length !== incoming.length ||
+      current.some(
+        (player, index) =>
+          player.playerId !== incoming[index].playerId ||
+          player.discordSnowflake !== incoming[index].discordSnowflake ||
+          ignKey(player.ignUsed ?? "") !==
+            ignKey(incoming[index].ignUsed ?? "") ||
+          !!player.captain !== !!incoming[index].captain
+      )
+    )
+      throw new Error(
+        `Recovered ${team} roster or captains differ from the current game. Repair refused.`
+      );
+  }
+}
+
+function strictlyExtendedPlan(
+  existing?: TeamPlanRecord,
+  recovered?: TeamPlanRecord
+): boolean {
+  if (!recovered) return false;
+  if (!existing) return true;
+  const extendsSection = (oldValue: string | null, newValue: string | null) =>
+    !oldValue?.trim() || !!newValue?.trim().startsWith(oldValue.trim());
+  return (
+    extendsSection(existing.midBlocks, recovered.midBlocks) &&
+    extendsSection(existing.gamePlan, recovered.gamePlan) &&
+    (existing.midBlocks?.trim() !== recovered.midBlocks?.trim() ||
+      existing.gamePlan?.trim() !== recovered.gamePlan?.trim())
+  );
+}
+
+export function previewDiscordRecoveryRepair(
+  game: GameInstance,
+  proposal: RecoveryProposal
+): {
+  newVotes: number;
+  alreadyVoted: number;
+  updateRedPlan: boolean;
+  updateBluePlan: boolean;
+} {
+  validateDiscordRecoveryRepair(game, proposal);
+  return {
+    newVotes: proposal.mvpVotes.filter(
+      (vote) => !game.hasVotedMvp(vote.voterId)
+    ).length,
+    alreadyVoted: proposal.mvpVotes.filter((vote) =>
+      game.hasVotedMvp(vote.voterId)
+    ).length,
+    updateRedPlan: strictlyExtendedPlan(game.redTeamPlan, proposal.redPlan),
+    updateBluePlan: strictlyExtendedPlan(game.blueTeamPlan, proposal.bluePlan),
+  };
+}
+
+export function repairDiscordRecoveredGame(
+  game: GameInstance,
+  proposal: RecoveryProposal
+): ReturnType<typeof previewDiscordRecoveryRepair> {
+  const changes = previewDiscordRecoveryRepair(game, proposal);
+  // Validate every pending vote *before* making any in-memory changes.
+  const newVotes = proposal.mvpVotes.filter(
+    (vote) => !game.hasVotedMvp(vote.voterId)
+  );
+  for (const vote of newVotes) {
+    const voter = game.teams[vote.team].find(
+      (player) => player.discordSnowflake === vote.voterId
+    );
+    const target = game.teams[vote.team].find(
+      (player) => player.discordSnowflake === vote.targetId
+    );
+    if (!voter || !target || target.captain || voter === target)
+      throw new Error(
+        "Verified MVP vote no longer agrees with the live roster. Repair refused."
+      );
+  }
+  for (const vote of newVotes) {
+    const result = game.voteMvp(vote.voterId, vote.targetId);
+    if (result.error)
+      throw new Error(`MVP vote repair failed: ${result.error}`);
+  }
+  if (changes.updateRedPlan && proposal.redPlan)
+    game.redTeamPlan = proposal.redPlan;
+  if (changes.updateBluePlan && proposal.bluePlan)
+    game.blueTeamPlan = proposal.bluePlan;
+  return changes;
 }
 
 export function installDiscordRecovery(proposal: RecoveryProposal): void {

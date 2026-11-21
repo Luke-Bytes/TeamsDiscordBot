@@ -12,10 +12,11 @@ npx esbuild tests/temporary/run-recover-game.ts --bundle --platform=node --targe
 node dist/tests/recover-game-temporary.js
 ```
 
-As of 21 November 2026 the suite covers **125 scenarios (125/125 passing)**:
+As of 21 November 2026 the suite covers **129 scenarios (129/129 passing)**:
 the original 75 (previously 68 passing and 7 failing), plus 30 additional
 adversarial cases, four post-game recovery guards, four IGN/UUID identity guards,
-and twelve MVP-vote recovery guards. A nonzero exit code now indicates a regression.
+twelve MVP-vote recovery guards and four in-place repair guards.
+A nonzero exit code now indicates a regression.
 
 The unaffected normal suite is run with `npm run tests`. These temporary
 tests are not imported by the normal runner. The mock state and monkey
@@ -62,6 +63,10 @@ been weakened.
   `mvp vote`) are accepted; skipped votes report specific rejection reasons.
   A 24-player, 13-vote scenario verifies both teams and voter bonuses.
   Voter-bonus eligibility is reconstructed with votes.
+- In-place repair of an already recovered ended game (missing MVP votes,
+  including voter ELO bonuses, and strictly extended team plans) without
+  resetting the game; rejection of saved games, changed rosters, stale
+  confirmation and conflicting plan replacements
 - Organiser authorisation, five-minute expiry, cancellation, stolen controls,
   role revocation, stale source changes, simultaneous confirmation, lost
   response acknowledgement, and single-use buttons
@@ -94,6 +99,17 @@ and warns about skipped replies. Missing or untraceable votes must be recast
 before /game shutdown. Missing optional team-chat history is warned about,
 not recreated. Avoid proceeding when an unreadable optional channel could conceal
 post-game activity.
+
+When the recovery has **already been confirmed**, do not reset the game to
+recover missing evidence. Use `/recover-game` with phase
+`Game already started`, the same original `announcement_link`, and
+`repair_existing: true`. The organiser must review a new preview before
+confirmation. This mode checks the database and current game, refuses
+changed rosters/settings, adds only missing verifiable MVP votes, and
+extends a plan only when the Discord version preserves the existing content
+as a prefix. It does not calculate ELO, save the match, restore timers,
+or replace a manually edited/conflicting plan. An in-memory repair does
+not survive another crash without an explicit save/snapshot.
 
 These are mocked/offline tests. Before enabling this on a test server, use a
 nonproduction database and dedicated guild to verify real Discord edits,

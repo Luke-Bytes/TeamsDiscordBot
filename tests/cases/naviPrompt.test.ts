@@ -53,7 +53,7 @@ test("Navi prompt has compact identity, evidence and safety invariants", () => {
   );
   assert(
     !naviAudiencePrompt(false).includes("verified organiser") &&
-      naviAudiencePrompt(false).includes("organiser-only") &&
+      naviAudiencePrompt(false).includes("only authorised roles") &&
       naviAudiencePrompt(true).includes("verified organiser"),
     "Audience boundaries remain explicit"
   );
@@ -94,6 +94,29 @@ test("Navi answers introductions and everyday questions without requiring server
       "Model is explicitly allowed to respond naturally to everyday questions"
     );
   }
+});
+
+test("A public FW lifecycle question retrieves a reviewed high-level guide", () => {
+  const knowledge = buildApprovedKnowledge(process.cwd());
+  const retrieved = retrieveApprovedKnowledge(
+    knowledge,
+    "whats the process to announce a fw game start to finish",
+    false
+  );
+  assert(
+    retrieved.some(
+      (chunk) =>
+        chunk.source === "docs/ai/player-guide.md" &&
+        chunk.heading ===
+          "FW game process: announce, register, start, finish" &&
+        chunk.content.includes("Shotbow's Minecraft Annihilation")
+    ),
+    "Players asking about the FW process receive a public, sourced overview"
+  );
+  assert(
+    retrieved.every((chunk) => chunk.source.startsWith("docs/ai/")),
+    "Every public guide excerpt still comes from the approved knowledge list"
+  );
 });
 
 test("Navi still refuses invented player statistics or game state without tools", async () => {
@@ -503,9 +526,12 @@ test("Navi seven-scenario offline context estimate stays within budget", () => {
       false,
       knowledge
     );
+    // The domain grounding and tone guidance are deliberate extra prompt
+    // context. Keep the worst-case regression bounded instead of pretending
+    // the current prompt is still the smaller historical audit baseline.
     assert(
-      after.total < before.total,
-      `Expected fewer estimated input tokens for ${s.name}: ${before.total} -> ${after.total}`
+      after.total <= Math.ceil(before.total * 1.12),
+      `Estimated input token growth exceeds 12% for ${s.name}: ${before.total} -> ${after.total}`
     );
     assert(
       after.core + after.audience + after.schemas + after.knowledge < 8500,

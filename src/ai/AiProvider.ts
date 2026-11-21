@@ -46,7 +46,9 @@ export class AiTransportError extends Error {
       | "busy"
       | "timeout"
       | "invalid"
-      | "cancelled"
+      | "cancelled",
+    /** Internal, bounded status/classification only; never provider response text. */
+    public readonly code?: string
   ) {
     super(kind);
   }

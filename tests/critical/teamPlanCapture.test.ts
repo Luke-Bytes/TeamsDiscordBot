@@ -24,6 +24,44 @@ test("Plan parser captures mid blocks and game plan (happy path)", async () => {
   assert(parsed.confidence === "full", "Parser confidence should be full");
 });
 
+test("Plan parser preserves all 12 un-fenced assignments in each section", async () => {
+  const mid = Array.from({ length: 12 }, (_, index) => `Player${index} = mid`);
+  const game = Array.from(
+    { length: 12 },
+    (_, index) => `Player${index} = game`
+  );
+  const plan = buildTeamPlanRecord(
+    `Mid Blocks Plan\n${mid.join("\n")}\nGame Plan\n${game.join("\n")}`,
+    "CHANNEL"
+  );
+  assertEqual(
+    plan?.midBlocks,
+    mid.join("\n"),
+    "All mid-block assignments kept"
+  );
+  assertEqual(
+    plan?.gamePlan,
+    game.join("\n"),
+    "All game-plan assignments kept"
+  );
+  assert(
+    plan?.gamePlan?.includes("Player11 = game"),
+    "Last player is included"
+  );
+});
+
+test("Unfenced mid-block plan never consumes a later game-plan code block", async () => {
+  const parsed = parsePlanText(
+    "Mid Blocks Plan\nRedCap = mid\nBlueCap = backup\nGame Plan\n```\nRedCap = farm\n```"
+  );
+  assertEqual(
+    parsed.midBlocks,
+    "RedCap = mid\nBlueCap = backup",
+    "Mid Blocks must use its own unfenced lines"
+  );
+  assertEqual(parsed.gamePlan, "RedCap = farm", "Game plan fence retained");
+});
+
 test("Plan parser returns none when no headers are present (sad path)", async () => {
   const parsed = parsePlanText("hello world");
   assert(parsed.confidence === "none", "Should not parse without headers");

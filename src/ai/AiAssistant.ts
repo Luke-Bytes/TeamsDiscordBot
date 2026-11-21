@@ -5,7 +5,14 @@ import { KnowledgeChunk, retrieveApprovedKnowledge } from "./Knowledge";
 import { HistoricalStatsClient } from "./HistoricalStatsClient";
 import { buildNaviMessages, toolsForAsk } from "./AiPrompt";
 
-export type AiAnswer = { text: string; sources: string[]; toolNames: string[] };
+export type AiAnswer = {
+  text: string;
+  sources: string[];
+  toolNames: string[];
+  /** Safe diagnostic classification for the operator log, not model content. */
+  failureKind?: AiTransportError["kind"];
+  failureCode?: string;
+};
 
 /**
  * Conversational questions need no server evidence; factual claims about a
@@ -227,6 +234,8 @@ export async function answerAiQuestion(options: {
       text: `${message} You can still use /stats, /leaderboards and /season view.`,
       sources: [],
       toolNames: usedTools,
+      failureKind: kind,
+      failureCode: error instanceof AiTransportError ? error.code : undefined,
     };
   }
   return {

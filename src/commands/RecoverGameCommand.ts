@@ -13,9 +13,12 @@ import type AnnouncementCommand from "./AnnouncementCommand";
 import { Command } from "./CommandInterface";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import {
+  assertRepairableRecoveredGame,
   buildDiscordRecovery,
   ensureRecoveryAllowed,
   installDiscordRecovery,
+  previewDiscordRecoveryRepair,
+  repairDiscordRecoveredGame,
   RecoveryOptions,
   RecoveryPhase,
   RecoveryProposal,
@@ -32,6 +35,8 @@ type Pending = {
   expiresAt: number;
   options: RecoveryOptions;
   preview: RecoveryProposal;
+  repairExisting: boolean;
+  repairState?: string;
 };
 
 export default class RecoverGameCommand implements Command {
@@ -124,6 +129,13 @@ export default class RecoverGameCommand implements Command {
           { name: "Balance", value: "BALANCE" }
         )
     )
+    .addBooleanOption((o) =>
+      o
+        .setName("repair_existing")
+        .setDescription(
+          "Repair MVP votes/full team plans on an already recovered ended game"
+        )
+    )
     .addStringOption((o) =>
       o
         .setName("red_captain")
@@ -162,7 +174,37 @@ export default class RecoverGameCommand implements Command {
     };
   }
 
-  private previewEmbed(result: RecoveryProposal): EmbedBuilder {
+  private repairState(game: GameInstance): string {
+    return JSON.stringify({
+      lifecycleToken: game.getLifecycleToken(),
+      gameId: game.gameId,
+      startTime: game.startTime?.toISOString(),
+      endTime: game.endTime?.toISOString(),
+      isFinished: game.isFinished,
+      gameWinner: game.gameWinner,
+      teams: Object.fromEntries(
+        (["RED", "BLUE", "UNDECIDED"] as const).map((team) => [
+          team,
+          game.teams[team].map((player) => ({
+            id: player.playerId,
+            snowflake: player.discordSnowflake,
+            ign: player.ignUsed,
+            captain: player.captain,
+            voted: game.hasVotedMvp(player.discordSnowflake),
+          })),
+        ])
+      ),
+      mvpVotes: game.mvpVotes,
+      redPlan: game.redTeamPlan,
+      bluePlan: game.blueTeamPlan,
+      settings: game.settings,
+    });
+  }
+
+  private previewEmbed(
+    result: RecoveryProposal,
+    repair?: ReturnType<typeof previewDiscordRecoveryRepair>
+  ): EmbedBuilder {
     const names = (team: "RED" | "BLUE" | "UNDECIDED") =>
       result.teams[team]
         .map(
@@ -209,9 +251,13 @@ export default class RecoverGameCommand implements Command {
       );
     return new EmbedBuilder()
       .setColor(0xf59e0b)
-      .setTitle("⚠️ Game recovery — review before confirming")
+      .setTitle(
+        repair
+          ? "⚠️ Game recovery — repair existing game"
+          : "⚠️ Game recovery — review before confirming"
+      )
       .setDescription(
-        `Phase: **${result.phase}**${result.recoveredEndTime ? " (already ended; not saved)" : ""} · Season: **${result.seasonNumber}** (${result.relaxed ? "Relaxed" : "Ranked"})\nTime: <t:${Math.floor(result.startTime.getTime() / 1000)}:F>\n` +
+        `${repair ? `Repair only: ${repair.newVotes} new MVP votes · ${repair.alreadyVoted} already counted · RED plan ${repair.updateRedPlan ? "extend" : "unchanged"} · BLUE plan ${repair.updateBluePlan ? "extend" : "unchanged"}\n` : ""}Phase: **${result.phase}**${result.recoveredEndTime ? " (already ended; not saved)" : ""} · Season: **${result.seasonNumber}** (${result.relaxed ? "Relaxed" : "Ranked"})\nTime: <t:${Math.floor(result.startTime.getTime() / 1000)}:F>\n` +
           `Map: **${result.map}** · Double ELO: **${result.doubleElo ? "Yes" : "No"}**\n` +
           `Method: **${result.teamsDecidedBy ?? "Not picked"}** · ` +
           `Rated: **${
@@ -280,8 +326,27 @@ export default class RecoverGameCommand implements Command {
         if (preview.expiresAt <= Date.now()) this.pending.delete(id);
       }
       const options = this.getOptions(interaction);
-      const initialToken = GameInstance.getInstance().getLifecycleToken();
-      const preview = await buildDiscordRecovery(interaction.guild, options);
+      const repairExisting =
+        interaction.options.getBoolean?.("repair_existing") === true;
+      const game = GameInstance.getInstance();
+      const initialToken = game.getLifecycleToken();
+      if (repairExisting) {
+        if (options.phase !== "started")
+          throw new Error(
+            "In-place repair requires phase 'Game already started'."
+          );
+        assertRepairableRecoveredGame(game);
+      }
+      const preview = await buildDiscordRecovery(
+        interaction.guild,
+        options,
+        false,
+        repairExisting ? game : undefined
+      );
+      const repair = repairExisting
+        ? previewDiscordRecoveryRepair(game, preview)
+        : undefined;
+      const repairState = repairExisting ? this.repairState(game) : undefined;
       if (GameInstance.getInstance().getLifecycleToken() !== initialToken) {
         throw new Error("Game lifecycle changed during the Discord scan.");
       }
@@ -290,16 +355,17 @@ export default class RecoverGameCommand implements Command {
         new ButtonBuilder()
           .setCustomId(`recover-game-confirm:${nonce}`)
           .setStyle(ButtonStyle.Danger)
-          .setLabel("Confirm recovery"),
+          .setLabel(repairExisting ? "Confirm repair" : "Confirm recovery"),
         new ButtonBuilder()
           .setCustomId(`recover-game-cancel:${nonce}`)
           .setStyle(ButtonStyle.Secondary)
           .setLabel("Cancel")
       );
       await interaction.editReply({
-        content:
-          "No state has been changed. Verify every player, captain and setting. Confirm within 5 minutes or cancel.",
-        embeds: [this.previewEmbed(preview)],
+        content: repairExisting
+          ? "No state changed. This repair only adds verified missing MVP votes and strictly extends team plans. It will not replace players, settings or ELO. Confirm within 5 minutes."
+          : "No state has been changed. Verify every player, captain and setting. Confirm within 5 minutes or cancel.",
+        embeds: [this.previewEmbed(preview, repair)],
         components: [row],
         allowedMentions: { parse: [] },
       });
@@ -310,6 +376,8 @@ export default class RecoverGameCommand implements Command {
         expiresAt: Date.now() + 5 * 60_000,
         options,
         preview,
+        repairExisting,
+        repairState,
       });
     } catch (error) {
       await interaction.editReply({
@@ -382,11 +450,17 @@ export default class RecoverGameCommand implements Command {
       ) {
         throw new Error("Game lifecycle changed since the preview.");
       }
-      await ensureRecoveryAllowed(pending.preview.startTime, true);
+      const repairGame = pending.repairExisting
+        ? GameInstance.getInstance()
+        : undefined;
+      if (repairGame && this.repairState(repairGame) !== pending.repairState)
+        throw new Error("The current game changed since the repair preview.");
+      await ensureRecoveryAllowed(pending.preview.startTime, true, repairGame);
       const current = await buildDiscordRecovery(
         interaction.guild,
         pending.options,
-        true
+        true,
+        repairGame
       );
       if (current.fingerprint !== pending.preview.fingerprint) {
         throw new Error(
@@ -404,30 +478,48 @@ export default class RecoverGameCommand implements Command {
         throw new Error(
           "Your organiser role was revoked during recovery verification."
         );
-      await ensureRecoveryAllowed(current.startTime, true);
+      await ensureRecoveryAllowed(current.startTime, true, repairGame);
       if (
         GameInstance.getInstance().getLifecycleToken() !==
         pending.lifecycleToken
       ) {
         throw new Error("Game lifecycle changed during verification.");
       }
-      installDiscordRecovery(current);
-      installed = true;
-      if (current.announcementMessage) {
-        this.announcementCommand.attachRecoveredAnnouncementMessage(
-          current.announcementMessage
+      let resultMessage: string;
+      if (repairGame) {
+        if (this.repairState(repairGame) !== pending.repairState)
+          throw new Error(
+            "The current game changed during repair verification."
+          );
+        const changes = repairDiscordRecoveredGame(repairGame, current);
+        installed = true;
+        console.info(
+          `event=game.discord_repair outcome=succeeded added_votes=${changes.newVotes} red_plan=${changes.updateRedPlan} blue_plan=${changes.updateBluePlan}`
         );
-      }
-      this.pending.clear();
-      console.info(
-        `event=game.discord_recovery outcome=succeeded players=${Object.values(current.teams).flat().length} phase=${current.phase}`
-      );
-      await interaction.editReply({
-        content:
+        resultMessage =
+          `✅ Existing game repaired in memory: ${changes.newVotes} missing MVP vote(s) added, ${changes.alreadyVoted} already recorded; ` +
+          `Red plan ${changes.updateRedPlan ? "extended" : "unchanged"}, Blue plan ${changes.updateBluePlan ? "extended" : "unchanged"}. ` +
+          "Teams, settings and existing ELO values were not replaced. Verify the result before /game shutdown.";
+      } else {
+        installDiscordRecovery(current);
+        installed = true;
+        if (current.announcementMessage) {
+          this.announcementCommand.attachRecoveredAnnouncementMessage(
+            current.announcementMessage
+          );
+        }
+        console.info(
+          `event=game.discord_recovery outcome=succeeded players=${Object.values(current.teams).flat().length} phase=${current.phase}`
+        );
+        resultMessage =
           `✅ Game reconstructed in memory (${current.phase}${current.recoveredEndTime ? ", ended pending save" : ""}, ${Object.values(current.teams).flat().length} players). ` +
           `${current.mvpVotes.length} verified MVP vote(s) restored; inspect the preview for any skipped or missing votes. ` +
           "No messages, Discord roles or VCs were recreated. Inspect /team list and /game diagnostics before continuing. " +
-          "Timers, vote sessions and game feeds remain paused. The reconstructed game will still be lost if the process crashes again.",
+          "Timers, vote sessions and game feeds remain paused. The reconstructed game will still be lost if the process crashes again.";
+      }
+      this.pending.clear();
+      await interaction.editReply({
+        content: resultMessage,
         embeds: [],
         components: [],
         allowedMentions: { parse: [] },
@@ -435,7 +527,7 @@ export default class RecoverGameCommand implements Command {
     } catch (error) {
       if (installed) {
         console.error(
-          "Recovery was installed, but the Discord response failed. Do NOT retry blindly.",
+          "Recovery/repair was applied, but the Discord response failed. Inspect game state; do NOT retry blindly.",
           error
         );
       } else {

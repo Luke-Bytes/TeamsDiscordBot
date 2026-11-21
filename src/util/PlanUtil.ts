@@ -24,17 +24,20 @@ function extractSection(text: string, header: RegExp): string | null {
   if (!match) return null;
 
   const after = text.slice(match.index + match[0].length);
-  const codeBlock = /```([\s\S]*?)```/m.exec(after);
+  // A fenced block belonging to the next section must never replace content
+  // from the current section. Bound the search before looking for a fence.
+  const nextHeader = ANY_HEADER.exec(after);
+  const section = nextHeader ? after.slice(0, nextHeader.index) : after;
+  const codeBlock = /```([\s\S]*?)```/m.exec(section);
   if (codeBlock && codeBlock[1].trim()) {
     return codeBlock[1].trim();
   }
 
-  const lines = after.split("\n");
+  const lines = section.split("\n");
   const collected: string[] = [];
   for (const line of lines) {
     if (ANY_HEADER.test(line)) break;
     collected.push(line);
-    if (collected.length >= 10) break;
   }
   const cleaned = collected.join("\n").trim();
   return cleaned.length ? cleaned : null;

@@ -1,9 +1,12 @@
 # Optional Discord AI assistant
 
-The bot exposes `/ask question:<text>` as an **ephemeral**, opt-in assistant.
-Navi can chat naturally about herself, her abilities, trivia and general
-subjects, even when no Friendly Wars documentation matches. Friendly
-Wars-specific instructions still use approved guides, and player statistics
+The bot exposes `/ask question:<text>` as an opt-in assistant with **public
+answers in the configured server channel**; bot DMs remain private to their
+recipient. Rejections of invalid or unauthorised requests remain ephemeral.
+Navi supports casual conversation and concise game questions. FW means
+Friendly War: this is a competitive community for Shotbow's Minecraft
+Annihilation. Friendly Wars-specific instructions use approved guides, while
+player statistics
 or live server facts require verified read-only data. It does not listen to
 regular messages, invoke maintenance scripts, edit records or perform
 Discord actions on behalf of a model. The built-in Discord commands continue
@@ -94,7 +97,7 @@ also to organisers, even though the existing general command rate limiter
 exempts the organiser role. The existing command safety filter still runs
 before the AI pathway. Each question can
 make up to 3 provider inferences (max 2 tool rounds, 4 tool requests/round,
-500 output tokens/call), with 20s timeout per provider call, a 3s application deadline per read-only
+1,024 maximum completion tokens/call, including model reasoning tokens), with 20s timeout per provider call, a 3s application deadline per read-only
 DB tool, no automatic retries, and bounded response bodies. Limits are local to one process; restarts and
 multiple processes do not provide durable shared-account accounting. Operator
 must reserve enough account quota for HiveOps before switching on. This
@@ -104,8 +107,12 @@ cross-process quota coordination.
 ## Data and permissions
 
 Guild /ask requests are allowed only in the configured `channels.botCommands`
-channel. Bot DMs are also eligible, but **only for current members of the
-guild owning that configured channel**: the bot resolves that fixed channel
+channel. **Every server-channel answer uses player-safe guides and tool
+schemas, even when an organiser invokes the command**, because that answer
+is visible to everyone. Organiser-only explanations and tools are available
+only in a verified organiser's private DM with the bot. Bot DMs are also
+eligible, but **only for current members of the guild owning that configured
+channel**: the bot resolves that fixed channel
 through Discord, then fetches the DM sender's membership and organiser role
 from the associated guild. Missing channels, failed membership checks, other
 private interaction contexts, and arbitrary mutual guilds fail closed before
@@ -154,11 +161,17 @@ revocation prevents delivery of a privileged answer. The model has no
 filesystem browsing tool. Bot-verified citations and the read-only data source
 names are attached separately. Knowledge refresh is on process restart.
 
-The bot replies ephemerally, suppresses Discord mentions, limits output
-length, strips external links and credential-shaped strings. The **final
-user-visible /ask reply** (including server-generated citations) is logged
-as a single JSON-escaped field **only after a successful Discord edit**,
-alongside provider, DM/guild scope, latency and tool count. The generic
+The bot answers publicly in the approved guild channel, or privately in a
+DM, suppresses Discord mentions, limits output length, and strips external
+links and credential-shaped strings. The **final user-visible /ask reply**
+(including server-generated citations) is logged as a single JSON-escaped
+field **only after a successful Discord edit**, alongside provider, DM/guild
+scope, latency and tool count. Provider failures are identified as
+`outcome=provider_failed` with safe `error_kind` and `error_code` values
+such as `finish_length` or `http_400`; they are not counted as successful
+answers. No raw provider response/error body is logged. Groq now has a
+larger maximum completion allowance, but short answers are enforced by the
+prompt style instructions rather than a small token budget. The generic
 slash-command audit also logs the **submitted parameter values**, including
 the `/ask question`, under `args={"question":"..."}`. Subcommand arguments
 retain their full paths, while recognised credentials, secret-named options,
