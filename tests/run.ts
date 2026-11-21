@@ -1,5 +1,8 @@
 import "./cases/eventRegression.test";
 import "./cases/needCommand.test";
+import "./cases/aiAssistant.test";
+import "./cases/aiHistoricalState.test";
+import "./cases/aiKnowledgeQc.test";
 // Simple test runner that executes all test cases in sequence
 import "./cases/captainNominate.test";
 import "./cases/basicCommands.test";
@@ -66,6 +69,7 @@ import "./critical/matchPersistenceAtomic.test";
 import "./critical/recoveryAndDiscordIntegrity.test";
 import "./critical/identityMutationSafety.test";
 import "./critical/activeGameRecovery.test";
+import "./critical/discordGameRecovery.test";
 import "./critical/activeGameRecoveryProcesses.test";
 import "./critical/targetedReliability.test";
 import "./critical/operationsImprovements.test";

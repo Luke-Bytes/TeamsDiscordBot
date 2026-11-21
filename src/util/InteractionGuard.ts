@@ -139,8 +139,9 @@ export class InteractionGuard {
     for (const input of unsafeInputs) {
       const validation = MessageSafetyUtil.validateUserInput(input);
       if (!validation.valid) {
+        // Never log the rejected free-form value: it may contain private data or keys.
         console.log(
-          `[Filter] Blocked unsafe input user=${interaction.user.id} value="${input}"`
+          `[Filter] Blocked unsafe input user=${interaction.user.id}`
         );
         await interaction.reply({
           content:

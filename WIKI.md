@@ -303,6 +303,41 @@ The order of the classes discussed will roughly follow how game operation flows.
 
 ---
 
+### /recover-game (emergency, organiser-only)
+
+Use `/recover-game` only when a match is still in progress but the bot lost
+its in-memory state after an unexpected process failure. Planned `/restart`
+recovery uses a separate snapshot mechanism and should take priority.
+
+1. Set **phase** to `announced`, `teams` (teams picked, not started), or
+   `started`. If needed, supply `announcement_link`, `registered_link`,
+   and `teams_link` using links to the bot's original Discord messages.
+2. The command searches configured channels for the latest matching announcement,
+   registered-players feed, and current-teams/draft embed, then resolves IGNs
+   to existing player records and active-season stats. It **never creates
+   player records** as a side effect.
+3. If the announcement was posted outside configured channels and cannot be
+   discovered, provide `start_time` (ISO 8601 with timezone, e.g.
+   `2026-11-20T22:00:00Z`), `map`, `banned_classes` (or `none`),
+   `modifiers` (or `none`) and `double_elo`. `organiser_name` and
+   `host_name` are strongly recommended. If there is no draft embed,
+   `selection_method` must be supplied for teams that have been finalised.
+   Optional `red_captain` and `blue_captain` override inferred captains.
+4. Inspect the private preview including both teams, unassigned registrations,
+   captain assignments, settings, and evidence links. Only the requesting
+   organiser can confirm, within five minutes. Nothing is changed before confirmation.
+
+Safety: recovery refuses to overwrite an active game, bypass an unresolved
+snapshot/DB cleanup, recover an already persisted game at the same scheduled
+time, or restore a period with game-end/MVP voting evidence. Confirmation
+rechecks Discord evidence, player stats and DB safety before installing state.
+The recovery does **not** resend announcements, alter Discord roles/VCs, restart
+timers/polls/drafts/feeds or reconstruct MVP votes and historical draft slots.
+Review `/team list` and `/game diagnostics` after recovery. A second
+unexpected crash will still lose this manually reconstructed in-memory state.
+
+---
+
 ### GameEndCleanUp
 
 **Role and Voice Channel Cleanup:**

@@ -3,21 +3,17 @@ import { CurrentGameManager } from "./CurrentGameManager";
 import { GameRecoveryCoordinator } from "./ActiveGameRecovery";
 import { MatchRecoveryGate } from "./MatchRecoveryGate";
 import TeamCommand from "../commands/TeamCommand";
+import { gameLifecycle } from "../ai/GameReadSnapshot";
 
 /** In-memory, read-only organiser snapshot. No DB, Discord fetch, or scheduler calls. */
 export function formatGameDiagnostics(game: GameInstance): string {
-  const active = game.announced || game.isFinished || game.isRestarting;
-  const status = !active
-    ? "inactive"
-    : game.isRestarting
+  const lifecycle = gameLifecycle(game);
+  const active = lifecycle !== "inactive";
+  // Preserve the existing slash-command wording while sharing stage semantics.
+  const status =
+    lifecycle === "awaiting cleanup or shutdown"
       ? "awaiting cleanup / shutdown"
-      : game.isFinished
-        ? "finished"
-        : game.getGameStartStatus() === "starting"
-          ? "starting"
-          : game.getGameStartStatus() === "started"
-            ? "started"
-            : "announced";
+      : lifecycle;
 
   const red = game.getPlayersOfTeam("RED").length;
   const blue = game.getPlayersOfTeam("BLUE").length;
@@ -27,12 +23,18 @@ export function formatGameDiagnostics(game: GameInstance): string {
   const captainBlue = game.getCaptainOfTeam("BLUE");
   const mapPoll = game.mapVoteManager;
   const minerushPoll = game.minerushVoteManager;
-  const minerushSetting = game.settings.modifiers.find((m) => m.category === "Minerushing");
-  const block = MatchRecoveryGate.getBlockReason() ?? GameRecoveryCoordinator.getBlockReason();
-  const timer = (handle: unknown) => handle ? "handle present (pending unknown)" : "no handle";
-  const time = game.startTime && Number.isFinite(game.startTime.getTime())
-    ? `<t:${Math.floor(game.startTime.getTime() / 1000)}:F>`
-    : "Unknown / not set";
+  const minerushSetting = game.settings.modifiers.find(
+    (m) => m.category === "Minerushing"
+  );
+  const block =
+    MatchRecoveryGate.getBlockReason() ??
+    GameRecoveryCoordinator.getBlockReason();
+  const timer = (handle: unknown) =>
+    handle ? "handle present (pending unknown)" : "no handle";
+  const time =
+    game.startTime && Number.isFinite(game.startTime.getTime())
+      ? `<t:${Math.floor(game.startTime.getTime() / 1000)}:F>`
+      : "Unknown / not set";
 
   return [
     "**Game diagnostics (in-memory)**",
@@ -40,7 +42,7 @@ export function formatGameDiagnostics(game: GameInstance): string {
     `**Correlation ID:** ${active ? (game.gameId ?? game.getLifecycleToken()) : "N/A (no active game)"}`,
     `**Scheduled start:** ${time}`,
     `**Players:** ${game.getRegisteredPlayerCount()} registered (RED ${red}, BLUE ${blue}, UNDECIDED ${undecided})`,
-    `**Team picking:** ${game.teamsDecidedBy ?? (session?.state ?? "not finalised")} | playable teams: ${game.hasFinalizedPlayableTeams() ? "yes" : "no"}`,
+    `**Team picking:** ${game.teamsDecidedBy ?? session?.state ?? "not finalised"} | playable teams: ${game.hasFinalizedPlayableTeams() ? "yes" : "no"}`,
     `**Captains:** RED ${captainRed ? "assigned" : "missing"}, BLUE ${captainBlue ? "assigned" : "missing"}`,
     `**Map:** ${game.settings.map ?? "Unknown / not selected"} | poll: ${mapPoll ? (mapPoll.pollMessage ? "message present (open/closed unknown)" : "manager present; message unavailable") : "not tracked"}`,
     `**Minerush:** ${minerushSetting?.name ?? "Unknown / not selected"} | poll: ${minerushPoll ? (minerushPoll.pollMessage ? "message present (open/closed unknown)" : "manager present; message unavailable") : "not tracked"}`,

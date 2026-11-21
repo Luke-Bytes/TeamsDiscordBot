@@ -1,3 +1,4 @@
+import AskCommand from "./AskCommand";
 import EventCommand from "./EventCommand";
 import SignCommand from "./SignCommand";
 import NeedCommand from "./NeedCommand";
@@ -12,6 +13,7 @@ import LeaderboardsCommand from "./LeaderboardsCommand";
 import RegisterCommand from "./RegisterCommand";
 import StatsCommand from "./StatsCommand";
 import TeamCommand from "./TeamCommand";
+import RecoverGameCommand from "./RecoverGameCommand";
 import TestCommand from "./TestCommand";
 import CleanupCommand from "./CleanUpCommand";
 import ScenarioCommand from "./ScenarioCommand";
@@ -62,6 +64,7 @@ import { GameRecoveryCoordinator } from "../logic/ActiveGameRecovery";
 
 export class CommandHandler {
   commands: Command[] = [];
+  askCommand = new AskCommand();
   eventCommand = new EventCommand();
   signCommand = new SignCommand();
 
@@ -72,6 +75,7 @@ export class CommandHandler {
   leaderboardsCommand = new LeaderboardsCommand();
   statsCommand = new StatsCommand();
   teamCommand = new TeamCommand();
+  recoverGameCommand = new RecoverGameCommand(this.announcementCommand);
   needCommand = new NeedCommand(this.teamCommand, this.captainPlanDMManager);
   captainCommand = new CaptainCommand(this.teamCommand);
   testCommand = new TestCommand();
@@ -120,6 +124,7 @@ export class CommandHandler {
 
   public loadCommands() {
     this.commands = [
+      this.askCommand,
       this.eventCommand,
       this.signCommand,
       this.announcementCommand,
@@ -129,6 +134,7 @@ export class CommandHandler {
       this.needCommand,
       this.statsCommand,
       this.teamCommand,
+      this.recoverGameCommand,
       this.captainCommand,
       this.testCommand,
       this.cleanupCommand,
@@ -188,8 +194,15 @@ export class CommandHandler {
         interaction.isModalSubmit()) &&
         (interaction.customId.startsWith("sign_") ||
           interaction.customId.startsWith("event_")));
+    // Recovery confirmation owns an exclusive barrier; do not count its own interaction
+    // among the operations it must wait to drain.
+    const discordRecoveryInteraction =
+      (interaction.isChatInputCommand() &&
+        interaction.commandName === "recover-game") ||
+      (interaction.isButton() &&
+        interaction.customId.startsWith("recover-game-"));
     const done =
-      restart || eventInteraction
+      restart || eventInteraction || discordRecoveryInteraction
         ? () => {}
         : GameRecoveryCoordinator.enterOperation();
     if (!done) {
