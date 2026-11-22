@@ -42,6 +42,11 @@ export function needsVerifiedServerData(question: string): boolean {
   const q = question.trim();
   return (
     asksForBottomPlayerRanking(q) ||
+    /\b(?:best|top|greatest|strongest)\b.{0,60}\b(?:fw|friendly wars|players?|picks?)\b/i.test(
+      q
+    ) ||
+    /\b(?:who|which|whom)\b.{0,65}\b(?:pick|draft|choose)\b/i.test(q) ||
+    /\b(?:recommend|suggest)\b.{0,60}\b(?:players?|picks?)\b/i.test(q) ||
     /\b(?:who(?:'s| is)?|what(?:'s| is)?|which)\b.{0,65}\b(?:leaderboards?|rankings?|standings?|\d+(?:st|nd|rd|th)\s+place|organisers?|organizers?)\b/i.test(
       q
     ) ||

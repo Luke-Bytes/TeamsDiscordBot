@@ -2,6 +2,7 @@ import { SeasonType } from "@prisma/client";
 import { prismaClient } from "../database/prismaClient";
 import { SeasonService } from "../database/SeasonService";
 import { getSavedPlayerCareerStats } from "../logic/PlayerCareerStats";
+import { getPlayerPerformanceShortlist } from "./PlayerPerformanceShortlist";
 import { AiFunctionTool } from "./AiProvider";
 import {
   searchTournamentMatches,
@@ -105,6 +106,19 @@ export const AI_TOOLS: AiFunctionTool[] = [
       name: "get_all_time_leaderboard",
       description:
         "Top 10 by TOTAL saved wins across all bot seasons (Ranked and Relaxed combined), with losses and games. No universal 'best' player or highest all-time Elo claim; archived REST_API-only history is not included.",
+      parameters: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_player_performance_shortlist",
+      description:
+        "For best FW players, strong draft picks or first-pick recommendations WITHOUT named candidates. Bounded multi-metric public shortlist from independent lifetime wins, current-season Elo/activity and finished-game MVP leaders. Includes each candidate's career record and win rate with games sample, streak, MVPs, captain wins/games and current-season record/rating. NOT an overall ranked top 10, role-fit proof or a list of currently available draft players. No inputs.",
       parameters: {
         type: "object",
         properties: {},
@@ -528,6 +542,7 @@ function parseArguments(name: string, raw: string): Record<string, unknown> {
                           name === "list_organisers" ||
                           name === "get_command_catalog" ||
                           name === "get_all_time_leaderboard" ||
+                          name === "get_player_performance_shortlist" ||
                           name === "get_my_all_time_stats"
                         ? []
                         : ["season"];
@@ -761,6 +776,8 @@ export async function executeAiTool(
       return caller.listOrganisers
         ? caller.listOrganisers()
         : { status: "unavailable", detail: "discord_role_lookup_unavailable" };
+    case "get_player_performance_shortlist":
+      return getPlayerPerformanceShortlist();
     case "get_my_all_time_stats": {
       const player = await prismaClient.player.findUnique({
         where: { discordSnowflake: caller.discordUserId },

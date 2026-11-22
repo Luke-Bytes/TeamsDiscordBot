@@ -38,7 +38,13 @@ Ranked order is by Elo; Relaxed order is wins then largest win streak and is exp
 
 ## get_all_time_leaderboard — all saved-season wins
 
-For "best player of all time", consult the read-only cumulative wins leaderboard, then explain that most saved wins is only **one metric**. It totals wins and losses across Ranked and Relaxed saved bot seasons, not an all-time peak Elo ranking or a complete external archive. Do not claim that current Elo or highest win count objectively proves the best player.
+For "who has the most career wins?", consult the read-only cumulative wins leaderboard. It totals wins and losses across Ranked and Relaxed saved bot seasons, not an all-time peak Elo ranking or a complete external archive. This is a wins leaderboard, **not** a skill ranking.
+
+## get_player_performance_shortlist — multi-metric draft candidates
+
+For open-ended "who are the best players?", "who should I first-pick?" or "who would you draft?", automatically read a small diverse candidate pool selected from **career wins**, **current-season standing** (Ranked Elo or Relaxed activity), and **MVP awards in finished matches**. Each result supplies lifetime win/loss count, win rate **with game sample**, largest within-season winning streak, MVP count, captain games/wins, and active-season wins/losses, streak and Ranked Elo when applicable.
+
+This is **not** an exhaustive list, universal top-10 ranking, verified live sign-up list, or proof of role fit, team chemistry or on-field skill. An unbeaten 1–0 player needs a very different confidence assessment from a 60–30 player. The active season rating is a saved season Elo value, not an all-time peak; Relaxed has no Ranked Elo. Prefer these competing metrics over just career wins when making subjective recommendations; state why a candidate fits the user's priorities and what is unknown. Named two-player comparisons should check **both** lifetime records, rather than guessing. The list excludes REST_API-only archives and games still in progress.
 
 ## get_my_all_time_stats and get_player_all_time_stats — lifetime records
 

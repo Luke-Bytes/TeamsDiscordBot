@@ -4,6 +4,7 @@ import "./cases/aiAssistant.test";
 import "./cases/aiAskImprovements.test";
 import "./cases/aiOrganiserCopilot.test";
 import "./cases/aiCareerStats.test";
+import "./cases/aiPerformanceShortlist.test";
 import "./cases/commandAuditLog.test";
 import "./cases/askDms.test";
 import "./cases/askVisibility.test";

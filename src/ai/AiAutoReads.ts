@@ -100,6 +100,58 @@ export function autoReadsForAsk(
     /\b(?:all|the|fw|friendly wars|who)\b/i.test(q)
   )
     return [{ name: "list_organisers", arguments: "{}" }];
+  // Preload both named career records for head-to-head draft comparisons.
+  const comparison =
+    /\b(?:pick|choose|draft|compare|between|versus|vs)\b.{0,90}?\b([a-z0-9_]{3,16})\s+(?:or|and|vs\.?|versus)\s+([a-z0-9_]{3,16})\b/i.exec(
+      q
+    );
+  if (comparison && comparison[1].toLowerCase() !== comparison[2].toLowerCase())
+    return [comparison[1], comparison[2]].map((ign) => ({
+      name: "get_player_all_time_stats",
+      arguments: JSON.stringify({ ign }),
+    }));
+  // Explicit season/Elo standings are factual rankings, not draft advice.
+  const standingQuestion =
+    /\b(?:ranked|elo|leaderboards?|standings?|season\s+\d+|this season|current season)\b/i.test(
+      q
+    ) &&
+    /\b(?:top|best|highest|leaders?|rank|players?|who|standings?|leaderboards?)\b/i.test(
+      q
+    ) &&
+    !/\b(?:pick|draft|choose|recommend|suggest|my|mine)\b/i.test(q) &&
+    !/\b(?:all[- ]time|career|most wins?)\b/i.test(q);
+  if (standingQuestion) {
+    const requested = /\bseason\s+(\d{1,4})\b/i.exec(q);
+    return [
+      {
+        name: "get_leaderboard",
+        arguments: JSON.stringify({
+          limit: 10,
+          ...(requested ? { season: Number(requested[1]) } : {}),
+        }),
+      },
+    ];
+  }
+  // Wins-only records are valid, but should never stand in for "best player".
+  const specificallyWins =
+    /\b(?:most|total|cumulative|highest)\s+(?:saved\s+)?wins?\b|\bwins?\s+(?:leaderboard|ranking|totals?|count)\b|\b(?:top|best)\b.{0,35}\bby wins\b/i.test(
+      q
+    );
+  if (
+    !specificallyWins &&
+    (/\b(?:best|greatest|strongest|top)\b.{0,45}\b(?:players?|picks?|fw|friendly wars|all[- ]time)\b/i.test(
+      q
+    ) ||
+      /\b(?:players?|picks?)\b.{0,45}\b(?:best|greatest|strongest)\b/i.test(
+        q
+      ) ||
+      /\b(?:who|whom|which)\b.{0,45}\b(?:pick|draft|choose)\b/i.test(q) ||
+      /\b(?:first|early)\s+pick\b/i.test(q) ||
+      /\b(?:recommend|suggest)\b.{0,45}\b(?:players?|picks?)\b/i.test(q))
+  )
+    return [{ name: "get_player_performance_shortlist", arguments: "{}" }];
+  if (specificallyWins && !/\b(?:this|current|season)\b/i.test(q))
+    return [{ name: "get_all_time_leaderboard", arguments: "{}" }];
   const careerScope =
     /\b(?:all[- ]time|lifetime|career|across (?:all|every) seasons?|ever)\b/i.test(
       q

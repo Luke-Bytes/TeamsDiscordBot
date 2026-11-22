@@ -457,7 +457,7 @@ test("AI tool schemas are bounded, described, audience gated and identity safe",
       `MY tool must not accept model-supplied identity: ${name}`
     );
   }
-  assert(names.size === 25, "Review the tools inventory when it changes");
+  assert(names.size === 26, "Review the tools inventory when it changes");
   assert(
     !permittedAiTools(false, false).some(
       (t) =>

@@ -40,8 +40,8 @@ test("Lifetime questions offer and automatically select safe career tools", asyn
   );
   assert(
     autoReadsForAsk("who is best player of all time")[0]?.name ===
-      "get_all_time_leaderboard",
-    "Best-player prompt uses metric-qualified leaderboard instead of guessing one person's stats"
+      "get_player_performance_shortlist",
+    "Subjective best-player prompts need multiple independent metrics rather than just wins"
   );
   assert(
     needsVerifiedServerData("what are my career stats?") &&

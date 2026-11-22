@@ -38,6 +38,8 @@ test("Navi prompt has compact identity, evidence and safety invariants", () => {
     "missing is not zero",
     "get_my_historical_",
     "server-bound identity",
+    "not 'saved records'",
+    "unless source matters",
     "persistence",
     "discord delivery",
     "citations",

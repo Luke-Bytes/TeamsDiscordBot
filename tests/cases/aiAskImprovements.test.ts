@@ -21,7 +21,7 @@ test("Common logged /ask questions choose bounded read-only data automatically",
   for (const [question, name] of [
     ["what commands are there", "get_command_catalog"],
     ["whos 5th on leaderboard right now", "get_leaderboard"],
-    ["whos the best player of all time", "get_all_time_leaderboard"],
+    ["whos the best player of all time", "get_player_performance_shortlist"],
     ["name all the fw organiser", "list_organisers"],
     ["analyse the stats of Backmobe", "get_player_stats"],
     ["fun facts about fw", "get_season_summary"],

@@ -102,6 +102,7 @@ export const APPROVED: readonly ApprovedSource[] = [
       "Caller identity and organiser names",
       "Live slash-command catalog",
       "get_all_time_leaderboard — all saved-season wins",
+      "get_player_performance_shortlist — multi-metric draft candidates",
       "get_my_all_time_stats and get_player_all_time_stats — lifetime records",
       "get_current_game_state — one public game snapshot",
       "get_recent_games — recently saved results",
