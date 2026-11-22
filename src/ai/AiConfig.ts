@@ -2,7 +2,9 @@ import { Config, ConfigManager } from "../ConfigManager";
 
 /** No model IDs, channel lists, limits or feature switches are read from .env. */
 export const AI_DEFAULTS = {
-  dailyRequestLimit: 50,
+  // Shared process-wide cap across all users/providers, not per-user.
+  // Five rolling requests/minute per caller limits bursts separately.
+  dailyRequestLimit: 300,
   requestTimeoutMs: 20_000,
   maxResponseBytes: 64 * 1024,
   // GPT-OSS completion tokens also cover internal reasoning before visible text.

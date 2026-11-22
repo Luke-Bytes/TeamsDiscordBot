@@ -204,6 +204,47 @@ test("Players can ask about organiser procedures publicly without receiving priv
   );
 });
 
+test("Second /ask inside the local cooldown explains the wait and logs a denial", async () => {
+  const bot = new AskCommand(settings);
+  const first = guildInteraction("hi nice to meet you", false);
+  const second = guildInteraction("who is the best fw player by stats?", false);
+  await withOfflineGroq(
+    async (requests, logs) => {
+      await bot.execute(first.interaction as any);
+      await bot.execute(second.interaction as any);
+      assert(
+        first.edits.length === 1 &&
+          second.deferred.length === 0 &&
+          second.replies.length === 1,
+        "First answer is delivered while a cooldown denial needs no provider deferral"
+      );
+      assert(
+        second.replies[0].flags === MessageFlags.Ephemeral &&
+          /Give me 5 more seconds/.test(second.replies[0].content),
+        "Clear, short, private wait message replaces ambiguous busy warning"
+      );
+      assert(
+        requests.length === 1 &&
+          logs.some((line) => line.includes("outcome=completed")) &&
+          logs.some(
+            (line) =>
+              line.includes(
+                "outcome=denied scope=guild reason=user_cooldown"
+              ) && line.includes("retry_after_s=5")
+          ),
+        "Denied question makes no extra Groq request and has an auditable admission reason"
+      );
+    },
+    () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ finish_reason: "stop", message: { content: "Hey!" } }],
+        }),
+        { status: 200 }
+      )
+  );
+});
+
 test("Invalid /ask questions still reply privately without AI network access", async () => {
   const mock = guildInteraction("BOT_TOKEN=do-not-post-secret", true);
   const dev = ConfigManager.getConfig().dev;

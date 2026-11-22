@@ -37,10 +37,14 @@ export default class AskCommand implements Command {
         .setMaxLength(450)
     );
 
-  private admission = new AiAdmission(getAiSettings().dailyRequestLimit);
+  private readonly admission: AiAdmission;
   private knowledge?: KnowledgeChunk[];
 
-  constructor(private readonly injectedSettings?: AiSettings) {}
+  constructor(private readonly injectedSettings?: AiSettings) {
+    this.admission = new AiAdmission(
+      injectedSettings?.dailyRequestLimit ?? getAiSettings().dailyRequestLimit
+    );
+  }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const config = this.injectedSettings ?? getAiSettings();
@@ -108,13 +112,28 @@ export default class AskCommand implements Command {
       });
       return;
     }
-    const release = this.admission.acquire(interaction.user.id, guildId);
-    if (!release) {
+    const admission = this.admission.tryAcquire(interaction.user.id, guildId);
+    if (!admission.ok) {
+      const content =
+        admission.reason === "user_cooldown"
+          ? `Give me ${admission.retryAfterSeconds} more second${admission.retryAfterSeconds === 1 ? "" : "s"} before asking again.`
+          : admission.reason === "user_minute_limit"
+            ? `You've reached 5 questions in a minute. Try again in ${admission.retryAfterSeconds} second${admission.retryAfterSeconds === 1 ? "" : "s"}.`
+            : admission.reason === "user_inflight"
+              ? "I'm still working on your previous question."
+              : admission.reason === "daily_limit"
+                ? "Navi's daily AI request limit has been reached. Try again after 00:00 UTC."
+                : "Navi is handling other questions right now. Try again shortly.";
       await interaction.reply({
-        content: "AI is busy or rate-limited. Please retry later.",
+        content,
         flags: MessageFlags.Ephemeral,
         allowedMentions: { parse: [] },
       });
+      // Admission is local and never contacts the selected AI provider.
+      // Log its exact reason, not a misleading generic provider failure.
+      console.info(
+        `ai.ask outcome=denied scope=${directMessage ? "dm" : "guild"} reason=${admission.reason}${admission.retryAfterSeconds === undefined ? "" : ` retry_after_s=${admission.retryAfterSeconds}`}`
+      );
       return;
     }
     const began = Date.now();
@@ -224,7 +243,7 @@ export default class AskCommand implements Command {
       }
       console.warn(`ai.ask outcome=failed duration_ms=${Date.now() - began}`);
     } finally {
-      release();
+      admission.release();
     }
   }
 }

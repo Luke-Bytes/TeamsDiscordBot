@@ -3,8 +3,13 @@ import { assert } from "../framework/assert";
 import { SeasonType } from "@prisma/client";
 import { prismaClient } from "../../src/database/prismaClient";
 import { SeasonService } from "../../src/database/SeasonService";
-import { AiAdmission } from "../../src/ai/Admission";
-import { getAiSettings } from "../../src/ai/AiConfig";
+import {
+  AiAdmission,
+  AI_USER_COOLDOWN_MS,
+  AI_USER_MINUTE_LIMIT,
+  AI_USER_MINUTE_WINDOW_MS,
+} from "../../src/ai/Admission";
+import { AI_DEFAULTS, getAiSettings } from "../../src/ai/AiConfig";
 import { answerAiQuestion, safeDiscordText } from "../../src/ai/AiAssistant";
 import {
   AiCaller,
@@ -59,7 +64,8 @@ test("AI defaults disabled and only the configured bot-command channel is allowe
   assert(
     enabled.channelIds.has("1234567890123456") &&
       !enabled.channelIds.has("9999999999999999") &&
-      enabled.dailyRequestLimit === 50,
+      enabled.dailyRequestLimit === AI_DEFAULTS.dailyRequestLimit &&
+      AI_DEFAULTS.dailyRequestLimit === 300,
     "Existing command channel and daily cap are defaults"
   );
   assert(
@@ -220,6 +226,166 @@ test("AI admission bounds active users, request budget and per-user cooldown", (
   );
   now += 86_400_000;
   assert(!!admission.acquire("one", "guild"), "Daily budget resets");
+});
+
+test("AI admission identifies rejection reasons without contacting a provider", () => {
+  let now = Date.UTC(2026, 10, 22);
+  const admission = new AiAdmission(4, () => now);
+  const first = admission.tryAcquire("player", "guild");
+  assert(first.ok, "First question admitted");
+  if (!first.ok) return;
+
+  const inflight = admission.tryAcquire("player", "guild");
+  assert(
+    !inflight.ok && inflight.reason === "user_inflight",
+    "Overlapping questions are recognised as in-flight"
+  );
+  first.release();
+
+  now += 3_500;
+  const cooldown = admission.tryAcquire("player", "guild");
+  assert(
+    !cooldown.ok &&
+      cooldown.reason === "user_cooldown" &&
+      cooldown.retryAfterSeconds === 2,
+    "Cooldown gives an accurate rounded-up retry interval"
+  );
+  now += AI_USER_COOLDOWN_MS - 3_500;
+  const second = admission.tryAcquire("player", "guild");
+  assert(second.ok, "Second question is accepted after the shorter cooldown");
+  if (!second.ok) return;
+
+  const third = admission.tryAcquire("other", "guild");
+  assert(third.ok, "Concurrent requests by different people remain allowed");
+  if (!third.ok) return;
+
+  const busy = admission.tryAcquire("extra", "guild");
+  assert(
+    !busy.ok && busy.reason === "global_busy",
+    "Global concurrency limit is reported distinctly"
+  );
+  second.release();
+  third.release();
+  assert(
+    admission.acquire("fourth", "guild") !== null,
+    "Released concurrent slots become available"
+  );
+  const daily = admission.tryAcquire("fifth", "guild");
+  assert(
+    !daily.ok && daily.reason === "daily_limit",
+    "Daily usage limit is reported distinctly"
+  );
+
+  const otherGuild = new AiAdmission(10, () => now);
+  const twoA = otherGuild.tryAcquire("a", "same-guild");
+  const twoB = otherGuild.tryAcquire("b", "same-guild");
+  assert(twoA.ok && twoB.ok, "Two concurrent requests from a guild can start");
+  if (twoA.ok && twoB.ok) {
+    // Currently guild and process caps are both 2, so the process cap wins.
+    const saturated = otherGuild.tryAcquire("c", "same-guild");
+    assert(
+      !saturated.ok && saturated.reason === "global_busy",
+      "Saturation reports the global cap rather than an ambiguous fallback"
+    );
+    twoA.release();
+    twoB.release();
+  }
+});
+
+test("AI admission permits five spaced questions per rolling minute, not six", () => {
+  let now = Date.UTC(2026, 10, 22, 12);
+  const start = now;
+  const admission = new AiAdmission(300, () => now);
+
+  for (let i = 0; i < AI_USER_MINUTE_LIMIT; i++) {
+    const result = admission.tryAcquire(
+      "chatter",
+      i % 2 ? "guild" : "dm-guild"
+    );
+    assert(result.ok, "Request " + (i + 1) + " accepted after 5 seconds");
+    if (!result.ok) return;
+    result.release();
+    if (i < AI_USER_MINUTE_LIMIT - 1) now += AI_USER_COOLDOWN_MS;
+  }
+
+  // Even an immediate sixth attempt must report the minute cap, rather
+  // than a misleading short cooldown that cannot actually admit it.
+  const immediate = admission.tryAcquire("chatter", "guild");
+  assert(
+    !immediate.ok &&
+      immediate.reason === "user_minute_limit" &&
+      immediate.retryAfterSeconds === 40,
+    "When both limits apply, the minute wait takes precedence"
+  );
+  now += AI_USER_COOLDOWN_MS;
+  const saturated = admission.tryAcquire("chatter", "guild");
+  assert(
+    !saturated.ok &&
+      saturated.reason === "user_minute_limit" &&
+      saturated.retryAfterSeconds === 35,
+    "Sixth question waits until the earliest accepted question leaves the 60-second window"
+  );
+  now = start + AI_USER_MINUTE_WINDOW_MS - 1;
+  const almostReady = admission.tryAcquire("chatter", "guild");
+  assert(
+    !almostReady.ok &&
+      almostReady.reason === "user_minute_limit" &&
+      almostReady.retryAfterSeconds === 1,
+    "Rolling-window boundary gives a precise one-second retry estimate"
+  );
+  now = start + AI_USER_MINUTE_WINDOW_MS;
+  const allowed = admission.tryAcquire("chatter", "guild");
+  assert(
+    allowed.ok,
+    "Oldest request expires exactly at the rolling 60-second boundary"
+  );
+  if (allowed.ok) allowed.release();
+
+  const unrelated = admission.tryAcquire("another-user", "guild");
+  assert(unrelated.ok, "One user's minute cap does not block another member");
+  if (unrelated.ok) unrelated.release();
+});
+
+test("AI minute window denies do not consume daily quota, and UTC daily quota still resets", () => {
+  let now = Date.UTC(2026, 10, 21, 23, 59, 10);
+  const admission = new AiAdmission(6, () => now);
+  for (let i = 0; i < 5; i++) {
+    const accepted = admission.tryAcquire("one", "guild");
+    assert(accepted.ok, "Each of the first five spaced requests is accepted");
+    if (accepted.ok) accepted.release();
+    now += AI_USER_COOLDOWN_MS;
+  }
+  for (let i = 0; i < 15; i++) {
+    const blocked = admission.tryAcquire("one", "guild");
+    assert(
+      !blocked.ok && blocked.reason === "user_minute_limit",
+      "Repeated rapid attempts cannot bypass the rolling limit"
+    );
+  }
+  const another = admission.tryAcquire("two", "guild");
+  assert(
+    another.ok,
+    "Another member can use the sixth and final shared daily request"
+  );
+  if (another.ok) another.release();
+  const full = admission.tryAcquire("three", "guild");
+  assert(
+    !full.ok && full.reason === "daily_limit",
+    "Only six accepted requests count against daily budget"
+  );
+
+  now = Date.UTC(2026, 10, 22, 0, 0, 0);
+  const reset = admission.tryAcquire("three", "guild");
+  assert(
+    reset.ok,
+    "Daily budget resets at UTC midnight without resetting rolling history"
+  );
+  if (reset.ok) reset.release();
+  const stillRecent = admission.tryAcquire("one", "guild");
+  assert(
+    !stillRecent.ok && stillRecent.reason === "user_minute_limit",
+    "UTC midnight does not reset one user's rolling minute limit"
+  );
 });
 
 test("AI tools deny model-supplied identity, malformed filters and organiser escalation before DB access", async () => {

@@ -89,10 +89,24 @@ uses its reviewed model-specific function calling. A model is never allowed
 to select a URL or execute a tool itself. **There is no automatic retry or
 cross-provider switch after a failed live request.** If a provider responds
 with an error, that question fails safely, with no unexpected second egress.
+Local admission denials are not provider errors: the bot reports whether a
+question is already in flight, the short per-user cooldown is active, the
+process is at capacity, or the UTC daily limit was reached. Each admission
+denial is logged as `ai.ask outcome=denied reason=...`, with
+`retry_after_s` for the cooldown and rolling-minute limit; none cause
+an external AI request. The 300 daily allowance counts _questions_, not
+provider inference rounds, which can be up to three for tool-using questions.
+It is a local safeguard, **not a guarantee of any Groq/Gemini/Cloudflare
+quota**. All three configured keys do not create load balancing: the first
+available credential wins (Groq, then Gemini, then Cloudflare), and a live
+provider failure does not trigger cross-provider retry.
 
 Separate direct clients do **not** share HiveOps' usage ledger. Default caps
-allow 50 accepted questions per UTC day, 2 concurrent total, 2 per guild,
-one in flight per caller and a 30-second user cooldown. These limits apply
+allow 300 accepted questions per UTC day **shared across all users**,
+2 concurrent total, 2 per guild, one in flight per caller, a 5-second
+per-user cooldown, and a second limit of **5 accepted questions per rolling
+60 seconds per user** (both measured from accepted request starts). These
+limits apply
 also to organisers, even though the existing general command rate limiter
 exempts the organiser role. The existing command safety filter still runs
 before the AI pathway. Each question can
