@@ -7,9 +7,12 @@ export const AI_DEFAULTS = {
   dailyRequestLimit: 300,
   requestTimeoutMs: 20_000,
   maxResponseBytes: 64 * 1024,
-  // GPT-OSS completion tokens also cover internal reasoning before visible text.
-  // Keep a bounded but less truncation-prone allowance; the prompt remains concise.
+  // Non-Groq providers keep their existing completion cap.
   maxOutputTokens: 1024,
+  // GPT-OSS also spends completion tokens on hidden reasoning. Keep the first
+  // Groq request generous and reserve one bounded larger retry for truncation.
+  groqMaxOutputTokens: 3072,
+  groqRetryMaxOutputTokens: 4096,
   maxToolCalls: 4,
   maxToolRounds: 2,
   temperature: 0.1,

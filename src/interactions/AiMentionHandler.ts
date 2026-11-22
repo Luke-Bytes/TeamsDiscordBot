@@ -1,30 +1,15 @@
-import { ChannelType, Client, Message } from "discord.js";
+import { Client, Message } from "discord.js";
 import { Config, ConfigManager } from "../ConfigManager";
 import { AiSettings } from "../ai/AiConfig";
+import {
+  isNaviGuildChannelEligible,
+  resolveNaviHomeGuild,
+} from "../ai/AiChannelPolicy";
 import { AiRequestService, validAiQuestion } from "../ai/AiRequestService";
 
+export { mentionChannelBlacklist } from "../ai/AiChannelPolicy";
+
 type ChannelsConfig = Config["channels"];
-
-const ELIGIBLE_TYPES: ReadonlySet<ChannelType> = new Set([
-  ChannelType.GuildText,
-  ChannelType.GuildAnnouncement,
-  ChannelType.PublicThread,
-  ChannelType.PrivateThread,
-  ChannelType.AnnouncementThread,
-]);
-
-/** All configured defaults are mandatory, even when optional exclusions are empty. */
-export function mentionChannelBlacklist(
-  channels: ChannelsConfig,
-  settings: AiSettings
-): ReadonlySet<string> {
-  return new Set([
-    channels.teamPickingChat,
-    channels.announcements,
-    channels.gameFeed,
-    ...(settings.mentionExcludedChannels ?? []),
-  ]);
-}
 
 /** Discord mention metadata AND the actual inline token must agree. */
 export function extractNaviQuestion(
@@ -59,18 +44,10 @@ export class AiMentionHandler {
     const channelId = settings.channelIds.values().next().value;
     if (!channelId) return null;
     if (this.home?.channelId === channelId) return this.home.guildId;
-    try {
-      const channel = await client.channels.fetch(channelId);
-      if (
-        channel?.type !== ChannelType.GuildText &&
-        channel?.type !== ChannelType.GuildAnnouncement
-      )
-        return null;
-      this.home = { channelId, guildId: channel.guild.id };
-      return channel.guild.id;
-    } catch {
-      return null;
-    }
+    const guild = await resolveNaviHomeGuild(client, settings);
+    if (!guild) return null;
+    this.home = { channelId, guildId: guild.id };
+    return guild.id;
   }
 
   private async reply(
@@ -107,13 +84,14 @@ export class AiMentionHandler {
 
     const config = this.assistant.getSettings();
     if (!config.enabled || config.mentionEnabled === false) return true;
-    if (!ELIGIBLE_TYPES.has(message.channel.type)) return true;
-    const excluded = mentionChannelBlacklist(this.channels, config);
     if (
-      excluded.has(message.channelId) ||
-      ("parentId" in message.channel &&
-        typeof message.channel.parentId === "string" &&
-        excluded.has(message.channel.parentId))
+      !isNaviGuildChannelEligible(
+        message.channel.type,
+        message.channelId,
+        "parentId" in message.channel ? message.channel.parentId : null,
+        this.channels,
+        config
+      )
     )
       return true;
     const dev = ConfigManager.getConfig().dev;

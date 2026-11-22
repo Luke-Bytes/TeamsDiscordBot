@@ -284,6 +284,40 @@ test("Navi omits tool schemas only for exact documented command help", async () 
   );
 });
 
+test("End-to-end organiser guidance prefers approved instructions without live reads", () => {
+  const knowledge = buildApprovedKnowledge(process.cwd());
+  for (const question of [
+    "How do I organise a game? start to finish",
+    "Walk me through hosting a FW match from beginning to end",
+    "How do I run a Friendly War game?",
+  ]) {
+    const found = retrieveApprovedKnowledge(knowledge, question, true);
+    assert(
+      found[0]?.heading === "Organise a game from start to finish" &&
+        found.some((chunk) => chunk.content.includes("/game shutdown")),
+      `Approved full-game walkthrough must be ranked first: ${question}`
+    );
+    assert(
+      toolsForAsk(question, found.length > 0, true, true).length === 0,
+      "Timeless organiser instructions should not call live game tools"
+    );
+  }
+  for (const question of [
+    "How do I organise our current game? We are stuck before start",
+    "How do I run this game tonight? I have an error",
+  ]) {
+    assert(
+      toolsForAsk(question, true, true, true).length > 0,
+      "Real live-game uncertainty must keep approved diagnostic tools"
+    );
+  }
+  assert(
+    toolsForAsk("How do I organise a game? start to finish", false, true, true)
+      .length > 0,
+    "Missing approved evidence must not silently disable tool access"
+  );
+});
+
 test("Navi tool offers never broaden roles or disabled history", () => {
   for (const organiser of [false, true]) {
     for (const history of [false, true]) {

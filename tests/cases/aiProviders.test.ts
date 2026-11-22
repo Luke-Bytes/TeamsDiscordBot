@@ -95,8 +95,10 @@ test("AI credential selection is deterministic, lazy while off, and skips invali
   );
 });
 
-test("Selected provider never retries another paid provider after a live failure", async () => {
-  const mock = fakeResponses([{ status: 503, value: { error: "suppressed" } }]);
+test("Selected provider retries transient failure only on the same provider", async () => {
+  const mock = fakeResponses(
+    Array.from({ length: 3 }, () => ({ status: 503, value: { error: "suppressed" } }))
+  );
   const selected = selectAiProvider({
     settings,
     env: { MC_AI_GROQ_KEY: "groq-offline-test", MC_AI_GEMINI_KEY: "gemini-offline-test" },
@@ -111,8 +113,9 @@ test("Selected provider never retries another paid provider after a live failure
     assert(error instanceof AiTransportError && error.kind === "unavailable",
       "Failure is safe and sanitized");
   }
-  assert(mock.requests.length === 1 && mock.requests[0].url.includes("api.groq.com"),
-    "Exactly one HTTP request; no cross-provider retry");
+  assert(mock.requests.length === 3 &&
+    mock.requests.every((request) => request.url.includes("api.groq.com")),
+    "Up to two retries of the same provider; no cross-provider fallback");
 });
 
 test("Gemini text and function calls preserve thinking signatures and group function responses", async () => {
@@ -275,7 +278,12 @@ test("Provider adapters reject error status, malformed responses and pre-cancell
       { status: 401, value: {}, kind: "unavailable" },
       { status: 200, value: { success: false }, kind: "invalid" },
     ]) {
-      const mock = fakeResponses([{ status: item.status, value: item.value }]);
+      const mock = fakeResponses(
+        Array.from({ length: item.status === 429 ? 3 : 1 }, () => ({
+          status: item.status,
+          value: item.value,
+        }))
+      );
       const infer = provider === "gemini"
         ? createGeminiInference({ model: AI_DEFAULTS.models.gemini,
             credential: () => "offline-key", fetchImpl: mock.fetchImpl })

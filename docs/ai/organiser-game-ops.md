@@ -2,6 +2,12 @@
 
 For authorised organisers using Discord. `/ask` explains commands and safe checks; it cannot run commands, repair state, confirm database writes or verify Discord delivery. Use normal Discord interactions, not operator tools. Each visible status is evidence of its stated scope only.
 
+## Organise a game from start to finish
+
+For a standard Friendly War, the organiser first uses `/announce start` to choose the time, map (or map poll), modifiers, bans, organiser and host. Review the preview and confirm to publish; a preview alone does not open registration. Players then use `/register` (or the organiser uses `/massregister` when appropriate). Check signups with `/registered` and `/team list`; ensure both teams will have players and that any scheduled poll or class-ban workflow is resolved. These are general steps, not evidence about an existing match.
+
+Next choose `/team generate method:random|elo|balance|draft|snake` and finish the preview or captain draft; draft methods require RED and BLUE captains (set via `/captain set` if needed). Verify the final teams, captains and Discord roles before `/game start`. After the real Minecraft match finishes, use `/game end` to mark the game finished and open MVP voting, then `/winner set team:RED|BLUE` and confirm the result. Finally use `/game shutdown` to save the result and clean up. Use `/game diagnostics`, `/team list` and visible Discord state to verify stage transitions; if shutdown or saving is uncertain, stop and ask a trusted operator to reconcile rather than repeating it.
+
 ## Announce a match: `/announce start`
 
 Use `/announce start` with required `when`, `modifiers`, `banned_classes`, `map`, `organiser` and `host`; `doubleelo` is optional (`yes`/`no`). The date must parse as a future time. A live announcement or an existing proposal blocks another proposal; an active season is required. Double Elo is disabled in Relaxed seasons regardless of the requested value.

@@ -1,4 +1,5 @@
 import "./cases/aiAssistant.test";
+import "./cases/aiHttpRetry.test";
 import "./cases/aiHistoricalState.test";
 import "./cases/aiKnowledgeQc.test";
 import "./cases/naviPrompt.test";

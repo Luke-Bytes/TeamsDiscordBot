@@ -34,6 +34,17 @@ function guildInteraction(question: string, organiser: boolean) {
     interaction: {
       guild,
       guildId: guild.id,
+      client: {
+        channels: {
+          fetch: async (channelId: string) => {
+            assert(
+              channelId === approvedChannel,
+              "Only the configured home-channel anchor is resolved"
+            );
+            return { type: ChannelType.GuildText, guild };
+          },
+        },
+      },
       channelId: approvedChannel,
       channel: { type: ChannelType.GuildText },
       context: InteractionContextType.Guild,
@@ -287,9 +298,14 @@ test("Groq truncated completions are safely classified rather than logged as suc
         "Truncated completion cannot masquerade as a verified answer"
       );
       assert(
-        requests[0].max_completion_tokens === AI_DEFAULTS.maxOutputTokens &&
-          AI_DEFAULTS.maxOutputTokens > 500,
-        "Groq has more room for reasoning tokens without making visible text verbose"
+        requests.length === 2 &&
+          requests[0].max_completion_tokens ===
+            AI_DEFAULTS.groqMaxOutputTokens &&
+          requests[1].max_completion_tokens ===
+            AI_DEFAULTS.groqRetryMaxOutputTokens &&
+          requests[0].reasoning_effort === "medium" &&
+          requests[1].reasoning_effort === "low",
+        "Truncated Groq completion receives one larger, lower-reasoning retry"
       );
       assert(
         logs.length === 1 &&
@@ -311,6 +327,61 @@ test("Groq truncated completions are safely classified rather than logged as suc
         }),
         { status: 200 }
       )
+  );
+});
+
+test("Groq recovers truncated organiser walkthroughs without extra live tool calls", async () => {
+  const question = "How do I organise a game? start to finish";
+  const mock = guildInteraction(question, true);
+  let attempts = 0;
+  await withOfflineGroq(
+    async (requests, logs) => {
+      await new AskCommand(settings).execute(mock.interaction as any);
+      assert(
+        mock.edits.length === 1 &&
+          mock.edits[0].content.includes("/announce start"),
+        "Completed recovery is delivered as a normal public answer"
+      );
+      assert(
+        requests.length === 2 &&
+          requests.every((request) => !request.tools) &&
+          requests[0].messages[2].content.includes(
+            "Organise a game from start to finish"
+          ) &&
+          JSON.stringify(requests[0].messages) ===
+            JSON.stringify(requests[1].messages),
+        "Broad static workflow uses approved guidance, not live diagnostics"
+      );
+      assert(
+        logs.length === 1 &&
+          logs[0].includes("outcome=completed") &&
+          !logs[0].includes("sensitive-partial-text") &&
+          /sources_used=[1-9]/.test(logs[0]),
+        "Recovered answers count as completed, without leaking partial model content"
+      );
+    },
+    () => {
+      attempts++;
+      return new Response(
+        JSON.stringify({
+          choices: [
+            attempts === 1
+              ? {
+                  finish_reason: "length",
+                  message: { content: "sensitive-partial-text" },
+                }
+              : {
+                  finish_reason: "stop",
+                  message: {
+                    content:
+                      "Use /announce start, confirm the announcement, then complete teams, /game start, /game end, /winner set and /game shutdown.",
+                  },
+                },
+          ],
+        }),
+        { status: 200 }
+      );
+    }
   );
 });
 

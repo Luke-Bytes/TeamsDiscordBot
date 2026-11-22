@@ -126,6 +126,7 @@ export const APPROVED: readonly ApprovedSource[] = [
     path: "docs/ai/organiser-game-ops.md",
     scope: "organiser",
     headings: [
+      "Organise a game from start to finish",
       "Announce a match: `/announce start`",
       "Announcement confirmation and edits",
       "Team generation: registered choices",
@@ -585,6 +586,30 @@ export function asksAboutFwTournament(question: string): boolean {
   );
 }
 
+/** A timeless walkthrough does not require a snapshot of anyone's live game. */
+export function asksForOrganiserWalkthrough(question: string): boolean {
+  const q = question.trim();
+  const game = /\b(?:games?|matches?|friendly wars?|fw)\b/i.test(q);
+  const organise =
+    /\b(?:organis(?:e|ing|er|ation)|organiz(?:e|ing|er|ation)|run(?:ning)?|host(?:ing)?)\b/i.test(
+      q
+    );
+  const requestingGuide =
+    /\b(?:start to finish|beginning to end|step[- ]by[- ]step|full (?:guide|process|workflow)|complete (?:guide|process|workflow)|all (?:the )?steps)\b/i.test(
+      q
+    ) ||
+    /^(?:how (?:do|can|should) (?:i|we) |how to |(?:please )?(?:explain|outline|describe|walk (?:me|us) through )|can you walk (?:me|us) through |what are the steps )/i.test(
+      q
+    );
+  // Do not suppress diagnostic tools for an actual match, even when the caller
+  // also asks for generic steps or uses "start to finish" in the question.
+  const liveProblem =
+    /\b(?:my|our|this|current|today|tonight|now|currently|already|still|next|ongoing|stuck|broken|fail(?:ed|ing|ure)?|errors?|timed?\s*out|missing|partial|recovered|registered|announced|in progress)\b/i.test(
+      q
+    );
+  return game && organise && requestingGuide && !liveProblem;
+}
+
 /**
  * All explicitly approved workflow guides are community-readable. The
  * 'organiser' scope labels who normally performs an operation, not who may
@@ -610,6 +635,7 @@ export function retrieveApprovedKnowledge(
     ) &&
     !/\bteam nexus\b/i.test(question);
   const selfQuestion = /\b(my|mine)\b/i.test(question);
+  const organiserWalkthrough = asksForOrganiserWalkthrough(question);
   const tacticalClassQuestion =
     /\b(?:kits?|classes?|builds?)\b/i.test(question) &&
     /\b(?:rush(?:ing|ers?|es|ed)?|defend(?:ing|ers?|s|ed)?|defen[sc]e)\b/i.test(
@@ -667,6 +693,13 @@ export function retrieveApprovedKnowledge(
       if (
         tournamentResultsQuestion &&
         chunk.heading === "Annihilation tournament champions and runners-up"
+      )
+        score += 35;
+      // Generic end-to-end questions should lead with the complete approved
+      // workflow, not unrelated fragments mentioning "game" or "start".
+      if (
+        organiserWalkthrough &&
+        chunk.heading === "Organise a game from start to finish"
       )
         score += 35;
       // "Best kit for rushing" should reach reviewed Annihilation classes,

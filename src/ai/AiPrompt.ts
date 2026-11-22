@@ -1,6 +1,6 @@
 import { permittedAiTools } from "./AiTools";
 import { AiFunctionTool, AiMessage } from "./AiProvider";
-import { KnowledgeChunk } from "./Knowledge";
+import { asksForOrganiserWalkthrough, KnowledgeChunk } from "./Knowledge";
 
 /** Instruction text only; permissions and citation provenance are enforced by code. */
 export const NAVI_CORE_PROMPT = [
@@ -42,7 +42,8 @@ export function toolsForAsk(
   if (
     hasApprovedEvidence &&
     (STATIC_COMMAND_HELP.test(question.trim()) ||
-      STATIC_ACTION_HELP.test(question.trim()))
+      STATIC_ACTION_HELP.test(question.trim()) ||
+      asksForOrganiserWalkthrough(question))
   )
     return [];
   return permittedAiTools(organiser, historicalEnabled);

@@ -9,6 +9,7 @@ import "./cases/askDms.test";
 import "./cases/askVisibility.test";
 import "./cases/aiMention.test";
 import "./cases/aiProviders.test";
+import "./cases/aiHttpRetry.test";
 import "./cases/aiHistoricalState.test";
 import "./cases/aiKnowledgeQc.test";
 import "./cases/shotbowKnowledge.test";

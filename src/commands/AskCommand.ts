@@ -9,6 +9,10 @@ import {
 import { Command } from "./CommandInterface";
 import { ConfigManager } from "../ConfigManager";
 import { AiSettings } from "../ai/AiConfig";
+import {
+  isNaviGuildChannelEligible,
+  resolveNaviHomeGuild,
+} from "../ai/AiChannelPolicy";
 import { AiRequestService } from "../ai/AiRequestService";
 
 /** Explicit opt-in slash command. Server replies are public; DMs stay private. */
@@ -53,36 +57,36 @@ export default class AskCommand implements Command {
       !interaction.guildId &&
       (interaction.context === InteractionContextType.BotDM ||
         interaction.channel?.type === ChannelType.DM);
-    let guild = interaction.guild;
-    let guildId = interaction.guildId;
-    if (directMessage) {
-      const commandChannelId = config.channelIds.values().next().value;
-      if (commandChannelId) {
-        try {
-          const channel =
-            await interaction.client.channels.fetch(commandChannelId);
-          if (
-            channel?.type === ChannelType.GuildText ||
-            channel?.type === ChannelType.GuildAnnouncement
-          ) {
-            guild = channel.guild;
-            guildId = guild.id;
-          }
-        } catch {
-          // Fail closed on inaccessible home-guild configuration.
-        }
-      }
-    }
+    // Guild /ask follows the same channel and parent-thread blacklist as
+    // @Navi. A DM remains valid independently of this server-channel policy.
+    const channelAllowed =
+      directMessage ||
+      isNaviGuildChannelEligible(
+        interaction.channel?.type,
+        interaction.channelId,
+        interaction.channel && "parentId" in interaction.channel
+          ? interaction.channel.parentId
+          : null,
+        ConfigManager.getConfig().channels,
+        config
+      );
+    const homeGuild = channelAllowed
+      ? await resolveNaviHomeGuild(interaction.client, config)
+      : null;
+    const guild = directMessage ? homeGuild : interaction.guild;
+    const guildId = directMessage ? homeGuild?.id : interaction.guildId;
     if (
       !guild ||
       !guildId ||
-      (!directMessage && !config.channelIds.has(interaction.channelId)) ||
+      !homeGuild ||
+      guildId !== homeGuild.id ||
+      !channelAllowed ||
       (ConfigManager.getConfig().dev.enabled &&
         guildId !== ConfigManager.getConfig().dev.guildId)
     ) {
       await interaction.reply({
         content:
-          "AI questions are only available in the bot-command channel or in DMs from verified server members.",
+          "AI questions are available in allowed server channels or in DMs from verified server members.",
         flags: MessageFlags.Ephemeral,
         allowedMentions: { parse: [] },
       });

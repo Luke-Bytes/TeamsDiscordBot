@@ -652,7 +652,7 @@ test("Groq aborts stalled requests at the configured deadline", async () => {
   }
 });
 
-test("Enabled /ask refuses disallowed guild channels and unsupported private contexts before provider access", async () => {
+test("Enabled /ask refuses unsupported guild channel types and private contexts before provider access", async () => {
   const replies: any[] = [];
   const command = new AskCommand({
     enabled: true,
@@ -669,7 +669,9 @@ test("Enabled /ask refuses disallowed guild channels and unsupported private con
   }
   assert(
     replies.length === 2 &&
-      replies.every((reply) => reply.content.includes("bot-command channel")),
+      replies.every((reply) =>
+        reply.content.includes("allowed server channels")
+      ),
     "Channel and DM fail closed before credentials or inference"
   );
 });

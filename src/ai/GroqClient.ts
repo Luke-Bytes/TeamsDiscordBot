@@ -36,34 +36,63 @@ export function createGroqInference(
   return async (messages, tools, signal) => {
     if (signal?.aborted) throw new AiTransportError("cancelled");
     const key = credential();
-    const parsed = await requestAiJson(
-      ENDPOINT,
-      {
-        model: options.model,
-        messages: messages.map((message) => {
-          if (message.role !== "assistant") return message;
-          const { continuation, ...wire } = message;
-          void continuation;
-          return wire;
-        }),
-        tools: tools.length ? tools : undefined,
-        tool_choice: tools.length ? "auto" : undefined,
-        parallel_tool_calls: false,
-        temperature: AI_DEFAULTS.temperature,
-        max_completion_tokens: AI_DEFAULTS.maxOutputTokens,
-        stream: false,
-      },
-      { authorization: `Bearer ${key}` },
-      options,
-      signal
+    // A truncated completion is not usable as a tool call or an answer.
+    // Re-run inference at most once, without executing any partial tool calls
+    // or switching providers. Both attempts share the same inference deadline.
+    const timeoutMs = Math.min(
+      Math.max(options.timeoutMs ?? AI_DEFAULTS.requestTimeoutMs, 1000),
+      30_000
     );
-    const choices = (parsed as { choices?: unknown })?.choices;
-    if (!Array.isArray(choices) || choices.length !== 1)
+    const deadline = Date.now() + timeoutMs;
+    const wireMessages = messages.map((message) => {
+      if (message.role !== "assistant") return message;
+      const { continuation, ...wire } = message;
+      void continuation;
+      return wire;
+    });
+    let choice:
+      | {
+          finish_reason?: string;
+          message?: { content?: unknown; tool_calls?: unknown };
+        }
+      | undefined;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (signal?.aborted) throw new AiTransportError("cancelled");
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0 || (attempt > 0 && remainingMs < 1000))
+        throw new AiTransportError("timeout");
+      const parsed = await requestAiJson(
+        ENDPOINT,
+        {
+          model: options.model,
+          messages: wireMessages,
+          tools: tools.length ? tools : undefined,
+          tool_choice: tools.length ? "auto" : undefined,
+          parallel_tool_calls: false,
+          temperature: AI_DEFAULTS.temperature,
+          max_completion_tokens:
+            attempt === 0
+              ? AI_DEFAULTS.groqMaxOutputTokens
+              : AI_DEFAULTS.groqRetryMaxOutputTokens,
+          // Use less hidden reasoning on the recovery request to leave room
+          // for a complete tool call or a concise visible answer.
+          reasoning_effort: attempt === 0 ? "medium" : "low",
+          stream: false,
+        },
+        { authorization: `Bearer ${key}` },
+        { ...options, timeoutMs: remainingMs },
+        signal
+      );
+      const choices = (parsed as { choices?: unknown })?.choices;
+      if (!Array.isArray(choices) || choices.length !== 1)
+        throw new AiTransportError("invalid");
+      choice = choices[0] as typeof choice;
+      if (choice?.finish_reason === "length" && attempt === 0) continue;
+      break;
+    }
+    if (!choice || !choice.message || typeof choice.message !== "object")
       throw new AiTransportError("invalid");
-    const choice = choices[0];
-    const message = choice?.message;
-    if (!message || typeof message !== "object")
-      throw new AiTransportError("invalid");
+    const message = choice.message;
     if (
       choice.finish_reason !== undefined &&
       choice.finish_reason !== "stop" &&

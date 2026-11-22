@@ -231,6 +231,114 @@ test("Mention feature defaults and mandatory blacklist preserve the /ask channel
   );
 });
 
+test("Guild /ask uses the same blacklist and eligible thread types as @Navi", async () => {
+  await withProvider(async (requests) => {
+    const configured = ConfigManager.getConfig().channels;
+    const previous = {
+      teamPickingChat: configured.teamPickingChat,
+      announcements: configured.announcements,
+      gameFeed: configured.gameFeed,
+    };
+    Object.assign(configured, {
+      teamPickingChat: PICKING,
+      announcements: ANNOUNCEMENTS,
+      gameFeed: FEED,
+    });
+    try {
+      for (const [channelId, type, parentId] of [
+        [HOME, ChannelType.GuildText, null],
+        [GENERAL, ChannelType.GuildText, null],
+        [GENERAL, ChannelType.GuildAnnouncement, null],
+        [GENERAL, ChannelType.PublicThread, GENERAL],
+        [GENERAL, ChannelType.PrivateThread, GENERAL],
+        [GENERAL, ChannelType.AnnouncementThread, GENERAL],
+      ] as Array<[string, ChannelType, string | null]>) {
+        const mock = scenario();
+        mock.interaction.channelId = channelId;
+        mock.interaction.channel = { type, parentId };
+        await new AskCommand(settings).execute(mock.interaction as any);
+        assert(
+          mock.defers.length === 1 &&
+            mock.edits.length === 1 &&
+            mock.slashReplies.length === 0,
+          `/ask must work publicly in allowed channel ${channelId} type ${type}`
+        );
+      }
+      assert(
+        requests.length === 6,
+        "Eligible server /ask reaches the provider"
+      );
+
+      for (const channelId of [PICKING, ANNOUNCEMENTS, FEED, EXTRA]) {
+        for (const threaded of [false, true]) {
+          const mock = scenario();
+          mock.interaction.channelId = threaded ? GENERAL : channelId;
+          mock.interaction.channel = {
+            type: threaded ? ChannelType.PublicThread : ChannelType.GuildText,
+            parentId: threaded ? channelId : null,
+          };
+          await new AskCommand(settings).execute(mock.interaction as any);
+          assert(
+            mock.defers.length === 0 &&
+              mock.edits.length === 0 &&
+              mock.slashReplies[0]?.flags === MessageFlags.Ephemeral &&
+              mock.slashReplies[0]?.content.includes(
+                "allowed server channels"
+              ) &&
+              mock.homeLookups() === 0,
+            "Excluded channels and their threads must deny before home lookup"
+          );
+        }
+      }
+      for (const type of [ChannelType.GuildVoice, ChannelType.GuildForum]) {
+        const mock = scenario();
+        mock.interaction.channelId = GENERAL;
+        mock.interaction.channel = { type, parentId: null };
+        await new AskCommand(settings).execute(mock.interaction as any);
+        assert(
+          mock.slashReplies[0]?.flags === MessageFlags.Ephemeral,
+          "Unsupported channel types fail closed"
+        );
+      }
+      for (const options of [
+        { guildId: "other-guild" },
+        { homeAccessible: false },
+      ]) {
+        const mock = scenario(options);
+        mock.interaction.channelId = GENERAL;
+        await new AskCommand(settings).execute(mock.interaction as any);
+        assert(
+          mock.slashReplies[0]?.content.includes("allowed server channels") &&
+            mock.defers.length === 0,
+          "Guild mismatch and inaccessible home anchor fail closed"
+        );
+      }
+      assert(
+        requests.length === 6,
+        "No excluded, unsupported or foreign guild request reaches the provider"
+      );
+    } finally {
+      Object.assign(configured, previous);
+    }
+  });
+});
+
+test("Slash /ask remains available when mention replies are disabled", async () => {
+  await withProvider(async (requests) => {
+    const mock = scenario();
+    mock.interaction.channelId = GENERAL;
+    await new AskCommand({ ...settings, mentionEnabled: false }).execute(
+      mock.interaction as any
+    );
+    assert(
+      requests.length === 1 &&
+        mock.edits.length === 1 &&
+        mock.slashReplies.length === 0,
+      "Mention-specific opt-out does not turn off the slash command"
+    );
+  });
+});
+
 test("Only real, inline Discord bot mentions extract text at any position", () => {
   for (const content of [
     `<@${BOT}> what are my stats?`,
