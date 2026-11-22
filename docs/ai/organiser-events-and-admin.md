@@ -14,7 +14,7 @@ Before opening, build questions with `/event question add`, `edit`, `remove` and
 
 ## Event opening and validation
 
-`/event open` makes the selected draft the current event and freezes questions and terms. It requires a configured sign-up text channel and a manageable participant role. Finish the previous current event before opening another.
+`/event open` makes the selected draft the current event and freezes questions while OPEN and terms permanently. It requires a configured sign-up text channel and a manageable participant role. Finish the previous current event before opening another.
 Opening can reject missing permissions, wrong role hierarchy, invalid questions or an incompatible event state. Inspect `/event view`/`preview` and have a trusted operator check configuration/role permissions; do not bypass validations.
 
 ## Event navigation and privacy
@@ -30,6 +30,7 @@ Withdrawals promote the earliest reserve; promotions can continue after regular 
 ## Closing, reopening and finishing events
 
 `/event close` stops **regular** admission; reserve applications/promotions may still continue. `/event reopen` restores regular admission when capacity and deadline permit. `/event finish` ends participation changes, stops promotions and removes participant roles.
+While the event is CLOSED, organisers can also use `/event question edit` (or add, move, remove), inspect `/event preview` and then `/event reopen`. Questions cannot change while OPEN or FINISHED. Editing increments the form revision: in-progress forms must restart; existing confirmed/reserve answers must remain compatible or the edit is rejected. Saved answers are preserved.
 These are persistent state changes with external Discord effects. If reopening appears ineffective, inspect deadline, capacity and event state. A finished event is not simply a temporarily closed event.
 
 ## Event role sync and delivery failures

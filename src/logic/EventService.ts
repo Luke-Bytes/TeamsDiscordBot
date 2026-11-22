@@ -249,8 +249,36 @@ export class EventService {
     validateEventQuestions(questions);
     return this.transaction(async (tx) => {
       const event = await this.lock(tx, guildId, eventId);
-      if (event.openedAt || event.state !== "DRAFT")
-        throw new Error("Questions are frozen after opening.");
+      if (
+        !["DRAFT", "CLOSED"].includes(event.state) ||
+        (event.state === "DRAFT" && event.openedAt)
+      )
+        throw new Error(
+          "Questions can only be edited in a draft or closed event. Use /event close first."
+        );
+      if (event.state === "CLOSED") {
+        // A closed event can still receive reserve applications. Keep existing
+        // confirmed/reserve responses valid when its questions are revised.
+        const signups = await tx.eventSignup.findMany({
+          where: {
+            eventId,
+            status: { in: ["CONFIRMED", "RESERVE"] },
+          },
+          select: { answers: true },
+        });
+        for (const signup of signups) {
+          try {
+            validateEventAnswers(
+              questions,
+              signup.answers as unknown as EventAnswers
+            );
+          } catch {
+            throw new Error(
+              "This change would invalidate existing sign-up answers. Keep their questions and choices compatible before reopening."
+            );
+          }
+        }
+      }
       return tx.standaloneEvent.update({
         where: { id: eventId },
         data: {

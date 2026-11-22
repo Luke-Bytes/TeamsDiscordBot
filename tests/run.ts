@@ -1,4 +1,5 @@
 import "./cases/eventRegression.test";
+import "./cases/eventQuestionReopen.test";
 import "./cases/signVisibility.test";
 import "./cases/eventDeletion.test";
 import "./cases/eventIdentitySync.test";

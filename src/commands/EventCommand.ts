@@ -146,10 +146,10 @@ export default class EventCommand implements Command {
     this.data.addSubcommandGroup((group) => {
       group
         .setName("question")
-        .setDescription("Configure draft event questions");
+        .setDescription("Configure draft or closed event questions");
       for (const action of ["add", "edit", "remove", "move"]) {
         group.addSubcommand((sub) => {
-          sub.setName(action).setDescription(`${action} a draft question`);
+          sub.setName(action).setDescription(`${action} an event question`);
           if (action !== "add")
             sub.addIntegerOption((o) =>
               o
@@ -339,7 +339,9 @@ export default class EventCommand implements Command {
         await eventService.setQuestions(guildId, event.id, questions);
         await this.respond(
           i,
-          "Questions saved. Use /event preview before opening."
+          event.state === "CLOSED"
+            ? "Questions saved. Use /event preview, then /event reopen when ready."
+            : "Questions saved. Use /event preview before opening."
         );
         return;
       }
