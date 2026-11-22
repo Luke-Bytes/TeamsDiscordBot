@@ -14,9 +14,10 @@
         "KGB",
         "01",
         "F3 Entity",
-        "Ace"
+        "Ace",
+        "YALE"
       ],
-      "participantBasis": "Finalists verified; other names from applications, not confirmed gameplay",
+      "participantBasis": "Known final teams plus YALE–AGENCY quarterfinal independently reviewed in AnniArchive's source footage; other registered clans are not proof of played games",
       "placements": [
         {
           "team": "DDD",
@@ -33,9 +34,9 @@
       ],
       "coverage": "partial",
       "gaps": [
-        "DDD channel upload names an opponent (01) but not both sides, so it remains a recording lead",
-        "lPirlo YALEAGENCY quarterfinal footage does not identify the opposing clan in metadata",
-        "Other group and knockout fixtures still incomplete"
+        "Other group and knockout fixtures incomplete",
+        "2023 DDD channel upload says vs 01 but does not unambiguously establish both sides",
+        "lPirlo quarterfinal is supported by reviewed AnniArchive footage (two teams), not a public bracket result"
       ]
     },
     {
@@ -749,6 +750,19 @@
           "kind": "official-video-title"
         }
       ]
+    },
+    {
+      "id": "s23-qf-yale-agency",
+      "tournamentId": "shotbow-2023",
+      "teams": ["YALE", "AGENCY"],
+      "stage": "Quarterfinal",
+      "status": "partial",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=1Nu_Db28r5s",
+          "kind": "community-report"
+        }
+      ]
     }
   ],
   "recordings": [
@@ -1120,7 +1134,13 @@
       "type": "match",
       "origin": "community",
       "uploadedOn": "2023-05-08",
-      "segments": []
+      "segments": [
+        {
+          "matchId": "s23-qf-yale-agency",
+          "status": "partial",
+          "evidence": "https://www.youtube.com/watch?v=1Nu_Db28r5s"
+        }
+      ]
     },
     {
       "id": "rec-s23-ddd-vs-01",

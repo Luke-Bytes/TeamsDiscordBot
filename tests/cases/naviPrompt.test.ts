@@ -44,11 +44,16 @@ test("Navi prompt has compact identity, evidence and safety invariants", () => {
     "human escalation",
     "discord chat",
     "no tables",
-    "fenced code",
+    "code fences",
     "real /slash commands",
     "occasional emoji",
     "skip legalistic warnings",
     "class abilities",
+    "playful for banter",
+    "direct for stats/commands/organiser help",
+    "at most one short bold phrase",
+    "no italics",
+    "no forced jokes",
   ])
     assert(
       policy.includes(phrase),
@@ -73,10 +78,11 @@ test("Navi delivery converts Markdown tables and fences to usable Discord text",
       "| 2 | **Ungenes** | 98 | 73 |"
   );
   assert(
-    table.includes("- **1. Deshigh** — Wins: 111 · Losses: 65") &&
-      table.includes("- **2. Ungenes** — Wins: 98 · Losses: 73") &&
-      !table.includes("| Rank |"),
-    "Model-generated tables become compact Discord-readable rows"
+    table.includes("1. Deshigh — Wins: 111 · Losses: 65") &&
+      table.includes("2. Ungenes — Wins: 98 · Losses: 73") &&
+      !table.includes("| Rank |") &&
+      table.match(/\*\*/g)?.length === 2,
+    "Model-generated tables become readable rows with at most one bold title"
   );
 
   const command = safeDiscordText(
@@ -84,7 +90,7 @@ test("Navi delivery converts Markdown tables and fences to usable Discord text",
       "Verify with GET /registered or run get_player_all_time_stats."
   );
   assert(
-    command.includes("**Updating names**") &&
+    command.includes("Updating names") &&
       command.includes("/username update oldusername:Old newusername:New") &&
       command.includes("/registered") &&
       command.includes("ask Navi to check") &&
@@ -93,6 +99,43 @@ test("Navi delivery converts Markdown tables and fences to usable Discord text",
       !command.includes("GET /registered") &&
       !command.includes("get_player_all_time_stats"),
     "No code fences, fake HTTP command or internal callable identifiers leak to users"
+  );
+});
+
+test("Navi limits excessive markdown emphasis without altering usernames or slashes", () => {
+  const reply = safeDiscordText(
+    "**Best option**: **Scout** for mobility; **Acrobat** for jumping. " +
+      "*Either works*, but try /stats player:Ice_otter and check _your_ records."
+  );
+  assert(
+    reply.includes("**Best option**") &&
+      reply.includes("Scout for mobility") &&
+      reply.includes("Acrobat for jumping") &&
+      reply.includes("Either works") &&
+      reply.includes("/stats player:Ice_otter") &&
+      reply.includes("your records") &&
+      reply.match(/\*\*/g)?.length === 2,
+    "Keep one useful bold phrase; remove decorative bold and italics"
+  );
+});
+
+test("Navi does not invent a worst-player ranking or fake slash command", async () => {
+  const result = await answerAiQuestion({
+    question: "who are the wost fw players",
+    organiser: false,
+    caller,
+    knowledge: [],
+    infer: async () => ({
+      content: "The worst player is ABC. Run /playerstats to see more.",
+      calls: [],
+    }),
+  });
+  assert(
+    result.text.includes("/stats player:<IGN>") &&
+      result.text.includes("/leaderboards") &&
+      !result.text.includes("ABC") &&
+      !result.text.includes("/playerstats"),
+    "Unverified bottom rankings must not surface invented identities or commands"
   );
 });
 

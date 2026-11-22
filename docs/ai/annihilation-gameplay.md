@@ -16,6 +16,18 @@ The wiki describes **five phases**, normally **10 minutes each**, with Phase 5 c
 
 Public games reward efficient early mining and enchanting, coordinated defense, mid control after diamonds appear, and timed Nexus rushes. A team's **Ender Furnace** is private to each user of that team and smelts faster than ordinary furnaces. In Phase 4, killing a boss and claiming its buff unlocks a special item shop for the team. A base **Nether Portal** allows class switching. Boss mechanics and loot have changed in patches, especially **Rising Radium (4.2.0)**, so defer to current official wiki/changelogs for exact cooldowns, items or damage numbers. Sources: https://wiki.shotbow.net/Annihilation_Game_Summary ; https://wiki.shotbow.net/Annihilation_Bosses
 
+## FW combat calls: rushing, defending and kits
+
+In competitive Annihilation and Friendly Wars (FW), **rushing** or a **rush** means attacking an enemy Nexus, aiming to damage or destroy it; a **rusher** is the player doing that job. **Defending** means protecting your own Nexus and stopping enemy rushers from reaching it; a **defender** is a team role, not automatically a reference to the playable Defender class. When someone asks for the best **kit** to rush or defend, they usually mean an Annihilation **class**, not a gun loadout. Teamwork, access routes and the match's banned classes affect the choice. These are FW competitive usage definitions; the underlying Nexus objective is documented at https://wiki.shotbow.net/Annihilation_Game_Summary .
+
+## FW map calls: mid and mid blocks
+
+**Mid** means the middle of an Annihilation map, where diamond ores become available from Phase 3. **Mid blocks** refers to the resource blocks contested at the centre at the start of a game: eight iron blocks and one diamond block in the usual FW competitive setup. The initial diamond **block** is different from diamonds that start spawning in Phase 3. This is FW community shorthand supplied by organisers, not a guarantee for every map variant; the public game's phase timing is explained at https://wiki.shotbow.net/Annihilation_Game_Summary .
+
+## FW economy roles: bunker, farmer, gold miner and gearer
+
+A **bunker** is the designated player who receives the team's gold and apple income and uses it to make golden apples (**gapples**) and potions for teammates. A **farmer** focuses on collecting apples, often using the Farmer class. A **gold miner** is dedicated to gathering gold, usually using the Miner class. A **gearer** prepares strong enchanted equipment for the team's fighters and rushers. These are informal player assignments, not necessarily distinct classes or Discord roles, and the team can divide or combine them differently. This wording reflects FW community usage; the wider Annihilation economy is described at https://wiki.shotbow.net/Annihilation_Game_Summary .
+
 ## Annihilation advice and version caveats
 
 A sensible public-game plan is: pick complementary classes, gather iron and levels early, prepare defenses before Phase 2, contest diamonds in Phase 3, organise boss teams in Phase 4, and coordinate attacks or counter-rushes when Phase 5 doubles Nexus damage. These are general tactics, not absolute requirements or claims about live teams. Annihilation's Minecraft base version changes over time (for example, the **February 2026 base 1.21.10** update), so older class guides and item descriptions can be stale. Source: https://shotbow.net/forum/threads/annihilation-base-1-21-10-update-5-0-0.432382/

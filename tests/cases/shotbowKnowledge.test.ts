@@ -4,6 +4,7 @@ import { answerAiQuestion } from "../../src/ai/AiAssistant";
 import {
   APPROVED,
   asksAboutFwTournament,
+  asksAboutFwVocabulary,
   asksAboutShotbow,
   buildApprovedKnowledge,
   retrieveApprovedKnowledge,
@@ -121,6 +122,155 @@ test("Specific Shotbow, Annihilation, class, map and patch questions retrieve th
     assert(
       retrieved.length <= 4,
       "Existing prompt excerpt budget remains bounded"
+    );
+  }
+});
+
+test("Unlabelled FW/Annihilation tactics and team roles retrieve the right glossary", () => {
+  const scenarios: Array<[string, string, string]> = [
+    [
+      "whats the best kit for rushing",
+      "Choosing Annihilation classes in a team",
+      "Scout",
+    ],
+    [
+      "what's the best class for defending",
+      "Choosing Annihilation classes in a team",
+      "Swapper",
+    ],
+    [
+      "what does rushing mean",
+      "FW combat calls: rushing, defending and kits",
+      "enemy Nexus",
+    ],
+    ["what is mid", "FW map calls: mid and mid blocks", "Phase 3"],
+    [
+      "where are the mid blocks",
+      "FW map calls: mid and mid blocks",
+      "eight iron blocks and one diamond block",
+    ],
+    [
+      "what is a bunker",
+      "FW economy roles: bunker, farmer, gold miner and gearer",
+      "gold and apple income",
+    ],
+    [
+      "what does a farmer do in FW",
+      "FW economy roles: bunker, farmer, gold miner and gearer",
+      "collecting apples",
+    ],
+    [
+      "what does a gold miner do",
+      "FW economy roles: bunker, farmer, gold miner and gearer",
+      "gathering gold",
+    ],
+    [
+      "what is a gearer",
+      "FW economy roles: bunker, farmer, gold miner and gearer",
+      "enchanted equipment",
+    ],
+  ];
+  for (const [question, heading, detail] of scenarios) {
+    assert(asksAboutShotbow(question), "Missed FW term: " + question);
+    const excerpts = retrieveApprovedKnowledge(knowledge, question, false);
+    assert(
+      excerpts.some(
+        (chunk) => chunk.heading === heading && chunk.content.includes(detail)
+      ),
+      `Glossary not retrieved for ${question}: ${excerpts.map((chunk) => chunk.heading).join(", ")}`
+    );
+  }
+  for (const question of [
+    "I am rushing emails to clients",
+    "How do I defend myself in court",
+    "What are the current FW rankings?",
+  ])
+    assert(
+      !asksAboutShotbow(question),
+      "Unrelated terms must not load Annihilation knowledge: " + question
+    );
+});
+
+test("FW memes, shorthand and staff distinctions are allowlisted and retrievable", () => {
+  const source = APPROVED.find(
+    (entry) => entry.path === "docs/ai/fw-community-terms.md"
+  );
+  assert(
+    source?.scope === "player" &&
+      source.topic === "fw-vocabulary" &&
+      source.headings.length === 4,
+    "Community-supplied slang is an approved, separate FW source"
+  );
+  const cases: Array<[string, string, string]> = [
+    ["what's a gap drop?", "Gap drop and leather scouting", "failed to eat"],
+    ["what is gap dropping", "Gap drop and leather scouting", "gapple"],
+    [
+      "why is he leather scouting?",
+      "Gap drop and leather scouting",
+      "fresh-spawn Scout",
+    ],
+    ["what are deppies?", "Deppies and prot12", "Depth Strider"],
+    ["deppies on a map with no water", "Deppies and prot12", "no water"],
+    [
+      "what is prot12",
+      "Deppies and prot12",
+      "Protection III on all four pieces",
+    ],
+    ["prot 12 while the nexus dies", "Deppies and prot12", "no potions"],
+    ["what does TP mean in FW?", "TP, rift, suc and 6 HP", "Transporter"],
+    ["TP?", "TP, rift, suc and 6 HP", "Transporter"],
+    ["what is a rift?", "TP, rift, suc and 6 HP", "Rift Walker"],
+    ["what does suc mean?", "TP, rift, suc and 6 HP", "Succubus"],
+    ["what does 6 hp mean?", "TP, rift, suc and 6 HP", "six or fewer"],
+    [
+      "he was on 6, I could have succed him",
+      "TP, rift, suc and 6 HP",
+      "finish",
+    ],
+    [
+      "is an FW organiser Shotbow staff?",
+      "Organiser, admin and host",
+      "does not make them Shotbow staff",
+    ],
+    [
+      "what is the difference between organiser and host?",
+      "Organiser, admin and host",
+      "official Shotbow staff",
+    ],
+  ];
+  for (const [question, title, detail] of cases) {
+    assert(
+      asksAboutFwVocabulary(question),
+      "Vocabulary intent not detected: " + question
+    );
+    const retrieved = retrieveApprovedKnowledge(knowledge, question, false);
+    assert(
+      retrieved.some(
+        (chunk) =>
+          chunk.source === "docs/ai/fw-community-terms.md" &&
+          chunk.heading.startsWith(title) &&
+          chunk.content.includes(detail)
+      ),
+      `Community meaning missing for "${question}": ${retrieved.map((c) => c.heading).join(", ")}`
+    );
+  }
+});
+
+test("Unrelated mentions do not inject FW meme vocabulary", () => {
+  for (const question of [
+    "How do I register?",
+    "How do I organise the game?",
+    "Who is hosting the website?",
+    "How does a tectonic rift form?",
+    "What is Depth Strider in a regular Minecraft survival world?",
+    "Tell me a joke about cats",
+  ]) {
+    assert(
+      !asksAboutFwVocabulary(question) &&
+        retrieveApprovedKnowledge(knowledge, question, false).every(
+          (chunk) => chunk.topic !== "fw-vocabulary"
+        ),
+      "Unrelated conversation retrieved FW slang: " + question
     );
   }
 });

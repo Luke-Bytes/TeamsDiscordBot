@@ -45,7 +45,7 @@ test("Approved tournament catalog has safe unique IDs, resolved links and no unv
     "Distinct 2018, 2020, FW and Shotbow tournament editions"
   );
   assert(
-    TOURNAMENT_ARCHIVE.matches.length >= 35,
+    TOURNAMENT_ARCHIVE.matches.length >= 36,
     "Individually traceable match records"
   );
   assert(
@@ -390,7 +390,6 @@ test("The same 2026 quarterfinal has multiple distinct official stream perspecti
   );
   for (const id of [
     "jQIIe5rVFUI",
-    "1Nu_Db28r5s",
     "SdwPHjJbCsQ",
     "N9TTVzHOQ78",
     "1izlnN61wJo",
@@ -401,6 +400,35 @@ test("The same 2026 quarterfinal has multiple distinct official stream perspecti
       "Real videos lacking proof of all opponents remain unassociated: " + id
     );
   }
+});
+
+test("Trusted AnniArchive footage identifies the 2023 YALE–AGENCY quarterfinal", () => {
+  const candidate = searchTournamentMatches({
+    team: "YALE",
+    opponent: "AGENCY",
+    year: 2023,
+  });
+  assert(
+    candidate.matches[0]?.matchId === "s23-qf-yale-agency" &&
+      candidate.matches[0].bothTeamsMatched &&
+      candidate.matches[0].stage === "Quarterfinal",
+    "Reviewed footage source supports two opponents and the quarterfinal round"
+  );
+  assert(
+    candidate.matches[0].map === null &&
+      candidate.matches[0].winner === null &&
+      candidate.matches[0].playedOn === null,
+    "Source footage does not imply a result, map or play date"
+  );
+  const source = TOURNAMENT_ARCHIVE.recordings.find(
+    (r) => r.videoId === "1Nu_Db28r5s"
+  );
+  assert(
+    source?.segments.length === 1 &&
+      source.segments[0].matchId === "s23-qf-yale-agency" &&
+      source.segments[0].startSeconds === undefined,
+    "Previously unresolved community upload now correctly associates, without a guessed start time"
+  );
 });
 
 test("Large catalog paging is stable, bounded and never silently drops matches", () => {

@@ -5,7 +5,7 @@ import { relative, resolve, sep } from "path";
 export type KnowledgeScope = "player" | "organiser";
 export type KnowledgeChunk = {
   id: string;
-  topic?: "shotbow" | "fw-tournament";
+  topic?: "shotbow" | "fw-tournament" | "fw-vocabulary";
   content: string;
   source: string;
   heading: string;
@@ -18,7 +18,7 @@ export type KnowledgeChunk = {
 export type ApprovedSource = {
   path: string;
   scope: KnowledgeScope;
-  topic?: "shotbow" | "fw-tournament";
+  topic?: "shotbow" | "fw-tournament" | "fw-vocabulary";
   headings: readonly string[];
 };
 
@@ -216,6 +216,17 @@ export const APPROVED: readonly ApprovedSource[] = [
     ],
   },
   {
+    path: "docs/ai/fw-community-terms.md",
+    scope: "player",
+    topic: "fw-vocabulary",
+    headings: [
+      "Gap drop and leather scouting — FW memes",
+      "Deppies and prot12 — FW gearing memes",
+      "TP, rift, suc and 6 HP — FW class shorthand",
+      "Organiser, admin and host — community role distinctions",
+    ],
+  },
+  {
     path: "docs/ai/shotbow-history.md",
     scope: "player",
     topic: "shotbow",
@@ -233,6 +244,9 @@ export const APPROVED: readonly ApprovedSource[] = [
       "Annihilation objective and teams",
       "Annihilation phases and resource timing",
       "Annihilation economy, bosses and preparation",
+      "FW combat calls: rushing, defending and kits",
+      "FW map calls: mid and mid blocks",
+      "FW economy roles: bunker, farmer, gold miner and gearer",
       "Annihilation advice and version caveats",
     ],
   },
@@ -413,7 +427,13 @@ const STOP = new Set([
 ]);
 function terms(text: string): Set<string> {
   return new Set(
-    (text.toLowerCase().match(/[a-z0-9_]{3,}/g) ?? [])
+    (
+      text
+        .toLowerCase()
+        .replace(/\bprot[\s-]+12\b/g, "prot12")
+        .replace(/\b6[\s-]*hp\b/g, "6hp")
+        .match(/\b(?:tp|[a-z0-9_]{3,})\b/g) ?? []
+    )
       // Preserve identifier matches while also finding words inside tool names
       // such as get_my_historical_stats.
       .flatMap((word) => [word, ...word.split("_")])
@@ -422,11 +442,23 @@ function terms(text: string): Set<string> {
           ? "register"
           : /^(win|wins|loss|losses|streak|streaks)$/.test(word)
             ? "stat"
-            : /^(teams|captains|seasons|games|events|players|stats|tools|accounts)$/.test(
-                  word
-                )
-              ? word.replace(/s$/, "")
-              : word
+            : /^(rush|rushing|rushes|rusher|rushers|rushed)$/.test(word)
+              ? "rush"
+              : /^(defend|defending|defender|defenders|defense|defence|defensive)$/.test(
+                    word
+                  )
+                ? "defend"
+                : /^(kits?|classes?)$/.test(word)
+                  ? "class"
+                  : /^(farmers?|farming)$/.test(word)
+                    ? "farmer"
+                    : /^(gearers?|gearing)$/.test(word)
+                      ? "gearer"
+                      : /^(teams|captains|seasons|games|events|players|stats|tools|accounts)$/.test(
+                            word
+                          )
+                        ? word.replace(/s$/, "")
+                        : word
       )
       .filter((word) => !STOP.has(word))
   );
@@ -452,6 +484,24 @@ function commands(text: string): Set<string> {
  * Annihilation terminology, or unmistakable class/map/update names. Ordinary
  * FW questions must not receive these extra paragraphs.
  */
+function asksAboutAnnihilationShorthand(question: string): boolean {
+  const combat =
+    /\b(?:rush(?:ing|ers?|es|ed)?|defend(?:ing|ers?|s|ed)?|defen[sc]e)\b/i.test(
+      question
+    );
+  const combatContext =
+    /\b(?:kits?|classes?|nexuses?|annihilation|anni|fw|friendly wars|what(?:'s| is)|means?|best|strategy|role|build|tactics?)\b/i.test(
+      question
+    );
+  const communityRole =
+    /\b(?:mid blocks?|gold miners?|gearers?|gapples?)\b/i.test(question) ||
+    (/\b(?:bunker|farmer|mid)\b/i.test(question) &&
+      /\b(?:fw|annihilation|anni|nexus|apples?|diamonds?|gold|minecraft|class|role|what(?:'s| is)|mean|where|why)\b/i.test(
+        question
+      ));
+  return (combat && combatContext) || communityRole;
+}
+
 export function asksAboutShotbow(question: string): boolean {
   // People often ask "Scout or Acrobat?" without saying "Annihilation class".
   // Recognise a class purchase/comparison without opening Shotbow guides for
@@ -460,7 +510,7 @@ export function asksAboutShotbow(question: string): boolean {
     question
       .toLowerCase()
       .match(
-        /\b(?:acrobat|scout|transporter|swapper|handyman|immobilizer|scorpio|bloodmage|alchemist|enchanter|rift walker|warrior|miner|pyro|assassin|berserker)\b/g
+        /\b(?:acrobat|scout|transporter|swapper|handyman|immobilizer|scorpio|bloodmage|alchemist|enchanter|rift walker|warrior|miner|pyro|assassin|berserker|farmer|defender|builder|healer)\b/g
       ) ?? []
   );
   const classChoice =
@@ -471,6 +521,7 @@ export function asksAboutShotbow(question: string): boolean {
     (classNames.size > 0 && /\b(?:buy|unlock|purchase|rent)\b/i.test(question));
   return (
     classChoice ||
+    asksAboutAnnihilationShorthand(question) ||
     /\b(?:shotbow|annihilation|anni|minez|hcfactions|ghostcraft|smash|nexus|nexuses)\b/i.test(
       question
     ) ||
@@ -481,7 +532,7 @@ export function asksAboutShotbow(question: string): boolean {
     ) ||
     /\b(?:5\.1\.0|5\.0\.0|4\.2\.0|4\.1\.0|3\.3\.0)\b/.test(question) ||
     (/\b(?:class|kit|ability|abilities)\b/i.test(question) &&
-      /\b(?:acrobat|scout|transporter|swapper|handyman|immobilizer|scorpio|bloodmage|alchemist|enchanter|rift walker|warrior|miner|pyro|assassin|berserker)\b/i.test(
+      /\b(?:acrobat|scout|transporter|swapper|handyman|immobilizer|scorpio|bloodmage|alchemist|enchanter|rift walker|warrior|miner|pyro|assassin|berserker|farmer|defender|builder|healer)\b/i.test(
         question
       )) ||
     (/\b(?:map|rotation)\b/i.test(question) &&
@@ -489,6 +540,37 @@ export function asksAboutShotbow(question: string): boolean {
         question
       ))
   );
+}
+
+/** User-supplied FW slang is not a source of general Shotbow rules. */
+export function asksAboutFwVocabulary(question: string): boolean {
+  const specific =
+    /\b(?:depp(?:ies|y)|prot[\s-]*12|leather[\s-]*scout(?:ing)?|gap[\s-]*drop(?:ping|ped|s)?|suc(?:c(?:ed|ing)?)?|6[\s-]*hp)\b/i.test(
+      question
+    );
+  const tp =
+    /\btp\b/i.test(question) &&
+    (/\b(?:fw|annihilation|anni|class|transporter|portal|nexus|what|means?|using|use|rushing)\b/i.test(
+      question
+    ) ||
+      /^tp\??$/i.test(question.trim()));
+  const rift =
+    /\brift\b/i.test(question) &&
+    !/\b(?:tectonic|geology|geological|valley|fantasy novel)\b/i.test(
+      question
+    ) &&
+    (/\b(?:fw|annihilation|anni|class|riftwalker|nexus|what|means?|using|use)\b/i.test(
+      question
+    ) ||
+      /^rift\??$/i.test(question.trim()));
+  const fwRole =
+    /\b(?:organis(?:ers?|ing|ation)|organiz(?:ers?|ing|ation)|admins?|hosts?|staff)\b/i.test(
+      question
+    ) &&
+    /\b(?:fw|friendly wars|shotbow|annihilation|organis(?:ers?|ing)|organiz(?:ers?|ing)|staff)\b/i.test(
+      question
+    );
+  return specific || tp || rift || fwRole;
 }
 
 /** Keep FW community tournament history separate from Shotbow staff events. */
@@ -519,6 +601,7 @@ export function retrieveApprovedKnowledge(
   const queryCommands = commands(question);
   const shotbowQuestion = asksAboutShotbow(question);
   const fwTournamentQuestion = asksAboutFwTournament(question);
+  const fwVocabularyQuestion = asksAboutFwVocabulary(question);
   const tournamentResultsQuestion =
     shotbowQuestion &&
     /\b(?:tournaments?|clans?)\b/i.test(question) &&
@@ -527,6 +610,11 @@ export function retrieveApprovedKnowledge(
     ) &&
     !/\bteam nexus\b/i.test(question);
   const selfQuestion = /\b(my|mine)\b/i.test(question);
+  const tacticalClassQuestion =
+    /\b(?:kits?|classes?|builds?)\b/i.test(question) &&
+    /\b(?:rush(?:ing|ers?|es|ed)?|defend(?:ing|ers?|s|ed)?|defen[sc]e)\b/i.test(
+      question
+    );
   const organiserTopic =
     /\b(?:organis(?:er|ers|e|ing|ation)|admin|announce|recover|shutdown|diagnos(?:e|is|tics)|punish(?:ment|ments)?|rollover|draft|captain|moderation|pending|announcements?)\b|\/(?:announce|punish|event|recover-game|game diagnostics)/i.test(
       question
@@ -535,7 +623,8 @@ export function retrieveApprovedKnowledge(
     .filter(
       (chunk) =>
         (chunk.topic !== "shotbow" || shotbowQuestion) &&
-        (chunk.topic !== "fw-tournament" || fwTournamentQuestion)
+        (chunk.topic !== "fw-tournament" || fwTournamentQuestion) &&
+        (chunk.topic !== "fw-vocabulary" || fwVocabularyQuestion)
     )
     .map((chunk) => {
       const body = terms(chunk.content);
@@ -565,6 +654,14 @@ export function retrieveApprovedKnowledge(
         matchingTerms
       )
         score += 8;
+      // Exact community slang needs to outrank generic game paragraphs,
+      // but should never be injected into unrelated conversations.
+      if (
+        fwVocabularyQuestion &&
+        chunk.topic === "fw-vocabulary" &&
+        matchingTerms
+      )
+        score += 16;
       // Years recur in registration paragraphs. Explicit winners/runner-up
       // questions should lead with the confirmed podium, not sign-up rosters.
       if (
@@ -572,6 +669,13 @@ export function retrieveApprovedKnowledge(
         chunk.heading === "Annihilation tournament champions and runners-up"
       )
         score += 35;
+      // "Best kit for rushing" should reach reviewed Annihilation classes,
+      // rather than a generic or unrelated meaning of "kit".
+      if (
+        tacticalClassQuestion &&
+        chunk.heading === "Choosing Annihilation classes in a team"
+      )
+        score += 24;
       // When people ask about "my" archived stats, prefer the documented
       // server-bound self tool over generic historical comparisons.
       if (selfQuestion && chunk.heading.startsWith("get_my_")) score += 7;

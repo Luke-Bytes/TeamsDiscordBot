@@ -47,7 +47,9 @@ export function formatNaviDiscordMessage(message: string): string {
           .slice(leadCount)
           .map((value, column) => `${header[column + leadCount]}: ${value}`)
           .join(" · ");
-        rendered.push(`- **${lead}**${details ? ` — ${details}` : ""}`);
+        rendered.push(
+          `${ranked ? "" : "- "}${lead}${details ? ` — ${details}` : ""}`
+        );
         cursor++;
       }
       if (cursor > index + 2) {
@@ -59,11 +61,10 @@ export function formatNaviDiscordMessage(message: string): string {
     // Strip code fence delimiters, not the useful slash command inside them.
     if (/^\s*(?:```|''')[a-z0-9_-]*\s*$/i.test(line)) continue;
     rendered.push(
-      line
-        .replace(/^\s{0,3}#{1,6}\s+(.+)$/, "**$1**")
-        .replace(/^\s{0,3}>\s?/, "")
+      line.replace(/^\s{0,3}#{1,6}\s+(.+)$/, "$1").replace(/^\s{0,3}>\s?/, "")
     );
   }
+  let boldUsed = false;
   return (
     rendered
       .join("\n")
@@ -77,6 +78,15 @@ export function formatNaviDiscordMessage(message: string): string {
       )
       // The model occasionally invents HTTP syntax for a genuine slash command.
       .replace(/\bGET\s+(\/(?:registered|stats|leaderboards|help))\b/g, "$1")
+      // Most of a conversational reply should remain plain text. Preserve at
+      // most one short emphasis; never decorate every row of a leaderboard.
+      .replace(/\*\*([^*\n]+)\*\*/g, (_match, content: string) => {
+        if (boldUsed || content.length > 45) return content;
+        boldUsed = true;
+        return `**${content}**`;
+      })
+      .replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "$1")
+      .replace(/(?<![\w_])_([^_\n]+)_(?![\w_])/g, "$1")
       .replace(/\n{3,}/g, "\n\n")
       .trim()
   );

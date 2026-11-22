@@ -27,9 +27,21 @@ export type AiAnswer = {
  * The prompt covers ambiguous cases, and this guard blocks common fabricated
  * server-state answers when the model declined every offered read-only tool.
  */
+function asksForBottomPlayerRanking(question: string): boolean {
+  return (
+    /\b(?:worst|wost|bottom|lowest)\b.{0,55}\b(?:fw|friendly wars|players?|win rate|elo|rankings?)\b/i.test(
+      question
+    ) ||
+    /\b(?:fw|friendly wars|players?)\b.{0,55}\b(?:worst|wost|bottom|lowest)\b/i.test(
+      question
+    )
+  );
+}
+
 export function needsVerifiedServerData(question: string): boolean {
   const q = question.trim();
   return (
+    asksForBottomPlayerRanking(q) ||
     /\b(?:who(?:'s| is)?|what(?:'s| is)?|which)\b.{0,65}\b(?:leaderboards?|rankings?|standings?|\d+(?:st|nd|rd|th)\s+place|organisers?|organizers?)\b/i.test(
       q
     ) ||
@@ -266,8 +278,9 @@ export async function answerAiQuestion(options: {
       if (result.calls.length === 0) {
         const content = safeDiscordText(result.content);
         return {
-          text:
-            !usedTools.length && needsVerifiedServerData(options.question)
+          text: asksForBottomPlayerRanking(options.question)
+            ? "I can't verify a reliable 'worst FW players' ranking. You can check someone's record with /stats player:<IGN>, or see seasonal standings with /leaderboards."
+            : !usedTools.length && needsVerifiedServerData(options.question)
               ? "I can't verify those server details without approved data. Try /stats, /leaderboards or ask an organiser."
               : content ||
                 "I couldn't produce an answer. Please try rephrasing.",
