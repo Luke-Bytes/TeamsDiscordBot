@@ -227,7 +227,9 @@ export class EventService {
           id: eventId,
           guildId,
           state: "DRAFT",
-          openedAt: null,
+          // MongoDB distinguishes an absent optional field from explicit null.
+          // New draft events may not have an openedAt field at all.
+          OR: [{ openedAt: null }, { openedAt: { isSet: false } }],
           revision: event.revision + 1,
         },
       });

@@ -154,11 +154,21 @@ test("event form requires private owner consent and rejects forms from a replace
     await command.execute(start);
     assert(
       start.calls.some(
-        (c: any) => c.method === "deferReply" && c.payload.flags
+        (c: any) => c.method === "deferReply" && !c.payload?.flags
       ),
-      "form is private"
+      "slash command acknowledgement is public"
     );
-    const page = start.calls.find((c: any) => c.method === "editReply").payload;
+    const publicReply = start.calls.find(
+      (c: any) => c.method === "editReply"
+    ).payload;
+    assert(
+      !JSON.stringify(publicReply).includes("Availability?"),
+      "public acknowledgement must not reveal private questions"
+    );
+    const page = start.calls.find(
+      (c: any) => c.method === "followUp" && c.payload.flags
+    ).payload;
+    assert(page.components?.length, "questionnaire stays private");
     const next = page.components
       .flatMap((r: any) => r.toJSON().components)
       .find((b: any) => b.label === "Next").custom_id;
@@ -186,7 +196,7 @@ test("event form requires private owner consent and rejects forms from a replace
     event.id = "future-event";
     const stale = interaction();
     const freshPage = fresh.calls.find(
-      (c: any) => c.method === "editReply"
+      (c: any) => c.method === "followUp" && c.payload.flags
     ).payload;
     stale.customId = freshPage.components
       .flatMap((r: any) => r.toJSON().components)

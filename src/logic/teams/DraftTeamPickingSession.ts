@@ -508,6 +508,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
   }
 
   public async cancelSession(): Promise<void> {
+    const wasInProgress = this.state === "inProgress";
     this.state = "cancelled";
     this.clearTurnTimers();
     if (typeof this.embedMessage?.delete === "function") {
@@ -515,9 +516,13 @@ export class DraftTeamPickingSession extends TeamPickingSession {
         this.embedMessage!.delete()
       );
     }
-    const channel = Channels.teamPicking;
-    if (channel.isSendable()) {
-      await channel.send("Draft picking cancelled.");
+    // End-of-game cleanup also disposes finalized drafts; only an active
+    // draft being cancelled should produce a channel announcement.
+    if (wasInProgress) {
+      const channel = Channels.teamPicking;
+      if (channel.isSendable()) {
+        await channel.send("Draft picking cancelled.");
+      }
     }
   }
 

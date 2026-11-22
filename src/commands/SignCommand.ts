@@ -89,11 +89,11 @@ export default class SignCommand implements Command {
     ) {
       await i.reply({
         content: "Use this command in the configured event sign-up channel.",
-        flags: MessageFlags.Ephemeral,
       });
       return;
     }
-    await i.deferReply({ flags: MessageFlags.Ephemeral });
+    // Public command acknowledgement; private answers stay in ephemeral follow-ups.
+    await i.deferReply();
     try {
       const event = await eventService.get(i.guildId);
       const roster = await eventService.roster(i.guildId, event.id);
@@ -111,10 +111,10 @@ export default class SignCommand implements Command {
           .join("\n")}`;
         const pages = eventPages(text);
         await i.editReply({
-          content: pages[0],
+          content: "Your event application was sent to you privately.",
           allowedMentions: { parse: [] },
         });
-        for (const content of pages.slice(1))
+        for (const content of pages)
           await i.followUp({
             content,
             flags: MessageFlags.Ephemeral,
@@ -130,8 +130,8 @@ export default class SignCommand implements Command {
         await eventService.withdraw(i.guildId, event.id, i.user.id);
         await syncEventDiscord(i.client, i.guildId);
         await i.editReply({
-          content:
-            "You have withdrawn. Your previous answers remain in the event's historical records.",
+          content: `<@${i.user.id}> has withdrawn from ${eventDisplay(event.title)}.`,
+          allowedMentions: { parse: [] },
         });
         return;
       }
@@ -174,11 +174,26 @@ export default class SignCommand implements Command {
         expectedSignupUpdatedAt: row?.updatedAt,
       };
       this.sessions.set(session.id, session);
-      await i.editReply(this.page(session));
-    } catch (error) {
       await i.editReply({
         content:
+          action === "edit"
+            ? "Application editing opened. Check your private form to continue."
+            : "Event sign-up started. Check your private form to complete registration.",
+        allowedMentions: { parse: [] },
+      });
+      await i.followUp({
+        ...this.page(session),
+        flags: MessageFlags.Ephemeral,
+      });
+    } catch (error) {
+      await i.editReply({
+        content: "Unable to complete the event request. See the private error.",
+        allowedMentions: { parse: [] },
+      });
+      await i.followUp({
+        content:
           error instanceof Error ? error.message : "Unable to load event.",
+        flags: MessageFlags.Ephemeral,
         allowedMentions: { parse: [] },
       });
     }
@@ -379,6 +394,15 @@ export default class SignCommand implements Command {
           components: [],
           allowedMentions: { parse: [] },
         });
+        // Only announce committed applications, never the player's answers.
+        try {
+          await i.followUp({
+            content: `<@${s.userId}> ${s.editing ? "updated their application" : "signed up"} for ${eventDisplay(s.event.title)} — ${result.status}.`,
+            allowedMentions: { parse: [] },
+          });
+        } catch (error) {
+          console.warn("[events] Public sign-up notification failed", error);
+        }
         return;
       }
       if (action === "next") {

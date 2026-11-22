@@ -9,7 +9,7 @@ type Draft = {
   guildId: string;
   title: string;
   state: string;
-  openedAt: Date | null;
+  openedAt?: Date | null;
   revision: number;
 };
 
@@ -28,13 +28,19 @@ function mockDatabase(draft: Draft, signups = 0, currentEventId?: string) {
         return { count: 1 };
       },
       deleteMany: async ({ where }: any) => {
+        // Prisma/MongoDB treats an absent optional field differently from null.
+        const unopened = where.OR?.some((filter: any) =>
+          filter.openedAt === null
+            ? draft.openedAt === null
+            : filter.openedAt?.isSet === false && draft.openedAt === undefined
+        );
         if (
           race ||
           removed ||
           draft.id !== where.id ||
           draft.guildId !== where.guildId ||
           draft.state !== where.state ||
-          draft.openedAt !== where.openedAt ||
+          !unopened ||
           draft.revision !== where.revision
         )
           return { count: 0 };
@@ -89,6 +95,24 @@ test("event deletion permanently removes only an unopened same-guild draft", asy
   const result = await new EventService(db.db).deleteDraft("guild", "draft-id");
   assertEqual(result.id, "draft-id", "correct draft deleted");
   assert(db.wasRemoved(), "draft record removed");
+
+  // MongoDB-backed drafts commonly omit openedAt instead of storing null.
+  const draftWithoutOpenedAt = draft();
+  delete draftWithoutOpenedAt.openedAt;
+  const missingFieldDb = mockDatabase(draftWithoutOpenedAt);
+  const missingFieldResult = await new EventService(
+    missingFieldDb.db
+  ).deleteDraft("guild", "draft-id");
+  assertEqual(
+    missingFieldResult.id,
+    "draft-id",
+    "draft with no openedAt deleted"
+  );
+  assert(
+    missingFieldDb.wasRemoved(),
+    "missing optional field must not block deletion"
+  );
+
   await rejectDelete(draft({ state: "OPEN", openedAt: new Date() }));
   await rejectDelete(draft({ state: "CLOSED", openedAt: new Date() }));
   await rejectDelete(draft({ state: "FINISHED", openedAt: new Date() }));

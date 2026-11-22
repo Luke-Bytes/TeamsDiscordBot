@@ -1,9 +1,12 @@
 import { test } from "../framework/test";
+import { assert, assertEqual } from "../framework/assert";
 import { CurrentGameManager } from "../../src/logic/CurrentGameManager";
 import { GameInstance } from "../../src/database/GameInstance";
 import TeamCommand from "../../src/commands/TeamCommand";
 import { gameFeed } from "../../src/logic/gameFeed/GameFeed";
 import { prismaClient } from "../../src/database/prismaClient";
+import { Channels } from "../../src/Channels";
+import { DraftTeamPickingSession } from "../../src/logic/teams/DraftTeamPickingSession";
 
 test("resetCurrentGame clears timers, sessions, votes, and state in-place", async () => {
   (prismaClient as any).game = (prismaClient as any).game || {};
@@ -93,6 +96,72 @@ test("resetCurrentGame clears timers, sessions, votes, and state in-place", asyn
 
   // Restore stubbed method
   (gameFeed as any).removeAllFeedMessages = originalRemoveAll;
+});
+
+test("end-of-game reset does not announce cancellation of a finalized draft", async () => {
+  const originalChannel = Channels.teamPicking;
+  const sent: string[] = [];
+  const command = new TeamCommand();
+  const draft = new DraftTeamPickingSession();
+  let deleted = false;
+  draft.state = "finalized";
+  draft.embedMessage = {
+    delete: async () => {
+      deleted = true;
+    },
+  } as any;
+  command.teamPickingSession = draft;
+  Channels.teamPicking = {
+    isSendable: () => true,
+    send: async (message: string) => {
+      sent.push(message);
+    },
+  } as any;
+
+  try {
+    await CurrentGameManager.resetCurrentGame();
+    assertEqual(sent.length, 0, "Finished draft cleanup should be silent");
+    assert(deleted, "Finished draft message is cleaned up");
+    assertEqual(command.teamPickingSession, undefined, "Session is detached");
+  } finally {
+    Channels.teamPicking = originalChannel;
+    command.teamPickingSession = undefined;
+  }
+});
+
+test("active draft cancellation announces once, even after repeated cleanup", async () => {
+  const originalChannel = Channels.teamPicking;
+  const sent: string[] = [];
+  const command = new TeamCommand();
+  Channels.teamPicking = {
+    isSendable: () => true,
+    send: async (message: string) => {
+      sent.push(message);
+    },
+  } as any;
+
+  try {
+    const activeDraft = new DraftTeamPickingSession();
+    command.teamPickingSession = activeDraft;
+    await command.resetTeamPickingSession();
+    assertEqual(sent.length, 1, "Active draft cancellation is announced once");
+    assertEqual(
+      sent[0],
+      "Draft picking cancelled.",
+      "Cancellation notice is correct"
+    );
+    await activeDraft.cancelSession();
+    assertEqual(sent.length, 1, "Repeated cancellation should be silent");
+
+    const alreadyCancelled = new DraftTeamPickingSession();
+    alreadyCancelled.state = "cancelled";
+    command.teamPickingSession = alreadyCancelled;
+    await command.resetTeamPickingSession();
+    assertEqual(sent.length, 1, "Button-cancel cleanup should not post again");
+  } finally {
+    Channels.teamPicking = originalChannel;
+    command.teamPickingSession = undefined;
+  }
 });
 
 test("resetGameInstance saves and resets in-place without stale references", async () => {

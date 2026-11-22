@@ -612,10 +612,12 @@ export default class TeamCommand implements Command {
   public async resetTeamPickingSession(): Promise<void> {
     const session = this.teamPickingSession;
     if (!session) return;
-    session.state = "cancelled";
     try {
+      // Let the session inspect its prior state before deciding whether this
+      // is an actual cancellation or just cleanup of a finalized draft.
       await session.cancelSession?.();
     } finally {
+      session.state = "cancelled";
       if (this.teamPickingSession === session) this.teamPickingSession = undefined;
     }
   }
