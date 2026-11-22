@@ -178,15 +178,17 @@ for general questions so organiser procedures do not crowd them out.
 Organiser-only **live tool schemas** remain withheld from players, and every
 tool rechecks role and membership. The assistant rechecks permissions around each provider turn;
 revocation prevents delivery of a privileged answer. The model has no
-filesystem browsing tool. Bot-verified citations and the read-only data source
-names are attached separately. Knowledge refresh is on process restart.
+filesystem browsing tool. Provenance remains server-side and the number of reviewed excerpts used is
+recorded as `sources_used` in the /ask outcome log. Document paths, hashes,
+line numbers and data-source category labels are **not appended** to Discord
+answers. Knowledge refresh is on process restart.
 
 The bot answers publicly in the approved guild channel, or privately in a
 DM, suppresses Discord mentions, limits output length, and strips external
 links and credential-shaped strings. The **final user-visible /ask reply**
-(including server-generated citations) is logged as a single JSON-escaped
+(without source or data-provenance footers) is logged as a single JSON-escaped
 field **only after a successful Discord edit**, alongside provider, DM/guild
-scope, latency and tool count. Provider failures are identified as
+scope, latency, tool count and number of approved excerpts used. Provider failures are identified as
 `outcome=provider_failed` with safe `error_kind` and `error_code` values
 such as `finish_length` or `http_400`; they are not counted as successful
 answers. No raw provider response/error body is logged. Groq now has a

@@ -189,31 +189,10 @@ export default class AskCommand implements Command {
         knowledge: this.knowledge,
         infer: selected.infer,
       });
-      const citations = result.sources.length
-        ? `\n\nSources: ${result.sources.slice(0, 3).join("; ")}`
-        : "";
-      const dataSources = [
-        ...new Set(
-          result.toolNames.map((name) =>
-            name.startsWith("get_historical_") ||
-            name.startsWith("get_my_historical_") ||
-            name === "list_historical_seasons"
-              ? "REST_API historical stats"
-              : name === "get_current_game_state" ||
-                  name === "get_game_diagnostics"
-                ? "current bot process snapshot"
-                : "Teams bot read-only database"
-          )
-        ),
-      ];
-      const database = dataSources.length
-        ? `\nData: ${dataSources.join("; ")} (read-only)`
-        : "";
-      const reply = (safeDiscordText(result.text) + citations + database).slice(
-        0,
-        1850
-      );
-      const delivered = reply || "No verified answer was available.";
+      // Retrieval provenance and tool identities remain server-side; public
+      // answers should read like normal conversation, not an audit report.
+      const delivered =
+        safeDiscordText(result.text) || "No verified answer was available.";
       await interaction.editReply({
         content: delivered,
         allowedMentions: { parse: [] },
@@ -222,7 +201,7 @@ export default class AskCommand implements Command {
       // JSON quoting keeps untrusted text on one log line. Never log prompts,
       // tool payloads, provider bodies, or credentials.
       console.info(
-        `ai.ask outcome=${result.failureKind ? "provider_failed" : "completed"} scope=${directMessage ? "dm" : "guild"} provider=${selected.provider} duration_ms=${Date.now() - began} tools=${result.toolNames.length}${result.failureKind ? ` error_kind=${result.failureKind} error_code=${result.failureCode ?? "unknown"}` : ""} reply=${JSON.stringify(delivered)}`
+        `ai.ask outcome=${result.failureKind ? "provider_failed" : "completed"} scope=${directMessage ? "dm" : "guild"} provider=${selected.provider} duration_ms=${Date.now() - began} tools=${result.toolNames.length} sources_used=${result.sources.length}${result.failureKind ? ` error_kind=${result.failureKind} error_code=${result.failureCode ?? "unknown"}` : ""} reply=${JSON.stringify(delivered)}`
       );
     } catch {
       try {

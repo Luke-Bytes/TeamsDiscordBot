@@ -110,6 +110,13 @@ test("Guild /ask replies publicly with verified organiser tools and approved org
         "Answer is sent through a public deferred interaction"
       );
       assert(
+        !mock.edits[0].content.includes("Sources:") &&
+          !mock.edits[0].content.includes("Data:") &&
+          !mock.edits[0].content.includes("docs/ai/") &&
+          !mock.edits[0].content.includes("sha256:"),
+        "Public replies never append source paths, metadata or data labels"
+      );
+      assert(
         mock.checks() >= 3 && requests.length === 1,
         "Fresh server membership checks are retained"
       );
@@ -130,8 +137,9 @@ test("Guild /ask replies publicly with verified organiser tools and approved org
       assert(
         logs.length === 1 &&
           logs[0].includes("outcome=completed scope=guild") &&
-          logs[0].includes("reply="),
-        "Public final reply remains audited"
+          logs[0].includes("reply=") &&
+          /sources_used=[1-9]/.test(logs[0]),
+        "Sources remain auditable as a count, without showing citation metadata"
       );
     },
     () =>

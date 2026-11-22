@@ -142,8 +142,12 @@ test("DM /ask uses its configured guild and logs only the sanitised delivered an
     );
     const delivered = mock.edits[0]?.content ?? "";
     assert(
-      delivered.includes("Use /register.") && delivered.includes("Sources:"),
-      "DM includes safe answer and server-generated evidence citations"
+      delivered.includes("Use /register.") &&
+        !delivered.includes("Sources:") &&
+        !delivered.includes("Data:") &&
+        !delivered.includes("docs/ai/") &&
+        !delivered.includes("sha256:"),
+      "DM answer has no provenance footer even when guides were retrieved"
     );
     assert(
       delivered.includes("[credential omitted]") && !delivered.includes("gsk_"),
@@ -158,7 +162,7 @@ test("DM /ask uses its configured guild and logs only the sanitised delivered an
     const rawLogReply = logs[0].split(" reply=")[1];
     assert(
       JSON.parse(rawLogReply) === delivered,
-      "PM2 log contains exactly the delivered final reply, including citations"
+      "PM2 log contains exactly the user-visible answer, without source footer"
     );
     assert(
       !logs[0].includes("How do I register?") &&
