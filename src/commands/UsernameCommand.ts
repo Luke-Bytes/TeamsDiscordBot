@@ -2,9 +2,9 @@ import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
 import { Command } from "./CommandInterface";
 import { MojangAPI } from "../api/MojangAPI";
 import { prismaClient } from "../database/prismaClient";
+import { updatePlayerIdentityAndEventSignups } from "../logic/EventIdentitySync";
 import { escapeText } from "../util/Utils";
 import { PermissionsUtil } from "../util/PermissionsUtil";
-
 
 export default class UsernameCommand implements Command {
   name = "username";
@@ -53,7 +53,8 @@ export default class UsernameCommand implements Command {
     const oldLookup = await MojangAPI.lookupUsername(oldUsername);
     const newLookup = await MojangAPI.lookupUsername(newUsername);
     if (oldLookup.status !== "found" || newLookup.status !== "found") {
-      const unavailable = oldLookup.status === "unavailable" ||
+      const unavailable =
+        oldLookup.status === "unavailable" ||
         newLookup.status === "unavailable";
       await interaction.editReply(
         unavailable
@@ -85,6 +86,7 @@ export default class UsernameCommand implements Command {
           { minecraftAccounts: { has: newUUID } },
           { latestIGN: { equals: newUsername, mode: "insensitive" } },
         ],
+        NOT: { id: oldPlayer.id },
       },
       select: { id: true },
     });
@@ -101,15 +103,17 @@ export default class UsernameCommand implements Command {
     // simultaneous claims by different players.
     let changed: { count: number };
     try {
-      changed = await prismaClient.player.updateMany({
-        where: { id: oldPlayer.id, primaryMinecraftAccount: oldUUID },
-        data: {
-          primaryMinecraftAccount: newUUID,
-          latestIGN: newUsername,
-        },
-      });
+      changed = await updatePlayerIdentityAndEventSignups(
+        oldPlayer,
+        oldUUID,
+        newUUID,
+        newUsername
+      );
     } catch (error) {
-      console.error("[UsernameCommand] Identity mutation completion uncertain; organiser review required", error);
+      console.error(
+        "[UsernameCommand] Identity and event sign-up mutation failed; organiser review required",
+        error
+      );
       await interaction.editReply(
         "Unable to confirm the account update. An organiser must check its current association before retrying."
       );

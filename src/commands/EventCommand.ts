@@ -5,6 +5,7 @@ import { regularEventSignupOpen } from "../logic/EventPolicy";
 import {
   AttachmentBuilder,
   AutocompleteInteraction,
+  ButtonInteraction,
   ChatInputCommandInteraction,
   MessageFlags,
   SlashCommandBuilder,
@@ -17,6 +18,10 @@ import {
   EventQuestion,
 } from "../logic/EventService";
 import { eventCsvCell, eventDisplay, eventPages } from "./EventPresentation";
+import {
+  eventDeletePrompt,
+  handleEventDeleteButton,
+} from "./EventDeleteConfirmation";
 
 function date(value: string | null): Date | null | undefined {
   if (value === null) return undefined;
@@ -35,7 +40,7 @@ function date(value: string | null): Date | null | undefined {
 export default class EventCommand implements Command {
   name = "event";
   description = "Configure standalone events and inspect sign-ups.";
-  buttonIds: string[] = [];
+  buttonIds = ["event_delete_confirm:", "event_delete_cancel:"];
   data = new SlashCommandBuilder()
     .setName(this.name)
     .setDescription(this.description);
@@ -123,6 +128,18 @@ export default class EventCommand implements Command {
         return sub;
       });
     }
+    this.data.addSubcommand((sub) =>
+      sub
+        .setName("delete")
+        .setDescription("Permanently delete an unopened draft event")
+        .addStringOption((o) =>
+          o
+            .setName("event")
+            .setDescription("Draft event ID to delete")
+            .setAutocomplete(true)
+            .setRequired(true)
+        )
+    );
     this.data.addSubcommand((sub) =>
       sub.setName("list").setDescription("List current and historical events")
     );
@@ -282,6 +299,12 @@ export default class EventCommand implements Command {
         return;
       }
       const event = await eventService.get(guildId, id);
+      if (action === "delete") {
+        if (event.state !== "DRAFT" || event.openedAt)
+          throw new Error("Only unopened draft events can be deleted.");
+        await i.editReply(eventDeletePrompt(guildId, i.user.id, event));
+        return;
+      }
       if (i.options.getSubcommandGroup() === "question") {
         const questions = eventQuestions(event);
         const index = (i.options.getInteger("number") ?? 1) - 1;
@@ -436,6 +459,10 @@ export default class EventCommand implements Command {
       });
     }
   }
+  async handleButtonPress(i: ButtonInteraction): Promise<void> {
+    await handleEventDeleteButton(i);
+  }
+
   private async respond(i: ChatInputCommandInteraction, text: string) {
     const pages = eventPages(text);
     await i.editReply({ content: pages[0], allowedMentions: { parse: [] } });

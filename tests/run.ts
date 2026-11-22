@@ -1,4 +1,6 @@
 import "./cases/eventRegression.test";
+import "./cases/eventDeletion.test";
+import "./cases/eventIdentitySync.test";
 import "./cases/needCommand.test";
 import "./cases/aiAssistant.test";
 import "./cases/aiAskImprovements.test";

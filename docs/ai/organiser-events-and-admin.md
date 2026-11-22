@@ -5,7 +5,7 @@ For legitimate Discord use by authorised organisers. `/ask` can explain a comman
 ## Event drafting: `/event create` and `/event edit`
 
 `/event create title:... description:... terms:...` creates a **draft**, not an open event. Optional `starts-at`, `deadline` and `capacity` accept zoned ISO dates and a confirmed-place limit; `capacity:0` means unlimited. `/event edit` changes permitted fields; `deadline:none` clears a deadline.
-Only organisers can manage events. Save the draft event ID for later edits because the default event is the current open/closed event, not necessarily your new draft.
+Only organisers can manage events. Save the draft event ID for later edits because the default event is the current open/closed event, not necessarily your new draft. `/event delete event:<ID>` asks for private confirmation before permanently removing an unopened draft with no sign-ups. It cannot delete current, opened or finished events.
 
 ## Draft questions: `/event question`
 
@@ -35,7 +35,7 @@ These are persistent state changes with external Discord effects. If reopening a
 ## Event role sync and delivery failures
 
 Only **confirmed** applicants receive the participant role, not reserves. Withdrawal, promotion and finish trigger external role changes. Missing Manage Roles permission, role hierarchy, channel access, or a departed member can delay syncing; a disabled DM does not undo a promotion.
-The database application status is the intended record, Discord roles/messages are separate observations. Do not ask players to resubmit to fix a role. If status and roles disagree, escalate permission/sync verification.
+The database application status is the intended record, Discord roles/messages are separate observations. Do not ask players to resubmit to fix a role. If status and roles disagree, escalate permission/sync verification. Live event applications follow the player's linked Minecraft UUID/IGN, including organiser `/username update` changes; finished and withdrawn sign-up snapshots remain historical. An interrupted form started before an account change must be restarted.
 
 ## Punishments: `/punish add` and `/punish remove`
 

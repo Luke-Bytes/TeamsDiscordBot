@@ -17,7 +17,7 @@ Merge these keys into your existing channel and role objects. The keys are optio
 
 ## Organiser workflow
 
-1. Create a draft with `/event create title:... description:... terms:...`. Set optional `starts-at`, `deadline`, and `capacity` options. Dates use ISO format with a time zone, such as `2030-06-01T19:00:00Z`. Use `capacity:0` for unlimited capacity and `deadline:none` to clear a deadline when editing. Save the returned event ID: drafts are not current events, so supply `event:<ID>` when configuring or opening them.
+1. Create a draft with `/event create title:... description:... terms:...`. Set optional `starts-at`, `deadline`, and `capacity` options. Dates use ISO format with a time zone, such as `2030-06-01T19:00:00Z`. Use `capacity:0` for unlimited capacity and `deadline:none` to clear a deadline when editing. Save the returned event ID: drafts are not current events, so supply `event:<ID>` when configuring or opening them. To permanently discard an unused draft, use `/event delete event:<ID>` and confirm the private prompt. Only never-opened drafts without sign-ups can be deleted; opened and finished events are protected.
 2. Build the form with `/event question add`, `edit`, `remove`, and `move`. Set `label`, `type`, and optional `required` (default true); separate choice `options` with `|`. Editing/removing uses a 1-based `number`; moving also uses a 1-based `position`. Questions can be required or optional short text, long text, single choice, or multiple choice. Preview with `/event preview`.
 3. Open the event with `/event open`. This makes it the current event and freezes its questions and terms. Metadata, capacity, and the deadline can still be corrected. Capacity cannot be reduced below the confirmed player count.
 4. Inspect the private roster with `/event roster`, read an application with `/event response`, or download `/event export`. Exports contain submitted answers and may contain personal information; share them only with the intended organisers.
@@ -28,11 +28,11 @@ The form supports up to 20 questions, up to 25 options per choice question, and 
 
 ## Player workflow
 
-In the configured sign-up channel, use `/sign up` (with `minecraft-username` if needed). Existing players reuse their stored Minecraft identity. Newcomers must supply a valid Minecraft username; a failed identity lookup requires retrying and does not register them for a game.
+In the configured sign-up channel, use `/sign up` (with `minecraft-username` if needed). Existing players reuse their stored Minecraft identity. Newcomers must supply a valid Minecraft username; a failed identity lookup requires retrying and does not register them for a game. Event sign-up cannot overwrite an existing linked player's current IGN.
 
 Complete the questions, review the answers and terms, and explicitly agree to submit. An abandoned form does not create an application or replace previously saved answers. Private form sessions expire after 30 minutes and must then be started again.
 
-Use `/sign view` to see your application, `/sign edit` to correct it, and `/sign withdraw` if you cannot attend. Confirmed players and reserves can edit or withdraw until the event is marked finished. Editing keeps your reserve position; withdrawing and rejoining puts you at the end of the queue.
+Use `/sign view` to see your application, `/sign edit` to correct it, and `/sign withdraw` if you cannot attend. Confirmed players and reserves can edit or withdraw until the event is marked finished. Editing keeps your reserve position; withdrawing and rejoining puts you at the end of the queue. Active sign-ups display the player's current linked Minecraft account, and `/username update` changes active sign-up account fields alongside the main player identity. Withdrawn applications and finished events retain the IGN and UUID saved in their historical records. An in-progress sign-up form must be restarted if its linked account changes.
 
 ## Capacity, closure, and reserves
 
