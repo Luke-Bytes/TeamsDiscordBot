@@ -1,12 +1,18 @@
 import "./cases/eventRegression.test";
 import "./cases/needCommand.test";
 import "./cases/aiAssistant.test";
+import "./cases/aiAskImprovements.test";
+import "./cases/aiOrganiserCopilot.test";
+import "./cases/aiCareerStats.test";
 import "./cases/commandAuditLog.test";
 import "./cases/askDms.test";
 import "./cases/askVisibility.test";
+import "./cases/aiMention.test";
 import "./cases/aiProviders.test";
 import "./cases/aiHistoricalState.test";
 import "./cases/aiKnowledgeQc.test";
+import "./cases/shotbowKnowledge.test";
+import "./cases/aiTournamentArchive.test";
 import "./cases/naviPrompt.test";
 // Simple test runner that executes all test cases in sequence
 import "./cases/captainNominate.test";

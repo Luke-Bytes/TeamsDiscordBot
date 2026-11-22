@@ -457,7 +457,7 @@ test("AI tool schemas are bounded, described, audience gated and identity safe",
       `MY tool must not accept model-supplied identity: ${name}`
     );
   }
-  assert(names.size === 16, "Review the tools inventory when it changes");
+  assert(names.size === 25, "Review the tools inventory when it changes");
   assert(
     !permittedAiTools(false, false).some(
       (t) =>
@@ -518,7 +518,10 @@ test("Registered commands are categorized in a separate coverage manifest", () =
   // Check all slash roots, even when a writer forgets backticks. Restrict
   // subcommand validation to backtick examples to avoid prose false positives.
   for (const source of APPROVED) {
-    const markdown = read(source.path);
+    // Public Shotbow guides discuss a different server command set, not FW commands.
+    if (source.topic === "shotbow") continue;
+    // URL path segments (https://shotbow.net/...) are not slash commands.
+    const markdown = read(source.path).replace(/https?:\/\/[^\s)]+/g, "");
     for (const match of markdown.matchAll(
       /(?<![a-zA-Z0-9:])\/([a-z][a-z0-9-]*)\b/g
     )) {

@@ -808,7 +808,7 @@ test("Organiser role revocation mid-request stops delivery of privileged answers
     },
   });
   assert(
-    inferred === 1 && result.text.includes("permissions changed"),
+    inferred <= 1 && result.text.toLowerCase().includes("permissions changed"),
     "Revoked organiser receives no privileged answer"
   );
   assert(

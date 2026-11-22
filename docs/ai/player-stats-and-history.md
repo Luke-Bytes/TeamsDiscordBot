@@ -2,6 +2,10 @@
 
 Use this reference for Friendly Wars results, Elo and older seasons. State which season and data source an answer uses. Do not guess missing results or treat a game still in progress as saved.
 
+## Lifetime versus seasonal player statistics
+
+`/stats` and `/wrapped` normally describe one season, and `/season-recap` evaluates one season's games. For a saved-bot **all-time** question, `/ask` can combine `PlayerStats` and finished game participation records across all saved seasons: total wins and losses, win percentage, MVPs, captain appearances and wins, double-Elo wins, and the largest single-season streaks. Highest saved Ranked season Elo is not necessarily peak in-match Elo. This excludes independent REST_API-only historical data and does not establish who was objectively the best player.
+
 ## /stats: player record and options
 
 Run `/stats` for yourself, or set `player` to a Minecraft IGN or Discord mention to look up someone else. Set `season` for a numbered season; otherwise it uses the active season. `detailed: true` adds more breakdowns.

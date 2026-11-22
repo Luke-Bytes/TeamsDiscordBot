@@ -1,0 +1,636 @@
+{
+  "reviewedOn": "2026-11-22",
+  "tournaments": [
+    {
+      "id": "shotbow-2023",
+      "name": "Shotbow Annihilation Clan Tournament 2023",
+      "organiser": "Shotbow",
+      "year": 2023,
+      "format": "10 starters and up to three substitutes; group stage followed by knockout matches",
+      "participants": [
+        "DDD",
+        "Agency",
+        "Frontier",
+        "KGB",
+        "01",
+        "F3 Entity",
+        "Ace"
+      ],
+      "participantBasis": "Finalists verified; other names from applications, not confirmed gameplay",
+      "placements": [
+        { "team": "DDD", "position": 1 },
+        { "team": "Agency", "position": 2 }
+      ],
+      "sources": [
+        "https://shotbow.net/forum/threads/annihilation-clan-tournament-2023.419233/",
+        "https://shotbow.net/forum/threads/dentrils-new-moon-august-2023.421489/"
+      ],
+      "coverage": "partial",
+      "gaps": [
+        "Group and knockout fixtures incomplete",
+        "No exact match dates except published final event references"
+      ]
+    },
+    {
+      "id": "shotbow-2024",
+      "name": "Shotbow Annihilation Clan Tournament 2024",
+      "organiser": "Shotbow",
+      "year": 2024,
+      "format": "10 starters and three substitutes; group stage then knockout; captain class bans",
+      "participants": [
+        "NyRq",
+        "Rawr v2",
+        "MRK",
+        "Giew",
+        "NSV2",
+        "SSS",
+        "PoiuYT",
+        "F3",
+        "TP",
+        "The Family",
+        "AZUL"
+      ],
+      "participantBasis": "Named in official match uploads or registration thread; no complete verified participant list",
+      "placements": [
+        { "team": "NyRq", "position": 1 },
+        { "team": "Rawr v2", "position": 2 }
+      ],
+      "sources": [
+        "https://shotbow.net/forum/threads/annihilation-clan-tournament-2024.422851/",
+        "https://shotbow.net/forum/threads/dentrils-new-moon-july-2024.425674/"
+      ],
+      "coverage": "partial",
+      "gaps": [
+        "All group-stage fixtures and one semifinal not identified",
+        "Video uploads are not proof of game dates",
+        "Unknown lower placements"
+      ]
+    },
+    {
+      "id": "fw-2025",
+      "name": "Friendly Wars community tournament 2025",
+      "organiser": "Friendly Wars community",
+      "year": 2025,
+      "participants": ["Aura", "F3"],
+      "participantBasis": "Community-provided first and second places only",
+      "placements": [
+        { "team": "Aura", "position": 1 },
+        { "team": "F3", "position": 2 }
+      ],
+      "sources": [],
+      "coverage": "reported",
+      "gaps": [
+        "Community report not independently verified",
+        "No confirmed fixture, bracket, match score or video"
+      ],
+      "note": "Results reported by the Friendly Wars community on 2026-11-22; not a Shotbow staff tournament"
+    },
+    {
+      "id": "shotbow-2026",
+      "name": "Shotbow Annihilation Tournament 2026",
+      "organiser": "Shotbow",
+      "year": 2026,
+      "format": "1v1 team matches, up to ten active players; changing stage rules",
+      "participants": [
+        "Aura",
+        "DONTCOMEANNI",
+        "GRIM",
+        "MRK",
+        "F3",
+        "APL",
+        "AWF",
+        "TT",
+        "SFJ",
+        "HELP",
+        "Zero Effort",
+        "Vein X Mush"
+      ],
+      "participantBasis": "Video match titles plus forum applications; applications alone do not verify play",
+      "placements": [
+        { "team": "Aura", "position": 1 },
+        { "team": "DONTCOMEANNI", "position": 2 }
+      ],
+      "sources": [
+        "https://shotbow.net/forum/threads/annihilation-2026-tournament.432532/",
+        "https://shotbow.net/forum/portal/?page=2"
+      ],
+      "coverage": "partial",
+      "gaps": [
+        "Other fixtures/stages unverified",
+        "Final match date not established by upload date",
+        "No reliable chapters in combined stream"
+      ]
+    },
+    {
+      "id": "shotbow-spring-2018",
+      "name": "Shotbow Spring 2018 / 21st Century tournament",
+      "organiser": "Shotbow",
+      "year": 2018,
+      "format": "Bracket competition with final played 2019-01-26",
+      "participants": [
+        "Oblivion",
+        "Team Turkish",
+        "japanesesnipers",
+        "Gov",
+        "Team Envy"
+      ],
+      "participantBasis": "Bracket/forum mentions, not an exhaustive played-fixture list",
+      "placements": [],
+      "sources": [
+        "https://shotbow.net/forum/threads/the-year-ahead-2019-dentrils-new-moon-february-2019.392056/",
+        "https://shotbow.net/forum/threads/the-annihilation-spring-2018-tournament-brackets.384112/page-3"
+      ],
+      "coverage": "sparse",
+      "gaps": [
+        "Finalists/winner and safely identifiable match pairings not confirmed"
+      ]
+    },
+    {
+      "id": "team-nexus-spring-2020",
+      "name": "Team Nexus Spring 2020 clan wars",
+      "organiser": "Team Nexus community",
+      "year": 2020,
+      "participants": ["TeamTurkish"],
+      "participantBasis": "Historical winner list only",
+      "placements": [{ "team": "TeamTurkish", "position": 1 }],
+      "sources": [
+        "https://shotbow.net/forum/threads/team-nexus-discord-server-for-clans-and-community-events.384901/"
+      ],
+      "coverage": "sparse",
+      "gaps": ["Fixtures and recordings not located"]
+    },
+    {
+      "id": "team-nexus-summer-fall-2020",
+      "name": "Team Nexus Summer & Fall 2020 clan wars",
+      "organiser": "Team Nexus community",
+      "year": 2020,
+      "participants": ["rawr"],
+      "participantBasis": "Historical winner list only",
+      "placements": [{ "team": "rawr", "position": 1 }],
+      "sources": [
+        "https://shotbow.net/forum/threads/team-nexus-discord-server-for-clans-and-community-events.384901/"
+      ],
+      "coverage": "sparse",
+      "gaps": ["Fixtures and recordings not located"]
+    },
+    {
+      "id": "team-nexus-mushroom",
+      "name": "Team Nexus Mushroom Tournament",
+      "organiser": "Team Nexus community",
+      "year": null,
+      "participants": ["Mizu"],
+      "participantBasis": "Historical winner list only",
+      "placements": [{ "team": "Mizu", "position": 1 }],
+      "sources": [
+        "https://shotbow.net/forum/threads/team-nexus-discord-server-for-clans-and-community-events.384901/"
+      ],
+      "coverage": "sparse",
+      "gaps": ["Event year, fixtures and recordings not confirmed"]
+    }
+  ],
+  "aliases": [
+    {
+      "name": "Rawr v2",
+      "aliases": ["RawrV2", "Rawr V2"],
+      "evidence": "https://www.youtube.com/watch?v=En6xfvoBlSQ"
+    },
+    {
+      "name": "NyRq",
+      "aliases": ["NYRQ"],
+      "evidence": "https://www.youtube.com/watch?v=oMISKDkIYdM"
+    },
+    {
+      "name": "DONTCOMEANNI",
+      "aliases": ["ANNL", "#Annl"],
+      "evidence": "https://shotbow.net/forum/threads/annihilation-2026-tournament.432532/"
+    },
+    {
+      "name": "Aura",
+      "aliases": ["A U R A"],
+      "evidence": "https://shotbow.net/forum/threads/annihilation-2026-tournament.432532/"
+    },
+    {
+      "name": "APL",
+      "aliases": ["ABOMINACIÓN"],
+      "evidence": "https://shotbow.net/forum/threads/annihilation-2026-tournament.432532/"
+    }
+  ],
+  "matches": [
+    {
+      "id": "s23-final",
+      "tournamentId": "shotbow-2023",
+      "teams": ["DDD", "Agency"],
+      "stage": "Final",
+      "map": "Andorra 1v1",
+      "winner": "DDD",
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://shotbow.net/forum/threads/dentrils-new-moon-august-2023.421489/",
+          "kind": "official-result"
+        },
+        {
+          "url": "https://www.youtube.com/watch?v=FA9PNNueFjc",
+          "kind": "official-video"
+        }
+      ]
+    },
+    {
+      "id": "s24-group-tp-mrk",
+      "tournamentId": "shotbow-2024",
+      "teams": ["TP", "MRK"],
+      "status": "partial",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=0REO1RSfOjE",
+          "kind": "official-video"
+        }
+      ]
+    },
+    {
+      "id": "s24-group-tp-poiu",
+      "tournamentId": "shotbow-2024",
+      "teams": ["TP", "PoiuYT"],
+      "status": "partial",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=UoSDfAWjvDY",
+          "kind": "official-video"
+        }
+      ]
+    },
+    {
+      "id": "s24-qf1",
+      "tournamentId": "shotbow-2024",
+      "teams": ["Giew", "MRK"],
+      "stage": "Quarterfinal #1",
+      "status": "partial",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=JcT99O71RiQ",
+          "kind": "official-video-description"
+        }
+      ]
+    },
+    {
+      "id": "s24-qf2",
+      "tournamentId": "shotbow-2024",
+      "teams": ["NSV2", "Rawr v2"],
+      "stage": "Quarterfinal #2",
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=JcT99O71RiQ",
+          "kind": "official-video-title"
+        }
+      ]
+    },
+    {
+      "id": "s24-qf3",
+      "tournamentId": "shotbow-2024",
+      "teams": ["SSS", "PoiuYT"],
+      "stage": "Quarterfinal #3",
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=4qVyI8mY4CE",
+          "kind": "official-video-title"
+        }
+      ]
+    },
+    {
+      "id": "s24-qf4",
+      "tournamentId": "shotbow-2024",
+      "teams": ["NyRq", "F3"],
+      "stage": "Quarterfinal #4",
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=oMISKDkIYdM",
+          "kind": "official-video-title"
+        }
+      ]
+    },
+    {
+      "id": "s24-sf1",
+      "tournamentId": "shotbow-2024",
+      "teams": ["PoiuYT", "NyRq"],
+      "stage": "Semifinal #1",
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=lSCo4yBbsck",
+          "kind": "official-video-title"
+        }
+      ]
+    },
+    {
+      "id": "s24-final",
+      "tournamentId": "shotbow-2024",
+      "teams": ["Rawr v2", "NyRq"],
+      "stage": "Final",
+      "winner": "NyRq",
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=En6xfvoBlSQ",
+          "kind": "official-video-title"
+        },
+        {
+          "url": "https://shotbow.net/forum/threads/dentrils-new-moon-july-2024.425674/",
+          "kind": "official-result"
+        }
+      ]
+    },
+    {
+      "id": "s26-tt-sfj",
+      "tournamentId": "shotbow-2026",
+      "teams": ["TT", "SFJ"],
+      "status": "partial",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=sMedcItfrZs",
+          "kind": "official-video-title"
+        }
+      ]
+    },
+    {
+      "id": "s26-grim-mrk",
+      "tournamentId": "shotbow-2026",
+      "teams": ["GRIM", "MRK"],
+      "status": "partial",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=LT_HJV_3kJ0",
+          "kind": "official-video-title"
+        }
+      ]
+    },
+    {
+      "id": "s26-annl-f3",
+      "tournamentId": "shotbow-2026",
+      "teams": ["DONTCOMEANNI", "F3"],
+      "status": "partial",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=LT_HJV_3kJ0",
+          "kind": "official-video-title"
+        }
+      ]
+    },
+    {
+      "id": "s26-apl-awf",
+      "tournamentId": "shotbow-2026",
+      "teams": ["APL", "AWF"],
+      "status": "partial",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=47Wz8hHsxqE",
+          "kind": "official-video-title"
+        }
+      ]
+    },
+    {
+      "id": "s26-final",
+      "tournamentId": "shotbow-2026",
+      "teams": ["DONTCOMEANNI", "Aura"],
+      "stage": "Final",
+      "winner": "Aura",
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=zXGzDq8b5nU",
+          "kind": "official-video-title"
+        },
+        {
+          "url": "https://shotbow.net/forum/portal/?page=2",
+          "kind": "official-result"
+        }
+      ]
+    }
+  ],
+  "recordings": [
+    {
+      "id": "rec-s23-final",
+      "videoId": "FA9PNNueFjc",
+      "title": null,
+      "channel": "Shotbow",
+      "type": "livestream",
+      "origin": "official",
+      "segments": [
+        {
+          "matchId": "s23-final",
+          "status": "partial",
+          "evidence": "https://shotbow.net/forum/threads/dentrils-new-moon-august-2023.421489/"
+        }
+      ]
+    },
+    {
+      "id": "rec-s24-tp-mrk",
+      "videoId": "0REO1RSfOjE",
+      "title": null,
+      "channel": "Shotbow",
+      "type": "match",
+      "origin": "official",
+      "segments": [
+        {
+          "matchId": "s24-group-tp-mrk",
+          "status": "partial",
+          "evidence": "https://www.youtube.com/watch?v=0REO1RSfOjE"
+        }
+      ]
+    },
+    {
+      "id": "rec-s24-tp-poiu",
+      "videoId": "UoSDfAWjvDY",
+      "title": null,
+      "channel": "Shotbow",
+      "type": "match",
+      "origin": "official",
+      "segments": [
+        {
+          "matchId": "s24-group-tp-poiu",
+          "status": "partial",
+          "evidence": "https://www.youtube.com/watch?v=UoSDfAWjvDY"
+        }
+      ]
+    },
+    {
+      "id": "rec-s24-qf2",
+      "videoId": "JcT99O71RiQ",
+      "title": "Annihilation 2024 Tournament - (NSV2 vs Rawr v2) - QUARTER FINAL #2",
+      "channel": "Shotbow",
+      "type": "match",
+      "origin": "official",
+      "uploadedOn": "2024-04-13",
+      "segments": [
+        {
+          "matchId": "s24-qf2",
+          "status": "confirmed",
+          "evidence": "https://www.youtube.com/watch?v=JcT99O71RiQ"
+        }
+      ]
+    },
+    {
+      "id": "rec-s24-qf3",
+      "videoId": "4qVyI8mY4CE",
+      "title": "Annihilation 2024 Tournament - (SSS vs PoiuYT) - QUARTER FINAL #3",
+      "channel": "Shotbow",
+      "type": "match",
+      "origin": "official",
+      "uploadedOn": "2024-04-14",
+      "segments": [
+        {
+          "matchId": "s24-qf3",
+          "status": "confirmed",
+          "evidence": "https://www.youtube.com/watch?v=4qVyI8mY4CE"
+        }
+      ]
+    },
+    {
+      "id": "rec-s24-qf4",
+      "videoId": "oMISKDkIYdM",
+      "title": "Annihilation 2024 Tournament - (NyRq vs F3) - QUARTER FINAL #4",
+      "channel": "Shotbow",
+      "type": "match",
+      "origin": "official",
+      "uploadedOn": "2024-04-21",
+      "segments": [
+        {
+          "matchId": "s24-qf4",
+          "status": "confirmed",
+          "evidence": "https://www.youtube.com/watch?v=oMISKDkIYdM"
+        }
+      ]
+    },
+    {
+      "id": "rec-s24-sf1",
+      "videoId": "lSCo4yBbsck",
+      "title": "Annihilation 2024 Tournament - (PoiuYT vs NyRq) - SEMI FINAL #1",
+      "channel": "Shotbow",
+      "type": "match",
+      "origin": "official",
+      "uploadedOn": "2024-05-18",
+      "segments": [
+        {
+          "matchId": "s24-sf1",
+          "status": "confirmed",
+          "evidence": "https://www.youtube.com/watch?v=lSCo4yBbsck"
+        }
+      ]
+    },
+    {
+      "id": "rec-s24-final",
+      "videoId": "En6xfvoBlSQ",
+      "title": "Annihilation 2024 Tournament (RawrV2 vs NyRq) - GRAND FINAL",
+      "channel": "Shotbow",
+      "type": "match",
+      "origin": "official",
+      "uploadedOn": "2024-06-15",
+      "segments": [
+        {
+          "matchId": "s24-final",
+          "status": "confirmed",
+          "evidence": "https://www.youtube.com/watch?v=En6xfvoBlSQ"
+        }
+      ]
+    },
+    {
+      "id": "rec-s26-tt-sfj",
+      "videoId": "sMedcItfrZs",
+      "title": "Annihilation 2026 Tournament - TT vs SFJ",
+      "channel": "Shotbow",
+      "type": "match",
+      "origin": "official",
+      "uploadedOn": "2026-06-14",
+      "segments": [
+        {
+          "matchId": "s26-tt-sfj",
+          "status": "partial",
+          "evidence": "https://www.youtube.com/watch?v=sMedcItfrZs"
+        }
+      ]
+    },
+    {
+      "id": "rec-s26-pairs",
+      "videoId": "LT_HJV_3kJ0",
+      "title": "Annihilation 2026 Tournament - GRIM vs MRK & ANNL vs F3",
+      "channel": "Shotbow",
+      "type": "livestream",
+      "origin": "official",
+      "uploadedOn": "2026-06-27",
+      "segments": [
+        {
+          "matchId": "s26-grim-mrk",
+          "status": "partial",
+          "evidence": "https://www.youtube.com/watch?v=LT_HJV_3kJ0"
+        },
+        {
+          "matchId": "s26-annl-f3",
+          "status": "partial",
+          "evidence": "https://www.youtube.com/watch?v=LT_HJV_3kJ0"
+        }
+      ]
+    },
+    {
+      "id": "rec-s26-apl-awf",
+      "videoId": "47Wz8hHsxqE",
+      "title": "Annihilation 2026 Tournament - APL vs AWF",
+      "channel": "Shotbow",
+      "type": "match",
+      "origin": "official",
+      "uploadedOn": "2026-06-27",
+      "segments": [
+        {
+          "matchId": "s26-apl-awf",
+          "status": "partial",
+          "evidence": "https://www.youtube.com/watch?v=47Wz8hHsxqE"
+        }
+      ]
+    },
+    {
+      "id": "rec-s26-final",
+      "videoId": "zXGzDq8b5nU",
+      "title": "Annihilation 2026 Tournament Final - ANNL vs AURA",
+      "channel": "Shotbow",
+      "type": "match",
+      "origin": "official",
+      "uploadedOn": "2026-08-30",
+      "segments": [
+        {
+          "matchId": "s26-final",
+          "status": "confirmed",
+          "evidence": "https://www.youtube.com/watch?v=zXGzDq8b5nU"
+        }
+      ]
+    },
+    {
+      "id": "rec-pirlo-2023-promo",
+      "videoId": "ZlVG_sUr4zM",
+      "title": "Minecraft Annihilation Clan Tournament | 2023",
+      "channel": "lPirlo",
+      "type": "announcement",
+      "origin": "community",
+      "uploadedOn": "2023-02-01",
+      "segments": []
+    },
+    {
+      "id": "rec-seed-icpc",
+      "videoId": "icpcNFnAbsU",
+      "title": null,
+      "channel": null,
+      "type": "unknown",
+      "origin": "unverified",
+      "segments": []
+    },
+    {
+      "id": "rec-seed-4cf",
+      "videoId": "4cFKAafjsOA",
+      "title": null,
+      "channel": null,
+      "type": "unknown",
+      "origin": "unverified",
+      "segments": []
+    }
+  ]
+}

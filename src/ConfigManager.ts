@@ -143,6 +143,10 @@ export type Config = {
   /** Enabling /ask acknowledges external provider egress of approved question/context data. */
   ai?: {
     enabled?: boolean;
+    /** Explicit @bot questions in the home guild; defaults to enabled with AI. */
+    mentionEnabled?: boolean;
+    /** Extra channel IDs to ignore, in addition to the built-in exclusions. */
+    mentionExcludedChannels?: string[];
     /** Required only for Cloudflare Workers AI; never an API token. */
     cloudflareAccountId?: string;
   };

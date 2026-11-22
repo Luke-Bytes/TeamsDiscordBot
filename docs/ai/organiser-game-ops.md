@@ -52,6 +52,12 @@ Captains cannot change before announcement, during start/shutdown transitions, o
 Organisers use `/player add player:<name> team:RED|BLUE|NONE`, `/player move player:<name> from:<team> to:<team>`, or `/player remove player:<name>`. These accept space-separated player names; `NONE` represents undecided. `/player replace old_player:<name> new_player:<name>` swaps a current team player for another eligible registered player.
 Requires an announced game and no active picking session. Invalid registration/team conditions reject changes. Operations can affect live rosters, roles and captain planning; check `/team list` and Discord after a partial failure.
 
+## A player leaves after teams are picked
+
+If RED loses a player after an announcement and teams are finalised, **check `/team list` and `/game diagnostics` first** to establish the stage. Do not start with `/team reset`, `/announce cancel`, a fabricated snapshot command, or blindly repeat a mutation. If the replacement is already eligible and registered but not assigned, use `/player replace old_player:<leaving IGN> new_player:<replacement IGN>` while the old player is still in RED. The command substitutes them into the current team and may update Discord roles; check the outcome and actual roster.
+
+If the leaving player has already unregistered or no replacement is ready, an organiser can use `/player remove player:<leaving IGN>` if they remain on the roster, then the RED captain (or organiser) can use `/need team:Red` to request a volunteer. The volunteer must `/register` and press **Join** while unassigned; `/need` is not an automatic team re-generation command. Recheck `/team list`, captains, roles and voice access before starting. If a draft is still active, start is underway, or a roster change fails partway through, stop and check state instead of forcing a replacement.
+
 ## Bulk signups: `/massregister`
 
 `/massregister playerlist:<Minecraft names>` accepts whitespace-separated names. It requires an announced game, existing player profiles and members still in this Discord server; it skips invalid names, duplicate entries and already registered players.

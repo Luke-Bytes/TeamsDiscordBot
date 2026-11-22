@@ -126,6 +126,11 @@ export function getCurrentGameStateSnapshot(audience: GameStateAudience) {
     ...(pendingBans
       ? ["Check class bans and their normal deadline before starting."]
       : []),
+    ...(game.recoveryDraftProgress
+      ? [
+          "Recovered draft is paused; do not assume old picks or timers can continue automatically.",
+        ]
+      : []),
   ];
   return {
     ...publicSnapshot,
@@ -133,6 +138,24 @@ export function getCurrentGameStateSnapshot(audience: GameStateAudience) {
       gameStartStatus: stage,
       shutdownOrCleanupInProgress: Boolean(game.isRestarting),
       pausedWorkflows: game.recoveryPausedWorkflows.length,
+      recoveredDraftPaused: Boolean(game.recoveryDraftProgress),
+      recordedEndTime: game.endTime?.toISOString() ?? null,
+      winnerInMemory: game.gameWinner ?? null,
+    },
+    announcedConfiguration: {
+      organiserBans: game.settings.organiserBannedClasses.length,
+      banMode: game.classBanMode,
+      delayedBan: game.settings.delayedBan,
+      modifierMode: game.modifierMode,
+      modifiers: game.settings.modifiers
+        .slice(0, 8)
+        .map(({ category, name }) => ({
+          category: category.slice(0, 32),
+          name: name.slice(0, 48),
+        })),
+      doubleElo: game.isDoubleElo,
+      noElo: game.noElo,
+      relaxedSeason: game.isRelaxedSeason,
     },
     teams: {
       ...publicSnapshot.teams,
@@ -162,6 +185,12 @@ export function getCurrentGameStateSnapshot(audience: GameStateAudience) {
       blueRecorded: blueCaptain
         ? game.getCaptainBanCount(blueCaptain.discordSnowflake)
         : null,
+      redWindowLocked: redCaptain
+        ? game.isCaptainBanLocked(redCaptain.discordSnowflake)
+        : null,
+      blueWindowLocked: blueCaptain
+        ? game.isCaptainBanLocked(blueCaptain.discordSnowflake)
+        : null,
       announcedInMemory: game.areClassBansAnnounced(),
       readiness:
         game.getClassBanLimit() === 0
@@ -181,6 +210,22 @@ export function getCurrentGameStateSnapshot(audience: GameStateAudience) {
         messageReferencePresent: Boolean(game.minerushVoteManager?.pollMessage),
         open: "unverified",
       },
+    },
+    expectedDeadlines: {
+      source: "scheduled start arithmetic, not evidence a callback ran",
+      captainReminder: game.startTime
+        ? new Date(game.startTime.getTime() - 20 * 60_000).toISOString()
+        : null,
+      captainSelection: game.startTime
+        ? new Date(game.startTime.getTime() - 15 * 60_000).toISOString()
+        : null,
+      mapVoteClose: game.startTime
+        ? new Date(game.startTime.getTime() - 10 * 60_000).toISOString()
+        : null,
+      minerushVoteClose: game.startTime
+        ? new Date(game.startTime.getTime() - 5 * 60_000).toISOString()
+        : null,
+      classBanDeadline: game.startTime?.toISOString() ?? null,
     },
     timers: {
       classWarningHandlePresent: Boolean(
@@ -207,7 +252,29 @@ export function getCurrentGameStateSnapshot(audience: GameStateAudience) {
         lifecycle === "announced" &&
         playable &&
         !recoveryBlocked &&
-        !activeTeamSession,
+        !activeTeamSession &&
+        !game.recoveryDraftProgress,
+      cautions: [
+        ...(activeTeamSession ? ["draft or picking is still active"] : []),
+        ...(game.recoveryDraftProgress
+          ? [
+              "draft was recovered in a paused state; manual operator review required",
+            ]
+          : []),
+        ...(!redCaptain || !blueCaptain
+          ? ["one or both captains are missing"]
+          : []),
+        ...(pendingBans
+          ? ["class ban announcement not recorded; window may still be open"]
+          : []),
+        ...(game.getGameStartStatus() === "starting"
+          ? ["game start is in progress; Discord operations may be partial"]
+          : []),
+        ...(game.isRestarting ? ["shutdown in progress or unresolved"] : []),
+        ...(recoveryBlocked
+          ? ["recovery gate blocks safe lifecycle progress"]
+          : []),
+      ].slice(0, 6),
       startCompletion:
         stage === "started"
           ? "in-memory transition completed; Discord actions unverified"

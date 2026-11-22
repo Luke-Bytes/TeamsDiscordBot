@@ -24,6 +24,8 @@ export const AI_DEFAULTS = {
 
 export type AiSettings = {
   enabled: boolean;
+  mentionEnabled?: boolean;
+  mentionExcludedChannels?: ReadonlySet<string>;
   channelIds: ReadonlySet<string>;
   dailyRequestLimit: number;
   cloudflareAccountId?: string;
@@ -35,6 +37,13 @@ export function getAiSettings(
   const commands = config.channels.botCommands;
   return {
     enabled: config.ai?.enabled === true,
+    mentionEnabled:
+      config.ai?.enabled === true && config.ai.mentionEnabled !== false,
+    mentionExcludedChannels: new Set(
+      (config.ai?.mentionExcludedChannels ?? []).filter(
+        (id) => typeof id === "string" && /^\d{8,25}$/.test(id)
+      )
+    ),
     // A missing/invalid bot-command channel is never an invitation to run everywhere.
     channelIds: new Set(
       typeof commands === "string" && /^\d{8,25}$/.test(commands)

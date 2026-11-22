@@ -31,12 +31,18 @@ function prepareWorker(): Promise<void> {
       format: "cjs",
       external: ["sharp"],
       // Reuse an explicitly configured dependency tree for isolated worktrees.
-      nodePaths: process.env.NODE_PATH?.split(path.delimiter).filter(Boolean) ?? [],
+      nodePaths:
+        process.env.NODE_PATH?.split(path.delimiter).filter(Boolean) ?? [],
       logLevel: "silent",
     }).then(() => {});
   }
   return workerBuild;
 }
+// Compile during earlier offline tests instead of charging a cold esbuild bundle
+// to the first child-process scenario's five-second assertion deadline.
+void prepareWorker().catch(() => {
+  // runWorker awaits the same rejected promise and reports the build failure.
+});
 const childEnvironment: NodeJS.ProcessEnv = {
   ...process.env,
   NODE_ENV: "test",

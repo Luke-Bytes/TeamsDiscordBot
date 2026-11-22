@@ -5,6 +5,7 @@ import { relative, resolve, sep } from "path";
 export type KnowledgeScope = "player" | "organiser";
 export type KnowledgeChunk = {
   id: string;
+  topic?: "shotbow" | "fw-tournament";
   content: string;
   source: string;
   heading: string;
@@ -17,6 +18,7 @@ export type KnowledgeChunk = {
 export type ApprovedSource = {
   path: string;
   scope: KnowledgeScope;
+  topic?: "shotbow" | "fw-tournament";
   headings: readonly string[];
 };
 
@@ -30,6 +32,8 @@ export const APPROVED: readonly ApprovedSource[] = [
     scope: "player",
     headings: [
       "Getting help with commands",
+      "How do I play a Friendly War?",
+      "Accurate FW facts and member questions",
       "FW game process: announce, register, start, finish",
       "AI assistant privacy and limitations",
     ],
@@ -75,6 +79,7 @@ export const APPROVED: readonly ApprovedSource[] = [
     path: "docs/ai/player-stats-and-history.md",
     scope: "player",
     headings: [
+      "Lifetime versus seasonal player statistics",
       "/stats: player record and options",
       "/leaderboards: Ranked rating or Relaxed activity",
       "/season view: seasonal participation",
@@ -94,6 +99,10 @@ export const APPROVED: readonly ApprovedSource[] = [
     scope: "player",
     headings: [
       "Choosing current, historical or in-progress evidence",
+      "Caller identity and organiser names",
+      "Live slash-command catalog",
+      "get_all_time_leaderboard — all saved-season wins",
+      "get_my_all_time_stats and get_player_all_time_stats — lifetime records",
       "get_current_game_state — one public game snapshot",
       "get_recent_games — recently saved results",
       "Historical tools — conditional access and outcomes",
@@ -124,6 +133,7 @@ export const APPROVED: readonly ApprovedSource[] = [
       "Team review, reset and cancellation",
       "Captains: `/captain set` and `/captain randomise`",
       "Roster corrections: `/player`",
+      "A player leaves after teams are picked",
       "Starting a match is not ending or saving it",
       "Ending gameplay: `/game end`",
       "Recording a winner: `/winner set`",
@@ -134,6 +144,45 @@ export const APPROVED: readonly ApprovedSource[] = [
       "Season status and authority",
       "First scheduled rollover versus ordinary rollover",
       "Deferred rollover and pending announcements",
+    ],
+  },
+  {
+    path: "docs/ai/organiser-troubleshooting.md",
+    scope: "organiser",
+    headings: [
+      "Announcement preview exists but was not published",
+      "Registration or signups fail",
+      "A registered player cannot be assigned to a team",
+      "Wrong game settings were selected",
+      "Team generation fails or the preview looks wrong",
+      "Draft stuck or captain stops picking",
+      "Captain selection fails",
+      "Player leaves after teams were picked",
+      "Replacement needs to be added",
+      "Incorrect Discord team roles before start",
+      "Map poll never appears or does not finish",
+      "Class bans incomplete or deadline appears stuck",
+      "Automatic start or pregame scheduling does not happen",
+      "/game start fails",
+      "Game remains in starting",
+      "Some players moved to voice but others did not",
+      "Discord team roles disagree with rosters",
+      "Captain or player disconnects during play",
+      "Organiser needs a live roster correction",
+      "Bot restarts during an announced or active game",
+      "Recovered game misses some workflow",
+      "Previously scheduled action never resumes",
+      "External Discord operation partially succeeds",
+      "/game end fails or appears to do nothing",
+      "Minecraft match finished but bot is at an earlier stage",
+      "MVP voting does not open or finish",
+      "Wrong winner selected before confirmation",
+      "Winner confirmation fails or times out",
+      "/game shutdown fails partway through",
+      "Match result may already have been saved",
+      "Database persistence succeeds but Discord cleanup fails",
+      "Recovery gate prevents further actions",
+      "Organiser wants the next game but cleanup is incomplete",
     ],
   },
   {
@@ -159,8 +208,96 @@ export const APPROVED: readonly ApprovedSource[] = [
     headings: [
       "get_current_game_state — organiser snapshot",
       "get_game_diagnostics — same operational snapshot",
+      "get_game_roster — current rosters, captains, class bans and draft",
+      "get_game_discord_state — targeted external Discord inspection",
+      "get_game_persistence — exact current match checkpoint",
       "get_organiser_status — saved season and announcement queue",
       "Recovery, finishing and persistent state",
+    ],
+  },
+  {
+    path: "docs/ai/shotbow-history.md",
+    scope: "player",
+    topic: "shotbow",
+    headings: [
+      "Shotbow founding and first games",
+      "Fun facts and well-known creators",
+      "Public Shotbow knowledge versus Friendly Wars",
+    ],
+  },
+  {
+    path: "docs/ai/annihilation-gameplay.md",
+    scope: "player",
+    topic: "shotbow",
+    headings: [
+      "Annihilation objective and teams",
+      "Annihilation phases and resource timing",
+      "Annihilation economy, bosses and preparation",
+      "Annihilation advice and version caveats",
+    ],
+  },
+  {
+    path: "docs/ai/annihilation-classes.md",
+    scope: "player",
+    topic: "shotbow",
+    headings: [
+      "Annihilation class roster and unlocks",
+      "Mobility and infiltration classes",
+      "Mining, building and utility classes",
+      "Ranged, combat and control classes",
+      "Choosing Annihilation classes in a team",
+    ],
+  },
+  {
+    path: "docs/ai/annihilation-maps.md",
+    scope: "player",
+    topic: "shotbow",
+    headings: [
+      "Annihilation map pool and rotation",
+      "Classic Annihilation maps and favourites",
+      "Other Annihilation maps in the catalog",
+      "Annihilation duel maps",
+      "Seasonal and special event maps",
+      "Notable Annihilation map details",
+    ],
+  },
+  {
+    path: "docs/ai/annihilation-updates.md",
+    scope: "player",
+    topic: "shotbow",
+    headings: [
+      "Annihilation updates 2026",
+      "Annihilation updates 2025",
+      "Annihilation updates 2024",
+      "Annihilation updates 2023",
+      "Annihilation updates 2022",
+      "Annihilation updates 2021 and 2020",
+      "Earlier Annihilation update milestones",
+      "Answering Annihilation changelog questions",
+    ],
+  },
+  {
+    path: "docs/ai/annihilation-tournaments.md",
+    scope: "player",
+    topic: "shotbow",
+    headings: [
+      "Annihilation tournament champions and runners-up",
+      "Annihilation Clan Tournament 2023: entrants and format",
+      "Annihilation Clan Tournament 2024: entrants and format",
+      "Annihilation Tournament 2026: format and confirmed finalists",
+      "Annihilation Tournament 2026: registered clans",
+      "Annihilation Spring 2018 tournament completed in 2019",
+      "Other Shotbow clan tournaments and missing years",
+      "Answering questions about clan tournament records",
+    ],
+  },
+  {
+    path: "docs/ai/friendly-wars-tournaments.md",
+    scope: "player",
+    topic: "fw-tournament",
+    headings: [
+      "Friendly Wars 2025 tournament results",
+      "Friendly Wars tournaments versus Shotbow clan tournaments",
     ],
   },
 ];
@@ -205,6 +342,7 @@ function makeChunk(
     id: `${source.path}:${start}-${end}:${hash}`,
     source: source.path,
     scope: source.scope,
+    topic: source.topic,
     heading,
     startLine: start,
     endLine: end,
@@ -299,7 +437,52 @@ function commands(text: string): Set<string> {
     (
       text.toLowerCase().match(/\/[a-z][a-z0-9-]*(?:\s+[a-z][a-z0-9-]*)?/g) ??
       []
-    ).map((command) => command.replace(/\s+/g, " ").trim())
+    ).map((command) =>
+      command
+        .replace(/\s+/g, " ")
+        .trim()
+        // In "use /stats to..." the word "to" is not a subcommand.
+        .replace(/\s+(?:to|for|with|on|in|of|and|is|can|does)$/, "")
+    )
+  );
+}
+
+/**
+ * Public Shotbow reference is opt-in for questions naming Shotbow, its games,
+ * Annihilation terminology, or unmistakable class/map/update names. Ordinary
+ * FW questions must not receive these extra paragraphs.
+ */
+export function asksAboutShotbow(question: string): boolean {
+  return (
+    /\b(?:shotbow|annihilation|anni|minez|hcfactions|ghostcraft|smash|nexus|nexuses)\b/i.test(
+      question
+    ) ||
+    (!/\b(?:fw|friendly wars)\b/i.test(question) &&
+      /\bclan\s+(?:war\s+)?tournaments?\b/i.test(question)) ||
+    /\b(?:polished platinum|rising radium|chunky arsenic|weary xenon|ambitious europium|duel mode|crispy cobalt|obvious osmium)\b/i.test(
+      question
+    ) ||
+    /\b(?:5\.1\.0|5\.0\.0|4\.2\.0|4\.1\.0|3\.3\.0)\b/.test(question) ||
+    (/\b(?:class|kit|ability|abilities)\b/i.test(question) &&
+      /\b(?:acrobat|scout|transporter|swapper|handyman|immobilizer|scorpio|bloodmage|alchemist|enchanter|rift walker|warrior|miner|pyro|assassin|berserker)\b/i.test(
+        question
+      )) ||
+    (/\b(?:map|rotation)\b/i.test(question) &&
+      /\b(?:coastal|andorra|hamlet|skylands|yggdrasil|aftermath|cherokee|villages|willowmere|ironvale|anniZ|duelstal)\b/i.test(
+        question
+      ))
+  );
+}
+
+/** Keep FW community tournament history separate from Shotbow staff events. */
+export function asksAboutFwTournament(question: string): boolean {
+  return (
+    /\b(?:fw|friendly wars?)\b/i.test(question) &&
+    (/\b(?:tournaments?|championships?)\b/i.test(question) ||
+      (/\b2025\b/.test(question) &&
+        /\b(?:aura|f3|winner|won|runner.up|placed|first|second)\b/i.test(
+          question
+        )))
   );
 }
 
@@ -317,12 +500,26 @@ export function retrieveApprovedKnowledge(
   const queryTerms = terms(question);
   if (!queryTerms.size) return [];
   const queryCommands = commands(question);
+  const shotbowQuestion = asksAboutShotbow(question);
+  const fwTournamentQuestion = asksAboutFwTournament(question);
+  const tournamentResultsQuestion =
+    shotbowQuestion &&
+    /\b(?:tournaments?|clans?)\b/i.test(question) &&
+    /\b(?:won|winner|champions?|first|second|runner-?up|placed|finished)\b/i.test(
+      question
+    ) &&
+    !/\bteam nexus\b/i.test(question);
   const selfQuestion = /\b(my|mine)\b/i.test(question);
   const organiserTopic =
     /\b(?:organis(?:er|ers|e|ing|ation)|admin|announce|recover|shutdown|diagnos(?:e|is|tics)|punish(?:ment|ments)?|rollover|draft|captain|moderation|pending|announcements?)\b|\/(?:announce|punish|event|recover-game|game diagnostics)/i.test(
       question
     );
   const scored = chunks
+    .filter(
+      (chunk) =>
+        (chunk.topic !== "shotbow" || shotbowQuestion) &&
+        (chunk.topic !== "fw-tournament" || fwTournamentQuestion)
+    )
     .map((chunk) => {
       const body = terms(chunk.content);
       const title = terms(chunk.heading);
@@ -336,9 +533,28 @@ export function retrieveApprovedKnowledge(
         if (body.has(token) || title.has(token)) matchingTerms++;
       }
       for (const command of queryCommands) {
-        if (titleCommands.has(command)) score += 14;
+        // Exact command headings must outrank generic tool prose mentioning
+        // similar terms (e.g. /stats versus all-time stats).
+        if (titleCommands.has(command)) score += 35;
         else if (bodyCommands.has(command)) score += 8;
       }
+      // Public-game excerpts should rank when explicitly requested, but never
+      // drown out precise FW command documentation in mixed questions.
+      if (shotbowQuestion && chunk.topic === "shotbow" && matchingTerms)
+        score += 8;
+      if (
+        fwTournamentQuestion &&
+        chunk.topic === "fw-tournament" &&
+        matchingTerms
+      )
+        score += 8;
+      // Years recur in registration paragraphs. Explicit winners/runner-up
+      // questions should lead with the confirmed podium, not sign-up rosters.
+      if (
+        tournamentResultsQuestion &&
+        chunk.heading === "Annihilation tournament champions and runners-up"
+      )
+        score += 35;
       // When people ask about "my" archived stats, prefer the documented
       // server-bound self tool over generic historical comparisons.
       if (selfQuestion && chunk.heading.startsWith("get_my_")) score += 7;

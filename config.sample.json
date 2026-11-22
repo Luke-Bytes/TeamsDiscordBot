@@ -31,7 +31,9 @@
     "guildId": ""
   },
   "ai": {
-    "enabled": false
+    "enabled": false,
+    "mentionEnabled": true,
+    "mentionExcludedChannels": []
   },
   "wiki": {
     "mapImageBaseUrl": "",

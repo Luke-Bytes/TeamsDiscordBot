@@ -14,6 +14,20 @@ Use for “Are there pending class bans or a blocked recovery?” and specific t
 
 Prefer a single `get_current_game_state` for broad state questions rather than repeatedly calling both. For a guided ordinary command view, recommend the read-only `/game diagnostics`. If the tool or membership check fails, say diagnostics were not verified rather than assuming the game is safe to start.
 
+## get_game_roster — current rosters, captains, class bans and draft
+
+For roster, eligibility, captain, replacement, class-ban, draft, MVP and winner questions, this verified-organiser-only read returns the current RED/BLUE/UNDECIDED latest IGNs (up to 24 entries, with explicit truncation), registered IGN differences, captain status, live or paused draft progress, captain ban counts/window locks, classes recorded in memory, and selected result fields. All these are process-memory facts. Do not confuse a draft's proposed list with committed teams or a recorded winner with a saved result.
+
+## get_game_discord_state — targeted external Discord inspection
+
+For voice/role problems, focus:players checks up to 16 assigned players by fresh targeted Discord member REST reads and reports expected/opposite team roles. The voice-location column comes from the gateway cache, **not** an independently fetched voice audit; a missing cache entry is unknown. An optional targetIGN must exactly match a currently assigned roster member and limits the check to them. No guild-wide scan or arbitrary lookup is allowed.
+
+For map/minerush polls, focus:polls checks the bot's known poll message references in the configured announcement channel. For publish trouble, focus:announcement similarly checks announcement references. A successful REST lookup means the message exists now, not that it opened on schedule or the poll closed; missing references are not proof of non-delivery, and inaccessible lookups stay unavailable. These are all read-only, bounded checks.
+
+## get_game_persistence — exact current match checkpoint
+
+For shutdown, saved result and cleanup uncertainty, this verified-organiser-only tool looks up **only the process-bound current match identity** in the database and returns a saved-result fingerprint/finished flag and cleanup checkpoint: PENDING, COMPLETE or unrecorded. No raw ID or database document is exposed. COMPLETE means the application stored its cleanup checkpoint, not an independent external cleanup audit. No record found at observation time does not prove a failed/rolled-back transaction; the database may still be changing. If the process has lost its match identity, the answer is unverified. Never advise retrying shutdown or starting another game merely because a record is absent.
+
 ## get_organiser_status — saved season and announcement queue
 
 Use for “How far along is the active season?” or “How many announcements are pending?” No inputs. Unlike game snapshots, this reads active season status from saved records: type, active flag, finished-game count, game/month limits, scheduled first rollover, deadline and pending announcement block count.

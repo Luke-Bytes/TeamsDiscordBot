@@ -8,23 +8,41 @@ For saved bot records, use the current-season tools (with a `season` number if s
 
 A process snapshot cannot prove a saved result, and historical REST_API data is not automatically identical to current bot data. If a result is missing, clarify source and season before concluding anything about games or wins.
 
+## Live slash-command catalog
+
+`get_command_catalog` reads currently registered slash command names and short descriptions directly from Discord (up to 60). This is more accurate than a guessed list, but a command's presence does not mean a member can run it. `/help`, `/help scope:organiser` and the Discord slash picker remain the authoritative way to navigate options and role/channel requirements. An unavailable or truncated response is not exhaustive.
+
+## Caller identity and organiser names
+
+The initial `/ask` context includes freshly verified organiser status and a server-resolved latest Minecraft IGN when available. No Discord snowflake is given to the model. The live `list_organisers` tool returns public display names of members with the FW organiser role (up to 40), not private roles or identifiers; an unavailable or truncated list must not be claimed complete. Organiser _commands_ do not become AI write tools.
+
 ## get_my_stats — my saved seasonal record
 
 Use for “How many wins do I have?” or “What's my current Elo?” with optional `season` number; omitted means active season. Caller identity is verified from Discord, never supplied as a user ID or IGN.
 
-Returns the linked player's wins, losses, current win/loss streaks, and Ranked Elo/rank; Relaxed has no Elo/rank. `player_not_found`, `season_not_found` and `no_stats` mean that the corresponding link, season or record was absent, not zero. For MVPs or a detailed breakdown, direct players to `/stats detailed:true`.
+Returns the linked player's wins, losses, current win/loss streaks, and Ranked Elo/rank; Relaxed has no Elo/rank. `player_not_found`, `season_not_found` and `no_stats` mean that the corresponding link, season or record was absent, not zero. Without an explicit season, the first lookup also checks up to 10 recent saved season records to provide broader context, reporting if more exist. For MVPs or a detailed breakdown, direct players to `/stats detailed:true`.
 
 ## get_player_stats — a named player's saved record
 
 Use for “What are PlayerName's stats in season 24?” Input is an exact Minecraft `ign` of 3–16 valid characters, plus optional `season`. The current bot matches the player's latest IGN without case sensitivity, not old aliases or partial names.
 
-Returns the same seasonal record fields as `get_my_stats`. `ambiguous_player`, `player_not_found`, `season_not_found` or `no_stats` do not justify a guessed record; ask to confirm the IGN or season.
+Returns the same seasonal record fields as `get_my_stats`. `ambiguous_player`, `player_not_found`, `season_not_found` or `no_stats` do not justify a guessed record. When season is omitted, up to 10 saved season records are checked alongside the active one, so a player missing **current** stats can still have older stats. These are not guaranteed complete historical REST_API records. Ask to confirm the IGN if nothing matches.
 
 ## get_leaderboard — top saved seasonal players
 
-Use for “Who's top this season?” with optional `season` and `limit` from 1–10 (default 5). Returns ordered entries with wins, losses, current win streak and Elo only for Ranked.
+Use for “Who's top this season?” with optional `season` and `limit` from 1–10 (default 10). Returns ordered entries with wins, losses, current win streak and Elo only for Ranked.
 
 Ranked order is by Elo; Relaxed order is wins then largest win streak and is explicitly unranked activity, not an Elo championship. An empty list means no returned entries, not that no one has ever played. An unknown season produces `season_not_found`.
+
+## get_all_time_leaderboard — all saved-season wins
+
+For "best player of all time", consult the read-only cumulative wins leaderboard, then explain that most saved wins is only **one metric**. It totals wins and losses across Ranked and Relaxed saved bot seasons, not an all-time peak Elo ranking or a complete external archive. Do not claim that current Elo or highest win count objectively proves the best player.
+
+## get_my_all_time_stats and get_player_all_time_stats — lifetime records
+
+Use these for "How many MVPs have I earned ever?", "What is Backmobe's career win rate?", "How many games have I played across all seasons?" and detailed comparisons of a player's **saved** FW career. Self lookups bind the verified Discord caller; named lookups accept only an exact latest IGN, not a Discord ID or partial alias. These tools share the underlying saved `PlayerStats` and finished-game participation records used by `/stats detailed:true`, `/wrapped`, `/season-recap` and lifetime title calculations; they do **not** execute those commands or load a full season recap.
+
+Returns lifetime wins/losses, games, win percentage, number of season-stat records, MVP count, captain games and wins (and captain win percentage), double-Elo wins, largest **single-season** win and loss streaks, highest **saved Ranked season rating** with season number, and date of the latest saved finished match. A per-season streak is not a guaranteed cross-season streak, and a saved season rating is not the highest mid-season Elo. If there is no saved record, say so, not "zero career games"; the separate REST_API archive is not silently merged. A lifetime total is distinct from the active season's Elo leaderboard.
 
 ## get_season_summary — the bot's season and limits
 
@@ -34,7 +52,7 @@ A scheduled first rollover is distinct from an estimated calendar deadline, neit
 
 ## get_recent_games — recently saved results
 
-Use for “Who won the last three finished games?” with optional `season` and `limit` 1–5 (default 3). Returns the saved finished games' end timestamps and winning teams, most recent first.
+Use for “Who won the last three finished games?” with optional `season` and `limit` 1–5 (default 5). Returns the saved finished games' end timestamps and winning teams, most recent first.
 
 It does not return rosters, individual participation, match-by-match Elo or unsaved games. An empty result is not proof no match happened; `season_not_found` is distinct from an empty list. For an unfinished current game, use `get_current_game_state`.
 

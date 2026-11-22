@@ -30,6 +30,7 @@ or
 - Record game and player data into a database
 - Run Ranked and Relaxed seasons with automatic game/month rollovers
 - Manage standalone event forms, participant roles, and FIFO reserve sign-ups
+- Ask Navi with `/ask` or by explicitly mentioning `@Navi` in eligible server text channels (see [Navi mention setup](docs/ai/mentions.md))
 
 ## Season management
 

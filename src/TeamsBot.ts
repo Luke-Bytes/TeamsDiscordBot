@@ -3,6 +3,7 @@ import { startEventDiscordSync, syncEventDiscord } from "./logic/EventDiscordSyn
 import { Client, GatewayIntentBits, Partials } from "discord.js";
 import { CommandHandler } from "./commands/CommandHandler";
 import { MessageHandler } from "./interactions/MessageHandler";
+import { AiMentionHandler } from "./interactions/AiMentionHandler";
 import { ReactionHandler } from "./interactions/ReactionHandler";
 import { VoiceChannelHandler } from "./interactions/VoiceChannelHandler";
 import { Channels } from "./Channels";
@@ -25,6 +26,7 @@ export class TeamsBot {
 
   commandHandler: CommandHandler;
   messageHandler: MessageHandler;
+  mentionHandler: AiMentionHandler;
   reactionHandler: ReactionHandler;
   voiceChannelHandler: VoiceChannelHandler;
   private static processHandlersAttached = false;
@@ -51,6 +53,9 @@ export class TeamsBot {
 
     this.commandHandler = new CommandHandler();
     this.messageHandler = new MessageHandler(this.client);
+    this.mentionHandler = new AiMentionHandler(
+      this.commandHandler.askCommand.assistant
+    );
     this.reactionHandler = new ReactionHandler();
     this.voiceChannelHandler = new VoiceChannelHandler();
 
@@ -249,16 +254,23 @@ export class TeamsBot {
         return;
       }
 
-      if (msg.content.length > 1900) {
-        return;
-      }
-
       if (
         PermissionsUtil.isDebugEnabled() &&
         msg.guild?.id !== PermissionsUtil.config.dev.guildId
       ) {
         return;
       }
+      // Consume explicit Navi mentions before community votes or draft picks.
+      // The outer recovery operation remains held until the AI reply settles.
+      try {
+        if (await this.mentionHandler.handle(msg)) return;
+      } catch {
+        // No question text or provider error details in logs, and never feed a
+        // failed Navi invocation into a game-input workflow.
+        console.warn("ai.mention outcome=handler_failed");
+        return;
+      }
+      if (msg.content.length > 1900) return;
       const handledTierListMessage =
         this.commandHandler.tierListCommand.handleMessage(msg);
       if (handledTierListMessage) {
