@@ -52,7 +52,7 @@ export const AI_TOOLS: AiFunctionTool[] = [
     function: {
       name: "search_tournament_matches",
       description:
-        "Search a reviewed, incomplete PUBLIC Shotbow Annihilation / Friendly Wars tournament MATCH and video archive. For remembered games (even wrong map/year), use text with the user's wording; optional team, opponent, map, year, stage or uploader can narrow ranking. Results distinguish source-backed matches, unknown maps/outcomes, unverified stream timestamps and community-reported FW placements. Not a live FW game search, full tournament bracket or internet browser.",
+        "Search a reviewed, incomplete PUBLIC Shotbow Annihilation / Friendly Wars tournament MATCH and video archive. For remembered games (even wrong map/year), use text with the user's wording; optional team, opponent, map, year, stage or uploader can narrow ranking. Results distinguish source-backed matches (including four-clan events), unknown maps/outcomes, unverified stream timestamps and community-reported FW placements. Use offset=nextOffset for more ranked matches; results are partial, not a complete tournament bracket. Not a live FW game search or internet browser.",
       parameters: {
         type: "object",
         properties: {
@@ -67,6 +67,7 @@ export const AI_TOOLS: AiFunctionTool[] = [
           fromYear: { type: "integer", minimum: 2010, maximum: 2100 },
           toYear: { type: "integer", minimum: 2010, maximum: 2100 },
           limit: { type: "integer", minimum: 1, maximum: 6 },
+          offset: { type: "integer", minimum: 0, maximum: 1000 },
         },
         additionalProperties: false,
       },

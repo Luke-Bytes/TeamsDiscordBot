@@ -45,11 +45,11 @@ test("Approved tournament catalog has safe unique IDs, resolved links and no unv
     "Distinct 2018, 2020, FW and Shotbow tournament editions"
   );
   assert(
-    TOURNAMENT_ARCHIVE.matches.length >= 14,
+    TOURNAMENT_ARCHIVE.matches.length >= 35,
     "Individually traceable match records"
   );
   assert(
-    TOURNAMENT_ARCHIVE.recordings.length >= 15,
+    TOURNAMENT_ARCHIVE.recordings.length >= 33,
     "Video metadata catalog includes the two unverified user seeds"
   );
   assert(
@@ -85,6 +85,12 @@ test("Tampered archives, relationships, duplicate IDs and unsafe sources fail cl
     (a: TournamentArchive) => a.matches.push({ ...a.matches[0] }),
     (a: TournamentArchive) => {
       a.matches[0].tournamentId = "not-real";
+    },
+    (a: TournamentArchive) => {
+      a.recordings.push({ ...a.recordings[0], id: "new-id" });
+    },
+    (a: TournamentArchive) => {
+      a.matches[0].teams = ["DDD", "DDD"];
     },
     (a: TournamentArchive) => {
       a.recordings[0].segments[0].matchId = "not-real";
@@ -192,7 +198,7 @@ test("Confirmed pair outweighs an incorrect optional map; same-map pair ranks hi
   });
   a.recordings.push({
     id: "fixture-mrk-f3-rec",
-    videoId: "oMISKDkIYdM",
+    videoId: "TSTrec00001",
     title: "Deterministic test-only clip",
     channel: "Shotbow",
     type: "match",
@@ -285,7 +291,7 @@ test("Absent map/date/score, multi-recording games, timestamped links and incomp
   );
   a.recordings.push({
     id: "fixture-second-perspective",
-    videoId: "oMISKDkIYdM",
+    videoId: "TSTrec00002",
     title: "Fixture perspective",
     channel: "lPirlo",
     type: "livestream",
@@ -327,6 +333,124 @@ test("Absent map/date/score, multi-recording games, timestamped links and incomp
   assert(
     noMap.status === "no_indexed_matches" && noMap.matches.length === 0,
     "Unknown maps cannot be reported as Coastal"
+  );
+});
+
+test("2020 Team Nexus four-clan events stay single real fixtures, not six invented pairings", () => {
+  const events = TOURNAMENT_ARCHIVE.matches.filter(
+    (m) => m.tournamentId === "team-nexus-spring-2020"
+  );
+  assert(events.length === 9, "Nine recorded results in the organiser's post");
+  assert(
+    events.every((m) => m.teams.length === 4 && !!m.winner),
+    "All original four sides and reported winners survive"
+  );
+  const hit = searchTournamentMatches({
+    team: "Oblivion",
+    opponent: "Mizu",
+    year: 2020,
+  });
+  assert(
+    hit.matches[0]?.matchId === "tn20-spring-03" &&
+      hit.matches[0].bothTeamsMatched &&
+      hit.matches[0].teams.length === 4,
+    "Search recognises opponents occupying any two positions in one multi-clan event"
+  );
+  const second = searchTournamentMatches({
+    team: "Team Turkish",
+    opponent: "LUD",
+  });
+  assert(
+    second.matches[0]?.matchId === "tn20-spring-06",
+    "Organiser-attested space variant resolves without claiming unrelated TT aliases"
+  );
+});
+
+test("The same 2026 quarterfinal has multiple distinct official stream perspectives", () => {
+  const target = "s26-qf-annl-sfj";
+  const sources = TOURNAMENT_ARCHIVE.recordings.filter((r) =>
+    r.segments.some((s) => s.matchId === target)
+  );
+  assert(
+    sources.length === 2 &&
+      sources.some((r) => r.videoId === "giZfDpHPY2E") &&
+      sources.some((r) => r.videoId === "aPm_WNvS8mQ"),
+    "English and Japanese official streams associate to one fixture"
+  );
+  const result = searchTournamentMatches({
+    team: "ANNL",
+    opponent: "SFJ",
+    year: 2026,
+  });
+  assert(
+    result.matches[0]?.matchId === target &&
+      result.matches[0].recordings.length === 2 &&
+      result.matches[0].recordings.every((r) => r.segmentStartSeconds === null),
+    "No guessed time offsets for either stream"
+  );
+  for (const id of [
+    "jQIIe5rVFUI",
+    "1Nu_Db28r5s",
+    "SdwPHjJbCsQ",
+    "N9TTVzHOQ78",
+    "1izlnN61wJo",
+  ]) {
+    const lead = TOURNAMENT_ARCHIVE.recordings.find((r) => r.videoId === id);
+    assert(
+      !!lead && lead.segments.length === 0,
+      "Real videos lacking proof of all opponents remain unassociated: " + id
+    );
+  }
+});
+
+test("Large catalog paging is stable, bounded and never silently drops matches", () => {
+  const a = fixture();
+  for (let i = 0; i < 75; i++)
+    a.matches.push({
+      id: `fixture-extra-${i}`,
+      tournamentId: "shotbow-2026",
+      teams: ["MRK", `Test Clan ${i}`],
+      status: "partial",
+      sources: [official("giZfDpHPY2E")],
+    });
+  assert(
+    validateTournamentArchive(a).length === 0,
+    "Large safe catalog validates"
+  );
+  let offset = 0;
+  const seen = new Set<string>();
+  for (let i = 0; i < 100; i++) {
+    const page = searchTournamentMatches({ team: "MRK", limit: 3, offset }, a);
+    assert(
+      JSON.stringify(page).length <= 4000,
+      "Every page fits the existing 4 KB tool-response budget"
+    );
+    assert(page.status === "ok", "Paging returns results before exhaustion");
+    for (const m of page.matches) {
+      assert(!seen.has(m.matchId), "No duplicates across page offsets");
+      seen.add(m.matchId);
+    }
+    if (page.nextOffset === null) {
+      assert(!page.truncatedCandidates, "No hidden matches remain");
+      break;
+    }
+    assert(page.nextOffset > offset, "Continuation always advances");
+    offset = page.nextOffset;
+  }
+  assert(seen.size >= 75, "Every synthetic fixture is reachable by pagination");
+  const laterPage = searchTournamentMatches(
+    { team: "MRK", opponent: "Test Clan 1", limit: 1, offset: 5 },
+    a
+  );
+  assert(
+    laterPage.identifiedPairInArchive &&
+      laterPage.matches.every((m) => m.matchId !== "fixture-extra-1"),
+    "An exact known pairing remains identified when pagination hides its result"
+  );
+  assert(
+    !validTournamentSearchQuery({ text: "MRK", offset: 1001 }) &&
+      !validTournamentSearchQuery({ text: "MRK", offset: -1 }),
+    "Pagination remains bounded"
   );
 });
 

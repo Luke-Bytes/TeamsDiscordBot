@@ -13,7 +13,8 @@ export type ArchiveEvidence = {
 export type ArchivedMatch = {
   id: string;
   tournamentId: string;
-  teams: [string, string];
+  /** One actual fixture may have two, three or four opposing clans. */
+  teams: [string, string, ...string[]];
   stage?: string;
   map?: string;
   playedOn?: string;
@@ -100,6 +101,7 @@ export function validateTournamentArchive(
   );
   const tournaments = new Set(archive.tournaments.map((t) => t.id));
   const matches = new Map(archive.matches.map((m) => [m.id, m]));
+  const videoIds = new Set<string>();
   for (const t of archive.tournaments) {
     if (
       t.participants.length > 100 ||
@@ -114,8 +116,10 @@ export function validateTournamentArchive(
   for (const m of archive.matches) {
     if (
       !tournaments.has(m.tournamentId) ||
-      m.teams.length !== 2 ||
+      m.teams.length < 2 ||
+      m.teams.length > 4 ||
       m.teams.some((t) => !t || t.length > 60) ||
+      new Set(m.teams.map((t) => t.toLowerCase())).size !== m.teams.length ||
       (m.winner && !m.teams.includes(m.winner)) ||
       !m.sources.length ||
       m.sources.length > 8 ||
@@ -124,8 +128,13 @@ export function validateTournamentArchive(
       errors.push(`invalid match: ${m.id}`);
   }
   for (const r of archive.recordings) {
-    if (!VIDEO_ID.test(r.videoId) || r.segments.length > 30)
-      errors.push(`invalid recording: ${r.id}`);
+    if (
+      !VIDEO_ID.test(r.videoId) ||
+      r.segments.length > 30 ||
+      videoIds.has(r.videoId)
+    )
+      errors.push(`invalid or duplicate video: ${r.id}`);
+    videoIds.add(r.videoId);
     const seen = new Set<string>();
     for (const segment of r.segments) {
       if (

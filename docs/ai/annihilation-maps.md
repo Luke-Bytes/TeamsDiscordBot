@@ -8,7 +8,7 @@ Shotbow's map wiki says a **10-map rotation** is picked, with the **live pool vi
 
 ## Classic Annihilation maps and favourites
 
-**Coastal** is the Tier 1 evergreen classic on the published wiki. Tier 2 community favourites listed there are **Aftermath 2.0, Andorra 3.9.2, Canyon, Cherokee, Hamlet, Kingdom, Nature and Villages**. These are public Shotbow rotation categories, not a guarantee that a specific FW event can play them. Source: https://wiki.shotbow.net/Annihilation_Maps
+**Coastal** is the Tier 1 evergreen classic on the published wiki. Tier 2 community favourites listed there are **Aftermath 2.0, Andorra 3.9.2, Canyon, Cherokee, Hamlet, Kingdom, Nature and Villages**. These are public Shotbow rotation categories, not a guarantee that a specific FW event can play them. The tiers are **not an official competitive ranking** or proof of match popularity; for a request like “top 3 maps for competitive Anni”, give a clearly subjective shortlist rather than claiming an official top three or live rotation. Source: https://wiki.shotbow.net/Annihilation_Maps
 
 ## Other Annihilation maps in the catalog
 

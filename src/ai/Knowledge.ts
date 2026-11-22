@@ -453,7 +453,24 @@ function commands(text: string): Set<string> {
  * FW questions must not receive these extra paragraphs.
  */
 export function asksAboutShotbow(question: string): boolean {
+  // People often ask "Scout or Acrobat?" without saying "Annihilation class".
+  // Recognise a class purchase/comparison without opening Shotbow guides for
+  // unrelated FW questions about a single generic word such as "scout".
+  const classNames = new Set(
+    question
+      .toLowerCase()
+      .match(
+        /\b(?:acrobat|scout|transporter|swapper|handyman|immobilizer|scorpio|bloodmage|alchemist|enchanter|rift walker|warrior|miner|pyro|assassin|berserker)\b/g
+      ) ?? []
+  );
+  const classChoice =
+    (classNames.size >= 2 &&
+      /\b(?:or|vs\.?|versus|compare|between|better|choose|pick|buy)\b/i.test(
+        question
+      )) ||
+    (classNames.size > 0 && /\b(?:buy|unlock|purchase|rent)\b/i.test(question));
   return (
+    classChoice ||
     /\b(?:shotbow|annihilation|anni|minez|hcfactions|ghostcraft|smash|nexus|nexuses)\b/i.test(
       question
     ) ||

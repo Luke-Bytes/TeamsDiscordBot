@@ -10,6 +10,7 @@ import { AI_DEFAULTS } from "./AiConfig";
 import { KnowledgeChunk, retrieveApprovedKnowledge } from "./Knowledge";
 import { HistoricalStatsClient } from "./HistoricalStatsClient";
 import { buildNaviMessages, toolsForAsk } from "./AiPrompt";
+import { formatNaviDiscordMessage } from "./DiscordAnswer";
 
 export type AiAnswer = {
   text: string;
@@ -68,29 +69,23 @@ async function boundedTool<T>(
 }
 
 export function safeDiscordText(input: string): string {
-  return (
-    input
-      // Responses (and thus PM2 reply logs) must not echo credential-shaped text.
-      .replace(
-        /(?:gsk_[a-zA-Z0-9_-]{16,}|sk-[a-zA-Z0-9_-]{16,}|AIza[a-zA-Z0-9_-]{20,}|(?:MC_AI_[A-Z0-9_]+|BOT_TOKEN|DATABASE_URL)\s*=\s*\S+)/gi,
-        "[credential omitted]"
-      )
-      .replace(/<@!?\d+>|<@&\d+>|<#\d+>|@everyone|@here/gi, "[mention]")
-      .replace(/https?:\/\/[^\s<>]+/gi, "[link omitted]")
-      .replace(/```/g, "'''")
-      .split("")
-      .filter((character) => {
-        const code = character.charCodeAt(0);
-        return (
-          (code >= 32 && code !== 127) ||
-          character === "\n" ||
-          character === "\t"
-        );
-      })
-      .join("")
-      .slice(0, 1450)
-      .trim()
-  );
+  const sanitised = input
+    // Responses (and thus PM2 reply logs) must not echo credential-shaped text.
+    .replace(
+      /(?:gsk_[a-zA-Z0-9_-]{16,}|sk-[a-zA-Z0-9_-]{16,}|AIza[a-zA-Z0-9_-]{20,}|(?:MC_AI_[A-Z0-9_]+|BOT_TOKEN|DATABASE_URL)\s*=\s*\S+)/gi,
+      "[credential omitted]"
+    )
+    .replace(/<@!?\d+>|<@&\d+>|<#\d+>|@everyone|@here/gi, "[mention]")
+    .replace(/https?:\/\/[^\s<>]+/gi, "[link omitted]")
+    .split("")
+    .filter((character) => {
+      const code = character.charCodeAt(0);
+      return (
+        (code >= 32 && code !== 127) || character === "\n" || character === "\t"
+      );
+    })
+    .join("");
+  return formatNaviDiscordMessage(sanitised).slice(0, 1450).trim();
 }
 
 export async function answerAiQuestion(options: {

@@ -17,6 +17,7 @@ export type TournamentSearchQuery = {
   fromYear?: number;
   toYear?: number;
   limit?: number;
+  offset?: number;
 };
 
 const SEARCH_TEXT = [
@@ -48,7 +49,10 @@ export function validTournamentSearchQuery(
 ): boolean {
   if (
     Object.keys(value).some(
-      (key) => !([...SEARCH_TEXT, ...YEARS, "limit"] as string[]).includes(key)
+      (key) =>
+        !([...SEARCH_TEXT, ...YEARS, "limit", "offset"] as string[]).includes(
+          key
+        )
     )
   )
     return false;
@@ -80,6 +84,13 @@ export function validTournamentSearchQuery(
     (!Number.isInteger(value.limit) ||
       Number(value.limit) < 1 ||
       Number(value.limit) > 6)
+  )
+    return false;
+  if (
+    value.offset !== undefined &&
+    (!Number.isInteger(value.offset) ||
+      Number(value.offset) < 0 ||
+      Number(value.offset) > 1000)
   )
     return false;
   if (
@@ -283,8 +294,14 @@ function scoreMatch(
   const bothTeams =
     names.length === 2 &&
     exactTeams === 2 &&
-    (matchLabel(names[0], match.teams[0], archive) === "exact") !==
-      (matchLabel(names[1], match.teams[0], archive) === "exact");
+    match.teams.some(
+      (team, first) =>
+        matchLabel(names[0], team, archive) === "exact" &&
+        match.teams.some(
+          (other, second) =>
+            first !== second && matchLabel(names[1], other, archive) === "exact"
+        )
+    );
   if (bothTeams) {
     score += 14;
     reasons.push("Both clans match, in either order");
@@ -385,6 +402,8 @@ export function searchTournamentMatches(
     identifiedPairInArchive: false,
     candidateCount: 0,
     truncatedCandidates: false,
+    pageOffset: 0,
+    nextOffset: null as number | null,
   };
   if (!validTournamentSearchQuery(input as Record<string, unknown>))
     return { status: "invalid_query", ...empty };
@@ -403,8 +422,9 @@ export function searchTournamentMatches(
     .filter(({ score }) => score > 0)
     .sort((a, b) => b.score - a.score || a.match.id.localeCompare(b.match.id));
   // Don't return map-unknown entries for map-only searches; unknown is not a confirmed hit.
+  const pageOffset = input.offset ?? 0;
   const matches = ranked
-    .slice(0, input.limit ?? 4)
+    .slice(pageOffset, pageOffset + (input.limit ?? 4))
     .map(({ match, recordings, reasons, score, bothTeams }) => {
       const tournament = archive.tournaments.find(
         (t) => t.id === match.tournamentId
@@ -454,9 +474,12 @@ export function searchTournamentMatches(
     reviewedOn: archive.reviewedOn,
     catalogScope: "Partial reviewed public archive, not all matches or streams",
     identifiedPairInArchive: Boolean(
-      query.team && query.opponent && matches.some((m) => m.bothTeamsMatched)
+      query.team &&
+        query.opponent &&
+        ranked.some((candidate) => candidate.bothTeams)
     ),
     matchCountIndexed: archive.matches.length,
+    pageOffset,
     query: {
       team: query.team ?? null,
       opponent: query.opponent ?? null,
@@ -475,6 +498,10 @@ export function searchTournamentMatches(
   return {
     ...response,
     candidateCount: ranked.length,
-    truncatedCandidates: ranked.length > response.matches.length,
+    truncatedCandidates: pageOffset + response.matches.length < ranked.length,
+    nextOffset:
+      pageOffset + response.matches.length < ranked.length
+        ? pageOffset + response.matches.length
+        : null,
   };
 }

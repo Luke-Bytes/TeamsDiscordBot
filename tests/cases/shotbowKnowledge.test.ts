@@ -91,6 +91,11 @@ test("Specific Shotbow, Annihilation, class, map and patch questions retrieve th
       "Annihilation class roster and unlocks",
     ],
     ["What does the Scout class do?", "Mobility and infiltration classes"],
+    ["should i buy scout or acrobat?", "Mobility and infiltration classes"],
+    [
+      "Scout vs Acrobat, which should I unlock?",
+      "Mobility and infiltration classes",
+    ],
     [
       "How does the Handyman class work?",
       "Mining, building and utility classes",
@@ -118,6 +123,20 @@ test("Specific Shotbow, Annihilation, class, map and patch questions retrieve th
       "Existing prompt excerpt budget remains bounded"
     );
   }
+});
+
+test("Competitive Annihilation map rankings carry their subjective status", () => {
+  const chunks = retrieveApprovedKnowledge(
+    knowledge,
+    "top 3 maps for competitive anni",
+    false
+  );
+  assert(
+    chunks.some((chunk) =>
+      chunk.content.includes("not an official competitive ranking")
+    ),
+    "Map recommendations must not present wiki rotation tiers as a measured competition ranking"
+  );
 });
 
 test("Annihilation clan tournament questions retrieve dated winners and documented entrants", () => {

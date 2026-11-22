@@ -3,7 +3,7 @@ import { assert } from "../framework/assert";
 import { SeasonType } from "@prisma/client";
 import { prismaClient } from "../../src/database/prismaClient";
 import { SeasonService } from "../../src/database/SeasonService";
-import { answerAiQuestion } from "../../src/ai/AiAssistant";
+import { answerAiQuestion, safeDiscordText } from "../../src/ai/AiAssistant";
 import { AiCaller, permittedAiTools } from "../../src/ai/AiTools";
 import { AiFunctionCall, AiMessage } from "../../src/ai/GroqClient";
 import {
@@ -42,6 +42,13 @@ test("Navi prompt has compact identity, evidence and safety invariants", () => {
     "discord delivery",
     "citations",
     "human escalation",
+    "discord chat",
+    "no tables",
+    "fenced code",
+    "real /slash commands",
+    "occasional emoji",
+    "skip legalistic warnings",
+    "class abilities",
   ])
     assert(
       policy.includes(phrase),
@@ -56,6 +63,36 @@ test("Navi prompt has compact identity, evidence and safety invariants", () => {
       naviAudiencePrompt(false).includes("only authorised roles") &&
       naviAudiencePrompt(true).includes("verified organiser"),
     "Audience boundaries remain explicit"
+  );
+});
+
+test("Navi delivery converts Markdown tables and fences to usable Discord text", () => {
+  const table = safeDiscordText(
+    "**Best FW players**\n\n| Rank | Player | Wins | Losses |\n" +
+      "|---|---|---|---|\n| 1 | **Deshigh** | 111 | 65 |\n" +
+      "| 2 | **Ungenes** | 98 | 73 |"
+  );
+  assert(
+    table.includes("- **1. Deshigh** — Wins: 111 · Losses: 65") &&
+      table.includes("- **2. Ungenes** — Wins: 98 · Losses: 73") &&
+      !table.includes("| Rank |"),
+    "Model-generated tables become compact Discord-readable rows"
+  );
+
+  const command = safeDiscordText(
+    "### Updating names\n```text\n/username update oldusername:Old newusername:New\n```\n" +
+      "Verify with GET /registered or run get_player_all_time_stats."
+  );
+  assert(
+    command.includes("**Updating names**") &&
+      command.includes("/username update oldusername:Old newusername:New") &&
+      command.includes("/registered") &&
+      command.includes("ask Navi to check") &&
+      !command.includes("```") &&
+      !command.includes("'''") &&
+      !command.includes("GET /registered") &&
+      !command.includes("get_player_all_time_stats"),
+    "No code fences, fake HTTP command or internal callable identifiers leak to users"
   );
 });
 

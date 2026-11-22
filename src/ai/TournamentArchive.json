@@ -18,8 +18,14 @@
       ],
       "participantBasis": "Finalists verified; other names from applications, not confirmed gameplay",
       "placements": [
-        { "team": "DDD", "position": 1 },
-        { "team": "Agency", "position": 2 }
+        {
+          "team": "DDD",
+          "position": 1
+        },
+        {
+          "team": "Agency",
+          "position": 2
+        }
       ],
       "sources": [
         "https://shotbow.net/forum/threads/annihilation-clan-tournament-2023.419233/",
@@ -27,8 +33,9 @@
       ],
       "coverage": "partial",
       "gaps": [
-        "Group and knockout fixtures incomplete",
-        "No exact match dates except published final event references"
+        "DDD channel upload names an opponent (01) but not both sides, so it remains a recording lead",
+        "lPirlo YALEAGENCY quarterfinal footage does not identify the opposing clan in metadata",
+        "Other group and knockout fixtures still incomplete"
       ]
     },
     {
@@ -52,8 +59,14 @@
       ],
       "participantBasis": "Named in official match uploads or registration thread; no complete verified participant list",
       "placements": [
-        { "team": "NyRq", "position": 1 },
-        { "team": "Rawr v2", "position": 2 }
+        {
+          "team": "NyRq",
+          "position": 1
+        },
+        {
+          "team": "Rawr v2",
+          "position": 2
+        }
       ],
       "sources": [
         "https://shotbow.net/forum/threads/annihilation-clan-tournament-2024.422851/",
@@ -61,9 +74,10 @@
       ],
       "coverage": "partial",
       "gaps": [
-        "All group-stage fixtures and one semifinal not identified",
-        "Video uploads are not proof of game dates",
-        "Unknown lower placements"
+        "Official 2024 11 tournament wars mentioned in March staff recap but corresponding group match pairs incomplete",
+        "Two Rawr v2 community uploads name only opponent (vs APL and vs F3); uploader name alone is not proof of the other side",
+        "Second semifinal's opponent pair and verified direct recording still missing",
+        "Upload dates are not game dates"
       ]
     },
     {
@@ -74,8 +88,14 @@
       "participants": ["Aura", "F3"],
       "participantBasis": "Community-provided first and second places only",
       "placements": [
-        { "team": "Aura", "position": 1 },
-        { "team": "F3", "position": 2 }
+        {
+          "team": "Aura",
+          "position": 1
+        },
+        {
+          "team": "F3",
+          "position": 2
+        }
       ],
       "sources": [],
       "coverage": "reported",
@@ -103,12 +123,19 @@
         "SFJ",
         "HELP",
         "Zero Effort",
-        "Vein X Mush"
+        "Vein X Mush",
+        "ZE"
       ],
-      "participantBasis": "Video match titles plus forum applications; applications alone do not verify play",
+      "participantBasis": "Named in official match video titles, plus separate forum applications (applications alone do not establish a played fixture)",
       "placements": [
-        { "team": "Aura", "position": 1 },
-        { "team": "DONTCOMEANNI", "position": 2 }
+        {
+          "team": "Aura",
+          "position": 1
+        },
+        {
+          "team": "DONTCOMEANNI",
+          "position": 2
+        }
       ],
       "sources": [
         "https://shotbow.net/forum/threads/annihilation-2026-tournament.432532/",
@@ -116,9 +143,9 @@
       ],
       "coverage": "partial",
       "gaps": [
-        "Other fixtures/stages unverified",
-        "Final match date not established by upload date",
-        "No reliable chapters in combined stream"
+        "Missing earlier group or preliminary games (if played), scores and maps",
+        "ZE upload does not establish that ZE is the registered Zero Effort clan",
+        "No verified chapter offsets or played-on dates"
       ]
     },
     {
@@ -132,9 +159,13 @@
         "Team Turkish",
         "japanesesnipers",
         "Gov",
-        "Team Envy"
+        "Team Envy",
+        "Envy",
+        "ATC",
+        "LOVE",
+        "The Blue Hearts"
       ],
-      "participantBasis": "Bracket/forum mentions, not an exhaustive played-fixture list",
+      "participantBasis": "Official 2018 quarterfinal stream establishes four clans; additional bracket mentions may be proposed rather than played",
       "placements": [],
       "sources": [
         "https://shotbow.net/forum/threads/the-year-ahead-2019-dentrils-new-moon-february-2019.392056/",
@@ -142,7 +173,8 @@
       ],
       "coverage": "sparse",
       "gaps": [
-        "Finalists/winner and safely identifiable match pairings not confirmed"
+        "Only a single four-clan quarterfinal independently identified",
+        "2019 final participants and winner still unverified"
       ]
     },
     {
@@ -150,14 +182,38 @@
       "name": "Team Nexus Spring 2020 clan wars",
       "organiser": "Team Nexus community",
       "year": 2020,
-      "participants": ["TeamTurkish"],
-      "participantBasis": "Historical winner list only",
-      "placements": [{ "team": "TeamTurkish", "position": 1 }],
-      "sources": [
-        "https://shotbow.net/forum/threads/team-nexus-discord-server-for-clans-and-community-events.384901/"
+      "participants": [
+        "APL",
+        "hmky",
+        "Oblivion",
+        "rawr",
+        "Dear",
+        "Mizu",
+        "Alice",
+        "TeamTurkish",
+        "LUD",
+        "PDO",
+        "Uchiha Clan",
+        "Team Clowned",
+        "CT"
       ],
-      "coverage": "sparse",
-      "gaps": ["Fixtures and recordings not located"]
+      "participantBasis": "Nine completed four-clan events with finishes reported by Team Nexus organiser Maashg",
+      "placements": [
+        {
+          "team": "TeamTurkish",
+          "position": 1
+        }
+      ],
+      "sources": [
+        "https://shotbow.net/forum/threads/team-nexus-discord-server-for-clans-and-community-events.384901/",
+        "https://shotbow.net/forum/threads/clan-war-events-by-team-nexus.400408/"
+      ],
+      "coverage": "partial",
+      "gaps": [
+        "No direct video identified for these nine fixtures",
+        "Some 2020 event numbers were duplicated in the organiser's schedule; unique archive IDs distinguish dates/order",
+        "Exact game play dates and maps require separate confirmation"
+      ]
     },
     {
       "id": "team-nexus-summer-fall-2020",
@@ -166,12 +222,20 @@
       "year": 2020,
       "participants": ["rawr"],
       "participantBasis": "Historical winner list only",
-      "placements": [{ "team": "rawr", "position": 1 }],
+      "placements": [
+        {
+          "team": "rawr",
+          "position": 1
+        }
+      ],
       "sources": [
         "https://shotbow.net/forum/threads/team-nexus-discord-server-for-clans-and-community-events.384901/"
       ],
       "coverage": "sparse",
-      "gaps": ["Fixtures and recordings not located"]
+      "gaps": [
+        "July 2020 official 3v3v3v3 recording found, but precise three-clan-per-colour compositions not established",
+        "Additional played fixtures and result associations are missing"
+      ]
     },
     {
       "id": "team-nexus-mushroom",
@@ -180,7 +244,12 @@
       "year": null,
       "participants": ["Mizu"],
       "participantBasis": "Historical winner list only",
-      "placements": [{ "team": "Mizu", "position": 1 }],
+      "placements": [
+        {
+          "team": "Mizu",
+          "position": 1
+        }
+      ],
       "sources": [
         "https://shotbow.net/forum/threads/team-nexus-discord-server-for-clans-and-community-events.384901/"
       ],
@@ -213,6 +282,11 @@
       "name": "APL",
       "aliases": ["ABOMINACIÓN"],
       "evidence": "https://shotbow.net/forum/threads/annihilation-2026-tournament.432532/"
+    },
+    {
+      "name": "TeamTurkish",
+      "aliases": ["Team Turkish"],
+      "evidence": "https://shotbow.net/forum/threads/clan-war-events-by-team-nexus.400408/"
     }
   ],
   "matches": [
@@ -405,6 +479,274 @@
         {
           "url": "https://shotbow.net/forum/portal/?page=2",
           "kind": "official-result"
+        }
+      ]
+    },
+    {
+      "id": "s18-qf-envy-atc-love-hearts",
+      "tournamentId": "shotbow-spring-2018",
+      "teams": ["Envy", "ATC", "LOVE", "The Blue Hearts"],
+      "stage": "Quarterfinal",
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=msPjB6nmmXE",
+          "kind": "official-video-title"
+        }
+      ]
+    },
+    {
+      "id": "tn20-spring-01",
+      "tournamentId": "team-nexus-spring-2020",
+      "teams": ["APL", "hmky", "Oblivion", "rawr"],
+      "winner": "hmky",
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://shotbow.net/forum/threads/clan-war-events-by-team-nexus.400408/",
+          "kind": "community-report"
+        }
+      ]
+    },
+    {
+      "id": "tn20-spring-02",
+      "tournamentId": "team-nexus-spring-2020",
+      "teams": ["Dear", "hmky", "Mizu", "Alice"],
+      "winner": "Mizu",
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://shotbow.net/forum/threads/clan-war-events-by-team-nexus.400408/",
+          "kind": "community-report"
+        }
+      ]
+    },
+    {
+      "id": "tn20-spring-03",
+      "tournamentId": "team-nexus-spring-2020",
+      "teams": ["APL", "Mizu", "Oblivion", "rawr"],
+      "winner": "Mizu",
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://shotbow.net/forum/threads/clan-war-events-by-team-nexus.400408/",
+          "kind": "community-report"
+        }
+      ]
+    },
+    {
+      "id": "tn20-spring-04",
+      "tournamentId": "team-nexus-spring-2020",
+      "teams": ["APL", "Mizu", "TeamTurkish", "Alice"],
+      "winner": "TeamTurkish",
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://shotbow.net/forum/threads/clan-war-events-by-team-nexus.400408/",
+          "kind": "community-report"
+        }
+      ]
+    },
+    {
+      "id": "tn20-spring-05",
+      "tournamentId": "team-nexus-spring-2020",
+      "teams": ["hmky", "Oblivion", "rawr", "TeamTurkish"],
+      "winner": "TeamTurkish",
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://shotbow.net/forum/threads/clan-war-events-by-team-nexus.400408/",
+          "kind": "community-report"
+        }
+      ]
+    },
+    {
+      "id": "tn20-spring-06",
+      "tournamentId": "team-nexus-spring-2020",
+      "teams": ["LUD", "PDO", "Uchiha Clan", "TeamTurkish"],
+      "winner": "Uchiha Clan",
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://shotbow.net/forum/threads/clan-war-events-by-team-nexus.400408/",
+          "kind": "community-report"
+        }
+      ]
+    },
+    {
+      "id": "tn20-spring-07a",
+      "tournamentId": "team-nexus-spring-2020",
+      "teams": ["Alice", "Dear", "Uchiha Clan", "Team Clowned"],
+      "winner": "Dear",
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://shotbow.net/forum/threads/clan-war-events-by-team-nexus.400408/",
+          "kind": "community-report"
+        }
+      ]
+    },
+    {
+      "id": "tn20-spring-07b",
+      "tournamentId": "team-nexus-spring-2020",
+      "teams": ["Mizu", "Oblivion", "rawr", "Team Clowned"],
+      "winner": "Team Clowned",
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://shotbow.net/forum/threads/clan-war-events-by-team-nexus.400408/",
+          "kind": "community-report"
+        }
+      ]
+    },
+    {
+      "id": "tn20-spring-07c",
+      "tournamentId": "team-nexus-spring-2020",
+      "teams": ["APL", "CT", "hmky", "Team Clowned"],
+      "winner": "APL",
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://shotbow.net/forum/threads/clan-war-events-by-team-nexus.400408/",
+          "kind": "community-report"
+        }
+      ]
+    },
+    {
+      "id": "s26-annl-grim",
+      "tournamentId": "shotbow-2026",
+      "teams": ["DONTCOMEANNI", "GRIM"],
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=6QkDb6neYJc",
+          "kind": "official-video-title"
+        }
+      ]
+    },
+    {
+      "id": "s26-ze-grim",
+      "tournamentId": "shotbow-2026",
+      "teams": ["ZE", "GRIM"],
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=EDLBbEdRBMQ",
+          "kind": "official-video-title"
+        }
+      ]
+    },
+    {
+      "id": "s26-tt-awf",
+      "tournamentId": "shotbow-2026",
+      "teams": ["TT", "AWF"],
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=0-BH43j-qQY",
+          "kind": "official-video-title"
+        }
+      ]
+    },
+    {
+      "id": "s26-apl-help",
+      "tournamentId": "shotbow-2026",
+      "teams": ["APL", "HELP"],
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=l0KBbrfh4Kc",
+          "kind": "official-video-title"
+        }
+      ]
+    },
+    {
+      "id": "s26-qf-annl-sfj",
+      "tournamentId": "shotbow-2026",
+      "teams": ["DONTCOMEANNI", "SFJ"],
+      "stage": "Quarterfinal",
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=giZfDpHPY2E",
+          "kind": "official-video-title"
+        }
+      ]
+    },
+    {
+      "id": "s26-qf-tt-f3",
+      "tournamentId": "shotbow-2026",
+      "teams": ["TT", "F3"],
+      "stage": "Quarterfinal",
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=WAE42dUSn1w",
+          "kind": "official-video-title"
+        }
+      ]
+    },
+    {
+      "id": "s26-qf-aura-mrk",
+      "tournamentId": "shotbow-2026",
+      "teams": ["Aura", "MRK"],
+      "stage": "Quarterfinal",
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=anuw9S9Jmps",
+          "kind": "official-video-title"
+        }
+      ]
+    },
+    {
+      "id": "s26-qf-help-grim",
+      "tournamentId": "shotbow-2026",
+      "teams": ["HELP", "GRIM"],
+      "stage": "Quarterfinal",
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=i6WaS2ofdxE",
+          "kind": "official-video-title"
+        }
+      ]
+    },
+    {
+      "id": "s26-sf-aura-f3",
+      "tournamentId": "shotbow-2026",
+      "teams": ["Aura", "F3"],
+      "stage": "Semifinal",
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=Z4zyrk1QJD8",
+          "kind": "official-video-title"
+        }
+      ]
+    },
+    {
+      "id": "s26-sf-annl-help",
+      "tournamentId": "shotbow-2026",
+      "teams": ["DONTCOMEANNI", "HELP"],
+      "stage": "Semifinal #2",
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=FI1Dt5AdIsI",
+          "kind": "official-video-title"
+        }
+      ]
+    },
+    {
+      "id": "s26-tt-help",
+      "tournamentId": "shotbow-2026",
+      "teams": ["TT", "HELP"],
+      "status": "confirmed",
+      "sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=hhAukvJG9Qk",
+          "kind": "official-video-title"
         }
       ]
     }
@@ -630,6 +972,264 @@
       "channel": null,
       "type": "unknown",
       "origin": "unverified",
+      "segments": []
+    },
+    {
+      "id": "rec-s26-annl-grim",
+      "videoId": "6QkDb6neYJc",
+      "title": "Annihilation 2026 Tournament - Annl vs Grim",
+      "channel": "Shotbow",
+      "type": "match",
+      "origin": "official",
+      "uploadedOn": "2026-05-23",
+      "segments": [
+        {
+          "matchId": "s26-annl-grim",
+          "status": "confirmed",
+          "evidence": "https://www.youtube.com/watch?v=6QkDb6neYJc"
+        }
+      ]
+    },
+    {
+      "id": "rec-s26-ze-grim",
+      "videoId": "EDLBbEdRBMQ",
+      "title": "Annihilation 2026 Tournament - ZE vs Grim",
+      "channel": "Shotbow",
+      "type": "match",
+      "origin": "official",
+      "uploadedOn": "2026-05-29",
+      "segments": [
+        {
+          "matchId": "s26-ze-grim",
+          "status": "confirmed",
+          "evidence": "https://www.youtube.com/watch?v=EDLBbEdRBMQ"
+        }
+      ]
+    },
+    {
+      "id": "rec-s26-tt-awf",
+      "videoId": "0-BH43j-qQY",
+      "title": "Annihilation 2026 Tournament - TT vs AWF",
+      "channel": "Shotbow",
+      "type": "match",
+      "origin": "official",
+      "uploadedOn": "2026-05-17",
+      "segments": [
+        {
+          "matchId": "s26-tt-awf",
+          "status": "confirmed",
+          "evidence": "https://www.youtube.com/watch?v=0-BH43j-qQY"
+        }
+      ]
+    },
+    {
+      "id": "rec-s26-apl-help",
+      "videoId": "l0KBbrfh4Kc",
+      "title": "Annihilation 2026 Tournament - APL vs HELP",
+      "channel": "Shotbow",
+      "type": "match",
+      "origin": "official",
+      "uploadedOn": "2026-06-06",
+      "segments": [
+        {
+          "matchId": "s26-apl-help",
+          "status": "confirmed",
+          "evidence": "https://www.youtube.com/watch?v=l0KBbrfh4Kc"
+        }
+      ]
+    },
+    {
+      "id": "rec-s26-qf-annl-sfj-en",
+      "videoId": "giZfDpHPY2E",
+      "title": "Annihilation 2026 Tournament Quarter Final - ANNL vs SFJ",
+      "channel": "Shotbow",
+      "type": "livestream",
+      "origin": "official",
+      "uploadedOn": "2026-07-20",
+      "segments": [
+        {
+          "matchId": "s26-qf-annl-sfj",
+          "status": "confirmed",
+          "evidence": "https://www.youtube.com/watch?v=giZfDpHPY2E"
+        }
+      ]
+    },
+    {
+      "id": "rec-s26-qf-annl-sfj-ja",
+      "videoId": "aPm_WNvS8mQ",
+      "title": "【日本語配信】Annihilation 2026 Tournament - ANNL vs SFJ - QUARTER FINAL #2",
+      "channel": "Shotbow",
+      "type": "livestream",
+      "origin": "official",
+      "uploadedOn": "2026-07-20",
+      "segments": [
+        {
+          "matchId": "s26-qf-annl-sfj",
+          "status": "confirmed",
+          "evidence": "https://www.youtube.com/watch?v=aPm_WNvS8mQ"
+        }
+      ]
+    },
+    {
+      "id": "rec-s26-qf-tt-f3",
+      "videoId": "WAE42dUSn1w",
+      "title": "Annihilation 2026 Tournament Quarter Final - TT vs F3",
+      "channel": "Shotbow",
+      "type": "livestream",
+      "origin": "official",
+      "uploadedOn": "2026-07-27",
+      "segments": [
+        {
+          "matchId": "s26-qf-tt-f3",
+          "status": "confirmed",
+          "evidence": "https://www.youtube.com/watch?v=WAE42dUSn1w"
+        }
+      ]
+    },
+    {
+      "id": "rec-s18-qf-four-clans",
+      "videoId": "msPjB6nmmXE",
+      "title": "Envy vs ATC vs LOVE vs The Blue Hearts - Annihilation Spring 2018 Quarter Final",
+      "channel": "Shotbow",
+      "type": "livestream",
+      "origin": "official",
+      "uploadedOn": "2018-05-20",
+      "segments": [
+        {
+          "matchId": "s18-qf-envy-atc-love-hearts",
+          "status": "confirmed",
+          "evidence": "https://www.youtube.com/watch?v=msPjB6nmmXE"
+        }
+      ]
+    },
+    {
+      "id": "rec-tn20-summer-opener",
+      "videoId": "SdwPHjJbCsQ",
+      "title": "TN Summer Season Opener: The Great Clan War - Annihilation 3v3v3v3",
+      "channel": "Shotbow",
+      "type": "livestream",
+      "origin": "official",
+      "uploadedOn": "2020-07-03",
+      "segments": []
+    },
+    {
+      "id": "rec-s23-pirlo-yaleagency",
+      "videoId": "1Nu_Db28r5s",
+      "title": "YALEAGENCY | Cuartos de final ANNIHILATION Tournament 1v1 | 2023",
+      "channel": "lPirlo",
+      "type": "match",
+      "origin": "community",
+      "uploadedOn": "2023-05-08",
+      "segments": []
+    },
+    {
+      "id": "rec-s23-ddd-vs-01",
+      "videoId": "jQIIe5rVFUI",
+      "title": "Annihilation Tournament 2023 - vs 01",
+      "channel": "DDD",
+      "type": "match",
+      "origin": "community",
+      "uploadedOn": "2023-02-26",
+      "segments": []
+    },
+    {
+      "id": "rec-s26-qf-aura-mrk",
+      "videoId": "anuw9S9Jmps",
+      "title": "Annihilation 2026 Tournament Quarter Final - AURA vs MRK",
+      "channel": "Shotbow",
+      "type": "match",
+      "origin": "official",
+      "uploadedOn": "2026-07-26",
+      "segments": [
+        {
+          "matchId": "s26-qf-aura-mrk",
+          "status": "confirmed",
+          "evidence": "https://www.youtube.com/watch?v=anuw9S9Jmps"
+        }
+      ]
+    },
+    {
+      "id": "rec-s26-qf-help-grim",
+      "videoId": "i6WaS2ofdxE",
+      "title": "Annihilation 2026 Tournament Quarter Final - HELP vs GRIM",
+      "channel": "Shotbow",
+      "type": "match",
+      "origin": "official",
+      "uploadedOn": "2026-07-18",
+      "segments": [
+        {
+          "matchId": "s26-qf-help-grim",
+          "status": "confirmed",
+          "evidence": "https://www.youtube.com/watch?v=i6WaS2ofdxE"
+        }
+      ]
+    },
+    {
+      "id": "rec-s26-sf-aura-f3",
+      "videoId": "Z4zyrk1QJD8",
+      "title": "Annihilation 2026 Tournament Semi-Final - AURA vs F3",
+      "channel": "Shotbow",
+      "type": "match",
+      "origin": "official",
+      "uploadedOn": "2026-08-08",
+      "segments": [
+        {
+          "matchId": "s26-sf-aura-f3",
+          "status": "confirmed",
+          "evidence": "https://www.youtube.com/watch?v=Z4zyrk1QJD8"
+        }
+      ]
+    },
+    {
+      "id": "rec-s26-sf-annl-help",
+      "videoId": "FI1Dt5AdIsI",
+      "title": "Annihilation 2026 Tournament Semi-Final #2 - ANNL vs HELP",
+      "channel": "Shotbow",
+      "type": "match",
+      "origin": "official",
+      "uploadedOn": "2026-08-15",
+      "segments": [
+        {
+          "matchId": "s26-sf-annl-help",
+          "status": "confirmed",
+          "evidence": "https://www.youtube.com/watch?v=FI1Dt5AdIsI"
+        }
+      ]
+    },
+    {
+      "id": "rec-s26-tt-help",
+      "videoId": "hhAukvJG9Qk",
+      "title": "Annihilation 2026 Tournament - TT vs HELP",
+      "channel": "Shotbow",
+      "type": "match",
+      "origin": "official",
+      "uploadedOn": "2026-06-20",
+      "segments": [
+        {
+          "matchId": "s26-tt-help",
+          "status": "confirmed",
+          "evidence": "https://www.youtube.com/watch?v=hhAukvJG9Qk"
+        }
+      ]
+    },
+    {
+      "id": "rec-rawrv2-s24-vs-apl",
+      "videoId": "N9TTVzHOQ78",
+      "title": "Shotbow Annihilation Tournament 2024 - vs APL",
+      "channel": "Rawr v2",
+      "type": "match",
+      "origin": "community",
+      "uploadedOn": "2024-03-07",
+      "segments": []
+    },
+    {
+      "id": "rec-rawrv2-s24-vs-f3",
+      "videoId": "1izlnN61wJo",
+      "title": "Shotbow Annihilation Tournament 2024 - vs F3",
+      "channel": "Rawr v2",
+      "type": "match",
+      "origin": "community",
+      "uploadedOn": "2024-02-26",
       "segments": []
     }
   ]

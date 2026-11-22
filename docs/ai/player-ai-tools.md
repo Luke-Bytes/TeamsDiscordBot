@@ -4,7 +4,9 @@ These are the player-visible tools the assistant may select; players describe a 
 
 ## Choosing current, historical or in-progress evidence
 
-For saved bot records, use the current-season tools (with a `season` number if supplied). For REST_API archives, use a historical tool only when the separate history service is enabled. For a game being prepared or played, use `get_current_game_state`, not saved game history.
+The function names in this document (such as `get_player_all_time_stats`) are Navi's **internal read-only lookups**, not Discord commands. Navi can call them when answering questions; users can only run registered Discord slash commands such as `/stats`, `/registered` or `/help`. Never tell a user to execute a function name or an HTTP request.
+
+For saved bot records, Navi uses the current-season tools (with a `season` number if supplied). For REST_API archives, it uses a historical tool only when the separate history service is enabled. For a game being prepared or played, it uses `get_current_game_state`, not saved game history.
 
 A process snapshot cannot prove a saved result, and historical REST_API data is not automatically identical to current bot data. If a result is missing, clarify source and season before concluding anything about games or wins.
 
