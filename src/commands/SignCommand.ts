@@ -178,7 +178,7 @@ export default class SignCommand implements Command {
         content:
           action === "edit"
             ? "Application editing opened. Check your private form to continue."
-            : "Event sign-up started. Check your private form to complete registration.",
+            : "Complete your private form to sign up.",
         allowedMentions: { parse: [] },
       });
       await i.followUp({
