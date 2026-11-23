@@ -7,17 +7,30 @@ import { SeasonService } from "../database/SeasonService";
  * Draws from independent career-win, current-season and finished-game MVP
  * signals so an open-ended draft question cannot default to wins alone.
  */
-export async function getPlayerPerformanceShortlist() {
+export async function getPlayerPerformanceShortlist(
+  options: {
+    minGames?: number;
+    maxGames?: number;
+    focus?: "mvps";
+  } = {}
+) {
+  const filtered =
+    options.minGames !== undefined || options.maxGames !== undefined;
+  // Filter after aggregating wins and losses, not wins alone. A bounded candidate
+  // search is explicitly NOT an exhaustive filtered leaderboard.
+  const pool = filtered ? 24 : 4;
   const season = await SeasonService.getActiveSeason();
   const ranked = season?.type !== SeasonType.RELAXED;
   const [careerLeaders, seasonLeaders, mvpLeaders] = await Promise.all([
-    prismaClient.playerStats.groupBy({
-      by: ["playerId"],
-      _sum: { wins: true },
-      orderBy: { _sum: { wins: "desc" } },
-      take: 4,
-    }),
-    season
+    options.focus === "mvps"
+      ? Promise.resolve([])
+      : prismaClient.playerStats.groupBy({
+          by: ["playerId"],
+          _sum: { wins: true },
+          orderBy: { _sum: { wins: "desc" } },
+          take: pool,
+        }),
+    season && options.focus !== "mvps"
       ? prismaClient.playerStats.findMany({
           where: {
             seasonId: season.id,
@@ -26,7 +39,7 @@ export async function getPlayerPerformanceShortlist() {
           orderBy: ranked
             ? [{ elo: "desc" }]
             : [{ wins: "desc" }, { biggestWinStreak: "desc" }],
-          take: 4,
+          take: pool,
           select: { playerId: true },
         })
       : Promise.resolve([]),
@@ -35,7 +48,7 @@ export async function getPlayerPerformanceShortlist() {
       where: { mvp: true, game: { is: { finished: true } } },
       _count: { _all: true },
       orderBy: { _count: { id: "desc" } },
-      take: 4,
+      take: options.focus === "mvps" && !filtered ? 10 : pool,
     }),
   ]);
   const signals = new Map<string, string[]>();
@@ -129,9 +142,24 @@ export async function getPlayerPerformanceShortlist() {
     season: season?.number ?? null,
     seasonType: season?.type ?? null,
     selection:
-      "Up to 4 leaders each by career wins, current season standing and MVP count; not an overall ranking",
+      options.focus === "mvps"
+        ? "Top finished-game MVP counts; this is an MVP leaderboard, not a skill ranking"
+        : `Up to ${pool} leaders each by career wins, current season standing and MVP count; not an overall ranking`,
+    filters: {
+      minGames: options.minGames ?? null,
+      maxGames: options.maxGames ?? null,
+    },
     candidates: ids
-      .filter((id) => names.get(id))
+      .filter((id) => {
+        const row = record.get(id);
+        const games = (row?._sum.wins ?? 0) + (row?._sum.losses ?? 0);
+        return (
+          Boolean(names.get(id)) &&
+          (options.minGames === undefined || games >= options.minGames) &&
+          (options.maxGames === undefined || games <= options.maxGames)
+        );
+      })
+      .slice(0, filtered ? 7 : undefined)
       .map((id) => {
         const row = record.get(id);
         const wins = row?._sum.wins ?? 0;
@@ -164,6 +192,6 @@ export async function getPlayerPerformanceShortlist() {
         };
       }),
     notes:
-      "Saved bot records only (Ranked and Relaxed career combined); season Elo is null for Relaxed; MVP/captain counts use finished games. A shortlist is not a full-player ranking. Compare win rates with sample sizes; Elo is a current saved season rating, not peak ability. No role fit or team synergy is verified.",
+      "Bot seasons combined; Ranked Elo only; finished-game MVP/captain counts. A shortlist and any games-played filter cover ONLY the bounded candidate pool, not all players. If filtered results are empty, this does not prove no player qualifies. Compare win rate with sample size; no measured game sense, mechanics, synergy or role fit.",
   };
 }

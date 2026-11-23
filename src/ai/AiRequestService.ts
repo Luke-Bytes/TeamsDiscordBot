@@ -1,4 +1,9 @@
-import { ApplicationCommandType, Client, Guild } from "discord.js";
+import {
+  ApplicationCommandOptionType,
+  ApplicationCommandType,
+  Client,
+  Guild,
+} from "discord.js";
 import { ConfigManager } from "../ConfigManager";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { AiSettings, getAiSettings } from "./AiConfig";
@@ -40,6 +45,16 @@ export class AiRequestService {
   // through the same AskCommand instance. No independent mention limiter.
   private readonly admission: AiAdmission;
   private knowledge?: KnowledgeChunk[];
+  private commandCatalogue?: {
+    expiresAt: number;
+    value: {
+      status: "ok";
+      commands: string[];
+      paths: string[];
+      total: number;
+      truncated: boolean;
+    };
+  };
 
   constructor(private readonly injectedSettings?: AiSettings) {
     this.admission = new AiAdmission(
@@ -150,26 +165,49 @@ export class AiRequestService {
         inspectGameDiscord: (focus, targetIGN) =>
           getGameDiscordDiagnostics(request.guild, focus, targetIGN),
         listCommands: async () => {
+          if (
+            this.commandCatalogue &&
+            this.commandCatalogue.expiresAt > Date.now()
+          )
+            return this.commandCatalogue.value;
           try {
             const registered = ConfigManager.getConfig().dev.enabled
               ? await request.guild.commands.fetch()
               : await request.client.application?.commands.fetch();
             if (!registered) return { status: "unavailable" as const };
-            const commands = registered
-              .filter(
-                (command) => command.type === ApplicationCommandType.ChatInput
-              )
+            const definitions = registered.filter(
+              (command) => command.type === ApplicationCommandType.ChatInput
+            );
+            const commands = definitions
               .map(
                 (command) =>
                   `/${command.name}: ${command.description.slice(0, 42)}`
               )
               .sort((a, b) => a.localeCompare(b));
-            return {
+            const paths = [...definitions.values()].flatMap((command) => {
+              const root = `/${command.name}`;
+              const paths = [root];
+              for (const option of command.options) {
+                if (option.type === ApplicationCommandOptionType.Subcommand)
+                  paths.push(`${root} ${option.name}`);
+                if (
+                  option.type === ApplicationCommandOptionType.SubcommandGroup
+                )
+                  for (const nested of option.options ?? [])
+                    if (nested.type === ApplicationCommandOptionType.Subcommand)
+                      paths.push(`${root} ${option.name} ${nested.name}`);
+              }
+              return paths;
+            });
+            const value = {
               status: "ok" as const,
               commands: commands.slice(0, 60),
+              paths,
               total: commands.length,
               truncated: commands.length > 60,
             };
+            this.commandCatalogue = { expiresAt: Date.now() + 180_000, value };
+            return value;
           } catch {
             return { status: "unavailable" as const };
           }
@@ -206,7 +244,8 @@ export class AiRequestService {
         infer: selected.infer,
       });
       const delivered =
-        safeDiscordText(result.text) || "No verified answer was available.";
+        safeDiscordText(result.text, result.trustedLinks) ||
+        "No verified answer was available.";
       await deliver(delivered);
       // Only the sanitised delivered reply and bounded metadata enter logs.
       // No prompt, provider body, tool payload or credentials are logged.

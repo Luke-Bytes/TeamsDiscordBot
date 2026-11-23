@@ -52,11 +52,12 @@ test("Draft questions preload diverse metrics; explicit wins questions remain wi
     "Who should I pick for my team, Backmobe or AgentPanda_?"
   );
   assert(
-    comparison.length === 2 &&
-      comparison.every((r) => r.name === "get_player_all_time_stats") &&
+    comparison.length === 4 &&
+      comparison.map((r) => r.name).join(",") ===
+        "get_player_all_time_stats,get_player_stats,get_player_all_time_stats,get_player_stats" &&
       comparison[0].arguments === '{"ign":"Backmobe"}' &&
-      comparison[1].arguments === '{"ign":"AgentPanda_"}',
-    "Two named alternatives preload both careers rather than the global shortlist"
+      comparison[2].arguments === '{"ign":"AgentPanda_"}',
+    "Two named alternatives preload both career and active-season stats"
   );
   assert(
     autoReadsForAsk("How do I start a game?").length === 0,

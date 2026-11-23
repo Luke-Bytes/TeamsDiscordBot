@@ -3,11 +3,16 @@ import { ConfigManager } from "../ConfigManager";
 import { PlayerInstance } from "../database/PlayerInstance";
 import { CurrentGameManager } from "../logic/CurrentGameManager";
 
+export const MVP_VOTE_ELO_BONUS = 1;
+
 export class Elo {
-  public calculateNewElo(player: PlayerInstance, winStreakOverride?: number): number {
+  public calculateNewElo(
+    player: PlayerInstance,
+    winStreakOverride?: number
+  ): number {
     const config = ConfigManager.getConfig();
     const game = CurrentGameManager.getCurrentGame();
-    const mvpVoteBonus = 1;
+    const mvpVoteBonus = MVP_VOTE_ELO_BONUS;
 
     if (!game || !player) {
       console.error("Game or Player not found.");
@@ -34,7 +39,12 @@ export class Elo {
     }
 
     if (game.gameWinner && playerTeam === game.gameWinner) {
-      let winEloGain = EloUtil.calculateEloChange(game, player, true, winStreakOverride);
+      let winEloGain = EloUtil.calculateEloChange(
+        game,
+        player,
+        true,
+        winStreakOverride
+      );
 
       if (game.isDoubleElo) {
         winEloGain = winEloGain * 2;

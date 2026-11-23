@@ -6,6 +6,7 @@ import "./cases/eventIdentitySync.test";
 import "./cases/needCommand.test";
 import "./cases/aiAssistant.test";
 import "./cases/aiAskImprovements.test";
+import "./cases/aiAnswerQuality.test";
 import "./cases/aiOrganiserCopilot.test";
 import "./cases/aiCareerStats.test";
 import "./cases/aiPerformanceShortlist.test";

@@ -1,3 +1,66 @@
+/** Reject unsupported slash paths when Discord's registered catalogue is available. */
+export function unverifiedSlashCommands(
+  reply: string,
+  paths: readonly string[]
+): string[] {
+  const allowed = new Set(paths.map((path) => path.toLowerCase()));
+  const roots = new Set(paths.map((path) => path.split(" ")[0].toLowerCase()));
+  const invalid: string[] = [];
+  const prose = new Set([
+    "to",
+    "for",
+    "with",
+    "after",
+    "before",
+    "and",
+    "or",
+    "in",
+    "on",
+    "if",
+    "when",
+    "then",
+    "from",
+    "as",
+    "is",
+    "will",
+  ]);
+  for (const match of reply.matchAll(
+    /(?:^|[\s(`])\/([a-z][a-z0-9_-]*)(?:[ \t]+([a-z][a-z0-9_-]*)(?![\w:-]))?(?:[ \t]+([a-z][a-z0-9_-]*)(?![\w:-]))?/gi
+  )) {
+    const root = `/${match[1].toLowerCase()}`;
+    const child = match[2]?.toLowerCase();
+    const third = match[3]?.toLowerCase();
+    const prefix = `${root} ${child}`;
+    if (
+      !roots.has(root) ||
+      (child &&
+        !prose.has(child) &&
+        paths.some((path) => path.toLowerCase().startsWith(`${root} `)) &&
+        !allowed.has(prefix) &&
+        !paths.some((path) => path.toLowerCase().startsWith(`${prefix} `))) ||
+      (child &&
+        third &&
+        !prose.has(third) &&
+        paths.some((path) => path.toLowerCase().startsWith(`${prefix} `)) &&
+        !allowed.has(`${prefix} ${third}`))
+    )
+      invalid.push(match[0].trim());
+  }
+  return invalid;
+}
+
+/** Keep the last complete sentence or list row rather than slicing mid-command. */
+export function completeDiscordReply(text: string, limit = 1450): string {
+  if (text.length <= limit) return text;
+  const clipped = text.slice(0, limit);
+  const boundaries = [...clipped.matchAll(/[.!?](?=\s|$)|\n(?=\S)/g)]
+    .map((match) => match.index! + (match[0] === "\n" ? 0 : 1))
+    .filter((index) => index > 150);
+  if (!boundaries.length)
+    return "That answer is too long to fit safely in one reply. Ask me for a shorter summary.";
+  return clipped.slice(0, boundaries[boundaries.length - 1]).trim();
+}
+
 /** A small last-mile safeguard: Discord renders lists and bold, not Markdown tables. */
 function tableCells(line: string): string[] | null {
   const trimmed = line.trim();

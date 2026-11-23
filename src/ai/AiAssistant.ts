@@ -10,12 +10,20 @@ import { AI_DEFAULTS } from "./AiConfig";
 import { KnowledgeChunk, retrieveApprovedKnowledge } from "./Knowledge";
 import { HistoricalStatsClient } from "./HistoricalStatsClient";
 import { buildNaviMessages, toolsForAsk } from "./AiPrompt";
-import { formatNaviDiscordMessage } from "./DiscordAnswer";
+import {
+  completeDiscordReply,
+  formatNaviDiscordMessage,
+  unverifiedSlashCommands,
+} from "./DiscordAnswer";
+import { ConfigManager } from "../ConfigManager";
+import { MVP_VOTE_ELO_BONUS } from "../logic/Elo";
 
 export type AiAnswer = {
   text: string;
   sources: string[];
   toolNames: string[];
+  /** URLs sourced from verified archive recording entries (not model text). */
+  trustedLinks?: string[];
   /** Safe diagnostic classification for the operator log, not model content. */
   failureKind?: AiTransportError["kind"];
   failureCode?: string;
@@ -42,6 +50,10 @@ export function needsVerifiedServerData(question: string): boolean {
   const q = question.trim();
   return (
     asksForBottomPlayerRanking(q) ||
+    /\b(?:better|stronger|compare|versus|vs|game sense)\b.{0,65}\b(?:or|than|versus|vs)\b/i.test(
+      q
+    ) ||
+    /\b(?:most|highest|top)\b.{0,35}\bmvps?\b/i.test(q) ||
     /\b(?:best|top|greatest|strongest)\b.{0,60}\b(?:fw|friendly wars|players?|picks?)\b/i.test(
       q
     ) ||
@@ -85,7 +97,50 @@ async function boundedTool<T>(
   }
 }
 
-export function safeDiscordText(input: string): string {
+const VERIFIED_RECORDING =
+  /^https:\/\/www\.youtube\.com\/watch\?v=[a-zA-Z0-9_-]{11}(?:&t=\d+s)?$/;
+
+function trustedRecordingLinks(payload: unknown): string[] {
+  const matches = (
+    payload as { matches?: { recordings?: { url?: string }[] }[] }
+  )?.matches;
+  if (!Array.isArray(matches)) return [];
+  return matches
+    .flatMap((match) => match.recordings ?? [])
+    .map((recording) => recording.url ?? "")
+    .filter((url) => VERIFIED_RECORDING.test(url));
+}
+
+export function boundedAiObservation(
+  name: string,
+  payload: unknown,
+  question = ""
+): string {
+  const full = JSON.stringify(payload);
+  if (full.length <= 4000) return full;
+  if (name === "get_game_roster" && payload && typeof payload === "object") {
+    const roster = payload as Record<string, unknown>;
+    const compact = JSON.stringify({
+      status: roster.status,
+      source: roster.source,
+      rosters: roster.rosters,
+      truncated: roster.truncated,
+      draft: roster.draft,
+      ...(/\bbans?\b/i.test(question) ? { classBans: roster.classBans } : {}),
+      ...(/\b(?:winner|mvps?|results?)\b/i.test(question)
+        ? { result: roster.result }
+        : {}),
+      note: "Partial process-memory observation; other diagnostic fields omitted for size.",
+    });
+    if (compact.length <= 4000) return compact;
+  }
+  return '{"status":"result_too_large"}';
+}
+
+export function safeDiscordText(
+  input: string,
+  trustedLinks: readonly string[] = []
+): string {
   const sanitised = input
     // Responses (and thus PM2 reply logs) must not echo credential-shaped text.
     .replace(
@@ -93,7 +148,13 @@ export function safeDiscordText(input: string): string {
       "[credential omitted]"
     )
     .replace(/<@!?\d+>|<@&\d+>|<#\d+>|@everyone|@here/gi, "[mention]")
-    .replace(/https?:\/\/[^\s<>]+/gi, "[link omitted]")
+    .replace(/https?:\/\/[^\s<>]+/gi, (match) => {
+      const url = match.replace(/[.,!?;:)]+$/, "");
+      const suffix = match.slice(url.length);
+      return VERIFIED_RECORDING.test(url) && trustedLinks.includes(url)
+        ? url + suffix
+        : "[link omitted]" + suffix;
+    })
     .split("")
     .filter((character) => {
       const code = character.charCodeAt(0);
@@ -102,7 +163,7 @@ export function safeDiscordText(input: string): string {
       );
     })
     .join("");
-  return formatNaviDiscordMessage(sanitised).slice(0, 1450).trim();
+  return completeDiscordReply(formatNaviDiscordMessage(sanitised));
 }
 
 export async function answerAiQuestion(options: {
@@ -158,6 +219,16 @@ export async function answerAiQuestion(options: {
     identity
   );
   const usedTools: string[] = [];
+  const trustedLinks = new Set<string>();
+  // Values are supplied by the real implementation/config, not a prompt constant.
+  if (
+    /\b(?:elo|rating)\b/i.test(options.question) &&
+    /\b(?:bonuses?|captain|mvps?|vot(?:e|ing)|double|calculat(?:e|ion)|work)\b/i.test(
+      options.question
+    )
+  ) {
+    messages[1].content += ` Elo implementation (rated matches): captain bonus +${ConfigManager.getConfig().captainBonus}, selected MVP +${ConfigManager.getConfig().mvpBonus}, casting an MVP vote +${MVP_VOTE_ELO_BONUS}; additive for either team. Double Elo doubles only winner match-result gain, not bonuses or loss penalty.`;
+  }
   // Simple self-identity questions need no paid model call or guessed IGN.
   const selfIdentity =
     /^(?:(?:who|what)\s+am\s+i|what(?:'s|\s+is)\s+my\s+(?:minecraft\s+)?(?:username|ign|mc\s+name)|what(?:'s|\s+is)\s+my\s+minecraft\s+(?:name|account))\??$/i.test(
@@ -223,9 +294,12 @@ export async function answerAiQuestion(options: {
           };
         }
         usedTools.push(read.name);
-        const serialized = JSON.stringify(payload);
+        if (read.name === "search_tournament_matches")
+          trustedRecordingLinks(payload).forEach((url) =>
+            trustedLinks.add(url)
+          );
         observed.push(
-          `${read.name}: ${serialized.length > 4000 ? '{"status":"result_too_large"}' : serialized}`
+          `${read.name}: ${boundedAiObservation(read.name, payload, options.question)}`
         );
       } catch (error) {
         if (error instanceof AiToolDenied)
@@ -281,7 +355,36 @@ export async function answerAiQuestion(options: {
       if (result.calls.length > AI_DEFAULTS.maxToolCalls)
         throw new AiTransportError("invalid");
       if (result.calls.length === 0) {
-        const content = safeDiscordText(result.content);
+        let content = safeDiscordText(result.content, [...trustedLinks]);
+        // Live game observations cannot substantiate unrelated Elo or career claims.
+        if (
+          usedTools.length &&
+          usedTools.every((name) => name.startsWith("get_game_")) &&
+          /\b(?:your|my)\s+(?:elo|win rate|career wins)\b/i.test(content)
+        )
+          content =
+            "I checked the current game, but can't verify those player statistics from game status alone.";
+        if (
+          content &&
+          options.caller.listCommands &&
+          /(?:^|[\s(`])\/[a-z][a-z0-9_-]*/i.test(content)
+        ) {
+          try {
+            const catalogue = await boundedTool(
+              options.caller.listCommands(),
+              800
+            );
+            if (
+              catalogue.status === "ok" &&
+              catalogue.paths?.length &&
+              unverifiedSlashCommands(content, catalogue.paths).length
+            )
+              content =
+                "I can't verify that slash command against the registered commands. Check /help for the available options.";
+          } catch {
+            // An unavailable catalogue is not evidence that a documented command is absent.
+          }
+        }
         return {
           text: asksForBottomPlayerRanking(options.question)
             ? "I can't verify a reliable 'worst FW players' ranking. You can check someone's record with /stats player:<IGN>, or see seasonal standings with /leaderboards."
@@ -291,6 +394,7 @@ export async function answerAiQuestion(options: {
                 "I couldn't produce an answer. Please try rephrasing.",
           sources,
           toolNames: usedTools,
+          trustedLinks: [...trustedLinks],
         };
       }
       if (round === AI_DEFAULTS.maxToolRounds)
@@ -315,6 +419,10 @@ export async function answerAiQuestion(options: {
             )
           );
           usedTools.push(call.function.name);
+          if (call.function.name === "search_tournament_matches")
+            trustedRecordingLinks(payload).forEach((url) =>
+              trustedLinks.add(url)
+            );
           if (
             (call.function.name.startsWith("get_historical_") ||
               call.function.name.startsWith("get_my_historical_") ||
@@ -348,14 +456,14 @@ export async function answerAiQuestion(options: {
             toolNames: [],
           };
         }
-        const serialized = JSON.stringify(payload);
         messages.push({
           role: "tool",
           tool_call_id: call.id,
-          content:
-            serialized.length > 4000
-              ? JSON.stringify({ status: "result_too_large" })
-              : serialized,
+          content: boundedAiObservation(
+            call.function.name,
+            payload,
+            options.question
+          ),
         });
       }
     }

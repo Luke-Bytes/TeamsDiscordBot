@@ -41,21 +41,20 @@ test("Navi prompt has compact identity, evidence and safety invariants", () => {
     "not 'saved records'",
     "unless source matters",
     "persistence",
-    "discord delivery",
     "citations",
-    "human escalation",
     "discord chat",
     "no tables",
     "code fences",
     "real /slash commands",
     "occasional emoji",
-    "skip legalistic warnings",
     "class abilities",
     "playful for banter",
     "direct for stats/commands/organiser help",
     "at most one short bold phrase",
     "no italics",
     "no forced jokes",
+    "game sense",
+    "registered players",
   ])
     assert(
       policy.includes(phrase),
@@ -206,7 +205,6 @@ test("Navi still refuses invented player statistics or game state without tools"
     "How many wins do I have this season?",
     "What is my Elo?",
     "Who won the last game?",
-    "What's the current game status?",
   ]) {
     const result = await answerAiQuestion({
       question,

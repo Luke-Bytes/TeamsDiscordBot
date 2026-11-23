@@ -31,6 +31,8 @@ export type AiCaller = {
   listCommands?: () => Promise<{
     status: "ok" | "unavailable";
     commands?: string[];
+    /** Exact slash paths from registered Discord command definitions. */
+    paths?: string[];
     total?: number;
     truncated?: boolean;
   }>;
@@ -118,10 +120,14 @@ export const AI_TOOLS: AiFunctionTool[] = [
     function: {
       name: "get_player_performance_shortlist",
       description:
-        "For best FW players, strong draft picks or first-pick recommendations WITHOUT named candidates. Bounded multi-metric public shortlist from independent lifetime wins, current-season Elo/activity and finished-game MVP leaders. Includes each candidate's career record and win rate with games sample, streak, MVPs, captain wins/games and current-season record/rating. NOT an overall ranked top 10, role-fit proof or a list of currently available draft players. No inputs.",
+        "For best FW players or draft picks WITHOUT named candidates: bounded multi-metric career, current Ranked Elo/activity and finished-game MVP shortlist. Optional minGames/maxGames filter actual wins+losses within a sampled pool, NOT all players. focus=mvps provides the highest recorded MVP totals, NOT a skill ranking. Not an eligible live roster; use get_game_roster for current registrations. Do not claim universal completeness.",
       parameters: {
         type: "object",
-        properties: {},
+        properties: {
+          minGames: { type: "integer", minimum: 0, maximum: 5000 },
+          maxGames: { type: "integer", minimum: 0, maximum: 5000 },
+          focus: { type: "string", minLength: 4, maxLength: 4, enum: ["mvps"] },
+        },
         additionalProperties: false,
       },
     },
@@ -522,34 +528,53 @@ function parseArguments(name: string, raw: string): Record<string, unknown> {
         ]
       : name === "get_game_discord_state"
         ? ["focus", "targetIGN"]
-        : name === "get_player_stats" || name === "get_historical_player_stats"
-          ? ["ign", "season"]
-          : name === "get_player_all_time_stats"
-            ? ["ign"]
-            : name === "get_historical_elo"
-              ? ["ign", "season", "limit"]
-              : name === "get_my_historical_elo"
-                ? ["season", "limit"]
-                : name === "get_historical_comparison"
-                  ? ["ign", "firstSeason", "secondSeason"]
-                  : name === "get_my_historical_comparison"
-                    ? ["firstSeason", "secondSeason"]
-                    : name === "get_leaderboard" || name === "get_recent_games"
-                      ? ["season", "limit"]
-                      : ORGANISER_TOOLS.has(name) ||
-                          name === "get_current_game_state" ||
-                          name === "list_historical_seasons" ||
-                          name === "list_organisers" ||
-                          name === "get_command_catalog" ||
-                          name === "get_all_time_leaderboard" ||
-                          name === "get_player_performance_shortlist" ||
-                          name === "get_my_all_time_stats"
-                        ? []
-                        : ["season"];
+        : name === "get_player_performance_shortlist"
+          ? ["minGames", "maxGames", "focus"]
+          : name === "get_player_stats" ||
+              name === "get_historical_player_stats"
+            ? ["ign", "season"]
+            : name === "get_player_all_time_stats"
+              ? ["ign"]
+              : name === "get_historical_elo"
+                ? ["ign", "season", "limit"]
+                : name === "get_my_historical_elo"
+                  ? ["season", "limit"]
+                  : name === "get_historical_comparison"
+                    ? ["ign", "firstSeason", "secondSeason"]
+                    : name === "get_my_historical_comparison"
+                      ? ["firstSeason", "secondSeason"]
+                      : name === "get_leaderboard" ||
+                          name === "get_recent_games"
+                        ? ["season", "limit"]
+                        : ORGANISER_TOOLS.has(name) ||
+                            name === "get_current_game_state" ||
+                            name === "list_historical_seasons" ||
+                            name === "list_organisers" ||
+                            name === "get_command_catalog" ||
+                            name === "get_all_time_leaderboard" ||
+                            name === "get_my_all_time_stats"
+                          ? []
+                          : ["season"];
   if (Object.keys(obj).some((key) => !allowed.includes(key)))
     throw new AiToolDenied();
   if (name === "search_tournament_matches" && !validTournamentSearchQuery(obj))
     throw new AiToolDenied();
+  if (name === "get_player_performance_shortlist") {
+    if (
+      [obj.minGames, obj.maxGames].some(
+        (value) =>
+          value !== undefined &&
+          (!Number.isInteger(value) ||
+            Number(value) < 0 ||
+            Number(value) > 5000)
+      ) ||
+      (obj.focus !== undefined && obj.focus !== "mvps") ||
+      (obj.minGames !== undefined &&
+        obj.maxGames !== undefined &&
+        Number(obj.minGames) > Number(obj.maxGames))
+    )
+      throw new AiToolDenied();
+  }
   if (name === "get_game_discord_state") {
     if (!["players", "polls", "announcement"].includes(obj.focus as string))
       throw new AiToolDenied();
@@ -768,16 +793,24 @@ export async function executeAiTool(
   switch (name) {
     case "search_tournament_matches":
       return searchTournamentMatches(args);
-    case "get_command_catalog":
-      return caller.listCommands
-        ? caller.listCommands()
-        : { status: "unavailable", detail: "command_catalog_unavailable" };
+    case "get_command_catalog": {
+      if (!caller.listCommands)
+        return { status: "unavailable", detail: "command_catalog_unavailable" };
+      const { status, commands, total, truncated } =
+        await caller.listCommands();
+      // Exact paths are for server-side validation, not a bloated model observation.
+      return { status, commands, total, truncated };
+    }
     case "list_organisers":
       return caller.listOrganisers
         ? caller.listOrganisers()
         : { status: "unavailable", detail: "discord_role_lookup_unavailable" };
     case "get_player_performance_shortlist":
-      return getPlayerPerformanceShortlist();
+      return getPlayerPerformanceShortlist({
+        minGames: args.minGames as number | undefined,
+        maxGames: args.maxGames as number | undefined,
+        focus: args.focus as "mvps" | undefined,
+      });
     case "get_my_all_time_stats": {
       const player = await prismaClient.player.findUnique({
         where: { discordSnowflake: caller.discordUserId },
