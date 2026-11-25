@@ -65,11 +65,12 @@ export class MojangAPI {
    * transport failures/429/5xx stay "unavailable", even if a third-party
    * fallback also returns no UUID. Do not infer absence from an outage.
    */
-  public static async lookupUsername(username: string): Promise<MinecraftNameLookup> {
+  public static async lookupUsername(username: string, fresh = false): Promise<MinecraftNameLookup> {
     if (!this.validateUsername(username)) return { status: "invalid" };
     const key = username.toLowerCase();
     const cached = this.successfulNames.get(key);
-    if (cached && cached.until > Date.now()) return { status: "found", uuid: cached.id };
+    if (!fresh && cached && cached.until > Date.now()) return { status: "found", uuid: cached.id };
+    if (fresh) this.successfulNames.delete(key);
 
     const primary = await this.lookupUUID(
       `https://api.mojang.com/users/profiles/minecraft/${encodeURIComponent(username)}`,
@@ -103,7 +104,7 @@ export class MojangAPI {
     this.successfulNames.set(key, { id, until: Date.now() + 5 * 60_000 });
   }
 
-  public static async uuidToUsername(uuid: string): Promise<string | null> {
+  public static async uuidToUsername(uuid: string, verifyUUID = false): Promise<string | null> {
     if (!this.validUUID(uuid)) return null;
     for (const [source, url] of [
       ["Mojang", `https://sessionserver.mojang.com/session/minecraft/profile/${uuid}`],
@@ -117,7 +118,9 @@ export class MojangAPI {
           continue;
         }
         const data: unknown = await response.json();
-        const name = (data as { name?: unknown } | null)?.name;
+        const profile = data as { name?: unknown; id?: unknown } | null;
+        const name = profile?.name;
+        if (verifyUUID && (!this.validUUID(profile?.id) || profile.id.toLowerCase() !== uuid.toLowerCase())) continue;
         if (typeof name === "string" && this.validateUsername(name)) return name;
         console.error(`${source} returned an invalid username`);
       } catch (error) {

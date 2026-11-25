@@ -13,6 +13,8 @@ import TeamCommand from "../commands/TeamCommand";
 import { DraftTeamPickingSession } from "../logic/teams/DraftTeamPickingSession";
 import { escapeText } from "../util/Utils";
 import { PrismaUtils } from "../util/PrismaUtils";
+import { syncRegistrationNickname } from "../util/AutoNickname";
+import { deliverScenarioRegistrationPrompt } from "../logic/scenarios/ScenarioPromptDelivery";
 
 export default class RegisterCommand implements Command {
   public data: SlashCommandBuilder;
@@ -188,6 +190,8 @@ export default class RegisterCommand implements Command {
       return;
     }
 
+    const validatedIgn = resolvedUsername;
+
     // Check if this user/UUID is already registered for the announced game
     const isAlreadyRegistered = CurrentGameManager.getCurrentGame()
       .getPlayers()
@@ -217,7 +221,7 @@ export default class RegisterCommand implements Command {
           return { error: "That user left the server before registration completed." } as const;
         }
         const added = await CurrentGameManager.getCurrentGame().addPlayerByDiscordId(
-          discordUserId, resolvedUsername, uuid
+          discordUserId, validatedIgn, uuid
         );
         const session = this.teamCommand.teamPickingSession;
         if (!added.error) registrationCommitted = true;
@@ -241,6 +245,19 @@ export default class RegisterCommand implements Command {
       return;
     }
 
+    // Use the latest verified IGN committed to the roster, not an input alias.
+    // Nickname updates are best-effort and never invalidate a registration.
+    resolvedUsername = result.playerInstance.ignUsed ?? resolvedUsername;
+    const nicknameResult = await syncRegistrationNickname(
+      interaction.guild,
+      discordUserId,
+      resolvedUsername
+    );
+    const nicknameNote =
+      nicknameResult === "failed"
+        ? " The server nickname could not be updated; registration still succeeded."
+        : "";
+
     // late signups
     const shouldNudgeIgn =
       Boolean(inGameNameOption) &&
@@ -253,38 +270,41 @@ export default class RegisterCommand implements Command {
     if (this.teamCommand.isTeamPickingSessionActive()) {
       if (PermissionsUtil.isSameUser(interaction, targetUser.id)) {
         await interaction.editReply({
-          content: `You have successfully registered as \`${resolvedUsername}\` but please note this is a late sign-up as team picking is currently ongoing. You may be unable to play.${ignNudge}`,
+          content: `You have successfully registered as \`${resolvedUsername}\` but please note this is a late sign-up as team picking is currently ongoing. You may be unable to play.${ignNudge}${nicknameNote}`,
         });
       } else {
         await interaction.editReply({
-          content: `${safeDiscordUserName} has been successfully registered as \`${resolvedUsername}\`, but it's a late sign-up during team picking.`,
+          content: `${safeDiscordUserName} has been successfully registered as \`${resolvedUsername}\`, but it's a late sign-up during team picking.${nicknameNote}`,
         });
       }
+      await deliverScenarioRegistrationPrompt(interaction, game, discordUserId);
       return;
     }
 
     if (CurrentGameManager.getCurrentGame().teamsDecidedBy !== null) {
       if (PermissionsUtil.isSameUser(interaction, targetUser.id)) {
         await interaction.editReply({
-          content: `You have successfully registered as \`${resolvedUsername}\` but please note this is a late sign-up as team picking has been completed. You may be unable to play.${ignNudge}`,
+          content: `You have successfully registered as \`${resolvedUsername}\` but please note this is a late sign-up as team picking has been completed. You may be unable to play.${ignNudge}${nicknameNote}`,
         });
       } else {
         await interaction.editReply({
-          content: `${safeDiscordUserName} has been successfully registered as \`${resolvedUsername}\`, but it's a late sign-up post team picking.`,
+          content: `${safeDiscordUserName} has been successfully registered as \`${resolvedUsername}\`, but it's a late sign-up post team picking.${nicknameNote}`,
         });
       }
+      await deliverScenarioRegistrationPrompt(interaction, game, discordUserId);
       return;
     }
 
     // success messages
     if (PermissionsUtil.isSameUser(interaction, targetUser.id)) {
       await interaction.editReply({
-        content: `You have successfully registered as \`${resolvedUsername}\`!${ignNudge}`,
+        content: `You have successfully registered as \`${resolvedUsername}\`!${ignNudge}${nicknameNote}`,
       });
     } else {
       await interaction.editReply({
-        content: `${safeDiscordUserName} has been successfully registered as \`${resolvedUsername}\`!`,
+        content: `${safeDiscordUserName} has been successfully registered as \`${resolvedUsername}\`!${nicknameNote}`,
       });
     }
+    await deliverScenarioRegistrationPrompt(interaction, game, discordUserId);
   }
 }

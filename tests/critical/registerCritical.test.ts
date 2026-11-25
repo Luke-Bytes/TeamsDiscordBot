@@ -11,8 +11,10 @@ import {
 import { ConfigManager } from "../../src/ConfigManager";
 import { MojangAPI } from "../../src/api/MojangAPI";
 import { prismaClient } from "../../src/database/prismaClient";
+import { PrismaUtils } from "../../src/util/PrismaUtils";
 
-const mockUUID = (name: string) => Buffer.from(name).toString("hex").padEnd(32, "0").slice(0, 32);
+const mockUUID = (name: string) =>
+  Buffer.from(name).toString("hex").padEnd(32, "0").slice(0, 32);
 
 test("Register blocks non-organiser from registering others and blocks duplicates", async () => {
   const teamCmd = new TeamCommand();
@@ -245,4 +247,178 @@ test("Register nudges when IGN provided but already known", async () => {
       /don't need to type your IGN/i.test(String(edit.payload?.content)),
     "Includes IGN nudge when already known"
   );
+});
+
+test("Register syncs the verified IGN unless the player opts out or Discord blocks it", async () => {
+  const game = CurrentGameManager.getCurrentGame();
+  const originalAdd = game.addPlayerByDiscordId;
+  const originalLookup = (prismaClient as any).player.byDiscordSnowflake;
+  const originalProfile = (prismaClient as any).profile;
+  const originalPunishment = (prismaClient as any).playerPunishment.findFirst;
+  const originalExpiry = PrismaUtils.updatePunishmentsForExpiry;
+  const originalMojangLookup = MojangAPI.usernameToUUID;
+  const cfg = ConfigManager.getConfig();
+
+  try {
+    (MojangAPI as any).usernameToUUID = async () => mockUUID("Requested");
+    (PrismaUtils as any).updatePunishmentsForExpiry = async () => {};
+    (prismaClient as any).playerPunishment.findFirst = async () => null;
+
+    for (const scenario of [
+      {
+        name: "normal",
+        optOut: false,
+        organiser: false,
+        blocked: false,
+        rosterError: false,
+      },
+      {
+        name: "opt-out",
+        optOut: true,
+        organiser: false,
+        blocked: false,
+        rosterError: false,
+      },
+      {
+        name: "legacy-profile",
+        optOut: false,
+        organiser: false,
+        blocked: false,
+        rosterError: false,
+      },
+      {
+        name: "explicit-on",
+        optOut: false,
+        organiser: false,
+        blocked: false,
+        rosterError: false,
+      },
+      {
+        name: "organiser",
+        optOut: false,
+        organiser: true,
+        blocked: false,
+        rosterError: false,
+      },
+      {
+        name: "unmanageable",
+        optOut: false,
+        organiser: false,
+        blocked: true,
+        rosterError: false,
+      },
+      {
+        name: "api-failure",
+        optOut: false,
+        organiser: false,
+        blocked: false,
+        rosterError: false,
+      },
+      {
+        name: "roster-failure",
+        optOut: false,
+        organiser: false,
+        blocked: false,
+        rosterError: true,
+      },
+    ]) {
+      game.reset();
+      game.announced = true;
+      const guild = new FakeGuild() as any;
+      const userId = `target-${scenario.name}`;
+      const requesterId = scenario.organiser
+        ? `organiser-${scenario.name}`
+        : userId;
+      const target = guild.addMember(new FakeGuildMember(userId));
+      target.nickname = "OldNick";
+      target.manageable = !scenario.blocked;
+      if (scenario.name === "api-failure") {
+        target.setNickname = async () => {
+          throw new Error("Missing Permissions");
+        };
+      }
+      if (scenario.organiser) {
+        const organiser = guild.addMember(new FakeGuildMember(requesterId));
+        await organiser.roles.add(cfg.roles.organiserRole);
+      }
+
+      const player = {
+        id: `db-${userId}`,
+        discordSnowflake: userId,
+        latestIGN: "VerifiedIGN",
+        primaryMinecraftAccount: mockUUID("Requested"),
+        minecraftAccounts: ["Requested"],
+      };
+      (prismaClient as any).profile = {
+        findUnique: async ({ where }: any) =>
+          where.playerId !== player.id
+            ? null
+            : scenario.optOut
+              ? { autoNickname: false }
+              : scenario.name === "legacy-profile"
+                ? {}
+                : scenario.name === "explicit-on"
+                  ? { autoNickname: true }
+                  : null,
+      };
+      let registered = scenario.optOut;
+      (prismaClient as any).player.byDiscordSnowflake = async (id: string) =>
+        registered && id === userId ? player : null;
+      (game as any).addPlayerByDiscordId = async () => {
+        if (scenario.rosterError) return { error: "Roster was not updated" };
+        registered = true;
+        return {
+          error: false,
+          playerInstance: { discordSnowflake: userId, ignUsed: "VerifiedIGN" },
+        };
+      };
+
+      const interaction = createChatInputInteraction(requesterId, {
+        guild,
+        channelId: cfg.channels.registration,
+        strings: { ingamename: "Requested" },
+        users: scenario.organiser
+          ? { discorduser: { id: userId, username: "Target" } as any }
+          : {},
+      });
+      await new RegisterCommand(new TeamCommand()).execute(interaction);
+
+      const reply = interaction.replies.find(
+        (item) => item.type === "editReply"
+      );
+      const success = !scenario.rosterError;
+      assert(
+        Boolean(reply) &&
+          success ===
+            /successfully registered/i.test(String(reply?.payload?.content)),
+        `${scenario.name}: roster result remains accurate`
+      );
+      assert(
+        target.nickname ===
+          (scenario.optOut ||
+          scenario.blocked ||
+          scenario.rosterError ||
+          scenario.name === "api-failure"
+            ? "OldNick"
+            : "VerifiedIGN"),
+        `${scenario.name}: automatic nickname obeys preference and permissions`
+      );
+      if (scenario.blocked || scenario.name === "api-failure") {
+        assert(
+          /nickname could not be updated/i.test(
+            String(reply?.payload?.content)
+          ),
+          "Nickname permission failure is reported without undoing registration"
+        );
+      }
+    }
+  } finally {
+    (game as any).addPlayerByDiscordId = originalAdd;
+    (prismaClient as any).player.byDiscordSnowflake = originalLookup;
+    (prismaClient as any).profile = originalProfile;
+    (prismaClient as any).playerPunishment.findFirst = originalPunishment;
+    (PrismaUtils as any).updatePunishmentsForExpiry = originalExpiry;
+    (MojangAPI as any).usernameToUUID = originalMojangLookup;
+    game.reset();
+  }
 });

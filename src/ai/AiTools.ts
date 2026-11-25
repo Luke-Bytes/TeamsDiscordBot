@@ -1,4 +1,5 @@
 import { SeasonType } from "@prisma/client";
+import type { MentionedPlayer } from "./AiPlayerReferences";
 import { prismaClient } from "../database/prismaClient";
 import { SeasonService } from "../database/SeasonService";
 import { getSavedPlayerCareerStats } from "../logic/PlayerCareerStats";
@@ -27,6 +28,8 @@ export type AiCaller = {
   discordUserId: string;
   guildId: string;
   verifyMembership: () => Promise<{ member: boolean; organiser: boolean }>;
+  /** Checks a mentioned member in the home guild, then reads their linked IGN. */
+  resolveMentionedPlayer?: (discordUserId: string) => Promise<MentionedPlayer>;
   /** Optional trusted Discord-role lookup; never takes a role ID from the model. */
   listCommands?: () => Promise<{
     status: "ok" | "unavailable";

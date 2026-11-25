@@ -23,6 +23,7 @@ import { Scheduler } from "../../src/util/SchedulerUtil";
 import RestartCommand from "../../src/commands/RestartCommand";
 import CaptainPlanDMManager from "../../src/logic/CaptainPlanDMManager";
 import AnnouncementCommand from "../../src/commands/AnnouncementCommand";
+import { GameChannelPreflight } from "../../src/util/GameChannelPreflight";
 import MVPCommand from "../../src/commands/MVPCommand";
 import { withImmediateTimers } from "../framework/timers";
 import { PrismaUtils } from "../../src/util/PrismaUtils";
@@ -189,7 +190,15 @@ async function runOneGame(params: {
     deferReply: async () => {},
     editReply: async () => {},
   };
-  await announcementCmd.handleButtonPress(confirmInteraction);
+  // This lifecycle fixture stubs Discord channel delivery; detailed channel
+  // permission checks have their own isolated pre-flight tests.
+  const originalPreflight = GameChannelPreflight.run;
+  GameChannelPreflight.run = async () => ({ checked: 10, ok: true, issues: [] });
+  try {
+    await announcementCmd.handleButtonPress(confirmInteraction);
+  } finally {
+    GameChannelPreflight.run = originalPreflight;
+  }
 
   assert(game.announced === true, "announcement should be confirmed");
   assert(!!game.mapVoteManager, "map vote manager should be created");

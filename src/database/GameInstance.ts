@@ -3,6 +3,7 @@ import { $Enums, AnniMap, Team } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { MatchRecoveryGate } from "../logic/MatchRecoveryGate";
 import { GameRecoveryCoordinator } from "../logic/ActiveGameRecovery";
+import type { DraftRecoveryProgress } from "../logic/ActiveGameRecovery";
 import {
   CacheType,
   CacheTypeReducer,
@@ -27,6 +28,7 @@ import { ModifierSelector } from "../logic/ModifierSelector";
 import { TeamPlanRecord } from "../util/PlanUtil";
 import { PrismaUtils } from "../util/PrismaUtils";
 import { escapeIgn } from "../util/Utils";
+import { ScenarioCoordinator } from "../logic/scenarios/ScenarioCoordinator";
 
 export type ModifierMode = "custom" | "randomised" | "default" | "none";
 export type GameStartStatus = "idle" | "starting" | "started";
@@ -42,11 +44,14 @@ export class GameInstance {
   announced = false;
   /** Recovery-only diagnostics: incomplete workflows are retained but not restarted. */
   recoveryPausedWorkflows: string[] = [];
-  recoveryDraftProgress?: { mode: "draft" | "snake"; turn: "RED" | "BLUE" | null; proposedTeams: Record<"RED" | "BLUE" | "UNDECIDED", string[]>; lateSignups: string[]; finishedPicking: boolean };
+  recoveryDraftProgress?: DraftRecoveryProgress;
   isRestarting = false;
   isDoubleElo = false;
   isRelaxedSeason = false;
   noElo = false;
+  /** Explicit organiser selection, independent of attendance and season rules. */
+  organiserNoElo = false;
+  readonly scenarios = new ScenarioCoordinator(this);
   private gameStartStatus: GameStartStatus = "idle";
   private lifecycleVersion = 0;
   private lifecycleToken = randomUUID();
@@ -147,6 +152,8 @@ export class GameInstance {
     this.isDoubleElo = false;
     this.isRelaxedSeason = false;
     this.noElo = false;
+    this.organiserNoElo = false;
+    this.scenarios.reset();
     this.gameStartStatus = "idle";
     this.startTime = undefined;
     this.endTime = undefined;
@@ -247,6 +254,7 @@ export class GameInstance {
 
   public completeGameStart(): void {
     if (this.gameStartStatus === "starting") {
+      this.scenarios.clearSchedules();
       this.gameStartStatus = "started";
     }
   }
@@ -271,7 +279,8 @@ export class GameInstance {
     this.recoveryPausedWorkflows = [];
     this.recoveryDraftProgress = undefined;
     this.isRestarting = false;
-    this.noElo = false;
+    this.noElo = this.organiserNoElo || this.isRelaxedSeason;
+    this.scenarios.confirmAnnouncement();
     this.gameStartStatus = "idle";
     this.endTime = undefined;
     this.gameWinner = undefined;
@@ -382,6 +391,12 @@ export class GameInstance {
 
   public shouldBeNoEloForPlayerCount(): boolean {
     return this.getActivePlayerCount() < GameInstance.MIN_ELO_PLAYER_COUNT;
+  }
+
+  /** Organiser No Elo is additive: never force a game rated against attendance/season rules. */
+  public refreshNoElo(): boolean {
+    this.noElo = this.organiserNoElo || this.isRelaxedSeason || this.shouldBeNoEloForPlayerCount();
+    return this.noElo;
   }
 
   public shouldAutoCancelForLowRegistration(): boolean {
@@ -520,6 +535,7 @@ export class GameInstance {
     }
     this.teams["UNDECIDED"].push(player);
     this.lastRegisteredSnowflake = discordSnowflake;
+    await this.scenarios.onRegistrationChanged(discordSnowflake, true);
 
     return {
       error: false,
@@ -544,6 +560,7 @@ export class GameInstance {
     if (this.lastRegisteredSnowflake === discordSnowflake) {
       this.lastRegisteredSnowflake = undefined;
     }
+    await this.scenarios.onRegistrationChanged(discordSnowflake, false);
   }
 
   public getPlayers() {
@@ -556,6 +573,7 @@ export class GameInstance {
 
   public resetTeams() {
     void NeedCommand.instance?.expireAll();
+    this.scenarios.invalidateTeams();
     const combined = new Map(
       [...this.teams["UNDECIDED"], ...this.teams["RED"], ...this.teams["BLUE"]]
         .map((player) => [player.discordSnowflake, player])
@@ -727,6 +745,9 @@ export class GameInstance {
       this.teams[team].push(player);
     }
 
+    if (this.getCaptainOfTeam("RED") && this.getCaptainOfTeam("BLUE"))
+      queueMicrotask(() => { void this.scenarios.activateType("on_captains_ready"); });
+
     return {
       oldCaptain: oldTeamCaptain?.discordSnowflake,
       newCaptain: player.discordSnowflake,
@@ -885,6 +906,7 @@ export class GameInstance {
     if (!this.canCompleteRosterMutation(token) || !this.isPlayerInUndecided(player)) return false;
     this.removePlayerFromAllTeams(player);
     this.teams[team].push(player);
+    if (this.announced && this.getGameStartStatus() === "idle") this.scenarios.invalidateTeams();
     return true;
   }
 
@@ -911,6 +933,7 @@ export class GameInstance {
     // A confirmed 10007 is not a reason to keep the departed player in the roster.
     if (!this.canCompleteRosterMutation(token)) return false;
     this.removePlayerFromAllTeams(player);
+    await this.scenarios.onRegistrationChanged(player.discordSnowflake, false);
     return true;
   }
 

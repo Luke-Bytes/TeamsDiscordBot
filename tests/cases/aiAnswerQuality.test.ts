@@ -13,12 +13,156 @@ import { autoReadsForAsk } from "../../src/ai/AiAutoReads";
 import { AiCaller, executeAiTool } from "../../src/ai/AiTools";
 import { getPlayerPerformanceShortlist } from "../../src/ai/PlayerPerformanceShortlist";
 import { unverifiedSlashCommands } from "../../src/ai/DiscordAnswer";
+import {
+  requestedCoinFlips,
+  requestedCoinPair,
+  simulateCoinFlips,
+} from "../../src/ai/NaviCoinFlips";
+import { requestedTeammateHistory } from "../../src/ai/NaviTeammateHistory";
+import { Team } from "@prisma/client";
 
 const caller: AiCaller = {
   guildId: "offline-guild",
   discordUserId: "offline-viewer",
   verifyMembership: async () => ({ member: true, organiser: false }),
 };
+
+test("Navi coin flips are bounded real draws, not model-generated simulations", async () => {
+  let draws = 0;
+  const text = simulateCoinFlips(1000, () => {
+    draws++;
+    return draws <= 611 ? 0 : 1;
+  });
+  assert(
+    draws === 1000 && text.includes("611 heads, 389 tails"),
+    "Every requested flip is counted"
+  );
+  assert(
+    !text.includes("Order"),
+    "Large simulations produce a compact summary"
+  );
+  assert(
+    simulateCoinFlips(10001, () => {
+      throw new Error("unbounded");
+    }).includes("10,000"),
+    "Oversized simulations are rejected without drawing"
+  );
+  assert(
+    requestedCoinFlips("How does /coinflip work?") === null,
+    "Command help stays conversational"
+  );
+  assert(
+    requestedCoinFlips("flip a coin 999 times") === 999,
+    "Natural count request"
+  );
+  const pair = requestedCoinPair(
+    "17 random coin flips between <@123456789012345678> and <@987654321098765432>"
+  );
+  assert(
+    pair?.count === 17 && pair.labels[0] === "first mentioned user",
+    "Resolve only order, never publish member IDs"
+  );
+  assert(
+    simulateCoinFlips(17, () => 1, pair?.labels).includes(
+      "second mentioned user won 17"
+    ),
+    "Pair results report actual draws"
+  );
+  const response = await answerAiQuestion({
+    question: "100 random coin flips",
+    organiser: false,
+    caller,
+    knowledge: [],
+    infer: async () => {
+      throw new Error("provider must not be called");
+    },
+  });
+  const totals = /([0-9]+) heads, ([0-9]+) tails/.exec(response.text);
+  assert(
+    Boolean(totals && Number(totals[1]) + Number(totals[2]) === 100),
+    "Actual results delivered without inference"
+  );
+});
+
+test("Navi teammate superlatives use caller's finished same-team records", async () => {
+  const beforePlayer = prismaClient.player.findUnique;
+  const beforeNames = prismaClient.player.findMany;
+  const beforeParticipation = prismaClient.gameParticipation.findMany;
+  const beforeSeason = prismaClient.season.findUnique;
+  try {
+    (prismaClient.player as any).findUnique = async (args: any) => {
+      assert(
+        args.where.discordSnowflake === caller.discordUserId,
+        "Self lookup uses verified caller"
+      );
+      return { id: "self" };
+    };
+    (prismaClient.season as any).findUnique = async (args: any) => {
+      assert(args.where.number === 7, "Explicit season is preserved");
+      return { id: "s7", number: 7 };
+    };
+    (prismaClient.gameParticipation as any).findMany = async (args: any) => {
+      if (args.where.playerId === "self") {
+        assert(
+          args.where.seasonId === "s7" && args.where.game.is.finished === true,
+          "Only finished season games"
+        );
+        return [
+          { gameId: "g1", team: Team.RED, game: { winner: Team.RED } },
+          { gameId: "g2", team: Team.BLUE, game: { winner: Team.BLUE } },
+          { gameId: "g3", team: Team.RED, game: { winner: Team.BLUE } },
+        ];
+      }
+      assert(
+        args.where.playerId.not === "self" && args.where.OR.length === 2,
+        "Lookup scoped to caller's teams"
+      );
+      return [
+        { gameId: "g1", playerId: "a", team: Team.RED },
+        { gameId: "g2", playerId: "a", team: Team.BLUE },
+        { gameId: "g3", playerId: "a", team: Team.RED },
+        { gameId: "g1", playerId: "b", team: Team.RED },
+        { gameId: "g2", playerId: "b", team: Team.BLUE },
+        { gameId: "g3", playerId: "opponent", team: Team.BLUE },
+      ];
+    };
+    (prismaClient.player as any).findMany = async () => [
+      { id: "a", latestIGN: "Alpha" },
+      { id: "b", latestIGN: "Bravo" },
+    ];
+    const ask = (question: string) =>
+      answerAiQuestion({
+        question,
+        organiser: false,
+        caller,
+        knowledge: [],
+        infer: async () => {
+          throw new Error("provider must not be called");
+        },
+      });
+    const wins = await ask("Who have I won with the most in season 7?");
+    assert(
+      wins.text.includes("Alpha (2 wins in 3 games") &&
+        wins.text.includes("Bravo (2 wins in 2 games") &&
+        !wins.text.includes("opponent"),
+      "Tied wins and correct samples, no opponents"
+    );
+    const games = await ask("Who have I played with the most in season 7?");
+    assert(
+      games.text.includes("Alpha") && !games.text.includes("Bravo"),
+      "Games and wins rank independently"
+    );
+    assert(
+      requestedTeammateHistory("Who has the most career wins?") === null,
+      "Do not hijack global rankings"
+    );
+  } finally {
+    prismaClient.player.findUnique = beforePlayer;
+    prismaClient.player.findMany = beforeNames;
+    prismaClient.gameParticipation.findMany = beforeParticipation;
+    prismaClient.season.findUnique = beforeSeason;
+  }
+});
 
 test("Conversational comparisons preload both season and lifetime metrics", () => {
   for (const question of [
@@ -97,6 +241,14 @@ test("Registered-player advice checks the real roster, while players cannot read
           JSON.parse(read.arguments).focus === "announcement"
       ),
     "Troubleshooting checks process and Discord evidence rather than guessing"
+  );
+  assert(
+    autoReadsForAsk("Why is the registration channel hidden?", true).some(
+      (read) =>
+        read.name === "get_game_discord_state" &&
+        JSON.parse(read.arguments).focus === "announcement"
+    ),
+    "Registration visibility problems also inspect announcement delivery"
   );
 });
 

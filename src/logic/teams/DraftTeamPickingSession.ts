@@ -22,6 +22,7 @@ import { escapeIgn, escapeText } from "../../util/Utils";
 import { PrismaUtils } from "../../util/PrismaUtils";
 import { withObsoleteMessageGuard } from "../../util/DiscordFailures";
 import { GameRecoveryCoordinator } from "../ActiveGameRecovery";
+import type { DraftRecoveryProgress } from "../ActiveGameRecovery";
 
 export class DraftTeamPickingSession extends TeamPickingSession {
   state: TeamPickingSessionState = "inProgress";
@@ -51,6 +52,51 @@ export class DraftTeamPickingSession extends TeamPickingSession {
   private readonly mode: "draft" | "snake";
   private totalPicksMade = 0;
   private firstPickTeam?: Team;
+  private pendingVeto?: { target: string; affected: Team };
+
+  /** Read-only power eligibility for the currently active, ordinary draft turn. */
+  public wildcardTurn() {
+    const own = this.turn ? this.proposedTeams[this.turn].filter((p) => !p.captain) : [];
+    const next = this.mode === "draft" || !this.firstPickTeam
+      ? (this.turn === "RED" ? "BLUE" : "RED")
+      : ((Math.floor((this.totalPicksMade + 2) / 2) % 2 === 0)
+          ? this.firstPickTeam : (this.firstPickTeam === "RED" ? "BLUE" : "RED"));
+    return {
+      team: this.turn, index: this.totalPicksMade,
+      owner: this.getTurnCaptain()?.discordSnowflake,
+      next,
+      own: own.map((p) => p.discordSnowflake),
+      pool: this.proposedTeams.UNDECIDED.map((p) => p.discordSnowflake),
+    };
+  }
+
+  public async useWildcardVeto(actorId: string, targetId: string): Promise<void> {
+    const turn = this.wildcardTurn();
+    if (this.state !== "inProgress" || this.finishedPicking || !turn.team || turn.owner !== actorId ||
+        turn.next === turn.team || turn.pool.length < 4 || !turn.pool.includes(targetId))
+      throw new Error("Veto is not legal for this next opposing turn.");
+    this.pendingVeto = { target: targetId, affected: turn.next };
+    if (Channels.teamPicking?.isSendable())
+      await Channels.teamPicking.send(`🚫 ${turn.team} used Veto: ${escapeIgn(this.proposedTeams.UNDECIDED.find((p) => p.discordSnowflake === targetId)?.ignUsed ?? "Player")} cannot be selected by ${turn.next} on their next pick.`);
+  }
+
+  public async useWildcardSwap(actorId: string, fromId: string, toId: string): Promise<void> {
+    const turn = this.wildcardTurn();
+    if (this.state !== "inProgress" || this.finishedPicking || !turn.team || turn.owner !== actorId ||
+        !turn.own.includes(fromId) || !turn.pool.includes(toId))
+      throw new Error("Switcheroo requires your own drafted non-captain and one undrafted player.");
+    const own = this.proposedTeams[turn.team];
+    const outgoing = own.find((p) => p.discordSnowflake === fromId)!;
+    const incoming = this.proposedTeams.UNDECIDED.find((p) => p.discordSnowflake === toId)!;
+    own.splice(own.indexOf(outgoing), 1, incoming);
+    this.proposedTeams.UNDECIDED.splice(this.proposedTeams.UNDECIDED.indexOf(incoming), 1, outgoing);
+    incoming.draftSlotPlacement = outgoing.draftSlotPlacement;
+    outgoing.draftSlotPlacement = undefined;
+    if (this.embedMessage) await withObsoleteMessageGuard("edit", this.embedMessage, () =>
+      this.embedMessage!.edit(this.createDraftEmbed(false)));
+    if (Channels.teamPicking?.isSendable())
+      await Channels.teamPicking.send(`🔄 ${turn.team} used Switcheroo: returned ${escapeIgn(outgoing.ignUsed ?? "Player")} and received ${escapeIgn(incoming.ignUsed ?? "Player")}.`);
+  }
 
   constructor(mode: "draft" | "snake" = "draft") {
     super();
@@ -62,8 +108,16 @@ export class DraftTeamPickingSession extends TeamPickingSession {
   }
 
   /** Uncommitted draft choices survive as a paused, inspectable recovery record. */
-  public exportRecoveryProgress() {
+  public exportRecoveryProgress(): DraftRecoveryProgress {
     const ids = (players: PlayerInstance[]) => players.map((p) => p.discordSnowflake);
+    // A target may already have been picked or withdrawn before the affected turn.
+    // Only preserve a still-applicable veto; never mutate the live session here.
+    const veto = this.pendingVeto;
+    const pendingVeto =
+      !this.finishedPicking && veto &&
+      this.proposedTeams.UNDECIDED.some((p) => p.discordSnowflake === veto.target)
+        ? { ...veto }
+        : null;
     return {
       mode: this.mode, turn: this.turn ?? null,
       proposedTeams: {
@@ -72,6 +126,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
         UNDECIDED: ids(this.proposedTeams.UNDECIDED),
       },
       lateSignups: ids(this.lateSignups),
+      pendingVeto,
       finishedPicking: this.finishedPicking,
     };
   }
@@ -239,6 +294,12 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       });
     }
 
+    if (CurrentGameManager.getCurrentGame().scenarios?.selectedId === "captains-wildcards") {
+      const power = CurrentGameManager.getCurrentGame().scenarios.snapshot()?.data.wildcards as
+        | { credits?: { RED: number; BLUE: number } } | undefined;
+      embed.addFields({ name: "Captain wildcards", value:
+        `RED ${power?.credits?.RED ?? 1} · BLUE ${power?.credits?.BLUE ?? 1} remaining. Check captain DMs for powers.` });
+    }
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId("draft-accept")
@@ -343,6 +404,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       return;
     }
 
+    await CurrentGameManager.getCurrentGame().scenarios?.onDraftTurn(this.turn!);
     const messages = await teamPickingChannel.messages.fetch({ limit: 10 });
     const lastTurnMessage = messages.find((msg) =>
       msg.content.includes("It's your turn to choose!")
@@ -353,7 +415,10 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     }
 
     await teamPickingChannel.send(
-      `<@${currentCaptain.discordSnowflake}> It's your turn to choose! Please type an IGN or ping a player.`
+      `<@${currentCaptain.discordSnowflake}> It's your turn to choose! Please type an IGN or ping a player.` +
+        (this.pendingVeto?.affected === this.turn
+          ? ` 🚫 ${escapeIgn(this.proposedTeams.UNDECIDED.find((p) => p.discordSnowflake === this.pendingVeto?.target)?.ignUsed ?? "Player")} is vetoed this pick.`
+          : "")
     );
     this.startTurnTimer();
   }
@@ -363,7 +428,8 @@ export class DraftTeamPickingSession extends TeamPickingSession {
     | { type: "LATE"; pool: PlayerInstance[] }
     | null {
     if (this.proposedTeams.UNDECIDED.length > 0) {
-      return { type: "UNDECIDED", pool: this.proposedTeams.UNDECIDED };
+      return { type: "UNDECIDED", pool: this.proposedTeams.UNDECIDED.filter((p) =>
+        this.pendingVeto?.affected !== this.turn || p.discordSnowflake !== this.pendingVeto?.target) };
     }
     const lateDraftable = this.getLateDraftablePlayers();
     if (lateDraftable.length > 0) {
@@ -399,6 +465,7 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       );
     }
 
+    if (this.pendingVeto?.affected === pickingTeam) this.pendingVeto = undefined;
     this.pickCounts[pickingTeam] += 1;
     player.draftSlotPlacement = this.pickCounts[pickingTeam];
     if (this.embedMessage) {
@@ -656,7 +723,9 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       player = pool.find((p) => p.discordSnowflake === firstMention.id);
       if (!player) {
         await message.channel.send(
-          `Invalid player ping: <@${firstMention.id}> - Did that player register?`
+          this.pendingVeto?.affected === this.turn && this.pendingVeto?.target === firstMention.id
+            ? "That player is vetoed for this pick. Choose someone else."
+            : `Invalid player ping: <@${firstMention.id}> - Did that player register?`
         );
         await message.delete().catch(() => {});
         return;
@@ -669,7 +738,10 @@ export class DraftTeamPickingSession extends TeamPickingSession {
       if (!player) {
         const safeContent = escapeText(message.content);
         await message.channel.send(
-          `Invalid player pick: **${safeContent}** - Did that player register?`
+          this.pendingVeto?.affected === this.turn && this.proposedTeams.UNDECIDED.some((p) =>
+            p.discordSnowflake === this.pendingVeto?.target && p.ignUsed?.toLowerCase() === message.content.toLowerCase())
+            ? "That player is vetoed for this pick. Choose someone else."
+            : `Invalid player pick: **${safeContent}** - Did that player register?`
         );
         await message.delete().catch(() => {});
         return;

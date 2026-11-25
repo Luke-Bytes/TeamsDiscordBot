@@ -40,7 +40,7 @@ export function autoReadsForAsk(
   // Organiser operational intent is selected by the server, not by the model.
   // Avoid all external checks for timeless command help or general chat.
   const operationalCue =
-    /\b(?:current|currently|this|our|we|we've|we're|now|today|tonight|next|left|ready|already|still|stuck|broken|fail(?:ed|s|ure)?|errors?|errored|timed?\s*out|timeout|missing|didn't|doesn't|isn't|hasn't|haven't|can't|cannot|won't|never|unexpected|wrong|unresponsive|issue|paused|recovered|restart(?:ed)?|retry|lost|finish|complete|before|after|actually|automatic|ago|ages)\b/i.test(
+    /\b(?:current|currently|this|our|we|we've|we're|now|today|tonight|next|left|ready|already|still|stuck|broken|fail(?:ed|s|ure)?|errors?|errored|timed?\s*out|timeout|missing|didn't|doesn't|isn't|hasn't|haven't|can't|cannot|won't|never|unexpected|wrong|unresponsive|hidden|visible|visibility|issue|paused|recovered|restart(?:ed)?|retry|lost|finish|complete|before|after|actually|automatic|ago|ages)\b/i.test(
       q
     ) ||
     /\b(?:what(?:'s| is)? (?:left|next)|what (?:do|should) (?:we|i) do next|why can't|safe to (?:retry|start))\b/i.test(
@@ -68,8 +68,10 @@ export function autoReadsForAsk(
       reads.push({ name: "get_game_persistence", arguments: "{}" });
     const discordFocus = /\b(?:poll|minerush|map vote)\b/i.test(q)
       ? "polls"
-      : /\b(?:announcement|announced|published)\b/i.test(q) &&
-          /\b(?:message|post|publish|appear|missing|didn't|never|not)\b/i.test(
+      : /\b(?:announcement|announced|published|registration|signups?)\b/i.test(
+            q
+          ) &&
+          /\b(?:message|post|publish|appear|missing|didn't|never|not|hidden|visible|visibility|see|channel|permissions?)\b/i.test(
             q
           )
         ? "announcement"
@@ -108,7 +110,7 @@ export function autoReadsForAsk(
   // Head-to-head questions need both careers AND active-season form/Elo.
   // Match a bounded pair, not arbitrary proper nouns in everyday conversation.
   const comparisonCue =
-    /\b(?:better|stronger|best|pick|choose|draft|compare|versus|vs\.?|game sense|captain)\b/i.test(
+    /\b(?:better|stronger|best|pick|choose|draft|compare|difference|versus|vs\.?|game sense|captain|more|fewer|higher|lower)\b/i.test(
       q
     );
   const comparison = comparisonCue
@@ -119,6 +121,9 @@ export function autoReadsForAsk(
         q
       ) ??
       /\b([a-z0-9_]{3,16})\b.{0,55}?\b(?:than|versus)\s+([a-z0-9_]{3,16})\b/i.exec(
+        q
+      ) ??
+      /\bcompare\s+([a-z0-9_]{3,16})\s+(?:with|to|against)\s+([a-z0-9_]{3,16})\b/i.exec(
         q
       ))
     : null;

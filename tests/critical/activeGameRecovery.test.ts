@@ -19,6 +19,7 @@ import { createChatInputInteraction, FakeGuild, FakeGuildMember } from "../frame
 import { TeamsBot } from "../../src/TeamsBot";
 import AnnouncementCommand from "../../src/commands/AnnouncementCommand";
 import { MatchRecoveryGate } from "../../src/logic/MatchRecoveryGate";
+import { Channels } from "../../src/Channels";
 
 function player(id: string, captain = false) {
   return {
@@ -30,12 +31,14 @@ function player(id: string, captain = false) {
   } as any;
 }
 
-function setup(count = 20) {
+function setup(count = 20, scenario?: string) {
   GameRecoveryCoordinator.resetForTests();
   const game = GameInstance.getInstance();
   game.reset();
+  if (scenario) game.scenarios.configure(scenario);
   game.announced = true;
   game.gameId = game.getLifecycleToken();
+  game.scenarios.confirmAnnouncement();
   game.startTime = new Date("2026-11-02T20:00:00.000Z");
   game.organiser = "organiser";
   game.host = "host";
@@ -123,6 +126,31 @@ test("Recovery schema captures 20 players, captains, class bans and exact game i
   game.reset();
 });
 
+test("Recovery preserves explicit organiser No Elo and accepts legacy snapshots without new fields", () => {
+  const game = setup(20);
+  game.organiserNoElo = true;
+  game.noElo = true;
+  game.isDoubleElo = false;
+  const snapshot = createGameSnapshot(game);
+  assert(snapshot.game.organiserNoElo === true && snapshot.game.scenario === null,
+    "explicit selection recorded separately from automatic noElo");
+  game.reset();
+  restoreGameSnapshot(snapshot, game);
+  assert(game.organiserNoElo && game.noElo, "selection preserved after restore");
+  game.reset();
+
+  // Old version-one snapshots must continue to load after the optional extension.
+  const legacy = structuredClone(snapshot);
+  delete legacy.game.organiserNoElo;
+  delete legacy.game.scenario;
+  const old = digest(legacy);
+  validateGameSnapshot(old);
+  restoreGameSnapshot(old, game);
+  assertEqual(game.organiserNoElo, false, "legacy default false");
+  assertEqual(game.scenarios.selectedId, null, "legacy scenario None");
+  game.reset();
+});
+
 test("Recovery keeps zero-player announcements and custom settings", async () => {
   await withStore(async (store) => {
     const game = setup(0);
@@ -185,6 +213,7 @@ test("Recovery preserves paused draft picks, turn and provisional roster without
     command.teamPickingSession = draft;
     const snapshot = createGameSnapshot(game, command);
     assertEqual(snapshot.workflows.draft?.turn, "BLUE", "draft turn");
+    assertEqual(snapshot.workflows.draft?.pendingVeto, null, "ordinary draft has no veto");
     assert(snapshot.workflows.paused.some((m) => m.includes("draft")), "paused draft diagnostics");
     await store.save(snapshot);
     game.reset();
@@ -193,6 +222,138 @@ test("Recovery preserves paused draft picks, turn and provisional roster without
     assertEqual(game.recoveryDraftProgress?.turn, "BLUE", "reviewable saved draft turn");
     assertEqual(game.recoveryDraftProgress?.mode, "snake", "draft method");
     assertEqual(game.teamsDecidedBy, null, "uncommitted picks not silently applied");
+    command.teamPickingSession = undefined;
+  });
+});
+
+async function setupVetoDraft(game: GameInstance) {
+  const command = new TeamCommand();
+  const draft = new DraftTeamPickingSession("draft");
+  draft.turn = "RED";
+  draft.redCaptain = game.getCaptainOfTeam("RED");
+  draft.blueCaptain = game.getCaptainOfTeam("BLUE");
+  draft.proposedTeams = {
+    RED: [...game.teams.RED],
+    BLUE: [...game.teams.BLUE],
+    UNDECIDED: [...game.teams.UNDECIDED],
+  };
+  const target = draft.proposedTeams.UNDECIDED[0];
+  const previousChannel = Channels.teamPicking;
+  try {
+    Channels.teamPicking = { isSendable: () => false } as any;
+    await draft.useWildcardVeto(draft.redCaptain!.discordSnowflake, target.discordSnowflake);
+  } finally {
+    Channels.teamPicking = previousChannel;
+  }
+  command.teamPickingSession = draft;
+  return { command, draft, target };
+}
+
+test("Recovery preserves an active wildcard veto for review without resuming draft or changing teams", async () => {
+  await withStore(async (store) => {
+    const game = setup(20, "captains-wildcards");
+    const { command, draft, target } = await setupVetoDraft(game);
+    // The pending veto applies to the opponent's next turn; the issuer may still be picking.
+    const snapshot = createGameSnapshot(game, command);
+    const expectedVeto = { target: target.discordSnowflake, affected: "BLUE" };
+    assertEqual(JSON.stringify(snapshot.workflows.draft?.pendingVeto), JSON.stringify(expectedVeto), "veto saved");
+    assertEqual(snapshot.game.scenario?.id, "captains-wildcards", "scenario saved");
+    await store.save(snapshot);
+    command.teamPickingSession = undefined;
+    game.reset();
+    await recoverPendingGame(store, game, null);
+    assertEqual(JSON.stringify(game.recoveryDraftProgress?.pendingVeto), JSON.stringify(expectedVeto), "veto retained for review");
+    assertEqual(game.scenarios.phase, "needs_review", "scenario requires review");
+    assertEqual(command.teamPickingSession, undefined, "draft not restarted");
+    assertEqual(game.teamsDecidedBy, null, "no provisional teams committed");
+    for (const team of ["RED", "BLUE", "UNDECIDED"] as const) {
+      assertEqual(game.teams[team].map((p) => p.discordSnowflake).join(","),
+        snapshot.game.teams[team].map((p) => p.discordSnowflake).join(","), "authoritative roster unchanged");
+    }
+    let rejected = false;
+    try { game.scenarios.resumeAfterReview(); } catch { rejected = true; }
+    assert(rejected, "interrupted wildcard draft cannot resume automatically or manually");
+    assertEqual(game.scenarios.phase, "needs_review", "review state retained");
+    assertEqual(await store.readPending(), null, "snapshot consumed once");
+    assertEqual(draft.exportRecoveryProgress().pendingVeto?.target, target.discordSnowflake, "snapshot did not mutate original session");
+    game.reset();
+    assertEqual(game.recoveryDraftProgress, undefined, "new game cannot inherit veto");
+  });
+});
+
+test("Recovery accepts legacy version-one draft snapshots without a veto field", async () => {
+  await withStore(async (store) => {
+    const game = setup();
+    const command = new TeamCommand();
+    const draft = new DraftTeamPickingSession("draft");
+    draft.turn = "RED";
+    draft.proposedTeams = {
+      RED: [...game.teams.RED], BLUE: [...game.teams.BLUE], UNDECIDED: [...game.teams.UNDECIDED],
+    };
+    command.teamPickingSession = draft;
+    const snapshot = createGameSnapshot(game, command);
+    delete snapshot.workflows.draft!.pendingVeto;
+    await store.save(digest(snapshot));
+    command.teamPickingSession = undefined;
+    game.reset();
+    await recoverPendingGame(store, game, null);
+    assertEqual(game.recoveryDraftProgress?.mode, "draft", "legacy draft restored");
+    assertEqual(game.recoveryDraftProgress?.pendingVeto, undefined, "legacy field remains absent");
+    assertEqual(game.getRegisteredPlayerCount(), 20, "legacy roster retained");
+  });
+});
+
+test("Recovery validator rejects malformed, foreign and inapplicable veto records", async () => {
+  await withStore(async () => {
+    const game = setup(20, "captains-wildcards");
+    const { command, target } = await setupVetoDraft(game);
+    const snapshot = createGameSnapshot(game, command);
+    for (const pendingVeto of [
+      [], "veto", {}, { target: target.discordSnowflake },
+      { target: "", affected: "BLUE" },
+      { target: "unknown", affected: "BLUE" },
+      { target: game.teams.RED[0].discordSnowflake, affected: "BLUE" },
+      { target: target.discordSnowflake, affected: "UNDECIDED" },
+      { target: target.discordSnowflake, affected: "BLUE", extra: true },
+    ]) {
+      const invalid = structuredClone(snapshot);
+      (invalid.workflows.draft as any).pendingVeto = pendingVeto;
+      let rejected = false;
+      try { validateGameSnapshot(digest(invalid)); } catch { rejected = true; }
+      assert(rejected, `invalid veto rejected: ${JSON.stringify(pendingVeto)}`);
+    }
+    const finished = structuredClone(snapshot);
+    finished.workflows.draft!.finishedPicking = true;
+    const extra = structuredClone(snapshot);
+    (extra.workflows.draft as any).unexpected = true;
+    for (const invalid of [finished, extra]) {
+      let rejected = false;
+      try { validateGameSnapshot(digest(invalid)); } catch { rejected = true; }
+      assert(rejected, "finished draft veto or unknown draft property rejected");
+    }
+    command.teamPickingSession = undefined;
+  });
+});
+
+test("Recovery snapshots omit obsolete vetoes without altering the live draft", async () => {
+  await withStore(async () => {
+    const game = setup(20, "captains-wildcards");
+    const { command, draft, target } = await setupVetoDraft(game);
+    // The issuing captain can still pick their own veto target before the opposing turn.
+    draft.proposedTeams.UNDECIDED = draft.proposedTeams.UNDECIDED.filter((p) => p !== target);
+    draft.proposedTeams.RED.push(target);
+    assertEqual(createGameSnapshot(game, command).workflows.draft?.pendingVeto, null, "already drafted target omitted");
+    draft.proposedTeams.RED = draft.proposedTeams.RED.filter((p) => p !== target);
+    draft.proposedTeams.UNDECIDED.push(target);
+    assertEqual(draft.exportRecoveryProgress().pendingVeto?.target, target.discordSnowflake, "export leaves live veto unchanged");
+    draft.finishedPicking = true;
+    assertEqual(createGameSnapshot(game, command).workflows.draft?.pendingVeto, null, "finished picking veto omitted");
+    draft.finishedPicking = false;
+    await draft.handleUnregister(target.discordSnowflake);
+    game.teams.UNDECIDED = game.teams.UNDECIDED.filter((p) => p !== target);
+    const snapshot = createGameSnapshot(game, command);
+    assertEqual(snapshot.workflows.draft?.pendingVeto, null, "withdrawn target omitted");
+    assertEqual(Object.values(snapshot.game.teams).flat().length, 19, "withdrawn player not restored");
     command.teamPickingSession = undefined;
   });
 });

@@ -6,6 +6,8 @@ import {
   persistCompletedMatch,
 } from "../../src/database/MatchPersistence";
 import { PlayerInstance } from "../../src/database/PlayerInstance";
+import { ScenarioCoordinator } from "../../src/logic/scenarios/ScenarioCoordinator";
+import { ScenarioRegistry } from "../../src/logic/scenarios/ScenarioRegistry";
 import { test } from "../framework/test";
 import { assert } from "../framework/assert";
 
@@ -66,7 +68,7 @@ function gameFixture() {
   return { game, red, blue };
 }
 
-function fakeStore(missingStatsFor?: string) {
+function fakeStore(missingStatsFor?: string, seasonType: "RANKED" | "RELAXED" = "RANKED") {
   let state: State = {
     games: {},
     stats: {
@@ -107,7 +109,7 @@ function fakeStore(missingStatsFor?: string) {
           },
         },
         season: {
-          findFirst: async () => ({ id: "season-1", type: "RANKED" }),
+          findFirst: async () => ({ id: "season-1", type: seasonType }),
         },
         player: {
           findUnique: async ({ where }: any) => {
@@ -298,6 +300,67 @@ test("missing default season stats are created within the match transaction", as
   await persistCompletedMatch(game, fake.store);
   assert(fake.state().stats["blue-1"].losses === 1,
     "Retry must not initialize or increment a second time");
+});
+
+test("completed matches save scenario ID/version and public result without raw responses", async () => {
+  const { game } = gameFixture();
+  const original = game.scenarios;
+  (game as any).scenarios = new ScenarioCoordinator(game, new ScenarioRegistry([{
+    id: "fixture", version: 2, name: "Test", description: "Test",
+    category: "team-formation", stage: "teams",
+    capabilities: { teams: true }, enabled: true,
+    implementation: { publicResult: () => ({ summary: "balanced" }) },
+  }]));
+  try {
+    game.announced = false;
+    game.isFinished = false;
+    game.scenarios.configure("fixture", { safe: "value" });
+    game.announced = true;
+    game.scenarios.confirmAnnouncement();
+    game.scenarios.markReady({ secretAnswer: "must never appear in match record" });
+    game.scenarios.complete();
+    game.isFinished = true;
+    const fake = fakeStore();
+    const saved = await persistCompletedMatch(game, fake.store);
+    assert(saved.scenarioId === "fixture" && saved.scenarioVersion === 2, "scenario metadata stored");
+    assert((saved.scenarioMetadata as any)?.publicResult?.summary === "balanced", "public summary persisted");
+    assert(!JSON.stringify(saved.scenarioMetadata).includes("secretAnswer"), "private answers omitted");
+  } finally {
+    game.reset();
+    (game as any).scenarios = original;
+  }
+});
+
+test("organiser-selected No Elo persists its own reason without awarding rating", async () => {
+  const { game } = gameFixture();
+  game.organiserNoElo = true;
+  game.noElo = true;
+  const fake = fakeStore();
+  const result = await persistCompletedMatch(game, fake.store);
+  assert(result.organiserNoElo === true, "explicit selection stored on match");
+  assert(result.eloRated === false, "no rating when organiser selected No Elo");
+  assert(result.unratedReason === "ORGANISER_SELECTED", "organiser reason overrides low attendance");
+  assert(result.scenarioId === null, "normal game has no scenario");
+  assert(fake.state().histories.length === 0, "unrated game never writes Elo history");
+  assert(fake.state().stats["red-1"].wins === 3, "match results still count");
+});
+
+test("relaxed and low-attendance unrating stays automatic without organiser flag", async () => {
+  const { game } = gameFixture();
+  game.organiserNoElo = false;
+  game.refreshNoElo();
+  const low = fakeStore();
+  const lowRecord = await persistCompletedMatch(game, low.store);
+  assert(lowRecord.unratedReason === "LOW_PLAYER_COUNT", "low attendance automatic reason");
+  assert(!lowRecord.eloRated, "low attendance unrated");
+
+  const { game: relaxedGame } = gameFixture();
+  relaxedGame.isRelaxedSeason = true;
+  relaxedGame.refreshNoElo();
+  const relaxed = fakeStore(undefined, "RELAXED");
+  const relaxedRecord = await persistCompletedMatch(relaxedGame, relaxed.store);
+  assert(relaxedRecord.unratedReason === "RELAXED_SEASON", "relaxed season reason");
+  assert(!relaxedRecord.eloRated, "relaxed season unrated");
 });
 
 test("unrated game records statistics but does not create Elo history", async () => {

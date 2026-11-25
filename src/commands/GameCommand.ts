@@ -37,6 +37,7 @@ import {
 import { setTimeout as delay } from "timers/promises";
 import { fetchGuildMember } from "../util/DiscordFailures";
 import TeamCommand from "./TeamCommand";
+import { configureHexPool, reportUnavailableClass } from "../logic/scenarios/classHex/ClassHex";
 
 export const GAME_START_BUTTON_ID = "game-start-confirm";
 
@@ -73,6 +74,18 @@ export default class GameCommand implements Command {
       sub
         .setName("shutdown")
         .setDescription("Complete the game and calculate elo")
+    )
+    .addSubcommandGroup((group) =>
+      group.setName("scenario").setDescription("Selected Friendly War scenario")
+        .addSubcommand((sub) => sub.setName("status").setDescription("Organiser scenario activation status"))
+        .addSubcommand((sub) => sub.setName("start").setDescription("Start the next eligible scenario stage")
+          .addStringOption((option) => option.setName("stage").setDescription("Stage ID (optional)").setRequired(false)))
+        .addSubcommand((sub) => sub.setName("resume").setDescription("Resume a scenario paused for organiser review"))
+        .addSubcommand((sub) => sub.setName("open").setDescription("Open your own pending private scenario interaction"))
+        .addSubcommand((sub) => sub.setName("pool").setDescription("Organiser: approve the Class Hex class pool")
+          .addStringOption((option) => option.setName("classes").setDescription("At least three valid classes, comma-separated").setRequired(true)))
+        .addSubcommand((sub) => sub.setName("report-class").setDescription("Report that your assigned Class Hex class is unavailable"))
+        .addSubcommand((sub) => sub.setName("cancel").setDescription("Organiser: cancel the selected scenario before match start"))
     )
     .addSubcommand((sub) =>
       sub
@@ -165,6 +178,93 @@ export default class GameCommand implements Command {
       await this.handleGameRequest(interaction);
       return;
     }
+    if (interaction.options.getSubcommandGroup?.(false) === "scenario") {
+      const game = GameInstance.getInstance();
+      if (subCommand === "open") {
+        if (!interaction.guild || !game.getPlayers().some((p) => p.discordSnowflake === interaction.user.id)) {
+          await interaction.reply({ content: "You must be registered in the current game to open a private scenario interaction.", flags: MessageFlags.Ephemeral });
+          return;
+        }
+        const prompt = await game.scenarios.reopenAction(interaction.user.id);
+        if (!prompt) {
+          await interaction.reply({ content: "No unanswered or editable scenario interaction is currently available for you.", flags: MessageFlags.Ephemeral });
+          return;
+        }
+        try {
+          await interaction.reply({ ...prompt, flags: MessageFlags.Ephemeral });
+          game.scenarios.markPromptDelivered(interaction.user.id);
+        } catch (error) {
+          game.scenarios.markPromptFailed(interaction.user.id);
+          throw error;
+        }
+        return;
+      }
+      if (subCommand === "report-class") {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        try {
+          const result = TeamCommand.instance
+            ? await TeamCommand.instance.runRosterOperation(async () => reportUnavailableClass(game, interaction.user.id))
+            : reportUnavailableClass(game, interaction.user.id);
+          await interaction.editReply(result);
+          await DiscordUtil.sendMessage("gameFeed", "⚠️ Class Hex class availability has been challenged. Organisers must resolve it before game start.");
+        } catch (error) {
+          await interaction.editReply(error instanceof Error ? error.message : "Could not report class availability.");
+        }
+        return;
+      }
+      if (!(await PermissionsUtil.isUserAuthorised(interaction))) return;
+      if (subCommand === "pool") {
+        try {
+          const classes = TeamCommand.instance
+            ? await TeamCommand.instance.runRosterOperation(async () =>
+                configureHexPool(game, interaction.options.getString("classes", true), interaction.user.id))
+            : configureHexPool(game, interaction.options.getString("classes", true), interaction.user.id);
+          await interaction.reply({ content: `Reviewed Class Hex pool saved: ${classes.join(", ")}. Start the hex stage once teams are finalised.`, flags: MessageFlags.Ephemeral });
+        } catch (error) {
+          await interaction.reply({ content: error instanceof Error ? error.message : "Cannot approve class pool.", flags: MessageFlags.Ephemeral });
+        }
+        return;
+      }
+      if (subCommand === "cancel") {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        try {
+          if (game.getGameStartStatus() !== "idle" || game.isFinished)
+            throw new Error("Scenario cancellation is only available before match start.");
+          if (TeamCommand.instance?.isTeamPickingSessionActive())
+            throw new Error("Cancel the active team-picking preview/session first.");
+          const previous = game.scenarios.definition?.name;
+          if (!previous) throw new Error("No scenario to cancel.");
+          await game.scenarios.cancel();
+          await DiscordUtil.sendMessage("gameFeed", `⚠️ An organiser cancelled ${previous}. Existing finalized teams remain unchanged.`);
+          await interaction.editReply("Scenario cancelled. Check current teams, captains and roles before starting.");
+        } catch (error) {
+          await interaction.editReply(error instanceof Error ? error.message : "Cancellation failed.");
+        }
+        return;
+      }
+      if (subCommand === "status") {
+        await interaction.reply({ content: game.scenarios.triggerStatus(), flags: MessageFlags.Ephemeral });
+        return;
+      }
+      if (subCommand === "resume") {
+        try {
+          game.scenarios.resumeAfterReview();
+          await interaction.reply({ content: "Scenario resumed for organiser-controlled recovery. Timers and old prompts were not replayed. Inspect status and start an eligible stage manually.", flags: MessageFlags.Ephemeral });
+        } catch (error) {
+          await interaction.reply({ content: error instanceof Error ? error.message : "Cannot resume scenario.", flags: MessageFlags.Ephemeral });
+        }
+        return;
+      }
+      if (subCommand === "start") {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        try {
+          await interaction.editReply(await game.scenarios.startNextManualTrigger(interaction.options.getString("stage") ?? undefined, interaction.guild!));
+        } catch (error) {
+          await interaction.editReply(error instanceof Error ? error.message : "Scenario stage could not start.");
+        }
+        return;
+      }
+    }
 
     const isAuthorized = await PermissionsUtil.isUserAuthorised(interaction);
     if (!isAuthorized) return;
@@ -193,7 +293,9 @@ export default class GameCommand implements Command {
           } catch (error) {
             console.error("Error starting the game:", error);
             await interaction.editReply({
-              content: "Failed to start the game. Some Discord operations may have succeeded; check roles and channels before retrying.",
+              content: error instanceof Error && error.message.startsWith("Game start blocked:")
+              ? error.message
+              : "Failed to start the game. Some Discord operations may have succeeded; check roles and channels before retrying.",
             });
           }
         }
@@ -288,8 +390,8 @@ export default class GameCommand implements Command {
         }
         GameInstance.getInstance().isRestarting = true;
         await interaction.reply(
-          gameInstance.noElo
-            ? "Beginning post game clean up. This game is marked as no elo due to low player count."
+          gameInstance.noElo || gameInstance.isRelaxedSeason
+            ? "Beginning post game clean up. This game is unrated."
             : "Beginning post game clean up of channels and calculating elo.."
         );
         try {
@@ -325,6 +427,10 @@ export default class GameCommand implements Command {
     game: GameInstance
   ): Promise<"acquired" | "inProgress" | "alreadyStarted"> {
     const attemptStart = async () => {
+      const scenarioBlock = game.scenarios.startBlock();
+      if (scenarioBlock) throw new Error(`Game start blocked: ${scenarioBlock}`);
+      if (game.organiserNoElo && game.isDoubleElo)
+        throw new Error("Game start blocked: No Elo conflicts with Double Elo. Correct the announcement settings.");
       const attempt = game.tryBeginGameStart();
       const token = game.getLifecycleToken();
       if (attempt !== "acquired") {
@@ -357,7 +463,7 @@ export default class GameCommand implements Command {
     client: Client,
     gameInstance: GameInstance
   ): Promise<void> {
-    gameInstance.noElo = gameInstance.shouldBeNoEloForPlayerCount();
+    gameInstance.refreshNoElo();
     const activePlayerCount = gameInstance.getActivePlayerCount();
 
     const memberCache = await buildMemberCache(
@@ -376,7 +482,12 @@ export default class GameCommand implements Command {
     console.info(`event=game.roles.assign game=${gameInstance.getLifecycleToken()} outcome=succeeded duration_ms=${Date.now() - rolesStart} players=${activePlayerCount}`);
 
     if (gameInstance.noElo) {
-      const noEloMessage = `⚠️ This is a **no elo game** due to low player count (${activePlayerCount} players; minimum ${GameInstance.MIN_ELO_PLAYER_COUNT} required).`;
+      const reason = gameInstance.organiserNoElo
+        ? "the organiser selected No Elo"
+        : gameInstance.isRelaxedSeason
+          ? "this is a Relaxed season"
+          : `low player count (${activePlayerCount} players; minimum ${GameInstance.MIN_ELO_PLAYER_COUNT} required)`;
+      const noEloMessage = `⚠️ This is a **no elo game** because ${reason}.`;
       await DiscordUtil.sendMessage("gameFeed", noEloMessage);
       await DiscordUtil.sendMessage("redTeamChat", noEloMessage);
       await DiscordUtil.sendMessage("blueTeamChat", noEloMessage);
@@ -535,7 +646,9 @@ export default class GameCommand implements Command {
     } catch (error) {
       console.error("Error starting the game:", error);
       await interaction.editReply(
-        createGameStartPrompt("Failed to start the game. Some Discord operations may have succeeded; check roles and channels before retrying.")
+        createGameStartPrompt(error instanceof Error && error.message.startsWith("Game start blocked:")
+          ? error.message
+          : "Failed to start the game. Some Discord operations may have succeeded; check roles and channels before retrying.")
       );
     }
   }

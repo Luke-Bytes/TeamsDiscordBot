@@ -54,7 +54,11 @@ Commands (excluding subcommands):
 `/announcement` `/igns` `/leaderboards` `/register` `/role` `/stats` `/team` `/season`
 `/captain` `/test` `/cleanup` `/scenario` `/registered` `/unregister`
 `/restart` `/player` `/winner` `/performance` `/mvp` `/game` `/missing`
-`/captainNominate` `/teamless` `/plan` `/massRegister`
+`/captainNominate` `/teamless` `/plan` `/massRegister` `/name` `/modcheck`
+
+### Minecraft name history
+
+Use `/name history username:<current IGN>` in the server for a private, read-only lookup of a Java account's recorded previous usernames from external providers and the Friendly Wars database. Registration is not required. Results can be incomplete; distinct names are not a count of renames. Organisers also see additional player-linked, UUID-unverified names separately and a combined UUID-linked summary in `/modcheck`. See [Minecraft name history](docs/minecraft-name-history.md) for configuration and privacy.
 
 ### Standalone event controls
 
@@ -149,6 +153,16 @@ redTeamVC - Red team only
 blueTeamVC - Blue team only
 redTeamChat - Red team only
 blueTeamChat - Blue team only
+
+Game-announcement pre-flight:
+
+- Organisers can run `/announce check` at any time to inspect the configured game channels and team roles without changing permissions.
+- Confirming an `/announce start` preview automatically checks channel permissions **before** posting or pinging. All pre-flight results are advisory: the announcement proceeds even if permissions are wrong or the check cannot finish, and the organiser receives a private warning to review/fix the setup. Actual Discord send failures can still prevent delivery.
+- Red/blue chats and voice channels must be private from `@everyone` and the opposing team. Each team's role must be able to use its own channels. Additional role/member allows (other than the organiser role or the bot's own managed role) are flagged because they can bypass team isolation.
+- The audit also checks the common game channels, channel types/IDs, the bot's posting/voice permissions, and duplicate destinations. If configured, event sign-ups and the temporary voice category are inspected too; bot access issues in these optional features are warnings.
+- The configured **Game Notify** role is checked independently: it must not view either team chat or join either private team voice channel, even if `@everyone` is denied. The notification role must also be distinct from team and organiser roles, and must not have Administrator.
+- Fix permissions manually in Discord and optionally re-run `/announce check`; the organiser does not need to fix warnings before confirming the announcement.
+- Administrator permissions inherently bypass channel privacy, and members with multiple roles may have access to both teams. The audit does not override Discord administrators or auto-repair channel settings.
 
 Developer Settings
 

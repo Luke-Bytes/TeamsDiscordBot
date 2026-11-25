@@ -5,6 +5,9 @@ import {
   Guild,
 } from "discord.js";
 import { ConfigManager } from "../ConfigManager";
+import { prismaClient } from "../database/prismaClient";
+import { validHistoricalIgn } from "./HistoricalStatsClient";
+import type { MentionedPlayer } from "./AiPlayerReferences";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { AiSettings, getAiSettings } from "./AiConfig";
 import { selectAiProvider } from "./AiProviderSelection";
@@ -25,6 +28,34 @@ export function validAiQuestion(question: string): boolean {
     trimmed.length <= 450 &&
     !CREDENTIAL_INPUT.test(trimmed)
   );
+}
+
+/** Only a fresh member of the configured home guild can be mapped to a linked IGN. */
+export async function getLinkedIgnForGuildMention(
+  guild: Guild,
+  discordUserId: string
+): Promise<MentionedPlayer> {
+  if (!/^\d{17,20}$/.test(discordUserId)) return { status: "unavailable" };
+  try {
+    const member = await guild.members.fetch({
+      user: discordUserId,
+      force: true,
+    });
+    if (!member || member.user.bot) return { status: "unavailable" };
+  } catch {
+    return { status: "unavailable" };
+  }
+  try {
+    const player = await prismaClient.player.findUnique({
+      where: { discordSnowflake: discordUserId },
+      select: { latestIGN: true },
+    });
+    return validHistoricalIgn(player?.latestIGN)
+      ? { status: "linked", ign: player.latestIGN }
+      : { status: "unlinked" };
+  } catch {
+    return { status: "unavailable" };
+  }
 }
 
 export type AiRequest = {
@@ -162,6 +193,8 @@ export class AiRequestService {
         discordUserId: request.userId,
         guildId: request.guild.id,
         verifyMembership,
+        resolveMentionedPlayer: (id) =>
+          getLinkedIgnForGuildMention(request.guild, id),
         inspectGameDiscord: (focus, targetIGN) =>
           getGameDiscordDiagnostics(request.guild, focus, targetIGN),
         listCommands: async () => {

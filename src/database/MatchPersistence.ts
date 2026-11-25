@@ -107,6 +107,14 @@ export async function persistCompletedMatch(
     teamsDecidedBy: game.teamsDecidedBy ?? null,
     isDoubleElo: game.isDoubleElo,
     noElo: game.noElo,
+    organiserNoElo: game.organiserNoElo,
+    scenario: game.scenarios.snapshot() ? {
+      id: game.scenarios.snapshot()!.id,
+      version: game.scenarios.snapshot()!.version,
+      phase: game.scenarios.snapshot()!.phase,
+      config: game.scenarios.snapshot()!.config,
+      publicResult: game.scenarios.publicMatchMetadata(),
+    } : null,
     redTeamPlan: game.redTeamPlan ?? null,
     blueTeamPlan: game.blueTeamPlan ?? null,
     participants: participants.map(({ player: _player, ...data }) => data),
@@ -136,13 +144,15 @@ export async function persistCompletedMatch(
         });
         if (!season) throw new Error("No active season found");
         const eloRated =
-          season.type !== SeasonType.RELAXED && !snapshot.noElo;
+          season.type !== SeasonType.RELAXED && !snapshot.noElo && !snapshot.organiserNoElo;
         const unratedReason =
-          season.type === SeasonType.RELAXED
-            ? UnratedGameReason.RELAXED_SEASON
-            : snapshot.noElo
-              ? UnratedGameReason.LOW_PLAYER_COUNT
-              : null;
+          snapshot.organiserNoElo
+            ? UnratedGameReason.ORGANISER_SELECTED
+            : season.type === SeasonType.RELAXED
+              ? UnratedGameReason.RELAXED_SEASON
+              : snapshot.noElo
+                ? UnratedGameReason.LOW_PLAYER_COUNT
+                : null;
         const elo = new Elo();
         const updates = [];
         for (const participant of participants) {
@@ -234,6 +244,10 @@ export async function persistCompletedMatch(
             organiser: snapshot.organiser,
             host: snapshot.host,
             doubleElo: snapshot.isDoubleElo,
+            organiserNoElo: snapshot.organiserNoElo,
+            scenarioId: snapshot.scenario?.id ?? null,
+            scenarioVersion: snapshot.scenario?.version ?? null,
+            scenarioMetadata: snapshot.scenario ?? undefined,
             eloRated,
             unratedReason,
             participantsIGNs: participants.map((p) => p.ignUsed),

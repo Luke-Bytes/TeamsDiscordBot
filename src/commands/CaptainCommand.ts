@@ -99,6 +99,11 @@ export default class CaptainCommand implements Command {
       return;
     }
 
+    const scenarioBlock = game.scenarios.automationBlock("captains");
+    if (scenarioBlock) {
+      await interaction.editReply(scenarioBlock);
+      return;
+    }
     if (this.teamCommand.isTeamPickingSessionActive()) {
       await interaction.editReply(
         "You can't change captains while team picking is in progress!"
@@ -173,7 +178,8 @@ export default class CaptainCommand implements Command {
           game.isRestarting ||
           game.getGameStartStatus() === "starting" ||
           game.getLifecycleToken() !== gameToken ||
-          this.teamCommand.isTeamPickingSessionActive()
+          this.teamCommand.isTeamPickingSessionActive() ||
+          game.scenarios.automationBlock("captains")
         ) {
           return "The game or drafting state changed; no captain was selected.";
         }

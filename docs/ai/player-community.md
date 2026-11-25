@@ -60,6 +60,10 @@ If it says no wrapped data was found for that season, try a completed season you
 `/maps` lists the bot's known Annihilation maps. `/wiki` links to the Shotbow wiki home page; to get a specific article, supply **both** `type:map` or `type:class` and `name:<map/class name>` (autocomplete helps). Unknown names are rejected.
 `/help` lists general slash commands. A command showing up in help is not proof you can use it: some commands have channel, role or game-state requirements. Check the specific command's reply or ask an organiser.
 
+## Can I check Minecraft username history? `/name history`
+
+Use `/name history username:<current IGN>` in the server for a private, read-only lookup, even if the account is not registered with the bot. It verifies the current Java account, then checks configured public history providers and UUID-linked Friendly Wars database records. Organisers can also see additional player-linked names separately, which may belong to other accounts. Results may be incomplete; previous names are not a count of renames or evidence of an alt. Navi can explain this command but cannot look up or disclose name history itself. Do not share private results in public channels.
+
 ## How do I make a Discord timestamp? `/timestamp`
 
 Use `/timestamp time:<date or time>` to make a timestamp Discord readers see in their own local time. Optional `timezone` helps with phrases such as `tomorrow 7pm`; `format` chooses **Date & Time**, **Countdown**, **Time Only**, or **Date Only**. `echo` controls whether the bot also tries to post the raw timestamp code (default true, in supported channels or DMs).

@@ -32,11 +32,13 @@ import PlanCommand from "../commands/PlanCommand";
 import MassRegisterCommand from "../commands/MassRegisterCommand";
 import PunishCommand from "../commands/PunishCommand";
 import PunishedCommand from "../commands/PunishedCommand";
+import ModCheckCommand from "../commands/ModCheckCommand";
 import TimestampCommand from "../commands/TimeStampCommand";
 import VerifyCommand from "../commands/VerifyCommand";
 import ClassbanCommand from "../commands/ClassbanCommand";
 import SeasonCommand from "../commands/SeasonCommand";
 import UsernameCommand from "../commands/UsernameCommand";
+import NameHistoryCommand from "./NameHistoryCommand";
 import ForfeitCommand from "../commands/ForfeitCommand";
 import MapsCommand from "../commands/MapsCommand";
 import CoinflipCommand from "../commands/CoinflipCommand";
@@ -62,6 +64,7 @@ import {
 } from "../util/DiscordFailures";
 import { GameRecoveryCoordinator } from "../logic/ActiveGameRecovery";
 import { commandAuditLog } from "../util/CommandAuditLog";
+import { isScenarioInteraction, routeScenarioInteraction } from "../logic/scenarios/ScenarioInteractionRouter";
 
 export class CommandHandler {
   commands: Command[] = [];
@@ -98,11 +101,13 @@ export class CommandHandler {
   massRegisterCommand = new MassRegisterCommand();
   punishCommand = new PunishCommand();
   punishedCommand = new PunishedCommand();
+  modCheckCommand = new ModCheckCommand();
   timestampCommand = new TimestampCommand();
   verifyCommand = new VerifyCommand();
   classbanCommand = new ClassbanCommand();
   seasonCommand = new SeasonCommand();
   usernameCommand = new UsernameCommand();
+  nameHistoryCommand = new NameHistoryCommand();
   forfeitCommand = new ForfeitCommand();
   mapsCommand = new MapsCommand();
   coinflipCommand = new CoinflipCommand();
@@ -155,11 +160,13 @@ export class CommandHandler {
       this.massRegisterCommand,
       this.punishCommand,
       this.punishedCommand,
+      this.modCheckCommand,
       this.timestampCommand,
       this.verifyCommand,
       this.classbanCommand,
       this.seasonCommand,
       this.usernameCommand,
+      this.nameHistoryCommand,
       this.forfeitCommand,
       this.mapsCommand,
       this.coinflipCommand,
@@ -235,6 +242,11 @@ export class CommandHandler {
         return;
       }
       if (!(await this.interactionGuard.checkInputSafety(interaction))) {
+        return;
+      }
+      if ((interaction.isButton() || interaction.isStringSelectMenu() || interaction.isUserSelectMenu() || interaction.isModalSubmit()) &&
+          isScenarioInteraction(interaction)) {
+        await routeScenarioInteraction(interaction);
         return;
       }
       if (interaction.isChatInputCommand()) {
@@ -354,7 +366,7 @@ export class CommandHandler {
       const data = cmd.data.toJSON();
       // Discord accepts command contexts on global commands, not guild commands.
       // In dev mode /ask remains guild-scoped until normal global registration.
-      if (config.dev.enabled && cmd.name === "ask" && "contexts" in data)
+      if (config.dev.enabled && ["ask", "name"].includes(cmd.name) && "contexts" in data)
         delete data.contexts;
       return data;
     });

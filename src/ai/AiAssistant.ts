@@ -5,6 +5,7 @@ import {
   getAiCallerIdentity,
 } from "./AiTools";
 import { autoReadsForAsk } from "./AiAutoReads";
+import { resolveAiPlayerReferences } from "./AiPlayerReferences";
 import { AiInference, AiTransportError } from "./AiProvider";
 import { AI_DEFAULTS } from "./AiConfig";
 import { KnowledgeChunk, retrieveApprovedKnowledge } from "./Knowledge";
@@ -17,6 +18,15 @@ import {
 } from "./DiscordAnswer";
 import { ConfigManager } from "../ConfigManager";
 import { MVP_VOTE_ELO_BONUS } from "../logic/Elo";
+import {
+  requestedCoinFlips,
+  requestedCoinPair,
+  simulateCoinFlips,
+} from "./NaviCoinFlips";
+import {
+  answerTeammateHistory,
+  requestedTeammateHistory,
+} from "./NaviTeammateHistory";
 
 export type AiAnswer = {
   text: string;
@@ -185,15 +195,37 @@ export async function answerAiQuestion(options: {
     };
   }
   const organiser = options.organiser && initialMember.organiser;
-  const excerpts = retrieveApprovedKnowledge(
-    options.knowledge,
-    options.question,
-    organiser
-  );
-  const sources = excerpts.map(
-    (chunk) =>
-      `${chunk.source} (${chunk.heading}, lines ${chunk.startLine}-${chunk.endLine}, sha256:${chunk.hash})`
-  );
+  const pair = requestedCoinPair(options.question);
+  if (pair)
+    return {
+      text: simulateCoinFlips(pair.count, undefined, pair.labels),
+      sources: [],
+      toolNames: [],
+    };
+  const flips = requestedCoinFlips(options.question);
+  if (flips !== null)
+    return { text: simulateCoinFlips(flips), sources: [], toolNames: [] };
+  const teammateRequest = requestedTeammateHistory(options.question);
+  if (teammateRequest) {
+    const toolNames = ["get_my_teammate_history"];
+    let text: string;
+    try {
+      text = await boundedTool(
+        answerTeammateHistory(options.caller.discordUserId, teammateRequest)
+      );
+    } catch {
+      text =
+        "I couldn't check your teammate history right now. Try again later or use /wrapped for a completed season.";
+    }
+    const membership = await options.caller.verifyMembership();
+    return membership.member
+      ? { text, sources: [], toolNames }
+      : {
+          text: "Your permissions changed. Please ask again.",
+          sources: [],
+          toolNames: [],
+        };
+  }
   // Provide trusted, self-scoped context up front, even if the model does not
   // choose a tool. Never let an identity DB outage block ordinary conversation.
   let identity: {
@@ -212,19 +244,63 @@ export async function answerAiQuestion(options: {
   } catch {
     // Unknown is not the same as unlinked.
   }
-  const messages = buildNaviMessages(
+  const references = await resolveAiPlayerReferences(
     options.question,
-    organiser,
-    excerpts,
-    identity
+    options.caller.discordUserId,
+    { status: identity.identityStatus, ign: identity.latestIGN ?? undefined },
+    options.caller.resolveMentionedPlayer
+      ? (id) => boundedTool(options.caller.resolveMentionedPlayer!(id), 850)
+      : undefined
   );
+  if (references.error)
+    return { text: references.error, sources: [], toolNames: [] };
+  const question = references.question;
+  const excerpts = retrieveApprovedKnowledge(
+    options.knowledge,
+    question,
+    organiser
+  );
+  const sources = excerpts.map(
+    (chunk) =>
+      `${chunk.source} (${chunk.heading}, lines ${chunk.startLine}-${chunk.endLine}, sha256:${chunk.hash})`
+  );
+  const messages = buildNaviMessages(question, organiser, excerpts, identity);
+  // Scoped advice avoids loading extra instructions for every casual message.
+  if (
+    /\b(?:kills?|kill.count|deaths?|kdr|kda|teammates?|partners?|synergy)\b/i.test(
+      question
+    )
+  )
+    messages[1].content +=
+      " Do not infer kills or pair statistics from career totals. If the requested metric is unavailable, say exactly that; do not substitute an unrelated leaderboard. Finished participation records support teammate lookups: try asking who you have played with or won with the most, or use /wrapped for a completed season.";
+  if (/\b(?:coin\s*flips?|random|simulate)\b/i.test(question))
+    messages[1].content +=
+      " Never fabricate random outcomes or claim to have run a simulation. /coinflip selects one of two Discord users once; for plain coin simulations ask for '100 coin flips'.";
+  if (
+    /\b(?:farmer|gap[ -]*drop(?:ping)?|leather[ -]*scout(?:ing)?|prot[ -]*12|deppies)\b/i.test(
+      question
+    )
+  )
+    messages[1].content +=
+      " For FW slang and class mechanics, use the approved community definitions literally. If a precise mechanic or probability isn't supported, say you don't know; do not claim a wiki omits it unless evidence establishes that.";
+  if (/\b(?:picture|image|screenshot|photo)\b/i.test(question))
+    messages[1].content +=
+      " You receive text only. Do not ask for a link you cannot open; suggest describing or transcribing the image.";
+  if (
+    /\b(?:announcement|registration|register)\b/i.test(question) &&
+    /\b(?:hidden|visible|visibility|see|missing|stuck|not|can't|cannot|won't)\b/i.test(
+      question
+    )
+  )
+    messages[1].content +=
+      " Do not assume an unpublished preview, channel permissions or successful delivery. Check current state; recommend /game diagnostics or /announce check as appropriate, never tell someone to register as a visibility test or blindly confirm again.";
   const usedTools: string[] = [];
   const trustedLinks = new Set<string>();
   // Values are supplied by the real implementation/config, not a prompt constant.
   if (
-    /\b(?:elo|rating)\b/i.test(options.question) &&
+    /\b(?:elo|rating)\b/i.test(question) &&
     /\b(?:bonuses?|captain|mvps?|vot(?:e|ing)|double|calculat(?:e|ion)|work)\b/i.test(
-      options.question
+      question
     )
   ) {
     messages[1].content += ` Elo implementation (rated matches): captain bonus +${ConfigManager.getConfig().captainBonus}, selected MVP +${ConfigManager.getConfig().mvpBonus}, casting an MVP vote +${MVP_VOTE_ELO_BONUS}; additive for either team. Double Elo doubles only winner match-result gain, not bonuses or loss penalty.`;
@@ -232,7 +308,7 @@ export async function answerAiQuestion(options: {
   // Simple self-identity questions need no paid model call or guessed IGN.
   const selfIdentity =
     /^(?:(?:who|what)\s+am\s+i|what(?:'s|\s+is)\s+my\s+(?:minecraft\s+)?(?:username|ign|mc\s+name)|what(?:'s|\s+is)\s+my\s+minecraft\s+(?:name|account))\??$/i.test(
-      options.question.trim()
+      question.trim()
     );
   if (selfIdentity) {
     const stillMember = await options.caller.verifyMembership();
@@ -252,7 +328,7 @@ export async function answerAiQuestion(options: {
           ? "I could not find a valid linked Minecraft IGN for you."
           : "I could not check your linked Minecraft IGN just now.";
     return {
-      text: /^(?:who|what)\s+am\s+i/i.test(options.question.trim())
+      text: /^(?:who|what)\s+am\s+i/i.test(question.trim())
         ? `You are ${role}. ${minecraft}`
         : minecraft,
       sources: [],
@@ -262,7 +338,7 @@ export async function answerAiQuestion(options: {
   // One shared six-request REST_API budget across all model tool rounds.
   const historical = options.historicalClient ?? new HistoricalStatsClient();
   const offeredTools = toolsForAsk(
-    options.question,
+    question,
     excerpts.length > 0,
     organiser,
     historical.enabled
@@ -270,7 +346,7 @@ export async function answerAiQuestion(options: {
   const offeredNames = new Set(offeredTools.map((tool) => tool.function.name));
   // Prefetch only unmistakable requests: the model cannot forget to query
   // leaderboards, historical wins, named stats or the public organiser role.
-  const preRead = autoReadsForAsk(options.question, organiser).filter((read) =>
+  const preRead = autoReadsForAsk(question, organiser).filter((read) =>
     offeredNames.has(read.name)
   );
   if (preRead.length) {
@@ -299,7 +375,7 @@ export async function answerAiQuestion(options: {
             trustedLinks.add(url)
           );
         observed.push(
-          `${read.name}: ${boundedAiObservation(read.name, payload, options.question)}`
+          `${read.name}: ${boundedAiObservation(read.name, payload, question)}`
         );
       } catch (error) {
         if (error instanceof AiToolDenied)
@@ -386,9 +462,9 @@ export async function answerAiQuestion(options: {
           }
         }
         return {
-          text: asksForBottomPlayerRanking(options.question)
+          text: asksForBottomPlayerRanking(question)
             ? "I can't verify a reliable 'worst FW players' ranking. You can check someone's record with /stats player:<IGN>, or see seasonal standings with /leaderboards."
-            : !usedTools.length && needsVerifiedServerData(options.question)
+            : !usedTools.length && needsVerifiedServerData(question)
               ? "I can't verify those server details without approved data. Try /stats, /leaderboards or ask an organiser."
               : content ||
                 "I couldn't produce an answer. Please try rephrasing.",
@@ -459,11 +535,7 @@ export async function answerAiQuestion(options: {
         messages.push({
           role: "tool",
           tool_call_id: call.id,
-          content: boundedAiObservation(
-            call.function.name,
-            payload,
-            options.question
-          ),
+          content: boundedAiObservation(call.function.name, payload, question),
         });
       }
     }

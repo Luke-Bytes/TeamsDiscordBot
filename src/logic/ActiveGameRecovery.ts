@@ -9,6 +9,9 @@ import { TeamPlanRecord } from "../util/PlanUtil";
 import type TeamCommand from "../commands/TeamCommand";
 import { DraftTeamPickingSession } from "./teams/DraftTeamPickingSession";
 import { RandomTeamPickingSession } from "./teams/RandomTeamPickingSession";
+import { ScenarioTeamPickingSession } from "./scenarios/ScenarioTeamPickingSession";
+import { validateScenarioState } from "./scenarios/ScenarioCoordinator";
+import type { ScenarioState } from "./scenarios/ScenarioTypes";
 
 type TeamKey = "RED" | "BLUE" | "UNDECIDED";
 type PlayerRecord = Pick<
@@ -77,21 +80,29 @@ type GameState = {
   isDoubleElo: boolean;
   isRelaxedSeason: boolean;
   noElo: boolean;
+  /** Optional for backwards-compatible version-one snapshots. */
+  organiserNoElo?: boolean;
+  scenario?: ScenarioState | null;
   pickOtherTeamsSupportRoles: boolean;
   modifierMode: GameInstance["modifierMode"];
   redTeamPlan: SerializedPlan | null;
   blueTeamPlan: SerializedPlan | null;
 };
 
+/** Diagnostic-only draft state; recovery never restarts its live session. */
+export type DraftRecoveryProgress = {
+  mode: "draft" | "snake";
+  turn: "RED" | "BLUE" | null;
+  proposedTeams: Record<TeamKey, string[]>;
+  lateSignups: string[];
+  finishedPicking: boolean;
+  /** Missing in older version-one snapshots. */
+  pendingVeto?: { target: string; affected: "RED" | "BLUE" } | null;
+};
+
 type WorkflowState = {
   paused: string[];
-  draft: null | {
-    mode: "draft" | "snake";
-    turn: "RED" | "BLUE" | null;
-    proposedTeams: Record<TeamKey, string[]>;
-    lateSignups: string[];
-    finishedPicking: boolean;
-  };
+  draft: DraftRecoveryProgress | null;
   preview: null | { proposedTeams: Record<TeamKey, string[]> };
   mapVote: null | {
     maps: AnniMap[];
@@ -242,6 +253,10 @@ export function createGameSnapshot(
       ? ["draft: uncommitted picks saved; manual team-picking review required"]
       : []),
     ...(preview ? ["team preview: unconfirmed teams not applied"] : []),
+    ...(session instanceof ScenarioTeamPickingSession && session.state === "inProgress"
+      ? ["scenario team preview: unconfirmed teams not applied"] : []),
+    ...(game.scenarios.phase && game.scenarios.phase !== "completed"
+      ? ["scenario interactions: not automatically resumed; organiser review required"] : []),
     ...(game.mapVoteManager
       ? ["map vote: original Discord poll not automatically finalised"]
       : []),
@@ -297,6 +312,8 @@ export function createGameSnapshot(
       isDoubleElo: game.isDoubleElo,
       isRelaxedSeason: game.isRelaxedSeason,
       noElo: game.noElo,
+      organiserNoElo: game.organiserNoElo,
+      scenario: game.scenarios.snapshot(),
       pickOtherTeamsSupportRoles: game.pickOtherTeamsSupportRoles,
       modifierMode: game.modifierMode,
       redTeamPlan: serializePlan(game.redTeamPlan),
@@ -402,6 +419,8 @@ export function validateGameSnapshot(
         "isDoubleElo",
         "isRelaxedSeason",
         "noElo",
+        ...(record(g) && Object.prototype.hasOwnProperty.call(g, "organiserNoElo") ? ["organiserNoElo"] : []),
+        ...(record(g) && Object.prototype.hasOwnProperty.call(g, "scenario") ? ["scenario"] : []),
         "pickOtherTeamsSupportRoles",
         "modifierMode",
         "redTeamPlan",
@@ -414,6 +433,15 @@ export function validateGameSnapshot(
       nullableStr(g.lastRegisteredSnowflake),
     "game fields"
   );
+  requireCondition(
+    (g.organiserNoElo === undefined || typeof g.organiserNoElo === "boolean") &&
+    (g.scenario === undefined || g.scenario === null || typeof g.scenario === "object"),
+    "optional scenario and rating fields"
+  );
+  if (g.scenario !== undefined && g.scenario !== null) {
+    validateScenarioState(g.scenario);
+    requireCondition(g.scenario.gameToken === input.lifecycleToken, "scenario lifecycle token mismatch");
+  }
   requireCondition(
     g.gameStartStatus === undefined ||
       g.gameStartStatus === "idle" ||
@@ -602,13 +630,26 @@ export function validateGameSnapshot(
           "proposedTeams",
           "lateSignups",
           "finishedPicking",
+          ...(Object.prototype.hasOwnProperty.call(wf.draft, "pendingVeto")
+            ? ["pendingVeto"]
+            : []),
         ]) &&
         ["draft", "snake"].includes(wf.draft.mode as string) &&
         (wf.draft.turn === null ||
           ["RED", "BLUE"].includes(wf.draft.turn as string)) &&
         idsByTeam(wf.draft.proposedTeams) &&
         idList(wf.draft.lateSignups) &&
-        typeof wf.draft.finishedPicking === "boolean"),
+        typeof wf.draft.finishedPicking === "boolean" &&
+        (!Object.prototype.hasOwnProperty.call(wf.draft, "pendingVeto") ||
+          wf.draft.pendingVeto === null ||
+          (record(wf.draft.pendingVeto) &&
+            keys(wf.draft.pendingVeto, ["target", "affected"]) &&
+            str(wf.draft.pendingVeto.target) &&
+            ["RED", "BLUE"].includes(wf.draft.pendingVeto.affected as string) &&
+            !wf.draft.finishedPicking &&
+            (wf.draft.proposedTeams as Record<TeamKey, string[]>).UNDECIDED.includes(
+              wf.draft.pendingVeto.target
+            )))),
     "draft"
   );
   requireCondition(
@@ -704,6 +745,7 @@ export function restoreGameSnapshot(
   game.isDoubleElo = s.isDoubleElo;
   game.isRelaxedSeason = s.isRelaxedSeason;
   game.noElo = s.noElo;
+  game.organiserNoElo = s.organiserNoElo ?? false;
   game.pickOtherTeamsSupportRoles = s.pickOtherTeamsSupportRoles;
   game.modifierMode = s.modifierMode;
   game.redTeamPlan = deserializePlan(s.redTeamPlan);
@@ -715,6 +757,7 @@ export function restoreGameSnapshot(
     captainBanLocked: s.captainBanLocked,
     classBansAnnounced: s.classBansAnnounced,
   });
+  game.scenarios.restore(s.scenario ?? null, snapshot.lifecycleToken);
   if (s.gameStartStatus === "started") {
     game.tryBeginGameStart();
     game.completeGameStart();

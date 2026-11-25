@@ -65,6 +65,9 @@ export class CurrentGameManager {
       void e;
     }
 
+    // Clear private scenario choices and release match-bound interactions.
+    await game.scenarios.cancel();
+
     // Finally, reset the in-memory game state
     game.reset();
   }
@@ -280,6 +283,7 @@ export class CurrentGameManager {
     if (!game.startTime) return;
     const token = game.getLifecycleToken();
     this.clearCaptainTimers();
+    game.scenarios.syncTriggerSchedule(Date.now(), guild);
     // The rest of the logic has been moved to AutoCaptainSelector; keep timer scheduling here.
 
     const now = Date.now();
@@ -299,7 +303,7 @@ export class CurrentGameManager {
           const redCap = game.getCaptainOfTeam("RED");
           const blueCap = game.getCaptainOfTeam("BLUE");
           const haveBoth = !!redCap && !!blueCap;
-          if (haveBoth) return;
+          if (haveBoth || game.scenarios.automationBlock("captains") || game.scenarios.automationBlock("draft")) return;
           await DiscordUtil.sendMessage(
             "gameFeed",
             "**Reminder**: Captains are still needed. If not set in time then two will be chosen at random."
@@ -327,6 +331,18 @@ export class CurrentGameManager {
 
           if (game.getLifecycleToken() !== token || !game.announced ||
               game.getGameStartStatus() !== "idle") return;
+          const captainBlock = game.scenarios.automationBlock("captains");
+          const draftBlock = game.scenarios.automationBlock("draft");
+          if (captainBlock || (draftBlock && game.scenarios.definition?.capabilities.teams)) {
+            await DiscordUtil.sendMessage("gameFeed", `⚠️ Automatic captain/draft preparation paused: ${captainBlock ?? draftBlock} Organisers should review the scenario.`);
+            return;
+          }
+          // A scenario-owned draft may still use ordinary captain selection,
+          // but must launch its own draft entry point instead of a snake draft.
+          if (draftBlock && game.getCaptainOfTeam("RED") && game.getCaptainOfTeam("BLUE")) {
+            await game.scenarios.activateType("on_draft_start", guild);
+            return;
+          }
           const redCap = game.getCaptainOfTeam("RED");
           const blueCap = game.getCaptainOfTeam("BLUE");
           const haveBoth = !!redCap && !!blueCap;
@@ -386,6 +402,11 @@ export class CurrentGameManager {
     const token = game.getLifecycleToken();
     const teamCommand = TeamCommand.instance;
     if (!teamCommand || teamCommand.isTeamPickingSessionActive()) return;
+    if (game.scenarios.automationBlock("draft")) {
+      if (game.scenarios.definition?.triggers?.some((t) => t.type === "on_draft_start"))
+        await game.scenarios.activateType("on_draft_start", guild);
+      return;
+    }
     if (game.teamsDecidedBy) return;
 
     const redCap = game.getCaptainOfTeam("RED");
@@ -394,6 +415,14 @@ export class CurrentGameManager {
 
     const startDraft = async () => {
       try {
+        if (this.getCurrentGame() !== game || game.getLifecycleToken() !== token ||
+            !game.announced || game.isFinished || game.getGameStartStatus() !== "idle") return;
+        // Draft extensions initialise before the first automatic pick. Custom
+        // drafts are dispatched above instead of starting a snake session.
+        if (game.scenarios.definition?.capabilities.normalDraft) {
+          await game.scenarios.activateType("on_draft_start", guild);
+          if (game.scenarios.automationBlock("draft")) return;
+        }
         const started = await teamCommand.startAutomaticDraft(guild);
         if (!started) {
           console.warn("Automatic draft not started; roster, captains or lifecycle changed.");
@@ -429,6 +458,7 @@ export class CurrentGameManager {
           !game.announced || game.isFinished ||
           game.getGameStartStatus() !== "idle") return;
       if (teamCommand.isTeamPickingSessionActive()) return;
+      if (currentGame.scenarios.automationBlock("draft")) return;
       if (currentGame.teamsDecidedBy) return;
 
       const red = currentGame.getCaptainOfTeam("RED");
@@ -460,7 +490,7 @@ export class CurrentGameManager {
       const removed = await teamCommand.runRosterOperation(async () => {
         if (this.getCurrentGame() !== game || game.getLifecycleToken() !== token ||
             !game.announced || game.getGameStartStatus() !== "idle" || game.isFinished ||
-            teamCommand.isTeamPickingSessionActive() || game.teamsDecidedBy ||
+            teamCommand.isTeamPickingSessionActive() || game.scenarios.automationBlock("draft") || game.teamsDecidedBy ||
             game.getPlayersOfTeam("UNDECIDED").length % 2 === 0 ||
             !game.getPlayers().some((p) => p.discordSnowflake === removalId)) return false;
         await currentGame.removePlayerByDiscordId(removalId);

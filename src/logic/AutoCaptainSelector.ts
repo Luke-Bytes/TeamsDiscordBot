@@ -30,6 +30,8 @@ export class AutoCaptainSelector {
           "Captains cannot be selected before announcement or during game transitions.",
       };
     }
+    const scenarioBlock = game.scenarios.automationBlock("captains");
+    if (scenarioBlock) return { error: scenarioBlock };
     if (TeamCommand.instance?.isTeamPickingSessionActive()) {
       return {
         error: "Captains cannot be changed while team picking is in progress.",

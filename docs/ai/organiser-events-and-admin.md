@@ -20,7 +20,7 @@ Opening can reject missing permissions, wrong role hierarchy, invalid questions 
 ## Event navigation and privacy
 
 `/event list` finds current and historical events; `/event view` displays event details; `/event preview` checks a draft. Commands with optional `event` generally target the current event unless an ID is supplied.
-`/event roster`, `/event response player:<user>` and `/event export` are **organiser-only ephemeral** outputs. Responses and CSV exports contain private applications and identifiers. Limit access to responsible organisers; do not paste answers, exports or personal records into `/ask` or public channels.
+`/event stats` gives entry/status/capacity totals. `/event responses` displays a private grid of six applicant answers per page, filtered by `question:<number>` and `page:<number>`. `/event roster`, `/event response player:<user>` and `/event export` are **organiser-only ephemeral** outputs, as are stats and the response grid. Grid answers may be shortened; use the individual response or CSV for complete text. Responses and CSV exports contain private applications and identifiers. Limit access to responsible organisers; do not paste answers, exports or personal records into `/ask` or public channels.
 
 ## Capacity, deadlines and reserves
 

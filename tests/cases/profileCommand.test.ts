@@ -303,3 +303,125 @@ test("/profilecreate titles are locked by default", async () => {
     (prismaClient as any).profile = origProfile;
   }
 });
+
+test("/profile lets only the account owner opt out of automatic nicknames", async () => {
+  const cmd = new ProfileCommand();
+  const originalFind = (PrismaUtils as any).findPlayer;
+  const originalProfile = (prismaClient as any).profile;
+  const player = {
+    id: "P-nickname",
+    discordSnowflake: "U-nickname",
+    latestIGN: "InGameName",
+  };
+  let profile: any = null;
+  let writes = 0;
+
+  try {
+    (PrismaUtils as any).findPlayer = async (id: string) =>
+      id === player.discordSnowflake ? player : null;
+    (prismaClient as any).profile = {
+      findUnique: async () => profile,
+      upsert: async ({ update, create }: any) => {
+        writes++;
+        profile = profile ? { ...profile, ...update } : { ...create };
+        return profile;
+      },
+    };
+
+    const view = createChatInputInteraction(player.discordSnowflake);
+    await cmd.execute(view);
+    const first = view.replies.find((entry) => entry.type === "reply")?.payload;
+    const initialButton = first.components[0].toJSON().components[0].custom_id;
+    assert(
+      initialButton === "profile-nickname:disable:P-nickname",
+      "Default-on setting is visible on own profile"
+    );
+    assert(
+      profile === null && writes === 0,
+      "Viewing a profile does not create one"
+    );
+
+    const denied: any = {
+      customId: initialButton,
+      user: { id: "different-user" },
+      reply: async (response: any) => {
+        denied.response = response;
+      },
+    };
+    await cmd.handleButtonPress(denied);
+    assert(
+      writes === 0 && denied.response?.flags === MessageFlags.Ephemeral,
+      "Other users cannot change the owner's preference"
+    );
+
+    const click: any = {
+      customId: initialButton,
+      user: { id: player.discordSnowflake },
+      message: { embeds: first.embeds },
+      update: async (response: any) => {
+        click.updated = response;
+      },
+    };
+    await cmd.handleButtonPress(click);
+    assert(
+      profile?.autoNickname === false &&
+        profile?.playerId === player.id &&
+        writes === 1,
+      "Opt-out creates the minimal optional Profile record"
+    );
+    assert(
+      click.updated.embeds[0].data.fields.some(
+        (field: any) =>
+          field.name === "Automatic nickname" && /Off/.test(field.value)
+      ),
+      "Profile confirms auto nickname is off"
+    );
+
+    // Existing profile fields must be preserved by preference changes.
+    profile.preferredName = "CustomName";
+    const enable: any = {
+      customId: click.updated.components[0].toJSON().components[0].custom_id,
+      user: { id: player.discordSnowflake },
+      message: { embeds: click.updated.embeds },
+      update: async (response: any) => {
+        enable.updated = response;
+      },
+    };
+    await cmd.handleButtonPress(enable);
+    assert(
+      profile.autoNickname === true &&
+        profile.preferredName === "CustomName" &&
+        writes === 2,
+      "Owner can re-enable without overwriting other profile data"
+    );
+
+    // Older profiles with no saved preference also behave as enabled.
+    profile = { playerId: player.id, preferredName: "Legacy" };
+    const legacyView = createChatInputInteraction(player.discordSnowflake);
+    await cmd.execute(legacyView);
+    const legacyButton = legacyView.replies
+      .find((entry) => entry.type === "reply")
+      ?.payload?.components[0].toJSON().components[0].custom_id;
+    assert(
+      legacyButton === "profile-nickname:disable:P-nickname",
+      "Profiles without the new preference default to enabled"
+    );
+
+    const anotherViewer = createChatInputInteraction("someone-else", {
+      strings: { name: "InGameName" },
+    });
+    (PrismaUtils as any).findPlayer = async (id: string) =>
+      id === "InGameName" || id === player.discordSnowflake ? player : null;
+    await cmd.execute(anotherViewer);
+    const publicView = anotherViewer.replies.find(
+      (entry) => entry.type === "reply"
+    )?.payload;
+    assert(
+      publicView.components.length === 0,
+      "Other people's profile views have no preference controls"
+    );
+  } finally {
+    (PrismaUtils as any).findPlayer = originalFind;
+    (prismaClient as any).profile = originalProfile;
+  }
+});

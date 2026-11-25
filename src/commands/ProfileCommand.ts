@@ -1,4 +1,8 @@
 import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonInteraction,
+  ButtonStyle,
   ChatInputCommandInteraction,
   EmbedBuilder,
   MessageFlags,
@@ -29,7 +33,7 @@ import { TitleStore } from "../util/TitleStore";
 export default class ProfileCommand implements Command {
   public name = "profile";
   public description = "View a player profile";
-  public buttonIds: string[] = [];
+  public buttonIds: string[] = ["profile-nickname:"];
   public data = new SlashCommandBuilder()
     .setName(this.name)
     .setDescription(this.description)
@@ -96,6 +100,7 @@ export default class ProfileCommand implements Command {
       proficientAtRoles?: Role[];
       improveRoles?: Role[];
       playstyles?: Playstyle[];
+      autoNickname?: boolean | null;
     } | null;
 
     if (data?.preferredName) {
@@ -181,10 +186,97 @@ export default class ProfileCommand implements Command {
       });
     }
 
+    const viewingOwnProfile = player.discordSnowflake === interaction.user.id;
+    const nicknameEnabled = data?.autoNickname !== false;
+    if (viewingOwnProfile) {
+      embed.addFields({
+        name: "Automatic nickname",
+        value: this.nicknameDescription(nicknameEnabled),
+        inline: false,
+      });
+    }
+
     if ((embed.data.fields?.length ?? 0) === 0) {
       embed.setDescription("Nothing here yet — run `/profilecreate` to begin.");
     }
 
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply({
+      embeds: [embed],
+      components: viewingOwnProfile
+        ? [this.nicknameButton(player.id, nicknameEnabled)]
+        : [],
+    });
+  }
+
+  public async handleButtonPress(
+    interaction: ButtonInteraction
+  ): Promise<void> {
+    const [prefix, action, playerId] = interaction.customId.split(":");
+    const player = await PrismaUtils.findPlayer(interaction.user.id);
+    if (
+      prefix !== "profile-nickname" ||
+      (action !== "enable" && action !== "disable") ||
+      !player ||
+      player.id !== playerId
+    ) {
+      await interaction.reply({
+        content: "Only the profile owner can change this setting.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const enabled = action === "enable";
+    try {
+      await prismaClient.profile.upsert({
+        where: { playerId: player.id },
+        create: { playerId: player.id, autoNickname: enabled },
+        update: { autoNickname: enabled },
+      });
+    } catch (error) {
+      console.warn(
+        "Could not update automatic nickname preference",
+        error instanceof Error ? error.message : String(error)
+      );
+      await interaction.reply({
+        content: "Unable to save the nickname setting. Try again.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const currentEmbed = interaction.message.embeds[0];
+    const embed = EmbedBuilder.from(currentEmbed);
+    const fieldIndex = (embed.data.fields ?? []).findIndex(
+      (field) => field.name === "Automatic nickname"
+    );
+    if (fieldIndex >= 0) {
+      embed.spliceFields(fieldIndex, 1, {
+        name: "Automatic nickname",
+        value: this.nicknameDescription(enabled),
+        inline: false,
+      });
+    }
+    await interaction.update({
+      embeds: [embed],
+      components: [this.nicknameButton(player.id, enabled)],
+    });
+  }
+
+  private nicknameDescription(enabled: boolean): string {
+    return enabled
+      ? "On — your server nickname updates to your latest IGN when you `/register`."
+      : "Off — registering will not change your server nickname.";
+  }
+
+  private nicknameButton(playerId: string, enabled: boolean) {
+    return new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(
+          `profile-nickname:${enabled ? "disable" : "enable"}:${playerId}`
+        )
+        .setLabel(enabled ? "Disable auto nickname" : "Enable auto nickname")
+        .setStyle(enabled ? ButtonStyle.Secondary : ButtonStyle.Primary)
+    );
   }
 }

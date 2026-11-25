@@ -171,6 +171,10 @@ model Game {
   winner        Team
   type          gameType?
   doubleElo     Boolean?
+  organiserNoElo Boolean? @default(false)
+  scenarioId     String?
+  scenarioVersion Int?
+  scenarioMetadata Json?
   eloRated      Boolean?           @default(true)
   unratedReason UnratedGameReason?
 
@@ -330,6 +334,7 @@ enum AnnouncementDeliveryState {
 enum UnratedGameReason {
   RELAXED_SEASON
   LOW_PLAYER_COUNT
+  ORGANISER_SELECTED
 }
 
 enum gameType {
@@ -349,6 +354,8 @@ model Profile {
   preferredName  String?
   title          String?
   unlockedTitles String[]    @default([])
+  // Optional for existing profiles that predate this setting; missing means on.
+  autoNickname   Boolean?    @default(true)
   pronouns       Pronouns?
   languages      Language[]
   region         Region?

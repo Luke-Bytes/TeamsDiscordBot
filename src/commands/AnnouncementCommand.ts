@@ -32,6 +32,11 @@ import { PermissionsUtil } from "../util/PermissionsUtil";
 import { MatchRecoveryGate } from "../logic/MatchRecoveryGate";
 import { ModifierSelector } from "../logic/ModifierSelector";
 import { SeasonService } from "../database/SeasonService";
+import { scenarioRegistry } from "../logic/scenarios/ScenarioRegistry";
+import {
+  GameChannelPreflight,
+  formatGameChannelPreflight,
+} from "../util/GameChannelPreflight";
 
 interface CustomModifierSession {
   choices: Record<string, string>;
@@ -160,7 +165,24 @@ export default class AnnouncementCommand implements Command {
                   { name: "No", value: "no" }
                 )
             )
+            .addBooleanOption((option) =>
+              option.setName("no_elo").setDescription("Explicitly make the game unrated (default: No)").setRequired(false)
+            )
+            .addStringOption((option) =>
+              option.setName("scenario").setDescription("Optional game scenario (default: None)").setRequired(false)
+                .addChoices(
+                  { name: "None", value: "none" },
+                  ...scenarioRegistry.available().slice(0, 24).map((s) => ({ name: s.name, value: s.id }))
+                )
+            )
         );
+      })
+      .addSubcommand((subcommand) => {
+        return subcommand
+          .setName("check")
+          .setDescription(
+            "Check channel access and game setup before announcing."
+          );
       })
       .addSubcommand((subcommand) => {
         return subcommand
@@ -347,6 +369,22 @@ export default class AnnouncementCommand implements Command {
       return;
     }
 
+    const noElo = interaction.options.getBoolean("no_elo") ?? false;
+    const scenarioId = interaction.options.getString("scenario") ?? "none";
+    if (noElo && interaction.options.getString("doubleelo")?.toLowerCase() === "yes") {
+      await interaction.editReply("No Elo and Double Elo cannot be enabled together. Choose one.");
+      return;
+    }
+    const game = CurrentGameManager.getCurrentGame();
+    try {
+      game.scenarios.configure(scenarioId);
+    } catch (error) {
+      await interaction.editReply(error instanceof Error ? error.message : "Scenario is unavailable.");
+      return;
+    }
+    game.organiserNoElo = noElo;
+    game.noElo = noElo;
+
     this.customModifierSessions.clear();
     this.customModifierRevision += 1;
 
@@ -458,6 +496,20 @@ export default class AnnouncementCommand implements Command {
     }
 
     const subcommand = interaction.options.getSubcommand(true);
+    if (subcommand === "check") {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      try {
+        const report = await GameChannelPreflight.run(interaction.guild!);
+        await interaction.editReply(formatGameChannelPreflight(report));
+      } catch (error) {
+        console.error("Channel pre-flight failed:", error);
+        await interaction.editReply(
+          "Could not complete the pre-flight check; Discord permissions could not be verified."
+        );
+      }
+      return;
+    }
+
     const blocked = MatchRecoveryGate.getBlockReason();
     if (blocked) {
       await interaction.reply({
@@ -485,7 +537,11 @@ export default class AnnouncementCommand implements Command {
     const blocked = MatchRecoveryGate.getBlockReason();
     if (blocked) throw new Error(`Cannot announce a new match: ${blocked}`);
     const embed = this.createGameAnnouncementEmbed(false).embeds?.[0];
-    if (!Channels.announcements.isSendable()) return;
+    if (!Channels.announcements?.isSendable()) {
+      throw new Error(
+        "Announcement channel is not available for sending messages."
+      );
+    }
 
     GameInstance.getInstance().beginConfirmedAnnouncement();
     const announcedAt = Date.now();
@@ -511,7 +567,10 @@ export default class AnnouncementCommand implements Command {
     if (Channels.registration.isTextBased()) {
       await Channels.registration.send(
         "**A friendly wars game has been announced!** 🎉\n" +
-          "Sign up by typing the `/register [MCID]` command in this chat. If you sign up but can't play then run `/unregister`."
+          "Sign up by typing the `/register [MCID]` command in this chat. If you sign up but can't play then run `/unregister`." +
+          (GameInstance.getInstance().scenarios.selectedId
+            ? "\nIf you need to open or revisit a private scenario question, use `/game scenario open`."
+            : "")
       );
     }
 
@@ -527,6 +586,7 @@ export default class AnnouncementCommand implements Command {
     await activateFeed(Channels.gameFeed, addTeamsGameFeed);
 
     await CurrentGameManager.getCurrentGame().announce();
+    await GameInstance.getInstance().scenarios.onAnnounced(guild);
 
     CurrentGameManager.scheduleClassBanTimers();
     CurrentGameManager.scheduleCaptainTimers(guild);
@@ -538,6 +598,45 @@ export default class AnnouncementCommand implements Command {
       });
     }
     console.info(`event=game.announcement game=${lifecycle} outcome=succeeded duration_ms=${Date.now() - announcedAt}`);
+  }
+
+  private async confirmWithPreflight(
+    interaction: ButtonInteraction,
+    ping: boolean
+  ): Promise<void> {
+    if (!this.isOrganiserInteraction(interaction)) {
+      await interaction.editReply(
+        "Only organisers can confirm an announcement."
+      );
+      return;
+    }
+    // Channel permission audits are advisory. Even an unavailable audit
+    // must not prevent organisers from confirming their announcement.
+    let preflightNotice: string;
+    try {
+      const report = await GameChannelPreflight.run(interaction.guild!);
+      preflightNotice = report.issues.length
+        ? `\n\n${formatGameChannelPreflight(report)}`
+        : ` Pre-flight passed (${report.checked} channels checked).`;
+    } catch (error) {
+      console.error("Announcement pre-flight could not complete:", error);
+      preflightNotice =
+        "\n\n⚠️ Pre-flight could not complete. Please check channel and role permissions manually or run /announce check.";
+    }
+
+    try {
+      await this.handleAnnouncementConfirm(interaction.guild!, ping);
+      await interaction.editReply(
+        `Announcement sent${ping ? " with ping" : ""}!${preflightNotice}`
+      );
+    } catch (error) {
+      console.error("Announcement confirmation failed:", error);
+      await interaction.editReply(
+        GameInstance.getInstance().announced
+          ? "Announcement may be partially published. Inspect the current game and bot logs before attempting any further action; do not retry the same confirmation."
+          : "Could not send the announcement. No permission changes were made; check the bot logs."
+      );
+    }
   }
 
   private getEditComponents(isConfirmed: boolean) {
@@ -635,7 +734,12 @@ export default class AnnouncementCommand implements Command {
       return;
     }
 
-    await interaction.deferReply({});
+    const isConfirmation =
+      interaction.customId === "announcement-confirm-ping" ||
+      interaction.customId === "announcement-confirm-noping";
+    await interaction.deferReply(
+      isConfirmation ? { flags: MessageFlags.Ephemeral } : {}
+    );
     const blocked = MatchRecoveryGate.getBlockReason();
     if (blocked) {
       await interaction.editReply(
@@ -660,16 +764,14 @@ export default class AnnouncementCommand implements Command {
 
       case "announcement-confirm-ping":
         if (!isConfirmed) {
-          await this.handleAnnouncementConfirm(interaction.guild!, true);
-          await interaction.editReply("Announcement sent with ping!");
+          await this.confirmWithPreflight(interaction, true);
         } else {
           await interaction.editReply("The announcement is already confirmed.");
         }
         break;
       case "announcement-confirm-noping":
         if (!isConfirmed) {
-          await this.handleAnnouncementConfirm(interaction.guild!, false);
-          await interaction.editReply("Announcement sent!");
+          await this.confirmWithPreflight(interaction, false);
         } else {
           await interaction.editReply("The announcement is already confirmed.");
         }
@@ -1130,6 +1232,16 @@ export default class AnnouncementCommand implements Command {
           name: "🚫 **BANNED CLASSES**",
           value: bannedClassesValue,
           inline: false,
+        },
+        {
+          name: "🎭 **SCENARIO**",
+          value: game.scenarios.definition?.name ?? "None",
+          inline: true,
+        },
+        {
+          name: "🏅 **NO ELO**",
+          value: game.organiserNoElo ? "**Yes (organiser selected)**" : game.isRelaxedSeason ? "**Yes (Relaxed season)**" : "**No (unless attendance is low)**",
+          inline: true,
         },
         {
           name: "⚙️ **MODIFIERS**",

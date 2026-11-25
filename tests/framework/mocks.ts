@@ -37,6 +37,11 @@ export class FakeGuildMember {
     remove: async (id: string) => this.roles.cache.remove(id),
   };
   user = { tag: `user-${this.id}` } as any;
+  nickname: string | null = null;
+  manageable = true;
+  async setNickname(nickname: string | null) {
+    this.nickname = nickname;
+  }
   voice = {
     channelId: null as string | null,
     channel: null as any,
@@ -91,7 +96,8 @@ export class FakeGuild {
       if (input === undefined) return new Map(this._members);
       const id = typeof input === "string" ? input : input.user;
       const member = this._members.get(id);
-      if (!member) throw Object.assign(new Error("Unknown Member"), { code: 10007 });
+      if (!member)
+        throw Object.assign(new Error("Unknown Member"), { code: 10007 });
       return member;
     },
     cache: { get: (id: string) => this._members.get(id)! },

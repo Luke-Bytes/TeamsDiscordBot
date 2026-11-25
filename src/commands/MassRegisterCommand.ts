@@ -16,6 +16,7 @@ import {
 } from "../util/DiscordFailures";
 import TeamCommand from "./TeamCommand";
 import { DraftTeamPickingSession } from "../logic/teams/DraftTeamPickingSession";
+import { deliverScenarioRegistrationPrompt } from "../logic/scenarios/ScenarioPromptDelivery";
 
 export function parseMassRegisterList(value: string): {
   names: string[];
@@ -152,6 +153,7 @@ export default class MassRegisterCommand implements Command {
         if (result.error) skipped.push(`${ign} (${result.error})`);
         else {
           registered.push(ign);
+          await deliverScenarioRegistrationPrompt(interaction, game, player.discordSnowflake);
           if (registeredWithDraftWarning)
             warnings.push(`${ign} (draft display needs organiser review)`);
         }

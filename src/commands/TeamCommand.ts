@@ -23,6 +23,9 @@ import { escapeText } from "../util/Utils";
 import { createGameStartPrompt } from "./GameCommand";
 import { GuildMembership } from "../logic/GuildMembership";
 import { GameRecoveryCoordinator } from "../logic/ActiveGameRecovery";
+import { ScenarioTeamPickingSession } from "../logic/scenarios/ScenarioTeamPickingSession";
+import { ScenarioDraftSession, ScenarioDraftMode } from "../logic/scenarios/drafts/ScenarioDraftSession";
+import { ScenarioTeamProposal } from "../logic/scenarios/ScenarioTypes";
 import { withObsoleteMessageGuard, discordErrorCode, fetchGuildMember } from "../util/DiscordFailures";
 
 export default class TeamCommand implements Command {
@@ -36,6 +39,8 @@ export default class TeamCommand implements Command {
     "random-team-generate-cancel",
     "draft-accept",
     "draft-cancel",
+    "scenario-team-accept",
+    "scenario-team-cancel",
   ];
 
   teamPickingSession?: TeamPickingSession;
@@ -67,7 +72,7 @@ export default class TeamCommand implements Command {
       const game = CurrentGameManager.getCurrentGame();
       const token = game.getLifecycleToken();
       if (!game.announced || game.isFinished || game.getGameStartStatus() !== "idle" ||
-          game.teamsDecidedBy || this.teamPickingSession) return false;
+          game.teamsDecidedBy || this.teamPickingSession || game.scenarios.automationBlock("draft")) return false;
 
       try {
         await GuildMembership.reconcile(guild, this);
@@ -77,6 +82,7 @@ export default class TeamCommand implements Command {
       }
       if (game.getLifecycleToken() !== token || !game.announced ||
           game.getGameStartStatus() !== "idle" || game.isFinished ||
+          game.scenarios.automationBlock("draft") ||
           !game.getCaptainOfTeam("RED") || !game.getCaptainOfTeam("BLUE") ||
           game.getPlayersOfTeam("UNDECIDED").length % 2 !== 0) return false;
 
@@ -101,6 +107,92 @@ export default class TeamCommand implements Command {
     });
   }
 
+  /** Only call from the scenario activation hook: it already owns the roster lock. */
+  async startScenarioDraftUnderLock(mode: ScenarioDraftMode): Promise<void> {
+    const game = CurrentGameManager.getCurrentGame();
+    const expected = mode === "masked" ? "masked-draft" : "draft-roulette";
+    if (game.scenarios.selectedId !== expected || game.scenarios.phase !== "collecting" ||
+        this.isTeamPickingSessionActive() || game.teamsDecidedBy)
+      throw new Error("Scenario draft cannot start in this phase or while another session is active.");
+    game.scenarios.assertCapturedRoster("draft");
+    const session = new ScenarioDraftSession(mode);
+    this.teamPickingSession = session;
+    try {
+      await session.initialize({ editReply: async () => {} } as unknown as ChatInputCommandInteraction);
+    } catch (error) {
+      await session.cancelSession();
+      if (this.teamPickingSession === session) this.teamPickingSession = undefined;
+      throw error;
+    }
+  }
+
+  /** Scenario-created teams go through the same serialized preview and role finalisation as normal teams. */
+  async previewScenarioTeams(guild: Guild, proposal: ScenarioTeamProposal): Promise<void> {
+    await this.serialise(async () => {
+      const game = CurrentGameManager.getCurrentGame();
+      if (this.isTeamPickingSessionActive() || game.teamsDecidedBy)
+        throw new Error("Another team-selection session already exists.");
+      const token = game.getLifecycleToken();
+      await GuildMembership.reconcile(guild, this);
+      if (game.getLifecycleToken() !== token || game.scenarios.phase !== "ready")
+        throw new Error("Scenario or roster changed before preview; recalculate teams.");
+      const session = new ScenarioTeamPickingSession(proposal);
+      await session.publishPreview();
+      this.teamPickingSession = session;
+    });
+  }
+
+  /** Complete a reviewed captain-election result without bypassing roster/role safeguards. */
+  async confirmScenarioCaptains(guild: Guild, redId: string, blueId: string): Promise<void> {
+    await this.serialise(async () => {
+      const game = CurrentGameManager.getCurrentGame();
+      const token = game.getLifecycleToken();
+      if (!game.announced || game.getGameStartStatus() !== "idle" || game.isFinished ||
+          game.teamsDecidedBy || this.isTeamPickingSessionActive() ||
+          game.scenarios.phase !== "ready" || !game.scenarios.definition?.capabilities.captains)
+        throw new Error("No ready, organiser-reviewed captain-election result is available.");
+      if (redId === blueId) throw new Error("Captains must be different registered players.");
+      // Reconcile membership before trusting the election's candidate set.
+      await GuildMembership.reconcile(guild, this);
+      const red = game.getPlayers().find((p) => p.discordSnowflake === redId);
+      const blue = game.getPlayers().find((p) => p.discordSnowflake === blueId);
+      if (!red || !blue || game.getLifecycleToken() !== token ||
+          game.scenarios.phase !== "ready")
+        throw new Error("A candidate or game changed; rebuild the captain-election result.");
+      game.scenarios.assertCapturedRosters();
+      const previous = [game.getCaptainOfTeam("RED"), game.getCaptainOfTeam("BLUE")];
+      const removed = previous.filter((p): p is PlayerInstance =>
+        !!p && p.discordSnowflake !== redId && p.discordSnowflake !== blueId);
+      const redMember = await fetchGuildMember(guild, redId);
+      const blueMember = await fetchGuildMember(guild, blueId);
+      const oldMembers = await Promise.all(removed.map((p) => fetchGuildMember(guild, p.discordSnowflake)));
+      if (!redMember || !blueMember || oldMembers.some((member) => !member) ||
+          game.getLifecycleToken() !== token || game.scenarios.phase !== "ready")
+        throw new Error("Candidate membership could not be verified; retry after review.");
+      const roles = ConfigManager.getConfig().roles;
+      try {
+        for (const [member, team] of [[redMember, "RED"], [blueMember, "BLUE"]] as const) {
+          await member.roles.add(roles.captainRole);
+          await member.roles.add(team === "RED" ? roles.redTeamRole : roles.blueTeamRole);
+          await member.roles.remove(team === "RED" ? roles.blueTeamRole : roles.redTeamRole);
+        }
+        for (const member of oldMembers) {
+          await member!.roles.remove(roles.captainRole);
+          await member!.roles.remove(roles.blueTeamRole);
+          await member!.roles.remove(roles.redTeamRole);
+        }
+        if (game.getLifecycleToken() !== token || game.scenarios.phase !== "ready")
+          throw new Error("Game changed while assigning Discord roles.");
+        game.setTeamCaptain("RED", red);
+        game.setTeamCaptain("BLUE", blue);
+        game.scenarios.complete();
+      } catch (error) {
+        game.scenarios.needsReview("Captain role assignment was interrupted; inspect Discord roles before retrying.");
+        throw error;
+      }
+    });
+  }
+
   async handleGuildDeparture(userId: string): Promise<boolean> {
     return this.serialise(() => GuildMembership.handleDeparture(userId, this));
   }
@@ -116,7 +208,7 @@ export default class TeamCommand implements Command {
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const subcommand = interaction.options.getSubcommand();
-    if (["generate", "reset"].includes(subcommand)) {
+    if (["generate", "reset", "scenario-fallback"].includes(subcommand)) {
       await interaction.deferReply();
       await this.serialise(() => this.executeUnlocked(interaction));
     } else {
@@ -154,6 +246,9 @@ export default class TeamCommand implements Command {
         subcommand.setName("list").setDescription("List the current teams")
       )
       .addSubcommand((subcommand) =>
+        subcommand.setName("scenario-fallback").setDescription("Organiser: cancel a stalled scenario and use normal team selection")
+      )
+      .addSubcommand((subcommand) =>
         subcommand
           .setName("cancel")
           .setDescription("Cancel the current team picking session")
@@ -177,6 +272,22 @@ export default class TeamCommand implements Command {
         return;
       }
       switch (subcommand) {
+        case "scenario-fallback": {
+          if (!isOrganiser) {
+            await DiscordUtil.reply(interaction, "Only organisers can cancel a scenario.");
+            return;
+          }
+          if (!game.announced || !game.scenarios.selectedId || game.hasFinalizedPlayableTeams() ||
+              this.isTeamPickingSessionActive() || game.isFinished || game.getGameStartStatus() !== "idle") {
+            await DiscordUtil.reply(interaction, "No eligible pre-game scenario fallback. Cancel active team picking first, or use the normal completed-game workflow.");
+            return;
+          }
+          const previous = game.scenarios.definition?.name ?? "Scenario";
+          await game.scenarios.cancel();
+          await DiscordUtil.sendMessage("gameFeed", `⚠️ Organiser cancelled ${previous}. Normal captain/team selection is now available. Check existing captains, roster and roles before proceeding.`);
+          await DiscordUtil.editReply(interaction, "Scenario cancelled. Review any existing captains and roles, then use /captain and /team generate as normal.");
+          break;
+        }
         case "generate": {
           if (!isOrganiser) {
             await DiscordUtil.reply(
@@ -194,6 +305,11 @@ export default class TeamCommand implements Command {
             return;
           }
 
+          const scenarioBlock = game.scenarios.automationBlock("teams") ?? game.scenarios.automationBlock("captains") ?? game.scenarios.automationBlock("draft");
+          if (scenarioBlock) {
+            await DiscordUtil.reply(interaction, scenarioBlock);
+            return;
+          }
           if (this.isTeamPickingSessionActive()) {
             await DiscordUtil.reply(
               interaction,
@@ -525,7 +641,7 @@ export default class TeamCommand implements Command {
   }
 
   /** Role changes are a recoverable projection of finalized game state. */
-  private async syncFinalizedTeamRoles(guild: Guild): Promise<string[]> {
+  private async syncFinalizedTeamRoles(guild: Guild, syncCaptains = false): Promise<string[]> {
     const warnings: string[] = [];
     const game = CurrentGameManager.getCurrentGame();
     const config = ConfigManager.getConfig();
@@ -542,6 +658,10 @@ export default class TeamCommand implements Command {
           const correctRole = team === "RED" ? config.roles.redTeamRole : config.roles.blueTeamRole;
           await member.roles.remove(wrongRole);
           await member.roles.add(correctRole);
+          if (syncCaptains) {
+            if (player.captain) await member.roles.add(config.roles.captainRole);
+            else await member.roles.remove(config.roles.captainRole);
+          }
         } catch (error) {
           if (discordErrorCode(error) === 10007) {
             await GuildMembership.handleDeparture(player.discordSnowflake, this);
@@ -563,7 +683,16 @@ export default class TeamCommand implements Command {
       }
       return;
     }
-    const ownedIds = [session.embedMessage?.id, session instanceof DraftTeamPickingSession ? session.finalizeMessage?.id : undefined].filter(Boolean);
+    if (session instanceof ScenarioTeamPickingSession || session instanceof ScenarioDraftSession) {
+      let member;
+      try { member = await fetchGuildMember(interaction.guild, interaction.user.id); }
+      catch { member = null; }
+      if (!PermissionsUtil.hasRole(member ?? undefined, "organiserRole")) {
+        await interaction.reply({ content: "Only verified organisers can confirm scenario teams.", flags: MessageFlags.Ephemeral });
+        return;
+      }
+    }
+    const ownedIds = [session.embedMessage?.id, session instanceof DraftTeamPickingSession || session instanceof ScenarioDraftSession ? session.finalizeMessage?.id : undefined].filter(Boolean);
     if (interaction.message?.id && ownedIds.length && !ownedIds.includes(interaction.message.id)) {
       await interaction.reply({ content: "That button belongs to an old team-picking session.", flags: MessageFlags.Ephemeral });
       return;
@@ -585,10 +714,13 @@ export default class TeamCommand implements Command {
           }
           if (previousState !== "finalized") {
             const warnings = session instanceof RandomTeamPickingSession ||
+              session instanceof ScenarioTeamPickingSession ||
+              session instanceof ScenarioDraftSession ||
               session instanceof DraftTeamPickingSession
-              ? await this.syncFinalizedTeamRoles(interaction.guild)
+              ? await this.syncFinalizedTeamRoles(interaction.guild, session instanceof ScenarioTeamPickingSession)
               : [];
             const finalizedGame = CurrentGameManager.getCurrentGame();
+            await finalizedGame.scenarios.onTeamsFinalized(interaction.guild);
             console.info(`event=team.finalize game=${finalizedGame.getLifecycleToken()} outcome=${warnings.length || !finalizedGame.hasFinalizedPlayableTeams() ? "failed" : "succeeded"} method=${finalizedGame.teamsDecidedBy ?? "unknown"} role_warnings=${warnings.length}`);
             if (warnings.length || !CurrentGameManager.getCurrentGame().teamsDecidedBy && (session instanceof RandomTeamPickingSession || session instanceof DraftTeamPickingSession)) {
               await interaction.followUp({

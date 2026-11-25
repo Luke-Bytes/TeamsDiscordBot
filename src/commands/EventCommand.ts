@@ -17,7 +17,13 @@ import {
   eventQuestions,
   EventQuestion,
 } from "../logic/EventService";
-import { eventCsvCell, eventDisplay, eventPages } from "./EventPresentation";
+import {
+  eventCsvCell,
+  eventDisplay,
+  eventPages,
+  eventResponseGrid,
+  eventStatsEmbed,
+} from "./EventPresentation";
 import {
   eventDeletePrompt,
   handleEventDeleteButton,
@@ -109,6 +115,8 @@ export default class EventCommand implements Command {
       "roster",
       "export",
       "response",
+      "responses",
+      "stats",
     ]) {
       this.data.addSubcommand((sub) => {
         sub.setName(name).setDescription(`${name} an event`);
@@ -119,6 +127,20 @@ export default class EventCommand implements Command {
               .setDescription("Player whose answers to inspect")
               .setRequired(true)
           );
+        if (name === "responses")
+          sub
+            .addIntegerOption((o) =>
+              o
+                .setName("question")
+                .setDescription("Question number to view (default 1)")
+                .setMinValue(1)
+            )
+            .addIntegerOption((o) =>
+              o
+                .setName("page")
+                .setDescription("Page of entries (default 1)")
+                .setMinValue(1)
+            );
         sub.addStringOption((o) =>
           o
             .setName("event")
@@ -375,6 +397,22 @@ export default class EventCommand implements Command {
         return;
       }
       const rows = await eventService.roster(guildId, event.id);
+      if (action === "responses" || action === "stats") {
+        const embed =
+          action === "responses"
+            ? eventResponseGrid(
+                event,
+                rows,
+                i.options.getInteger("question") ?? 1,
+                i.options.getInteger("page") ?? 1
+              )
+            : eventStatsEmbed(event, rows);
+        await i.editReply({
+          embeds: [embed],
+          allowedMentions: { parse: [] },
+        });
+        return;
+      }
       if (action === "export") {
         const questions = eventQuestions(event);
         const csv = [

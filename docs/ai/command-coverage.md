@@ -39,11 +39,13 @@ This is a QC inventory, **not** an AI knowledge source. The offline test compare
 | `massregister`     | brief      | organiser-game-ops source has bulk-add notes; not allowlisted                                   |
 | `punish`           | restricted | organiser-events-and-admin: basic add/remove; expunge excluded                                  |
 | `punished`         | restricted | organiser-events-and-admin: sensitive punishment read warning                                   |
+| `modcheck`         | restricted | docs/moderation-review: organiser-only sensitive review; not exposed through /ask                 |
 | `timestamp`        | full       | player-community: timestamp                                                                     |
 | `verify`           | brief      | organiser verification, not needed for ordinary /ask                                            |
 | `class`            | full       | player-actions: captain ban and view                                                            |
 | `season`           | full       | player-stats-and-history: view; organiser-game-ops: status/rollover                             |
 | `username`         | restricted | organiser-events-and-admin: identity review and safe correction; no AI mutation                 |
+| `name`             | brief      | player-community: private name history command; no AI access to historical names                |
 | `forfeit`          | full       | player-actions: confirmed captain forfeit                                                       |
 | `maps`             | brief      | player-community: map list                                                                      |
 | `coinflip`         | brief      | general utility; consult /help                                                                  |

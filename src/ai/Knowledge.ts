@@ -72,6 +72,7 @@ export const APPROVED: readonly ApprovedSource[] = [
       "How do I check or delete my temporary VC? `/vc info` and `/vc delete`",
       "Can I get a personal end-of-season recap? `/wrapped`",
       "Where can I find maps, wiki links or a command list?",
+      "Can I check Minecraft username history? `/name history`",
       "How do I make a Discord timestamp? `/timestamp`",
     ],
   },

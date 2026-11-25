@@ -41,6 +41,8 @@ export function formatGameDiagnostics(game: GameInstance): string {
     `**Lifecycle:** ${status} | active: ${active ? "yes" : "no"}`,
     `**Correlation ID:** ${active ? (game.gameId ?? game.getLifecycleToken()) : "N/A (no active game)"}`,
     `**Scheduled start:** ${time}`,
+    `**Rating:** organiser No Elo: ${game.organiserNoElo ? "yes" : "no"} | effective No Elo: ${game.noElo || game.isRelaxedSeason ? "yes" : "no"} | double: ${game.isDoubleElo ? "yes" : "no"}`,
+    `**Scenario:** ${game.scenarios.definition?.name ?? "None"} | phase: ${game.scenarios.phase ?? "N/A"} | start block: ${game.scenarios.startBlock() ?? "none"}`,
     `**Players:** ${game.getRegisteredPlayerCount()} registered (RED ${red}, BLUE ${blue}, UNDECIDED ${undecided})`,
     `**Team picking:** ${game.teamsDecidedBy ?? session?.state ?? "not finalised"} | playable teams: ${game.hasFinalizedPlayableTeams() ? "yes" : "no"}`,
     `**Captains:** RED ${captainRed ? "assigned" : "missing"}, BLUE ${captainBlue ? "assigned" : "missing"}`,
