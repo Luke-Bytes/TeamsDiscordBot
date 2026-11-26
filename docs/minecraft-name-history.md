@@ -31,7 +31,7 @@ The two published schema examples and access/attribution rules were independentl
 
 Direct, small public sample requests from the development workspace confirmed HTTP 200 for MCProfiles (Notch UUID; dashed data.uuid and observedAt history) and Bisai (jeb_ UUID; paginated names with occurrence, first_seen and nullable last_seen). Bisai's OpenAPI JSON also returned HTTP 200. A subsequent Bisai sample reported x-credits-limit=1200, x-credits-remaining and x-credits-reset; the authenticated quota and shared-IP reset-window allowance were not established. [Terms](https://mc-api.bisai.dev/terms) permit ordinary anonymous use, but describe individual-user IPs as intended; the bot conservatively requires a key. [Privacy](https://mc-api.bisai.dev/privacy) provides removal/objection handling. MCProfiles omits privacy-suppressed profiles; silent absence cannot distinguish removal from an unknown account.
 
-MCProfiles is enabled without credentials. Supply an authorised key for the other providers. Set `MC_NAME_HISTORY_MCPROFILES_ENABLED=false`, `MC_NAME_HISTORY_LABY_ENABLED=false`, `MC_NAME_HISTORY_WINSTREAK_ENABLED=false` or `MC_NAME_HISTORY_BISAI_ENABLED=false` to disable individually. Missing credentials are normal and do not prevent startup.
+MCProfiles is always queried for non-suppressed accounts without credentials. The other providers are automatically used when their authorised credential is non-empty; remove the credential to stop using that provider. Missing credentials are normal and do not prevent startup. The optional UUID suppression list below is independent of provider configuration.
 
 ### Investigated but not implemented
 

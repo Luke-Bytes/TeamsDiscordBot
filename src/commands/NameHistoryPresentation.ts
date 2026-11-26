@@ -6,7 +6,7 @@ const statusLabels = {
   success: "responded", noHistory: "no records", notFound: "not found",
   unavailable: "unavailable", rateLimited: "rate limited", timeout: "timed out",
   invalidResponse: "invalid response", uuidMismatch: "identity mismatch",
-  authenticationRequired: "authentication required", disabled: "disabled",
+  authenticationRequired: "authentication required",
   notConfigured: "not configured", withheld: "withheld",
 };
 
@@ -41,7 +41,7 @@ function historyLine(name: HistoricalName, current: string): string {
 
 export function historyProviderSummary(result: NameHistoryResult): string {
   const responded = result.providers.filter((p) => p.status === "success" || p.status === "noHistory").length;
-  const configured = result.providers.filter((p) => p.status !== "disabled" && p.status !== "notConfigured").length;
+  const configured = result.providers.filter((p) => p.status !== "notConfigured").length;
   return `Providers responding: ${responded}/${configured} configured` +
     (result.providers.length ? "\n" + result.providers.map((p) =>
       `${providerLabel(p.provider, result.currentUsername ?? "")}: ${statusLabels[p.status]}${p.cached ? " (cached)" : ""}${p.archived ? " (archive)" : ""}${p.stale ? " (stale)" : ""}${p.limited ? " (limited)" : ""}`

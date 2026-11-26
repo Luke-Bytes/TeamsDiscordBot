@@ -75,23 +75,36 @@ test("name history invalid dates, malformed data, mismatches and withheld rows a
   assertEqual(mergeNameHistory("Current", [hidden, partial]).length, 1);
 });
 
+// Advance between fixtures so provider rate windows never leak across tests.
+let offlineClockOffset = 0;
+
+function mockHistoryFetch(handler: typeof fetch): void {
+  globalThis.fetch = async (url, init) => {
+    const target = String(url);
+    if (target.startsWith("https://mcprofiles.me/api/player/")) {
+      return json({ kind: "profile", data: { uuid: target.split("/").pop(), usernameHistory: [] } });
+    }
+    return handler(url, init);
+  };
+}
+
 async function offline(run: () => Promise<void>): Promise<void> {
   const fetch = globalThis.fetch;
   const lookup = MojangAPI.lookupUsername;
   const reverse = MojangAPI.uuidToUsername;
   const database = DatabaseNameHistory.lookup;
-  const keys = ["LABY_API_TOKEN", "WINSTREAK_API_KEY", "MC_NAME_HISTORY_LABY_ENABLED", "MC_NAME_HISTORY_WINSTREAK_ENABLED", "MC_NAME_HISTORY_SUPPRESSED_UUIDS", "MC_NAME_HISTORY_MCPROFILES_ENABLED", "MC_NAME_HISTORY_BISAI_ENABLED", "BISAI_API_KEY"];
+  const keys = ["LABY_API_TOKEN", "WINSTREAK_API_KEY", "BISAI_API_KEY", "MC_NAME_HISTORY_SUPPRESSED_UUIDS"];
   const original = keys.map((key) => process.env[key]);
   const now = Date.now;
   try {
     MinecraftNameHistoryAPI.invalidate();
     for (const key of keys) delete process.env[key];
-    process.env.MC_NAME_HISTORY_MCPROFILES_ENABLED = "false";
-    process.env.MC_NAME_HISTORY_BISAI_ENABLED = "false";
+    const offset = (offlineClockOffset += 1_000_000);
+    Date.now = () => now() + offset;
     MojangAPI.lookupUsername = async () => ({ status: "found", uuid });
     MojangAPI.uuidToUsername = async () => "Current";
     DatabaseNameHistory.lookup = async () => ({ history: providerResult("database", "noHistory"), playerRecords: [] });
-    globalThis.fetch = async () => { throw new Error("Unexpected external request"); };
+    mockHistoryFetch(async () => { throw new Error("Unexpected credentialed provider request"); });
     await run();
   } finally {
     globalThis.fetch = fetch;
@@ -113,7 +126,7 @@ function json(value: unknown, status = 200, headers: Record<string, string> = {}
 
 test("name history resolves current ownership, handles reassignment and skips unconfigured providers", async () => offline(async () => {
   let requests = 0;
-  globalThis.fetch = async () => { requests++; throw new Error("Unexpected provider"); };
+  mockHistoryFetch(async () => { requests++; throw new Error("Unexpected credentialed provider"); });
   assertEqual((await MinecraftNameHistoryAPI.lookup("not valid")).status, "invalid");
   MojangAPI.lookupUsername = async () => ({ status: "notFound" });
   assertEqual((await MinecraftNameHistoryAPI.lookup("Missing")).status, "notFound");
@@ -134,14 +147,15 @@ test("name history runs all configured providers, coalesces requests and respect
   process.env.LABY_API_TOKEN = "test-laby";
   process.env.WINSTREAK_API_KEY = "test-winstreak";
   const calls: string[] = [];
-  globalThis.fetch = async (url, init) => {
+  mockHistoryFetch(async (url, init) => {
     const target = String(url);
     calls.push(target);
     assert(target.includes(uuid), "Only resolved UUID may be queried");
     assertEqual(init?.redirect, "error");
     assert(!!init?.signal, "Provider requests must be abortable");
+    assertEqual(new Headers(init?.headers).get("Authorization"), target.includes("laby.net") ? "Bearer test-laby" : "Bearer test-winstreak");
     return target.includes("laby.net") ? json(labyRows) : json(winstreakRows);
-  };
+  });
   const [one, two] = await Promise.all([MinecraftNameHistoryAPI.lookupByUUID(uuid), MinecraftNameHistoryAPI.lookupByUUID(uuid)]);
   assertEqual(calls.length, 2);
   assertEqual(one.names.length, two.names.length);
@@ -166,10 +180,10 @@ test("name history reports HTTP failures separately, retains current name and ob
   process.env.LABY_API_TOKEN = "test-laby";
   process.env.WINSTREAK_API_KEY = "test-winstreak";
   let count = 0;
-  globalThis.fetch = async (url) => {
+  mockHistoryFetch(async (url) => {
     count++;
     return String(url).includes("laby.net") ? json({}, 429, { "Retry-After": "60" }) : json({}, 403);
-  };
+  });
   const result = await MinecraftNameHistoryAPI.lookupByUUID(other);
   assertEqual(result.names.length, 1);
   assert(result.partial, "Failures must be disclosed");
@@ -178,7 +192,7 @@ test("name history reports HTTP failures separately, retains current name and ob
   await MinecraftNameHistoryAPI.lookupByUUID(other);
   assertEqual(count, 2);
   Date.now = () => time + 151_000;
-  globalThis.fetch = async (url) => String(url).includes("laby.net") ? json({}, 404) : json({}, 503);
+  mockHistoryFetch(async (url) => String(url).includes("laby.net") ? json({}, 404) : json({}, 503));
   const after = await MinecraftNameHistoryAPI.lookupByUUID(other);
   assertEqual(after.providers[0].status, "notFound");
   assertEqual(after.providers[1].status, "unavailable");
@@ -191,7 +205,7 @@ test("name history handles abort and timeout independently of a successful provi
   process.env.LABY_API_TOKEN = "test-laby";
   process.env.WINSTREAK_API_KEY = "test-winstreak";
   let aborted = false;
-  globalThis.fetch = async (url, init) => {
+  mockHistoryFetch(async (url, init) => {
     if (String(url).includes("winstreak")) return json(winstreakRows);
     return new Promise<Response>((_resolve, reject) => {
       init?.signal?.addEventListener("abort", () => {
@@ -199,7 +213,7 @@ test("name history handles abort and timeout independently of a successful provi
         reject(new Error("Aborted"));
       }, { once: true });
     });
-  };
+  });
   const result = await MinecraftNameHistoryAPI.lookupByUUID(uuid);
   assert(aborted, "Timed out fetch must actually abort");
   assertEqual(result.providers[0].status, "timeout");
@@ -265,7 +279,7 @@ test("database name history merges UUID-linked rows, isolates player-only aliase
       process.env.LABY_API_TOKEN = "test";
       const now = Date.now();
       Date.now = () => now + 400_000;
-      globalThis.fetch = async () => json(labyRows);
+      mockHistoryFetch(async () => json(labyRows));
       const ordinary = await MinecraftNameHistoryAPI.lookupByUUID(uuid, { guildId: "guild-1" });
       assertEqual(gameQueries, 0);
       assertEqual(ordinary.localPlayerNames?.length, 0);
@@ -400,8 +414,9 @@ test("name history Bisai validates paging and retains separate observed usage pe
 });
 
 test("name history default public provider and keyed Bisai isolate credentials", async () => offline(async () => {
-  delete process.env.MC_NAME_HISTORY_MCPROFILES_ENABLED;
-  delete process.env.MC_NAME_HISTORY_BISAI_ENABLED;
+  process.env.LABY_API_TOKEN = "";
+  process.env.WINSTREAK_API_KEY = "   ";
+  process.env.BISAI_API_KEY = "   ";
   const calls: string[] = [];
   globalThis.fetch = async (url, init) => {
     const target = String(url);
@@ -417,6 +432,8 @@ test("name history default public provider and keyed Bisai isolate credentials",
     return json(bisai);
   };
   const initial = await MinecraftNameHistoryAPI.lookupByUUID(uuid);
+  assertEqual(initial.providers[0].status, "notConfigured");
+  assertEqual(initial.providers[1].status, "notConfigured");
   assertEqual(initial.providers[2].status, "success");
   assertEqual(initial.providers[3].status, "notConfigured");
   assertEqual(calls.length, 1);
@@ -425,6 +442,15 @@ test("name history default public provider and keyed Bisai isolate credentials",
   assertEqual(result.providers[3].status, "success");
   assertEqual(calls.length, 2);
   assertEqual(result.names.find((n) => n.normalizedName === "old_name")?.providers.length, 2);
+  delete process.env.BISAI_API_KEY;
+  const removed = await MinecraftNameHistoryAPI.lookupByUUID(uuid);
+  assertEqual(removed.providers[3].status, "notConfigured");
+  assertEqual(calls.length, 2);
+  process.env.MC_NAME_HISTORY_SUPPRESSED_UUIDS = uuid;
+  const suppressed = await MinecraftNameHistoryAPI.lookupByUUID(uuid);
+  assert(suppressed.suppressed, "Suppression also covers the public provider");
+  assertEqual(suppressed.names.length, 1);
+  assertEqual(calls.length, 2);
 }));
 
 test("name history pages fit embed limits and include an explicit overflow attachment", () => {

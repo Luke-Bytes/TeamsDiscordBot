@@ -18,10 +18,6 @@ function suppressed(uuid: string): boolean {
   return (process.env.MC_NAME_HISTORY_SUPPRESSED_UUIDS ?? "").split(/[\s,]+/).some((value) => normalizeHistoryUUID(value) === uuid);
 }
 
-function enabled(adapter: HistoryAdapter): boolean {
-  return !/^(?:false|0|off)$/i.test(process.env[`MC_NAME_HISTORY_${adapter.id.toUpperCase()}_ENABLED`]?.trim() ?? "");
-}
-
 // Mojang has bounded, retried requests of its own. Leave a separate provider
 // window and stop scheduling further work when the identity budget expires.
 async function within<T>(promise: Promise<T>, deadline: number, fallback: T): Promise<T> {
@@ -185,7 +181,6 @@ export class MinecraftNameHistoryAPI {
 
   private static async query(adapter: HistoryAdapter, uuid: string): Promise<ProviderHistory> {
     const id = adapter.id;
-    if (!enabled(adapter)) return providerResult(id, "disabled");
     const token = adapter.credential ? process.env[adapter.credential]?.trim() : undefined;
     if (adapter.credential && !token) return providerResult(id, "notConfigured");
     if (this.isSuppressed(uuid)) return providerResult(id, "withheld");

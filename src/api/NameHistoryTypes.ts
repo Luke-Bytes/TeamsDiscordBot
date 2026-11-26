@@ -9,7 +9,7 @@ export interface NameHistoryScope {
 export type ProviderStatus =
   | "success" | "noHistory" | "notFound" | "unavailable" | "rateLimited"
   | "timeout" | "invalidResponse" | "uuidMismatch" | "authenticationRequired"
-  | "disabled" | "notConfigured" | "withheld";
+  | "notConfigured" | "withheld";
 
 export type HistoryDateKind =
   | "accurateChange" | "estimatedChange" | "firstObserved" | "lastObserved"
