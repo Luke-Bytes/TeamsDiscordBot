@@ -10,7 +10,7 @@ Next choose `/team generate method:random|elo|balance|draft|snake` and finish th
 
 ## Announce a match: `/announce start`
 
-Use `/announce start` with required `when`, `modifiers`, `banned_classes`, `map`, `organiser` and `host`; `doubleelo` is optional (`yes`/`no`). The date must parse as a future time. A live announcement or an existing proposal blocks another proposal; an active season is required. Double Elo is disabled in Relaxed seasons regardless of the requested value.
+Use `/announce start` with required `when`, `modifiers`, `banned_classes`, `map`, `organiser` and `host`; `doubleelo` is optional (`yes`/`no`). The optional `scenario` selects a Friendly Wars scenario; ordinary games leave it unset. For scenario games, follow the scenario's scheduled preparation and confirmation controls rather than manually overriding them. The date must parse as a future time. A live announcement or an existing proposal blocks another proposal; an active season is required. Double Elo is disabled in Relaxed seasons regardless of the requested value.
 The command prepares a **preview**, not a published game. Review every setting before confirming.
 
 ## Announcement confirmation and edits

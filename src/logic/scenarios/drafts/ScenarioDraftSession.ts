@@ -11,6 +11,8 @@ import TeamCommand from "../../../commands/TeamCommand";
 import { TeamPickingSession, TeamPickingSessionState } from "../../teams/TeamPickingSession";
 import type { ScenarioValue } from "../ScenarioTypes";
 import { maskedCards, rouletteOffer, snakeTurn, DraftTeam } from "./ScenarioDraftRules";
+import { buildMaskedHints, MYSTERY_HINT } from "./MaskedDraftHints";
+import { loadMaskedStatistics } from "./MaskedDraftStatistics";
 
 export type ScenarioDraftMode = "masked" | "roulette";
 export interface ScenarioDraftProgress {
@@ -22,6 +24,8 @@ export interface ScenarioDraftProgress {
   blue: string[];
   remaining: string[];
   cards: Record<string, string>;
+  /** Frozen display descriptions; optional for legacy recovery snapshots. */
+  cardHints?: Record<string, string>;
   hand: string[];
   pickIndex: number;
   rerolls: Record<DraftTeam, boolean>;
@@ -78,23 +82,32 @@ export class ScenarioDraftSession extends TeamPickingSession {
   private cardLabel(id: string): string {
     const card = this.name(id);
     if (this.mode === "roulette") return card;
-    const player = this.game.getPlayers().find((p) => p.discordSnowflake === id);
-    const band = Math.floor((player?.elo ?? 1000) / 300) * 300;
-    const count = this.game.getPlayersOfTeam("UNDECIDED").filter((p) =>
-      Math.floor((p.elo ?? 1000) / 300) * 300 === band).length;
-    // Hide unique and two-player bands; a hint must never reveal a unique identity.
-    return count >= 3 ? `${card} — Elo band ${band}-${band + 299}` : `${card} — Mystery card`;
+    return `${card} - ${this.requireProgress().cardHints?.[card] ?? MYSTERY_HINT}`;
   }
   private summaryEmbed(finished = false) {
     const progress = this.requireProgress();
-    const labels = (ids: string[]) => ids.map((id) => this.name(id)).join("\n").slice(0, 1024) || "None";
+    const labels = (ids: string[], showClues = false) => {
+      const lines = ids.map((id) => showClues && this.mode === "masked" &&
+        id !== progress.redCaptain && id !== progress.blueCaptain
+        ? this.cardLabel(id) : this.name(id));
+      if (this.mode === "roulette") return lines.join("\n").slice(0, 1024) || "None";
+      let result = "";
+      for (let i = 0; i < lines.length; i++) {
+        const next = result ? `${result}\n${lines[i]}` : lines[i];
+        if (next.length > 990) return `${result}\n+ ${lines.length - i} more`;
+        result = next;
+      }
+      return result || "None";
+    };
     return new EmbedBuilder()
       .setTitle(this.mode === "masked" ? "🎭 The Masked Draft" : "🎲 Draft Roulette")
       .setDescription(finished ? "All selections made. Organiser confirmation required before team roles change." :
-        "Snake draft. Only the active captain may select. A timed-out pick comes from the displayed offer.")
+        this.mode === "masked"
+          ? "Snake draft. Choose by match history, teammate records and map results, not Elo. Some cards are a complete mystery. Only the active captain can pick; identities stay hidden until confirmation."
+          : "Snake draft. Only the active captain may select. A timed-out pick comes from the displayed offer.")
       .addFields(
-        { name: `🔴 RED (${progress.red.length + 1})`, value: labels([progress.redCaptain, ...progress.red]), inline: true },
-        { name: `🔵 BLUE (${progress.blue.length + 1})`, value: labels([progress.blueCaptain, ...progress.blue]), inline: true },
+        { name: `🔴 RED (${progress.red.length + 1})`, value: labels([progress.redCaptain, ...progress.red], true), inline: true },
+        { name: `🔵 BLUE (${progress.blue.length + 1})`, value: labels([progress.blueCaptain, ...progress.blue], true), inline: true },
         { name: `Unpicked (${progress.remaining.length})`, value: labels(progress.remaining), inline: false },
         { name: "Rerolls", value: this.mode === "roulette"
           ? `RED ${progress.rerolls.RED ? "used" : "1"} · BLUE ${progress.rerolls.BLUE ? "used" : "1"}`
@@ -124,7 +137,7 @@ export class ScenarioDraftSession extends TeamPickingSession {
         .setLabel("Use one reroll").setStyle(ButtonStyle.Primary));
     const deadline = Math.floor(Date.parse(progress.deadline) / 1000);
     return {
-      content: `**${owner} captain's turn** (${progress.pickIndex + 1}). ${this.mode === "roulette" ? "Choose from these offered players only." : "Cards conceal registered identities until confirmation."}\nPick deadline: <t:${deadline}:R>. ${progress.remaining.length} undrafted remain.`,
+      content: `**${owner} captain's turn** (${progress.pickIndex + 1}). ${this.mode === "roulette" ? "Choose from these offered players only." : "Clues use recorded matches from the past year. Captain clues refer to today's captains as past teammates, not past team colours. Several cards can share the same clues. Past results aren't guarantees."}\nPick deadline: <t:${deadline}:R>. ${progress.remaining.length} undrafted remain.`,
       components: [
         new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu),
         ...(buttons.components.length ? [buttons] : []),
@@ -135,20 +148,30 @@ export class ScenarioDraftSession extends TeamPickingSession {
     if (!Channels.teamPicking?.isSendable()) throw new Error("Team picking channel is unavailable.");
     const red = this.game.getCaptainOfTeam("RED")?.discordSnowflake;
     const blue = this.game.getCaptainOfTeam("BLUE")?.discordSnowflake;
-    const remaining = this.game.getPlayersOfTeam("UNDECIDED").map((p) => p.discordSnowflake).sort();
+    const candidates = this.game.getPlayersOfTeam("UNDECIDED");
+    const remaining = candidates.map((p) => p.discordSnowflake).sort();
     if (!red || !blue || red === blue || remaining.length < 2 || remaining.length % 2 !== 0)
       throw new Error("Two valid captains and an even nonempty undrafted pool are required.");
     if (this.game.getPlayers().length !== remaining.length + 2)
       throw new Error("Existing drafted team members are incompatible with a new scenario draft.");
     const first: DraftTeam = Math.random() < 0.5 ? "RED" : "BLUE";
+    const cards = this.mode === "masked" ? maskedCards(remaining) : {};
+    const cardHints = this.mode === "masked"
+      ? buildMaskedHints(cards, remaining.length >= 3
+        ? await loadMaskedStatistics(this.game.getPlayers(), { RED: red, BLUE: blue }, Date.now(), this.game.settings.map)
+        : new Map())
+      : undefined;
     this.progress = {
       mode: this.mode, first, redCaptain: red, blueCaptain: blue,
-      red: [], blue: [], remaining,
-      cards: this.mode === "masked" ? maskedCards(remaining) : {},
+      // Never display masked cards in underlying Discord ID order.
+      red: [], blue: [], remaining: this.mode === "masked" ? Object.values(cards) : remaining,
+      cards, ...(cardHints ? { cardHints } : {}),
       hand: [], pickIndex: 0, rerolls: { RED: false, BLUE: false },
       deadline: new Date(Date.now() + 120_000).toISOString(), finished: false,
     };
     this.progress.hand = this.mode === "roulette" ? rouletteOffer(remaining) : [];
+    // A statistics read must not allow a stale roster or captain to publish.
+    if (this.mode === "masked") this.requireProgress();
     this.save();
     this.embedMessage = await Channels.teamPicking.send({ embeds: [this.summaryEmbed()] }) as Message<boolean>;
     await Channels.teamPicking.send(`**${this.mode === "masked" ? "Masked Draft" : "Draft Roulette"} starts!** ${first} has the first pick. Captains have two minutes for the first pick and one minute thereafter. Organiser confirmation and role sync occur only after all selections.`);
@@ -158,7 +181,10 @@ export class ScenarioDraftSession extends TeamPickingSession {
   private async publishTurn(): Promise<void> {
     if (this.state !== "inProgress" || !this.progress || this.progress.finished) return;
     this.page = 0;
-    this.turnMessage = await Channels.teamPicking.send(this.turnControls()) as Message<boolean>;
+    const controls = this.turnControls();
+    const side = snakeTurn(this.progress.pickIndex, this.progress.first);
+    const captain = side === "RED" ? this.progress.redCaptain : this.progress.blueCaptain;
+    this.turnMessage = await Channels.teamPicking.send({ ...controls, content: `<@${captain}> ${controls.content}`, allowedMentions: { users: [captain] } }) as Message<boolean>;
     this.armTimeout();
   }
   private armTimeout(): void {
@@ -172,7 +198,7 @@ export class ScenarioDraftSession extends TeamPickingSession {
           const p = this.requireProgress();
           const offered = this.mode === "roulette" ? p.hand : p.remaining;
           if (!offered.length) throw new Error("No legal auto-pick candidates.");
-          // Auto-pick is constrained to the same fixed hand shown to the captain.
+          // Roulette uses its fixed hand; masked uses the frozen shuffled deck.
           await this.pick(offered[0], true);
         } catch (error) {
           this.game.scenarios.needsReview(`Draft timeout could not advance: ${error instanceof Error ? error.message : String(error)}`);
@@ -202,7 +228,7 @@ export class ScenarioDraftSession extends TeamPickingSession {
     } else { p.finished = true; p.hand = []; }
     this.save();
     if (this.embedMessage) await this.embedMessage.edit({ embeds: [this.summaryEmbed(p.finished)] });
-    await Channels.teamPicking.send(`${automatic ? "⏰ Time expired — " : ""}**${this.name(id)}** drafted to **${team}**.`);
+    await Channels.teamPicking.send(`${automatic ? "⏰ Time expired - " : ""}**${this.mode === "masked" ? this.cardLabel(id) : this.name(id)}** drafted to **${team}**.`);
     if (p.finished) {
       this.finalizeMessage = await Channels.teamPicking.send({
         content: "All cards selected. Organiser: confirm teams or cancel the draft.",

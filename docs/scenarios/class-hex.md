@@ -1,4 +1,4 @@
-# Class Hex — Cursed Classes
+# Cursed Classes
 
 **Status:** Design proposal, not implemented. **Type:** gameplay restriction overlay **after teams are final**, before the match starts. Read [shared rules](./shared-design.md).
 
@@ -6,7 +6,7 @@
 
 The bot randomly draws **three awkward, off-meta Annihilation classes**. Each captain then gets to inflict those three classes on **three different enemy players**. They can target the opposing team's strongest rusher, best defender or even the captain to force unusual strategies.
 
-The reveal should be funny and tactical, not a claim that the selected players themselves are bad. This is the user's proposed scenario sometimes called **Cursed Classes** or **Class Hex**.
+The reveal should be funny and tactical, not a claim that the selected players themselves are bad. The internal scenario ID remains `class-hex`.
 
 ## Exact proposed v1 rules
 
@@ -49,7 +49,7 @@ The captain chooses **which enemy gets which class**; they do not choose new cla
 
 ## Discord interaction sketch
 
-- Organiser preview: "Class Hex selected. Eligible pool: N classes. Draw: A, B, C. Check current bans and class access. [Confirm Draw] [Cancel]."
+- Organiser preview: "Cursed Classes selected. Eligible pool: N classes. Draw: A, B, C. Check current bans and class access. [Confirm Draw] [Cancel]."
 - Private captain editor: three rows, one per class; for each row select an eligible **opposing-team player**. Already-selected targets disappear or become disabled. **Review → Submit**.
 - Private player notice: after final reveal, each affected player receives their required class and a clear reminder that this is a voluntary community match rule; provide a way to flag **cannot access this class** before game start.
 - Public reveal, only when both captains finish: "RED curses BLUE: Alex → Civilian; Blake → Farmer; Casey → Tinkerer. BLUE curses RED: Dana → Farmer; Emi → Civilian; Fin → Tinkerer."
@@ -58,7 +58,7 @@ The captain chooses **which enemy gets which class**; they do not choose new cla
 
 ## Interactions with team formats
 
-Class Hex is a **post-team overlay** and can follow ordinary teams, Mystery Dungeon, Partners in Crime, People's Captains + draft, Masked Draft or Draft Roulette. It **must not** run before anonymous drafting finishes; revealing target names while a Masked Draft is live would defeat the mask.
+Cursed Classes is a **post-team overlay** and can follow ordinary teams, Mystery Dungeon, Partners in Crime, People's Captains + draft, Masked Draft or Draft Roulette. It **must not** run before anonymous drafting finishes; revealing target names while a Masked Draft is live would defeat the mask.
 
 If another setting already forces a player onto a conflicting class or bans their assigned class, the scenario must be rejected or adjusted **before assignments are locked**. A class restriction applying to all members of an enemy team is *not* the same as a captain targeting three individual players; don't implement this via existing class-ban modifiers alone.
 
@@ -71,7 +71,7 @@ If another setting already forces a player onto a conflicting class or bans thei
 - **Team has fewer than three players:** do not activate this scenario, even if a low-player ordinary match could otherwise proceed.
 - **Changing classes accidentally:** the rules should say what to do if Shotbow temporarily changes class or doesn't allow an instant switch. Suggested policy: restore the assigned class as soon as legally available; host decides disputes, without bot-invented automated penalties.
 - **Strategic targeting / player experience:** targeting high-skilled players is explicitly part of the game. However, repeated personalised harassment, taunts or coercion are not. Advertise the rule **before registration** so players understand they may be targeted.
-- **Ratings:** recommend **unrated/exhibition** by default because the match artificially handicaps six targeted players. This requires explicit implementation; the current Elo system does **not** infer unrated status from Class Hex.
+- **Ratings:** recommend **unrated/exhibition** by default because the match artificially handicaps six targeted players. This requires explicit implementation; the current Elo system does **not** infer unrated status from Cursed Classes.
 
 ## Acceptance criteria
 

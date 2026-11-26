@@ -11,6 +11,11 @@ import {
 import { AI_TOOLS, permittedAiTools } from "../../src/ai/AiTools";
 import { answerAiQuestion } from "../../src/ai/AiAssistant";
 import { CommandHandler } from "../../src/commands/CommandHandler";
+import { scenarioMetadata } from "../../src/logic/scenarios/ScenarioMetadata";
+import { buildNaviMessages } from "../../src/ai/AiPrompt";
+import { GameInstance } from "../../src/database/GameInstance";
+import { getCurrentGameStateSnapshot } from "../../src/ai/GameReadSnapshot";
+import { getGameOrganiserRoster } from "../../src/ai/GameOrganiserReads";
 
 const root = process.cwd();
 const read = (path: string) => readFileSync(resolve(root, path), "utf8");
@@ -602,6 +607,121 @@ test("Forty-six role-aware offline question probes retrieve relevant paragraphs"
         "Document-only probe cannot verify live facts"
       );
     }
+  }
+});
+
+test("Scenario knowledge matches the shared guide and excludes historical designs", () => {
+  const chunks = buildApprovedKnowledge(root);
+  for (const scenario of Object.values(scenarioMetadata)) {
+    assert(
+      chunks.some((c) => c.source === "docs/ai/player-scenarios.md" &&
+        c.heading === scenario.name && c.content.includes(scenario.description)),
+      `Missing or stale scenario description: ${scenario.name}`
+    );
+  }
+  assert(!chunks.some((c) => c.source.startsWith("docs/scenarios/")), "Design proposals must not be indexed");
+  const current = chunks.filter((c) => c.topic === "fw-scenario").map((c) => c.content).join("\n");
+  assert(!/Class Hex|\/scenario\b|Scout Report|Unrated play is recommended/.test(current), "Obsolete scenario guidance");
+});
+
+test("Natural scenario questions retrieve the current rules and safe next steps", () => {
+  const chunks = buildApprovedKnowledge(root);
+  const cases: [string, string, string][] = [
+    ["What are Friendly Wars scenarios?", "Friendly Wars scenarios", "/game scenario guide"],
+    ["How do I see all the scenarios?", "Friendly Wars scenarios", "private dropdown"],
+    ["How do I join a scenario game?", "Friendly Wars scenarios", "/register"],
+    ["Do I need to do anything special when registering for a scenario?", "Friendly Wars scenarios", "Register normally"],
+    ["I accidentally closed my scenario prompt. How do I get it back?", "Friendly Wars scenarios", "/game scenario open"],
+    ["The bot hasn't sent me a DM. What should I do?", "Friendly Wars scenarios", "DM delivery is not guaranteed"],
+    ["What scenario are we playing?", "Friendly Wars scenarios", "Check the current announcement"],
+    ["Can an organiser resend my scenario interaction?", "Scenario status", "user:@player"],
+    ["What is the personality test?", "Mystery Dungeon", "five private"],
+    ["Do I have to answer the Mystery Dungeon questions?", "Mystery Dungeon", "optionally"],
+    ["What happens if I don't finish the quiz?", "Mystery Dungeon", "you still play"],
+    ["Can other players see my personality answers?", "Mystery Dungeon", "nobody else"],
+    ["How are the Mystery Dungeon teams decided?", "Mystery Dungeon", "personality variety"],
+    ["How are captains chosen in The People's Captains?", "The People's Captains", "Every registered player"],
+    ["How do I vote in the captain election?", "The People's Captains", "Pick one name"],
+    ["Can I vote for myself?", "The People's Captains", "never themselves"],
+    ["Why do I have different voting options from my friend?", "The People's Captains", "exactly three ballots"],
+    ["What happens if not enough people vote?", "The People's Captains", "20%"],
+    ["How do I choose my partner?", "Partners in Crime", "one other registered player"],
+    ["Does my partner need to choose me back?", "Partners in Crime", "Both players must pick each other"],
+    ["Will someone know if I picked them?", "Partners in Crime", "Nobody is notified"],
+    ["Are we guaranteed to be on the same team?", "Partners in Crime", "not guaranteed"],
+    ["Why can't I see who I'm picking?", "The Masked Draft", "anonymous cards"],
+    ["When are player identities revealed?", "The Masked Draft", "after the organiser confirms"],
+    ["What happens if a captain runs out of time in Masked Draft?", "The Masked Draft", "two minutes"],
+    ["Why can I only pick from three players?", "Draft Roulette", "up to three"],
+    ["How many rerolls do I get?", "Draft Roulette", "one reroll"],
+    ["What happens if I miss my turn in Draft Roulette?", "Draft Roulette", "current hand"],
+    ["What powers can captains use in Captain's Wildcards?", "Captain's Wildcards", "Switcheroo"],
+    ["How does Veto work?", "Captain's Wildcards", "next pick only"],
+    ["How does Switcheroo work?", "Captain's Wildcards", "returns to the pool"],
+    ["Do I have to use my wildcard?", "Captain's Wildcards", "ignore it"],
+    ["Does using a wildcard stop the draft timer?", "Captain's Wildcards", "keeps ticking"],
+    ["What are Cursed Classes?", "Cursed Classes", "same three distinct classes"],
+    ["How are cursed classes chosen?", "Cursed Classes", "approved eligible pool"],
+    ["Do I have to use my assigned class all game?", "Cursed Classes", "whole game"],
+    ["Can I change classes after dying in Cursed Classes?", "Cursed Classes", "after death"],
+    ["What if I don't own my assigned class?", "Cursed Classes", "/game scenario report-class"],
+    ["How do captains assign curses?", "Cursed Classes", "different enemy player"],
+    ["Can the bot enforce my assigned class in Minecraft?", "Cursed Classes", "cannot enforce"],
+    ["How do I announce a scenario game?", "Announce and prepare", "/announce start"],
+    ["Why hasn't the scenario started?", "Scenario recovery", "scheduled time"],
+    ["How do I see who still needs to respond to the scenario?", "Scenario status", "response and delivery progress"],
+    ["How do I resend a private prompt?", "Scenario status", "user:@player"],
+    ["Why can't I start the game with a scenario?", "Scenario game start", "start blocker"],
+    ["How do I cancel a scenario without cancelling the game?", "Scenario recovery", "/game scenario cancel"],
+    ["What should I do if the bot restarts during a scenario?", "Scenario recovery", "/game scenario resume"],
+  ];
+  for (const [question, heading, evidence] of cases) {
+    const found = retrieveApprovedKnowledge(chunks, question, false);
+    assert(found.some((c) => c.heading.startsWith(heading) && c.content.includes(evidence)),
+      `Missing evidence for "${question}": ${found.map((c) => c.heading).join(" | ")}`);
+  }
+  for (const question of ["How do I register?", "How do I vote for MVP?", "How do captains ban classes?", "What is my current Elo?"]) {
+    assert(!retrieveApprovedKnowledge(chunks, question, false).some((c) => c.topic === "fw-scenario"), `Unrelated scenario result: ${question}`);
+  }
+});
+
+test("Existing live AI projections never include private scenario payloads", () => {
+  const game = GameInstance.getInstance();
+  try {
+    for (const [id, keys] of [
+      ["mystery-dungeon", ["quizzes", "types"]],
+      ["peoples-captains", ["ballots", "votes"]],
+      ["partners-in-crime", ["preferences"]],
+      ["masked-draft", ["draft"]],
+      ["captains-wildcards", ["wildcards"]],
+      ["class-hex", ["hexEditors"]],
+    ] as const) {
+      game.reset();
+      game.scenarios.configure(id);
+      game.announced = true;
+      game.scenarios.confirmAnnouncement();
+      for (const key of keys) game.scenarios.setData(key, { marker: "PRIVATE_SCENARIO_SENTINEL" });
+      assert(JSON.stringify(game.scenarios.snapshot()).includes("PRIVATE_SCENARIO_SENTINEL"), "Private fixture must exist");
+      for (const payload of [
+        getCurrentGameStateSnapshot("player"),
+        getCurrentGameStateSnapshot("organiser"),
+        getGameOrganiserRoster(),
+      ]) {
+        assert(!JSON.stringify(payload).includes("PRIVATE_SCENARIO_SENTINEL"), `Private scenario leaked: ${id}`);
+      }
+    }
+  } finally {
+    game.reset();
+  }
+});
+
+test("Navi scenario prompts distinguish private choices, live evidence and organiser actions", () => {
+  const question = "Who voted for me in The People's Captains?";
+  const found = retrieveApprovedKnowledge(buildApprovedKnowledge(root), question, false);
+  const messages = buildNaviMessages(question, false, found);
+  const instructions = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n");
+  for (const phrase of ["individual election votes", "unrevealed masked identities", "hidden personality types", "partner preferences", "unsubmitted wildcard choices", "unrevealed curses", "General rules do not establish live scenario state", "Organisers can resend, not answer for others", "Only discuss Elo when asked", "not em dashes"]) {
+    assert(instructions.includes(phrase), `Missing scenario prompt safeguard: ${phrase}`);
   }
 });
 

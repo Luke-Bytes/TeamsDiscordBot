@@ -5,7 +5,7 @@ import { DiscordUtil } from "../../../util/DiscordUtil";
 import { allocateScenarioTeams, ScenarioPair } from "../ScenarioTeamAllocation";
 import { choice, data, participantLabel, publishTeamProposal } from "../ScenarioGameplay";
 
-export interface Preference { target: string | null; reveal: boolean }
+export interface Preference { target: string | null; reveal: boolean; chosen?: boolean }
 type Preferences = Record<string, Preference>;
 function preferences(game: GameInstance): Preferences { return data<Preferences>(game, "preferences", {}); }
 export function mutualPairs(prefs: Preferences, eligible: readonly string[]): ScenarioPair[] {
@@ -19,7 +19,7 @@ function render(game: GameInstance, userId: string, customId: string): ScenarioP
   const p = preferences(game)[userId] ?? { target: null, reveal: false };
   const current = p.target ? participantLabel(game, p.target) : "No preference";
   return {
-    content: `🤝 **Partners in Crime**\nYour choice: **${current}**. Only mutual choices become pairs. Nobody is notified of one-sided preferences.\nBoth players must consent before a successful pair is named publicly. Public reveal: **${p.reveal ? "Yes" : "No"}**.\nEdit as often as you like before the cutoff; /game scenario open reopens this editor.`,
+    content: `🤝 **Partners in Crime**\n${p.chosen ? "Preference saved." : "Optional: choose a teammate or select No preference."} Your choice: **${current}**. Only mutual choices become pairs. Nobody is notified of one-sided preferences.\nBoth players must consent before a successful pair is named publicly. Public reveal: **${p.reveal ? "Yes" : "No"}**.\nEdit as often as you like before the cutoff; /game scenario open reopens this editor.`,
     components: [
       new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(
         new UserSelectMenuBuilder().setCustomId(customId)
@@ -47,13 +47,15 @@ export const partnersInCrime: ScenarioImplementation = {
     if (!game.getPlayers().some((p) => p.discordSnowflake === input))
       throw new Error("That player is not registered. Please choose a registered teammate.");
   },
+  isActionComplete: (game, action) => preferences(game)[action.ownerId]?.chosen === true,
   onActionSubmitted(game, action) {
     const prefs = preferences(game);
-    const current = prefs[action.ownerId] ?? { target: null, reveal: false };
+    const current: Preference = prefs[action.ownerId] ?? { target: null, reveal: false };
     const input = choice(action);
     if (input === "none") current.target = null;
     else if (input.startsWith("reveal:")) current.reveal = input === "reveal:yes";
     else current.target = input;
+    if (!input.startsWith("reveal:")) current.chosen = true;
     prefs[action.ownerId] = current;
     game.scenarios.setData("preferences", prefs as unknown as ScenarioValue);
   },

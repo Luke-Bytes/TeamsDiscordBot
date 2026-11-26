@@ -125,6 +125,8 @@ export default class CaptainCommand implements Command {
       await interaction.editReply(
         `Captains have been selected:\n🔵 Blue: **${escapeIgn(result.blue.ignUsed ?? "Unknown")}**\n🔴 Red: **${escapeIgn(result.red.ignUsed ?? "Unknown")}**`
       );
+      if (game.getLifecycleToken() === gameToken && game.scenarios.selectedId === "class-hex" && game.hasFinalizedPlayableTeams())
+        await game.scenarios.activateType("on_teams_finalized", interaction.guild);
       return;
     }
 
@@ -253,5 +255,9 @@ export default class CaptainCommand implements Command {
         "Discord role updates failed; captain assignment was not committed. Check roles before retrying.";
     }
     await interaction.editReply({ content: resultMessage });
+    if (resultMessage.startsWith("Successfully set captain") && game.getLifecycleToken() === gameToken &&
+        game.scenarios.selectedId === "class-hex" && game.hasFinalizedPlayableTeams() &&
+        game.getCaptainOfTeam("RED") && game.getCaptainOfTeam("BLUE"))
+      await game.scenarios.activateType("on_teams_finalized", interaction.guild);
   }
 }

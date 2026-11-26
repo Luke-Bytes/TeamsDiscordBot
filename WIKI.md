@@ -52,9 +52,11 @@ For users adding the bot to their server:
 Commands (excluding subcommands):
 
 `/announcement` `/igns` `/leaderboards` `/register` `/role` `/stats` `/team` `/season`
-`/captain` `/test` `/cleanup` `/scenario` `/registered` `/unregister`
+`/captain` `/test` `/cleanup` `/debug-scenario` `/registered` `/unregister`
 `/restart` `/player` `/winner` `/performance` `/mvp` `/game` `/missing`
 `/captainNominate` `/teamless` `/plan` `/massRegister` `/name` `/modcheck`
+
+Friendly Wars: `/game scenario guide` browses scenarios, and `/game scenario open` recovers your private action.
 
 ### Minecraft name history
 

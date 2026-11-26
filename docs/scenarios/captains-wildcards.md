@@ -16,7 +16,7 @@ This is about **draft-stage powers**, not altering Minecraft permissions, Elo, o
 4. An unused credit expires when the draft is finalised. A captain cannot spend it twice, transfer it or get it back from a stale click.
 5. After an action, the normal draft resumes. Teams remain equal-sized at completion and both captains retain their own team roles.
 
-## Power catalogue — suggested initial set
+## Power catalogue - suggested initial set
 
 ### A. Veto (before opponent's next pick)
 
@@ -50,7 +50,7 @@ A one-time extra hand redraw. Because [Draft Roulette](./draft-roulette.md) alre
 ## How this plays
 
 ```text
-SNAKE DRAFT — RED TO PICK
+SNAKE DRAFT - RED TO PICK
 RED wildcard: 1 available
 BLUE wildcard: spent (Veto)
 

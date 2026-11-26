@@ -33,6 +33,8 @@ import { MatchRecoveryGate } from "../logic/MatchRecoveryGate";
 import { ModifierSelector } from "../logic/ModifierSelector";
 import { SeasonService } from "../database/SeasonService";
 import { scenarioRegistry } from "../logic/scenarios/ScenarioRegistry";
+import { openScenarioButton } from "../logic/scenarios/ScenarioPromptDelivery";
+import { announcementScenarioEmbeds, publishScenarioInformation } from "../logic/scenarios/ScenarioAnnouncementInformation";
 import {
   GameChannelPreflight,
   formatGameChannelPreflight,
@@ -565,13 +567,14 @@ export default class AnnouncementCommand implements Command {
     }
 
     if (Channels.registration.isTextBased()) {
-      await Channels.registration.send(
-        "**A friendly wars game has been announced!** 🎉\n" +
+      const game = GameInstance.getInstance();
+      const scenario = game.scenarios.definition;
+      await Channels.registration.send({
+        content: "**A friendly wars game has been announced!** 🎉\n" +
           "Sign up by typing the `/register [MCID]` command in this chat. If you sign up but can't play then run `/unregister`." +
-          (GameInstance.getInstance().scenarios.selectedId
-            ? "\nIf you need to open or revisit a private scenario question, use `/game scenario open`."
-            : "")
-      );
+          (scenario ? `\n**${scenario.name}:** ${scenario.description}\nIf you have a private scenario action, use the button below or ` + "`/game scenario open`." : ""),
+        components: scenario ? [openScenarioButton(game)] : [],
+      });
     }
 
     const config = ConfigManager.getConfig();
@@ -584,6 +587,7 @@ export default class AnnouncementCommand implements Command {
     }
     await activateFeed(Channels.gameFeed, addRegisteredPlayersFeed);
     await activateFeed(Channels.gameFeed, addTeamsGameFeed);
+    await publishScenarioInformation(GameInstance.getInstance(), embed);
 
     await CurrentGameManager.getCurrentGame().announce();
     await GameInstance.getInstance().scenarios.onAnnounced(guild);
@@ -593,7 +597,7 @@ export default class AnnouncementCommand implements Command {
 
     if (this.announcementPreviewMessage) {
       await this.announcementPreviewMessage.edit({
-        embeds: [embed],
+        embeds: this.createGameAnnouncementEmbed(false).embeds,
         components: this.getEditComponents(true),
       });
     }
@@ -830,9 +834,8 @@ export default class AnnouncementCommand implements Command {
     }
 
     if (isConfirmed) {
-      const embed = this.createGameAnnouncementEmbed(false).embeds?.[0];
-      if (this.announcementMessage && embed) {
-        await this.announcementMessage.edit({ embeds: [embed] });
+      if (this.announcementMessage) {
+        await this.announcementMessage.edit({ embeds: this.createGameAnnouncementEmbed(false).embeds });
       }
     }
   }
@@ -1170,10 +1173,25 @@ export default class AnnouncementCommand implements Command {
     const registrationChannelId =
       ConfigManager.getConfig().channels.registration;
 
-    const doubleEloMessage = game.isDoubleElo
-      ? "\n\n**🌟 A special DOUBLE ELO game! 🌟**\n\n"
+    // Announcements describe rating eligibility, not the final attendance
+    // decision made when the game starts (the roster may still change).
+    const doubleElo =
+      game.isDoubleElo && !game.organiserNoElo && !game.isRelaxedSeason;
+    const attendanceRequirement = `requires ${GameInstance.MIN_ELO_PLAYER_COUNT}+ active players at game start`;
+    const eloValue = game.organiserNoElo
+      ? game.isRelaxedSeason
+        ? "**Disabled** (Organiser selected; Relaxed season)"
+        : "**Disabled** (Organiser selected)"
       : game.isRelaxedSeason
-        ? "\n\n**🎈 Relaxed season: this game is unranked and Double Elo is unavailable.**\n\n"
+        ? "**Disabled** (Relaxed season)"
+        : `**Enabled${doubleElo ? " — Double Elo" : ""}** (${attendanceRequirement})`;
+
+    // Recovery also recognises the Double Elo and Relaxed season markers
+    // in the description, so retain them for backwards compatibility.
+    const doubleEloMessage = game.isRelaxedSeason
+      ? "\n\n**🎈 Relaxed season: this game is unranked and Double Elo is unavailable.**\n\n"
+      : doubleElo
+        ? "\n\n**🌟 Double Elo planned, subject to the attendance requirement! 🌟**\n\n"
         : "";
 
     const sharedBans = Array.from(
@@ -1239,8 +1257,8 @@ export default class AnnouncementCommand implements Command {
           inline: true,
         },
         {
-          name: "🏅 **NO ELO**",
-          value: game.organiserNoElo ? "**Yes (organiser selected)**" : game.isRelaxedSeason ? "**Yes (Relaxed season)**" : "**No (unless attendance is low)**",
+          name: "🏅 **ELO**",
+          value: eloValue,
           inline: true,
         },
         {
@@ -1271,26 +1289,25 @@ export default class AnnouncementCommand implements Command {
     }
     embed.setTimestamp();
 
+    const embeds = announcementScenarioEmbeds(embed, game.scenarios.definition);
     return preview
-      ? { embeds: [embed], components: this.getEditComponents(false) }
-      : { embeds: [embed] };
+      ? { embeds, components: this.getEditComponents(false) }
+      : { embeds };
   }
 
   private async updateAnnouncementMessages() {
-    const embed = this.createGameAnnouncementEmbed(false).embeds?.[0];
+    const { embeds } = this.createGameAnnouncementEmbed(false);
     const isConfirmed = !!this.announcementMessage;
 
     if (this.announcementPreviewMessage) {
       await this.announcementPreviewMessage.edit({
-        embeds: [embed],
+        embeds,
         components: this.getEditComponents(isConfirmed),
       });
     }
 
     if (this.announcementMessage) {
-      await this.announcementMessage.edit({
-        embeds: [embed],
-      });
+      await this.announcementMessage.edit({ embeds });
     }
   }
 

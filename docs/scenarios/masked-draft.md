@@ -1,92 +1,47 @@
 # The Masked Draft
 
-**Status:** Design proposal, not implemented. **Type:** alternate captain draft. Read [shared rules](./shared-design.md).
+**Status:** Implemented. **Type:** alternate captain snake draft.
 
-## Fantasy / promise
+## How to play
 
-Captains draft **mystery players** without seeing their names. Every undecided registered player becomes a numbered card with a few **non-identifying gameplay clues**. Captains must build teams by judging useful roles and general skill bands rather than instantly choosing their friends or the most recognisable names. When every pick is locked, the masks come off.
+Register normally. The organiser selects captains as usual and starts the scenario draft. Every other registered player receives a randomly assigned mystery card (M01, M02, etc.). Captains pick cards rather than names in the team-picking channel.
 
-This is **identity-blind drafting**, not a promise of perfect anonymity; members may already know who registered or recognise a rare profile.
+Choose based on evidence from recorded matches: a player who has won often with your captain, someone with a strong record on today's map, or someone who has earned MVP recently. Some cards have two clues, others are completely mysterious. Clues describe past results, not guaranteed future performance.
 
-## Proposed v1 rules
+Only the active captain can pick or page through cards. The first pick has two minutes and later picks have one minute. If time runs out, the bot picks the first eligible card in the frozen shuffled deck. Picks follow snake order. The organiser confirms the finished draft before the masks come off; the game feed then shows each card, player, original clues and team.
 
-1. Choose two willing captains via normal appointment/nomination or [The People's Captains](./peoples-captains.md). Captains are publicly identified and begin on opposite teams.
-2. Freeze the other registered players **before any cards are generated**. Each remaining player is assigned exactly one **random stable card ID** for this draft (e.g., M01, M02).
-3. Build an intentionally coarse card:
-   - An **Elo band** (e.g., `1000–1099`, not exact Elo), when enough rating information exists.
-   - One **player-declared playstyle/role preference**, such as defence, support, attacker or flexible, if available and explicitly opted in.
-   - Optional harmless flavour icon/descriptor from a small shared set.
-4. **Do not expose** IGN, Discord mention/avatar, profile title, exact Elo, exact draft history, registration order, or other identifiers in a card. Do not invent role expertise from a short profile if no grounded preference exists.
-5. Captains alternate selecting cards with the existing standard or snake draft order; recommend **snake** for v1. A picked card moves to a team in the preview, still masked.
-6. After all cards are assigned and the organiser confirms final teams, reveal a single mapping of **card ID → real player and team**, and only then publish normal rosters / sync team roles.
-7. The normal match begins after role/roster verification. The scenario changes **how people are chosen**, not how they play.
+## Example cards
 
-## Illustrative draft screen
+These are illustrative synthetic cards, not actual player data:
 
-```text
-MASKED DRAFT — BLUE TO PICK
-BLUE: Captain Alex, M02, M07
-RED:  Captain Emi, M04
+- M01 - RED captain: 80%+ wins together
+- M02 - Canyon: 60-79% wins · MVP in 2+ of last 10 games
+- M03 - 20+ pts higher win rate with BLUE captain than RED
+- M04 - 60-79% wins as captain
+- M05 - Played Canyon 10+ times · Won 6-7 of last 10 games
+- M06 - Mystery card
 
-Available:
-M01 — Elo 1000–1099 • Defender
-M03 — Elo 1100–1199 • Flexible
-M05 — Elo 1000–1099 • Support
-M06 — Rating not available • Attacker
+Each complete displayed description, including Mystery card when the pool is large enough, is shared by at least three candidates in the original undrafted roster. Smaller pools of fewer than three get only mystery cards. Two clues are paired only when they describe different dimensions of a player's history.
 
-[Pick M01] [Pick M03] [More cards]
-```
+## Where the clues come from
 
-After confirmation:
+All facts use recorded, finished team games in the past 365 days, regardless of Elo rating. The bot never uses self-declared roles, playstyles, Elo, exact rankings or untracked gameplay statistics.
 
-```text
-THE MASKS ARE OFF!
-M01 was Fin → BLUE
-M03 was Blake → RED
-M05 was Dana → BLUE
-...
-```
+- Current captain partnership: win-rate bands for games played together (minimum five shared games), a 60%+ winning record, or at least ten games together. A comparison between the two captains requires at least five games with each and a difference of at least 20 percentage points in shared win rates.
+- Top lobby win-rate partner: compare same-team results with other current registrants, with at least five shared games and a win rate of at least 60%. Joint top partners qualify. Most-played lobby teammate requires at least eight shared games and may also be a joint best. Only already-public captains can be identified by their current team colour. Historical team colours are irrelevant to the clue; a masked teammate's name or card ID is never exposed.
+- Today's map: win-rate band after at least five games on the selected map, or familiarity (at least five or ten games). If no map is selected, there are no current-map-specific clues. Other map clues include a uniquely highest eligible win-rate map (at least five games and 60% wins), or a most-played map with at least ten games.
+- Captain experience: at least five recorded captain games, optionally with a win-rate band, regardless of team colour.
+- MVP record: five or more recorded MVP awards, two or more in losses, or at least two in the last ten recorded matches.
+- Recent form: a broad win count band across the last ten matches (0-3, 4-5, 6-7, 8-10). If the tenth and eleventh games have tied timestamps, no last-ten clue is generated. Recent form is lower priority than matchup and map evidence.
 
-These names, scores and card IDs are illustrative only.
+Rate bands are under 40%, 40-59%, 60-79% or 80%+; minimum sample requirements are applied internally, not appended to cards; game-count clues themselves still show a count band. Missing history does not imply poor ability. The bot chooses one or two true clues per card, prioritising useful partner and map records, then other historical evidence. A combined label is evaluated as a whole. Rare clues or combinations are withheld. If the bounded history lookup fails, times out or exceeds its row limit, all cards become mysteries.
 
-## Private versus public information
+## Anonymity and recovery
 
-- Cards and team card lists may be public; **card-to-identity mapping stays server-side** until final reveal. Even organisers need a troubleshooting view that is private and not casually shared.
-- If a player has a rare profile, the bot should withhold distinctive hints. Use broad role options and rating bands, not a distinctive free-text biography.
-- If a player declines to share a preference, show **Flexible / Not provided** rather than inferring it. Ratings below a privacy-sensitive cohort size may be bucketed more broadly or omitted.
-- A final roster must be available to the bot for identity-bound role updates; do **not** mask internal identity objects or invent dummy Discord IDs.
-- The existing roster commands and player statistics may permit people to infer card identities; document that this is a fun draft limitation, not an actual privacy guarantee.
+Card IDs and descriptions are generated once and stored in bounded private scenario recovery state before any cards appear. Only anonymous card IDs are sent as masked select values. Cards are displayed in shuffled card order, not registration or Discord ID order. Hints do not change after picks or navigation. Captains themselves are publicly known.
 
-## Draft mechanics and fairness
+The mask is a gameplay mechanic, not guaranteed anonymity. Outside knowledge, public match histories and deliberate player communication can still help someone guess. Captains can weigh the evidence and make deductions, but players should not deliberately disclose their identities.
 
-- Reuse the normal **captain eligibility, even undecided count, turn timers, autopick and final confirmation** rules unless explicitly changed.
-- A card is unique and becomes unavailable once picked; prevent double-picks and use the current session/lifecycle token for button validation.
-- A timeout automatically picks one eligible remaining **card**, not an unrelated real-name lookup. Show "Auto-picked M07" until the reveal.
-- The other captain should not learn a card's identity merely by clicking it; their action should show the card's publicly permitted traits and confirmation only.
-- When one card remains, allocate it to the appropriate side as the existing draft does, while keeping it masked until reveal.
-- All normal draft writes, embeds, logs intended for Discord and team feeds must avoid leaking names. The original `DraftTeamPickingSession` publicly announces picks by IGN, so masking **requires changes to its presentation path**, not just wrapping card names in another message.
+Late registration or withdrawal invalidates the frozen draft and requires organiser review. A restart preserves the private snapshot but does not automatically resume interrupted drafts; cancel the scenario and use a fresh normal draft if needed. No identities are published by the scenario until the authoritative draft confirmation succeeds. Roles and roster still need normal verification before starting the game.
 
-## Roster changes / recovery
-
-- Late signups after card generation: **do not silently extend** the deck. Suggested v1: late signups stay undecided for organiser review or the draft is cancelled and regenerated **before locks**.
-- Player unregisters during the draft: invalidate that card. If this breaks draft parity or a completed pick, pause and require an organiser-controlled rebuild; never reveal identity as an error fallback.
-- Discord role assignment: do not pre-assign team roles on a card pick because those roles may leak team membership or make partial results appear final.
-- Interrupted draft or restart: restore the exact stable mapping and picked-card state only if a trusted, validated snapshot exists; otherwise pause/fail closed. **Never draw a new mapping under an old message.**
-- If final confirmation/role sync fails, provide an organiser reconciliation path without public partial identity leaks.
-
-## Acceptance criteria
-
-- One stable anonymous card per eligible undecided player; exactly one real identity per card.
-- Captains can pick legal cards without seeing real identities through the scenario UI.
-- Expired/stale buttons never make picks; autopicks respect the same pool and order.
-- No duplicate cards, missing players or cross-team duplicates at finalisation.
-- Roster changes cannot silently remap cards; recovery preserves or deliberately invalidates mappings.
-- The reveal occurs **once**, only after the draft is confirmed; team role sync follows the authoritative final roster.
-- After reveal, regular team lists / captain plan / start flow still work.
-
-## Open decisions
-
-- Exactly which non-identifying hints are both fun and available from verified player data?
-- Should players explicitly choose a public masked-card playstyle at registration?
-- Could too few players per Elo band make the hints effectively identifying? (Recommended: dynamically widen bands or omit them.)
-- Should the reveal happen all at once or card by card for suspense? (Recommend **one atomic reveal message** for v1.)
+Use /game scenario guide for a quick explanation or /game scenario status for organiser review.

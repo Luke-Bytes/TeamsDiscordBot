@@ -4,60 +4,83 @@ import { DiscordUtil } from "../../../util/DiscordUtil";
 import { allocateScenarioTeams } from "../ScenarioTeamAllocation";
 import { choice, data, participantLabel, publishTeamProposal, selectPrompt } from "../ScenarioGameplay";
 
-export const archetypes = ["Guardian", "Pathfinder", "Strategist", "Vanguard"] as const;
-export type Archetype = typeof archetypes[number] | "Unclassified";
-const questions: { title: string; answers: string[] }[] = [
-  { title: "Your Nexus is under attack, but diamonds have appeared. What do you do?", answers: ["Return and defend", "Scout a flanking route", "Check whether defence can hold", "Rally a counter-push"] },
-  { title: "Five minutes before the first big fight…", answers: ["Reinforce our defences", "Explore overlooked routes", "Prepare efficient gear", "Organise an attack plan"] },
-  { title: "The first rush fails. You…", answers: ["Cover the retreat", "Find a new way in", "Analyse what went wrong", "Regroup the team"] },
-  { title: "Your favourite match moment?", answers: ["Saving the Nexus", "Pulling off a surprise", "A plan coming together", "A coordinated team win"] },
-  { title: "A new player asks for help. You…", answers: ["Keep them safe", "Show useful shortcuts", "Explain a gear plan", "Invite them on an objective"] },
-];
+import { archetypes, legacyQuestions, QUESTION_COUNT, questions, selectQuestions } from "./QuestionBank";
+import type { Archetype, Question, QuestionId } from "./QuestionBank";
+export { archetypes };
+export type { Archetype };
 const descriptions = [
   "the steady shield your teammates can count on.",
   "the explorer who spots an unexpected path.",
   "the planner who turns preparation into opportunity.",
   "the spark that brings a team together.",
 ];
-export interface Quiz { answers: number[]; cursor: number; submitted: boolean; hidden: boolean }
+export interface Quiz {
+  questionIds?: QuestionId[]; // Absent only in legacy recovery snapshots.
+  answers: (number | null)[];
+  cursor: number;
+  submitted: boolean;
+  hidden: boolean;
+}
 type Quizzes = Record<string, Quiz>;
 function all(game: GameInstance): Quizzes { return data<Quizzes>(game, "quizzes", {}); }
-export function classify(answers: readonly number[]): Archetype {
-  if (answers.length !== 5 || answers.some((a) => !Number.isInteger(a) || a < 0 || a > 3))
-    return "Unclassified";
+function assignedQuestions(ids?: readonly QuestionId[]): readonly Question[] {
+  if (ids === undefined) return legacyQuestions;
+  if (!Array.isArray(ids) || ids.length !== QUESTION_COUNT ||
+      new Set(ids).size !== QUESTION_COUNT ||
+      !ids.every((id) => Object.prototype.hasOwnProperty.call(questions, id)))
+    throw new Error("Invalid saved questionnaire.");
+  return ids.map((id) => questions[id]);
+}
+function validAnswer(question: Question | undefined, answer: unknown): answer is number {
+  return !!question && typeof answer === "number" && Number.isInteger(answer) &&
+    answer >= 0 && answer < question.answers.length;
+}
+export function classify(answers: readonly (number | null)[], ids?: readonly QuestionId[]): Archetype {
+  const assigned = assignedQuestions(ids);
+  if (answers.length !== QUESTION_COUNT ||
+      !assigned.every((q, i) => validAnswer(q, answers[i]))) return "Unclassified";
   const scores = [0, 0, 0, 0];
-  answers.forEach((a) => scores[a]++);
-  // Fixed priority resolves ties identically on every restart.
+  assigned.forEach((q, i) => scores[archetypes.indexOf(q.answers[answers[i]!][1])]++);
+  // Keep existing deterministic tie priority.
   return archetypes[scores.indexOf(Math.max(...scores))];
 }
 function validatedQuiz(game: GameInstance, user: string): Quiz {
-  return all(game)[user] ?? { answers: [], cursor: 0, submitted: false, hidden: false };
+  const quizzes = all(game);
+  if (quizzes[user]) return quizzes[user];
+  const quiz: Quiz = {
+    questionIds: selectQuestions(), answers: Array<number | null>(QUESTION_COUNT).fill(null),
+    cursor: 0, submitted: false, hidden: false,
+  };
+  quizzes[user] = quiz;
+  game.scenarios.setData("quizzes", quizzes as unknown as ScenarioValue);
+  return quiz;
 }
 function render(game: GameInstance, user: string, customId: string) {
   const quiz = validatedQuiz(game, user);
+  const assigned = assignedQuestions(quiz.questionIds);
   if (quiz.submitted) {
-    const result = classify(quiz.answers);
+    const result = classify(quiz.answers, quiz.questionIds);
     const index = archetypes.indexOf(result as typeof archetypes[number]);
     return selectPrompt(
-      `✨ You are **${result}** — ${descriptions[index] ?? "still a mystery!"}\nYour answers are saved until the quiz closes. Your profile label ${quiz.hidden ? "will stay private" : "will appear at team reveal"}.`,
+      `✨ You are **${result}** - ${descriptions[index] ?? "still a mystery!"}\nYour personality test is complete. Your answers are saved until the quiz closes. Your profile label ${quiz.hidden ? "will stay private" : "will appear at team reveal"}.`,
       customId, [{ label: "Edit answers", value: "edit" }, { label: quiz.hidden ? "Show my archetype" : "Hide my archetype", value: "visibility" }],
     );
   }
-  if (quiz.cursor === 5) {
-    const review = questions.map((q, i) =>
-      `${i + 1}. ${q.title}\n   ${quiz.answers[i] === undefined ? "❔ Unanswered" : q.answers[quiz.answers[i]]}`).join("\n");
-    return selectPrompt(`**Mystery Dungeon — Review**\n${review}\nChoose a question to edit, or submit all five answers.`,
+  if (quiz.cursor === QUESTION_COUNT) {
+    const review = assigned.map((q, i) =>
+      `${i + 1}. ${q.title}\n   ${validAnswer(q, quiz.answers[i]) ? q.answers[quiz.answers[i]!][0] : "❔ Unanswered"}`).join("\n");
+    return selectPrompt(`**Mystery Dungeon - Review**\n${review}\nChoose a question to edit, or submit all five answers.`,
       customId, [
-        ...questions.map((_, i) => ({ label: `Edit question ${i + 1}`, value: `nav:${i}` })),
+        ...assigned.map((_, i) => ({ label: `Edit question ${i + 1}`, value: `nav:${i}` })),
         { label: "Submit my personality test", value: "submit" },
       ]);
   }
   const i = quiz.cursor;
   return selectPrompt(
-    `**Mystery Dungeon — Question ${i + 1}/5**\n${questions[i].title}\n\n${quiz.answers.filter((a) => a !== undefined).length} of 5 answered. You can go back and edit before submitting.`,
+    `**Mystery Dungeon - Question ${i + 1}/${QUESTION_COUNT}**\n${assigned[i].title}\n\n${assigned.filter((q, index) => validAnswer(q, quiz.answers[index])).length} of ${QUESTION_COUNT} answered. You can go back and edit before submitting.`,
     customId,
     [
-      ...questions[i].answers.map((answer, index) => ({ label: answer, value: `answer:${i}:${index}` })),
+      ...assigned[i].answers.map(([label], index) => ({ label, value: `answer:${i}:${index}` })),
       ...(i > 0 ? [{ label: "← Previous question", value: `nav:${i - 1}` }] : []),
       { label: "Review all answers", value: "nav:5" },
     ],
@@ -70,11 +93,17 @@ export const mysteryDungeon: ScenarioImplementation = {
     if (action.kind !== "questionnaire") throw new Error("Unknown questionnaire.");
     const input = Array.isArray(value) && typeof value[0] === "string" ? value[0] : "";
     const quiz = validatedQuiz(game, action.ownerId);
-    if (/^answer:[0-4]:[0-3]$/.test(input)) return;
+    const assigned = assignedQuestions(quiz.questionIds);
+    const answer = /^answer:([0-4]):([0-3])$/.exec(input);
+    if (answer) {
+      if (validAnswer(assigned[Number(answer[1])], Number(answer[2]))) return;
+      throw new Error("Invalid answer for this question.");
+    }
     if (/^nav:[0-5]$/.test(input) || input === "edit" || input === "visibility") return;
-    if (input === "submit" && [0, 1, 2, 3, 4].every((i) => quiz.answers[i] !== undefined)) return;
+    if (input === "submit" && assigned.every((q, i) => validAnswer(q, quiz.answers[i]))) return;
     throw new Error("Answer all five questions before submitting.");
   },
+  isActionComplete: (game, action) => all(game)[action.ownerId]?.submitted ?? false,
   onActionSubmitted(game, action) {
     const input = choice(action);
     const quizzes = all(game);
@@ -82,7 +111,7 @@ export const mysteryDungeon: ScenarioImplementation = {
     if (input.startsWith("answer:")) {
       const [, i, answer] = input.split(":").map(Number);
       quiz.answers[i] = answer;
-      quiz.cursor = Math.min(5, i + 1);
+      quiz.cursor = Math.min(QUESTION_COUNT, i + 1);
       quiz.submitted = false;
     } else if (input.startsWith("nav:")) {
       quiz.cursor = Number(input.slice(4));
@@ -106,7 +135,7 @@ export const mysteryDungeon: ScenarioImplementation = {
     game.scenarios.assertCapturedRoster("lock");
     const quizzes = all(game);
     const types: Record<string, string> = {};
-    for (const id of roster) types[id] = quizzes[id]?.submitted ? classify(quizzes[id].answers) : "Unclassified";
+    for (const id of roster) types[id] = quizzes[id]?.submitted ? classify(quizzes[id].answers, quizzes[id].questionIds) : "Unclassified";
     const allocation = allocateScenarioTeams(game, types);
     game.scenarios.markReady({ types, red: allocation.proposal.red, blue: allocation.proposal.blue });
     publishTeamProposal(game, allocation.proposal);
@@ -124,7 +153,7 @@ export const mysteryDungeon: ScenarioImplementation = {
     const types = data<Record<string, string>>(game, "types", {});
     const quizzes = all(game);
     const line = (side: "RED" | "BLUE") => game.getPlayersOfTeam(side)
-      .map((p) => `${participantLabel(game, p.discordSnowflake)} — ${quizzes[p.discordSnowflake]?.hidden ? "Hidden" : types[p.discordSnowflake] ?? "Unclassified"}`).join("\n");
+      .map((p) => `${participantLabel(game, p.discordSnowflake)} - ${quizzes[p.discordSnowflake]?.hidden ? "Hidden" : types[p.discordSnowflake] ?? "Unclassified"}`).join("\n");
     await DiscordUtil.sendMessage("gameFeed", `✨ **Mystery Dungeon teams revealed!**\n🔴 RED\n${line("RED")}\n🔵 BLUE\n${line("BLUE")}\nCaptains can now be appointed from their respective teams.`);
   },
   publicResult(game) {

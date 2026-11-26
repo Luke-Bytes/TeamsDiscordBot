@@ -12,6 +12,7 @@ type HelpCategory = "user" | "organiser" | "dev";
 const MANUAL_OVERRIDES: Record<string, HelpCategory> = {
   performance: "dev",
   test: "dev",
+  "debug-scenario": "dev",
   nickname: "user",
   plan: "user",
   register: "user",
@@ -101,6 +102,10 @@ export default class HelpCommand implements Command {
     const embed = new EmbedBuilder()
       .setTitle(title)
       .setDescription(description);
+
+    if (scope === "user") {
+      embed.addFields({ name: "Friendly Wars scenarios", value: "/game scenario guide - browse the scenarios\n/game scenario open - recover your own private action" });
+    }
 
     if (scope === "dev" && !ConfigManager.getConfig().dev.enabled) {
       embed.setFooter({

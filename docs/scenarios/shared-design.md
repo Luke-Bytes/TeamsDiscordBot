@@ -43,7 +43,7 @@ Suggested state vocabulary for a future implementation: `configured → collecti
 
 Two different considerations must be displayed separately: **competitive balance** and **scenario fidelity** (e.g., keeping a mutual pair together or respecting a captain's pick). For a v1, accept some Elo difference to preserve the scenario's identity, but show team player counts and Elo totals/averages in the organiser preview and warn on unusually large gaps. Reject impossible allocations rather than hiding them.
 
-Choose an explicit rating policy per scenario **before** release. Suggested default: unusual role/class interference scenarios such as Class Hex should be opt-in **unrated exhibition** modes unless organisers and players agree on a fair competition policy. This is a product recommendation, **not** a capability of current `noElo` flags or season rules. Do not silently manipulate Elo calculation to enforce it.
+Choose an explicit rating policy per scenario **before** release. Suggested default: unusual role/class interference scenarios such as Cursed Classes should be opt-in **unrated exhibition** modes unless organisers and players agree on a fair competition policy. This is a product recommendation, **not** a capability of current `noElo` flags or season rules. Do not silently manipulate Elo calculation to enforce it.
 
 If an optional restriction cannot be verified in Minecraft, the bot must say **"honour rule; organiser-enforced"**, not claim it automatically applies. No bot-side stats should imply automatic proof of class compliance.
 
@@ -51,12 +51,12 @@ If an optional restriction cannot be verified in Minecraft, the bot must say **"
 
 | Primary selection | Compatible extension | Caution |
 | --- | --- | --- |
-| Mystery Dungeon | Later captain assignment; Class Hex | Not simultaneously with Partners in Crime or a normal draft |
-| Partners in Crime | Later captain assignment; Class Hex | Cannot promise all preferences are satisfied |
+| Mystery Dungeon | Later captain assignment; Cursed Classes | Not simultaneously with Partners in Crime or a normal draft |
+| Partners in Crime | Later captain assignment; Cursed Classes | Cannot promise all preferences are satisfied |
 | People's Captains | Standard draft, snake, Masked, Roulette | Election chooses captains, **not** teams |
-| Masked Draft | Captain's Wildcards; Class Hex | Preserve masking in all embeds, logs visible to users and previews until reveal |
-| Draft Roulette | Captain's Wildcards; Class Hex | Wildcard availability depends on offer count |
-| Any finalised teams | Class Hex | Class pool must be valid for both sides; requires external honour-rule enforcement |
+| Masked Draft | Captain's Wildcards; Cursed Classes | Preserve masking in all embeds, logs visible to users and previews until reveal |
+| Draft Roulette | Captain's Wildcards; Cursed Classes | Wildcard availability depends on offer count |
+| Any finalised teams | Cursed Classes | Class pool must be valid for both sides; requires external honour-rule enforcement |
 
 Default to **one** gameplay overlay. Combining more than one complex twist should be a deliberate future enhancement with cross-compatibility tests.
 
@@ -67,7 +67,7 @@ Default to **one** gameplay overlay. Combining more than one complex twist shoul
 - Include scenario type/version in saved games if needed for historical displays. Keep existing `gameType` semantics or migrate callers/recovery validation together. Captains' selections and player assignments must survive an intentional preserved restart where supported, or fail closed and require review.
 - Before changing `AnnouncementCommand`, `GameInstance`, `MatchPersistence` or active-game recovery, inspect their latest state and project guardrails. The repository has concurrent work; do not erase it.
 - Use the current permissions, identifier escaping, guild-member reconciliation and interaction expiry patterns. Race-check that a game has not started or changed before mutating roles.
-- Existing `/scenario` is developer-only test fixture setup. Don't reuse its behaviour as though it were the player-facing feature.
+- Existing `/debug-scenario` is developer-only test fixture setup. Don't reuse its behaviour as though it were the player-facing feature.
 
 ## Minimum integration acceptance criteria
 

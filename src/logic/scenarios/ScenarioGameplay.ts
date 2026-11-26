@@ -5,6 +5,7 @@ import type { ScenarioAction, ScenarioPrivatePrompt, ScenarioTeamProposal, Scena
 import { Channels } from "../../Channels";
 import { DiscordUtil } from "../../util/DiscordUtil";
 import TeamCommand from "../../commands/TeamCommand";
+import { deliverScenarioAction } from "./ScenarioPromptDelivery";
 
 export function data<T>(game: GameInstance, key: string, fallback: T): T {
   return (game.scenarios.snapshot()?.data[key] ?? fallback) as T;
@@ -36,6 +37,16 @@ export function openScenarioAction(
   });
 }
 
+export async function deliverAction(game: GameInstance, userId: string, customId: string): Promise<boolean> {
+  const client = Channels.gameFeed?.client ?? Channels.teamPicking?.client;
+  if (!client) {
+    game.scenarios.markPromptFailed(userId, customId.split(":")[2]);
+    return false;
+  }
+  return (await deliverScenarioAction(game, userId, client, customId.split(":")[2], false, false)) === "delivered";
+}
+
+/** Notifications that do not contain an editor (e.g. final assigned class). */
 export async function deliverPrivate(game: GameInstance, userId: string, prompt: ScenarioPrivatePrompt): Promise<boolean> {
   try {
     const user = await Channels.teamPicking.client.users.fetch(userId);
@@ -50,17 +61,18 @@ export async function deliverPrivate(game: GameInstance, userId: string, prompt:
 /** No nested roster lock: the caller already owns it during activation. */
 export function publishTeamProposal(game: GameInstance, proposal: ScenarioTeamProposal): void {
   const token = game.getLifecycleToken();
+  const revision = game.scenarios.controlRevision;
   queueMicrotask(() => {
     void (async () => {
       try {
-        if (token !== game.getLifecycleToken() || game.scenarios.phase !== "ready")
+        if (token !== game.getLifecycleToken() || game.scenarios.phase !== "ready" || revision !== game.scenarios.controlRevision)
           return;
         if (!Channels.teamPicking?.guild || !TeamCommand.instance)
           throw new Error("Team review channel or command unavailable.");
-        await TeamCommand.instance.previewScenarioTeams(Channels.teamPicking.guild, proposal);
+        await TeamCommand.instance.previewScenarioTeams(Channels.teamPicking.guild, proposal, token, revision);
       } catch (error) {
-        if (token === game.getLifecycleToken())
-          game.scenarios.needsReview(`Failed to publish team preview: ${error instanceof Error ? error.message : "unknown error"}`);
+        if (token !== game.getLifecycleToken() || revision !== game.scenarios.controlRevision) return;
+        game.scenarios.needsReview(`Failed to publish team preview: ${error instanceof Error ? error.message : "unknown error"}`);
         await DiscordUtil.sendMessage("gameFeed", "⚠️ Scenario team preview could not be published. Organiser review required.").catch(() => {});
       }
     })();

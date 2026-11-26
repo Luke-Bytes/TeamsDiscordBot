@@ -3,8 +3,9 @@ import { ActionRowBuilder, StringSelectMenuBuilder, UserSelectMenuBuilder } from
 import type { GameInstance } from "../../../database/GameInstance";
 import type { ScenarioAction, ScenarioImplementation, ScenarioPrivatePrompt, ScenarioValue } from "../ScenarioTypes";
 import { DiscordUtil } from "../../../util/DiscordUtil";
-import { choice, data, deliverPrivate, openScenarioAction, participantLabel } from "../ScenarioGameplay";
+import { choice, data, deliverAction, deliverPrivate, openScenarioAction, participantLabel } from "../ScenarioGameplay";
 import { shuffle } from "../drafts/ScenarioDraftRules";
+import { openScenarioButton } from "../ScenarioPromptDelivery";
 
 type Side = "RED" | "BLUE";
 interface Editor {
@@ -36,8 +37,8 @@ export function eligibleClasses(game: GameInstance): string[] {
 /** Organiser explicitly approves a pool for this match. No default "weak" list is invented. */
 export function configureHexPool(game: GameInstance, raw: string, reviewer: string): string[] {
   if (game.scenarios.selectedId !== "class-hex" || game.scenarios.phase !== "collecting" ||
-      game.getGameStartStatus() !== "idle" || game.isFinished)
-    throw new Error("Class Hex pool can only be edited before its draw is activated.");
+      game.getGameStartStatus() !== "idle" || game.isFinished || draw(game).length)
+    throw new Error("Cursed Classes pool can only be edited before classes are drawn.");
   const requested = raw.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean);
   if (requested.length < 3 || requested.length > 20 ||
       new Set(requested).size !== requested.length ||
@@ -61,13 +62,13 @@ function validEditor(game: GameInstance, editor: Editor): boolean {
 function render(game: GameInstance, action: ScenarioAction, customId: string): ScenarioPrivatePrompt {
   const editor = editors(game)[action.ownerId];
   const classes = draw(game);
-  if (!editor || classes.length !== 3) return { content: "Class Hex is not accepting assignments." };
+  if (!editor || classes.length !== 3) return { content: "Cursed Classes is not accepting assignments." };
   if (editor.submitted) return {
     content: "🔒 Your three class assignments have been submitted. Other captain's choices stay private until both have submitted.",
   };
   const rows = classes.map((c, i) =>
     `${i + 1}. **${c}** → ${editor.targets[i] ? participantLabel(game, editor.targets[i]) : "Unassigned"}`).join("\n");
-  const summary = `🪄 **Class Hex — ${editor.team} captain**\nAssign each cursed class to a different **${targetSide(editor.team)}** player, captains included. Only mutual submission triggers the reveal.\n${rows}\n\nHonour rule; organiser-enforced for the whole game, not Minecraft-side class enforcement.`;
+  const summary = `🪄 **Cursed Classes - ${editor.team} captain**\nAssign each cursed class to a different **${targetSide(editor.team)}** player, captains included. Only mutual submission triggers the reveal.\n${rows}\n\nHonour rule; organiser-enforced for the whole game, not Minecraft-side class enforcement.`;
   if (editor.cursor >= 3) {
     return {
       content: `${summary}\n**Review your three choices, then submit.**`,
@@ -100,23 +101,23 @@ function render(game: GameInstance, action: ScenarioAction, customId: string): S
 export const classHex: ScenarioImplementation = {
   validateTrigger(game, policy) {
     if (policy.id !== "hex") return null;
-    if (!game.hasFinalizedPlayableTeams()) return "Class Hex requires finalised teams.";
+    if (!game.hasFinalizedPlayableTeams()) return "Cursed Classes requires finalised teams.";
     if (!approved(game).length)
-      return "Organiser must approve a class pool using /game scenario pool before Class Hex can activate.";
+      return "Organiser must approve a class pool using /game scenario pool before Cursed Classes can begin.";
     if (eligibleClasses(game).length < 3)
-      return "Class Hex requires at least three distinct permitted, organiser-reviewed classes.";
+      return "Cursed Classes requires at least three distinct permitted, organiser-reviewed classes.";
     if (game.getPlayersOfTeam("RED").length < 3 || game.getPlayersOfTeam("BLUE").length < 3)
-      return "Class Hex requires three targets on each team.";
+      return "Cursed Classes requires three targets on each team.";
     if (!game.getCaptainOfTeam("RED") || !game.getCaptainOfTeam("BLUE"))
       return "Both captains must be selected.";
     if (!game.startTime || game.startTime.getTime() - 180_000 <= Date.now())
-      return "Not enough time remains for private Class Hex assignments. Reschedule or cancel the scenario.";
+      return "Not enough time remains for private class assignments. Reschedule or cancel the scenario.";
     return null;
   },
   async activateTrigger(game, policy, roster) {
     if (policy.id === "deadline") {
       if (game.scenarios.phase !== "completed")
-        throw new Error("Class Hex captain deadline passed without both valid submissions. An organiser must review or cancel the scenario.");
+        throw new Error("Cursed Classes captain deadline passed without both valid submissions. An organiser must review or cancel the scenario.");
       return;
     }
     if (policy.id !== "hex") return;
@@ -135,16 +136,21 @@ export const classHex: ScenarioImplementation = {
     game.scenarios.setData("hexEditors", current as unknown as ScenarioValue);
     for (const captain of Object.keys(current)) {
       const customId = openScenarioAction(game, captain, "hex", "captain", deadline);
-      const action: ScenarioAction = { id: customId.split(":")[2], kind: "hex",
-        ownerId: captain, role: "captain", phase: "collecting", deadline: deadline.toISOString(), allowUpdates: true };
-      if (await deliverPrivate(game, captain, render(game, action, customId))) delivered++;
+      if (await deliverAction(game, captain, customId)) delivered++;
     }
-    await DiscordUtil.sendMessage("gameFeed",
-      `🪄 **Class Hex begins!** The shared class draw is **${chosen.join(" · ")}**. Each captain privately assigns all three to different opponents before <t:${Math.floor(deadline.getTime() / 1000)}:t>. ${delivered}/2 captains received DMs; use /game scenario open if yours failed.\n**Honour rule: organiser-enforced**, not automatically enforced in Shotbow. ${game.noElo || game.organiserNoElo ? "Unrated match selected." : "⚠️ Rated match selected; an unrated exhibition is recommended, but existing Elo policy is unchanged."}`);
+    await DiscordUtil.sendMessage("gameFeed", {
+      content: `🪄 **Cursed Classes begins!** The shared class draw is **${chosen.join(" · ")}**. Each captain privately assigns all three to different opponents before <t:${Math.floor(deadline.getTime() / 1000)}:t>. ${delivered}/2 captains received DMs; open your own assignment below if yours failed.\n**Honour rule: organiser-enforced**, not automatically enforced in Shotbow. ${game.noElo || game.organiserNoElo ? "Unrated match selected." : "⚠️ Rated match selected; an unrated exhibition is recommended, but existing Elo policy is unchanged."}`,
+      components: [openScenarioButton(game)],
+    });
   },
   renderAction: (game, action, customId) => render(game, action, customId),
+  isActionAvailable(game, action) {
+    const editor = editors(game)[action.ownerId];
+    return !!editor && !editor.submitted &&
+      game.getCaptainOfTeam(editor.team)?.discordSnowflake === action.ownerId;
+  },
   validateAction(game, action, value) {
-    if (action.kind !== "hex" || draw(game).length !== 3) throw new Error("Class Hex assignment expired.");
+    if (action.kind !== "hex" || draw(game).length !== 3) throw new Error("Class assignment expired.");
     const editor = editors(game)[action.ownerId];
     if (!editor || editor.submitted || game.getCaptainOfTeam(editor.team)?.discordSnowflake !== action.ownerId)
       throw new Error("Only the current team captain can submit these assignments.");
@@ -155,6 +161,7 @@ export const classHex: ScenarioImplementation = {
         editor.targets.every((id, i) => i === editor.cursor || id !== input)) return;
     throw new Error("Select three different registered opponents before submitting.");
   },
+  isActionComplete: (game, action) => editors(game)[action.ownerId]?.submitted === true,
   async onActionSubmitted(game, action) {
     const input = choice(action);
     const state = editors(game);
@@ -177,7 +184,7 @@ export const classHex: ScenarioImplementation = {
         `${participantLabel(game, e.targets[i])} → **${c}**`).join("\n")}`).join("\n");
     game.scenarios.complete();
     await DiscordUtil.sendMessage("gameFeed",
-      `🪄 **Class Hex — all six curses revealed!**\n${reveal}\nThese are **organiser-enforced honour rules** for the entire match (including respawns when class selection is available). The bot cannot verify or enforce Minecraft classes. Report unavailable classes using /game scenario report-class before match start.`);
+      `🪄 **Cursed Classes - all six curses revealed!**\n${reveal}\nThese are **organiser-enforced honour rules** for the entire match (including respawns when class selection is available). The bot cannot verify or enforce Minecraft classes. Report unavailable classes using /game scenario report-class before match start. Both captains are finished; organisers should verify class access, then use /game start.`);
     for (const e of Object.values(state)) for (const [i, target] of e.targets.entries()) {
       await deliverPrivate(game, target, {
         content: `🪄 You were assigned **${classes[i]}** for this Friendly War. Please use it whenever class selection is available, including after respawn. This is an organiser-enforced honour rule. If you lack access, run /game scenario report-class before the match.`,
@@ -193,15 +200,16 @@ export const classHex: ScenarioImplementation = {
     const classes = draw(game);
     const state = editors(game);
     if (classes.length !== 3 || !classes.every((c) => eligibleClasses(game).includes(c)))
-      return "Class Hex draw is no longer valid under current class bans or modifiers.";
-    if (Object.values(state).length !== 2 || !Object.values(state).every((e) => e.submitted && validEditor(game, e)))
-      return "Class Hex assignments are not complete and valid.";
+      return "Cursed Classes draw is no longer valid under current class bans or modifiers.";
+    if (Object.keys(state).length !== 2 || !Object.entries(state).every(([owner, e]) => e.submitted && validEditor(game, e) &&
+        game.getCaptainOfTeam(e.team)?.discordSnowflake === owner))
+      return "Class assignments are not complete and valid.";
     if (Object.values(data<Record<string, string>>(game, "access", {})).includes("unavailable"))
       return "An affected player cannot access their class; organiser review required.";
     return null;
   },
   publicSummary(game) {
-    return `Class Hex is organiser-enforced for the whole match. An unrated exhibition is recommended; current selection: ${game.organiserNoElo ? "No Elo" : "normal rating policy"}. Organiser must approve a class pool before activation.`;
+    return `Cursed Classes is organiser-enforced for the whole match. An unrated exhibition is recommended; current selection: ${game.organiserNoElo ? "No Elo" : "normal rating policy"}. Organiser must approve a class pool before activation.`;
   },
   publicResult(game) {
     const state = editors(game);
@@ -211,7 +219,7 @@ export const classHex: ScenarioImplementation = {
 };
 export function reportUnavailableClass(game: GameInstance, user: string): string {
   if (game.scenarios.selectedId !== "class-hex" || game.scenarios.phase !== "completed" ||
-      game.getGameStartStatus() !== "idle") throw new Error("Class Hex is not accepting pre-match class reports.");
+      game.getGameStartStatus() !== "idle") throw new Error("Cursed Classes is not accepting pre-match class reports.");
   const assignment = Object.values(editors(game)).flatMap((e) => e.targets).includes(user);
   if (!assignment) throw new Error("You are not one of the six assigned players.");
   const access = data<Record<string, string>>(game, "access", {});

@@ -407,7 +407,12 @@ export class CurrentGameManager {
         await game.scenarios.activateType("on_draft_start", guild);
       return;
     }
-    if (game.teamsDecidedBy) return;
+    if (game.teamsDecidedBy) {
+      if (game.scenarios.selectedId === "class-hex" && game.hasFinalizedPlayableTeams() &&
+          game.getCaptainOfTeam("RED") && game.getCaptainOfTeam("BLUE"))
+        await game.scenarios.activateType("on_teams_finalized", guild);
+      return;
+    }
 
     const redCap = game.getCaptainOfTeam("RED");
     const blueCap = game.getCaptainOfTeam("BLUE");

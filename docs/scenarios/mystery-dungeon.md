@@ -1,4 +1,4 @@
-# Mystery Dungeon — The Personality Test
+# Mystery Dungeon - The Personality Test
 
 **Status:** Design proposal, not implemented. **Type:** primary team-formation scenario. Read [shared rules](./shared-design.md).
 
@@ -22,37 +22,13 @@ The quiz shapes team composition but **does not deterministically sort one perso
 6. Once teams are locked, reveal players grouped by RED/BLUE with their personality labels. Afterwards, choose a suitable captain **within each team**, subject to normal captain/organiser permissions and player consent.
 7. Optional flavour: suggest 1–2 *playstyles/classes* per archetype. This is **not** a forced class rule and should never imply that someone must play a particular class.
 
-## Example five-question quiz
+## Question bank
 
-Each question has four choices; the archetype in parentheses is a **scoring annotation for developers**, not text shown to players. Shuffle the visual order of answers per question (or deliberately rotate answer order) to avoid an obvious "always choose A" pattern.
+The quiz samples five distinct questions from the 25-question pool in `src/logic/scenarios/mysteryDungeon/QuestionBank.ts` for each player in each game. The pool mixes everyday preferences, silly situations, community jokes and Annihilation scenarios. Questions have two to four choices; each choice explicitly maps to one archetype independently of its display position.
 
-1. **Your Nexus is under attack, but diamonds have just appeared. What do you do?**
-   - Run home and defend (Guardian)
-   - Scout the attacking route to flank them (Pathfinder)
-   - Check whether the defence can hold before committing (Strategist)
-   - Rally nearby players for a counter-push (Vanguard)
-2. **You have five minutes before the first big fight.**
-   - Build or reinforce useful defences (Guardian)
-   - Explore routes the other team may have missed (Pathfinder)
-   - Gather resources for the most efficient team setup (Strategist)
-   - Organise a coordinated attack plan (Vanguard)
-3. **Your team's first rush goes badly.**
-   - Cover everyone's retreat (Guardian)
-   - Find an unexpected second route (Pathfinder)
-   - Work out why the push failed (Strategist)
-   - Get the team regrouped for another attempt (Vanguard)
-4. **Pick your favourite moment in a match.**
-   - Preventing a disaster at your Nexus (Guardian)
-   - Pulling off an unexpected play (Pathfinder)
-   - Seeing careful preparation pay off (Strategist)
-   - Winning a fight through great teamwork (Vanguard)
-5. **An inexperienced teammate asks for help.**
-   - Keep them safe while they learn (Guardian)
-   - Show them interesting shortcuts and tactics (Pathfinder)
-   - Explain an efficient gear and resource plan (Strategist)
-   - Include them in a small coordinated objective (Vanguard)
+The selected question IDs and order are saved with the player's answers, so reopening or editing the questionnaire cannot reroll it. Older recovered quizzes retain their original five questions to avoid reinterpreting saved answers.
 
-Suggested scoring: +1 to the matching archetype for each selected answer. Highest score wins; tie-break on a deterministic question/answer-derived rule or a fixed seeded choice stored with the response. Do **not** use Elo or historical stats to label personality. Show a short, friendly description alongside the result.
+Scoring: +1 to the matching archetype for each selected answer. Highest score wins; ties use the existing fixed archetype priority. The quiz is for fun and does not use Elo or historical stats to label personality.
 
 ## Allocation / balancing
 
@@ -65,8 +41,8 @@ Suggested scoring: +1 to the matching archetype for each selected answer. Highes
 ## Discord interaction sketch
 
 - Public: "Mystery Dungeon Night! 14/20 players have discovered their class personality. Quiz closes at HH:MM." No individual raw answers.
-- Private: one question at a time, four select/button options; **Back / Next / Review / Submit**. Players may edit until the freeze.
-- Private result: "You are a **Pathfinder** — a player who spots opportunities others miss."
+- Private: one question at a time, two to four answer options; **Back / Next / Review / Submit**. Players may edit until the freeze.
+- Private result: "You are a **Pathfinder** - a player who spots opportunities others miss."
 - Final public reveal: short personality summary + RED and BLUE roster with icons/labels. Only after roles are final.
 - Organiser preview: answer count, nonrespondents, current roster version, mean Elo and archetype distribution.
 
@@ -93,5 +69,4 @@ Suggested scoring: +1 to the matching archetype for each selected answer. Highes
 
 - Should players be able to hide their **archetype** from the public reveal? (Recommended: opt out of the label while still allowing team assignment.)
 - How much Elo gap should be tolerated to preserve a better personality mix?
-- Should future questions rotate between games, or remain fixed initially? (Recommended: fixed v1 for testability.)
 - Do playful archetype titles unlock anything beyond presentation? (Recommended: **no** gameplay advantage initially.)

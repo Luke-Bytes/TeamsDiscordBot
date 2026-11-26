@@ -4,7 +4,9 @@ import { ScenarioCoordinator, validateScenarioState } from "../../src/logic/scen
 import { ScenarioRegistry, plannedScenarios, scenarioRegistry } from "../../src/logic/scenarios/ScenarioRegistry";
 import { ScenarioDefinition } from "../../src/logic/scenarios/ScenarioTypes";
 import { ScenarioTeamPickingSession } from "../../src/logic/scenarios/ScenarioTeamPickingSession";
-import { deliverScenarioRegistrationPrompt } from "../../src/logic/scenarios/ScenarioPromptDelivery";
+import { deliverScenarioRegistrationPrompt, deliverScenarioAction } from "../../src/logic/scenarios/ScenarioPromptDelivery";
+import { Channels } from "../../src/Channels";
+import { handleScenarioDashboard } from "../../src/logic/scenarios/ScenarioDashboard";
 import GameCommand from "../../src/commands/GameCommand";
 import { MessageFlags } from "discord.js";
 import AnnouncementCommand from "../../src/commands/AnnouncementCommand";
@@ -50,6 +52,7 @@ test("Scenario trigger policies are declared for all seven enabled definitions",
   assert(policies.get("mystery-dungeon")!.includes("before_game_start"), "Mystery Dungeon locks later");
   assert(policies.get("partners-in-crime")!.includes("on_registration"), "Partners collects preferences");
   assert(policies.get("peoples-captains")!.includes("before_game_start"), "election is scheduled");
+  assert(!policies.get("peoples-captains")!.includes("on_registration"), "election has no volunteer prompt");
   for (const id of ["masked-draft", "draft-roulette", "captains-wildcards"])
     assert(policies.get(id)!.includes("on_draft_start"), `${id} hooks draft`);
   assert(policies.get("class-hex")!.includes("on_teams_finalized"), "Class Hex follows final teams");
@@ -141,7 +144,7 @@ test("Scenario organiser command group enforces organiser permissions and privat
   const command = new GameCommand();
   const json = command.data.toJSON() as any;
   const group = json.options.find((option: any) => option.name === "scenario");
-  assert(group && group.options.length === 7, "scenario has status, start, resume, open, pool, report-class and cancel");
+  assert(group && group.options.length === 8, "scenario has guide, status, start, resume, open, pool, report-class and cancel");
   const denied: any[] = [];
   const guild = new FakeGuild();
   const nonOrganiser = new FakeGuildMember("1002");
@@ -398,12 +401,55 @@ test("Announcements default to no_elo=false, scenario none, and reject No Elo pl
     return Object.fromEntries(fields.map((field: any) => [field.name, field.value]));
   };
   assertEqual(values(true)["🎭 **SCENARIO**"], "None", "preview scenario None");
-  assert(values(true)["🏅 **NO ELO**"].includes("No"), "preview default No Elo");
-  game.organiserNoElo = true;
-  game.noElo = true;
-  assert(values(true)["🏅 **NO ELO**"].includes("Yes"), "explicit preview");
-  assert(values(false)["🏅 **NO ELO**"].includes("Yes"), "explicit final announcement");
+  assertEqual(
+    values(true)["🏅 **ELO**"],
+    `**Enabled** (requires ${GameInstance.MIN_ELO_PLAYER_COUNT}+ active players at game start)`,
+    "preview default rating eligibility"
+  );
   game.reset();
+});
+
+test("Announcement rating wording covers all organiser, season and Double Elo choices", () => {
+  const game = GameInstance.getInstance();
+  game.reset();
+  const command = new AnnouncementCommand() as any;
+  const attendance = `requires ${GameInstance.MIN_ELO_PLAYER_COUNT}+ active players at game start`;
+  const cases = [
+    { organiser: false, relaxed: false, double: false, expected: `**Enabled** (${attendance})` },
+    { organiser: false, relaxed: false, double: true, expected: `**Enabled — Double Elo** (${attendance})` },
+    { organiser: true, relaxed: false, double: false, expected: "**Disabled** (Organiser selected)" },
+    { organiser: true, relaxed: false, double: true, expected: "**Disabled** (Organiser selected)" },
+    { organiser: false, relaxed: true, double: false, expected: "**Disabled** (Relaxed season)" },
+    { organiser: false, relaxed: true, double: true, expected: "**Disabled** (Relaxed season)" },
+    { organiser: true, relaxed: true, double: false, expected: "**Disabled** (Organiser selected; Relaxed season)" },
+    { organiser: true, relaxed: true, double: true, expected: "**Disabled** (Organiser selected; Relaxed season)" },
+  ];
+  try {
+    game.scenarios.configure("mystery-dungeon");
+    for (const c of cases) {
+      game.organiserNoElo = c.organiser;
+      game.isRelaxedSeason = c.relaxed;
+      game.isDoubleElo = c.double;
+      // Before the game starts, zero active players must not imply a
+      // permanently unrated game. Also cover stale effective No Elo state.
+      game.refreshNoElo();
+      for (const preview of [true, false]) {
+        const embed = command.createGameAnnouncementEmbed(preview).embeds[0].toJSON();
+        const elo = embed.fields.find((f: any) => f.name === "🏅 **ELO**");
+        assertEqual(elo?.value, c.expected, "correct rating wording");
+        assert(!embed.fields.some((f: any) => f.name.includes("NO ELO")), "no double-negative label");
+        const eligibleDouble = c.double && !c.organiser && !c.relaxed;
+        assertEqual(embed.description.includes("Double Elo planned"), eligibleDouble, "conditional Double Elo banner");
+        assertEqual(embed.description.includes("Relaxed season"), c.relaxed, "relaxed season marker retained");
+        if (eligibleDouble) {
+          assert(embed.description.includes("attendance requirement"), "banner does not guarantee Double Elo");
+        }
+        assert(game.noElo, "rendering leaves effective rating state unchanged");
+      }
+    }
+  } finally {
+    game.reset();
+  }
 });
 
 test("Announcement start validates choices before modifying the game and saves explicit No Elo in preview", async () => {
@@ -452,7 +498,11 @@ test("Announcement start validates choices before modifying the game and saves e
     assert(game.organiserNoElo && game.noElo, "valid No Elo selection saved");
     assert(!game.isDoubleElo, "no rating multiplier applied");
     const embedFields = replies.at(-1).embeds[0].toJSON().fields;
-    assert(embedFields.find((f: any) => f.name.includes("NO ELO")).value.includes("Yes"), "No Elo displayed in preview");
+    assertEqual(
+      embedFields.find((f: any) => f.name === "🏅 **ELO**")?.value,
+      "**Disabled** (Organiser selected)",
+      "No Elo displayed clearly in preview"
+    );
     game.beginConfirmedAnnouncement();
     assert(game.organiserNoElo && game.noElo, "confirmation preserves No Elo");
   } finally {
@@ -621,6 +671,125 @@ test("Captain-election result safely assigns confirmed captains through the shar
   }
 });
 
+test("People's Captains opens ballots for all players, preserves votes through review and confirms a replacement", async () => {
+  const game = GameInstance.getInstance();
+  game.reset();
+  const original = game.scenarios;
+  const originalCommand = TeamCommand.instance;
+  const savedFeed = Channels.gameFeed;
+  const sc = new ScenarioCoordinator(game);
+  (game as any).scenarios = sc;
+  const guild = new FakeGuild();
+  const ids = ["1001", "1002", "1003", "1004", "1005", "1006"];
+  const published: any[] = [];
+  const client = { users: { fetch: async () => ({ send: async () => { throw new Error("DMs closed"); } }) } };
+  Channels.gameFeed = { guild, client, send: async (message: any) => published.push(message) } as any;
+  const command = new TeamCommand();
+  try {
+    await withScenarioClock(sc, async ({ advanceTo }) => {
+      sc.configure("peoples-captains");
+      game.startTime = new Date(Date.now() + 35 * 60_000);
+      game.beginConfirmedAnnouncement();
+      game.teams.UNDECIDED = ids.map((id) => ({ playerId: id, discordSnowflake: id, captain: false, ignUsed: id, elo: 1000 } as any));
+      ids.forEach((id) => guild.addMember(new FakeGuildMember(id)));
+      assertEqual(await sc.registrationPrompt(ids[0]), null, "no volunteering interaction");
+      await sc.activateTrigger("election", "manual", guild as any);
+      const first = sc.snapshot()!;
+      assertEqual(first.actions.length, ids.length, "every registered player receives an action");
+      assertEqual(first.prompts!.filter((p) => p.status === "failed").length, ids.length, "failed DMs are recorded");
+      const frozen = first.data.ballots as Record<string, string[]>;
+      const voter = ids[0];
+      const action = first.actions.find((a) => a.ownerId === voter)!;
+      const oldId = `fwsc:${game.getLifecycleToken()}:${action.id}:${voter}`;
+      const firstPrompt = await sc.reopenAction(voter);
+      assert(firstPrompt?.content.includes("your ballot"), "failed DM can reopen privately");
+      await sc.applyAction(oldId, voter, ["vote:" + frozen[voter][0]]);
+      sc.restore(sc.snapshot(), game.getLifecycleToken());
+      assertEqual(sc.phase, "needs_review", "restart pauses voting");
+      sc.resumeAfterReview();
+      assertEqual(JSON.stringify(sc.snapshot()!.data.ballots), JSON.stringify(frozen), "ballots preserved across restart");
+      assertEqual((sc.snapshot()!.data.votes as Record<string, string>)[voter], frozen[voter][0], "vote preserved");
+      let stale = false;
+      try { await sc.applyAction(oldId, voter, ["vote:" + frozen[voter][1]]); } catch { stale = true; }
+      assert(stale, "old DM controls invalid after restart");
+      // Choose at least three different candidates to ensure a supported replacement exists.
+      const selected = new Set<string>();
+      for (const a of sc.snapshot()!.actions) {
+        const choices = frozen[a.ownerId];
+        const pick = choices.find((id) => !selected.has(id)) ?? choices[0];
+        selected.add(pick);
+        if ((sc.snapshot()!.data.votes as Record<string, string>)[a.ownerId] !== pick)
+          await sc.applyAction(`fwsc:${game.getLifecycleToken()}:${a.id}:${a.ownerId}`, a.ownerId, ["vote:" + pick]);
+      }
+      assert(selected.size >= 3, "replacement has real support");
+      let earlyClose = false;
+      try { await sc.activateTrigger("close", "manual", guild as any); } catch { earlyClose = true; }
+      assert(earlyClose, "even full turnout cannot shorten the advertised voting window");
+      assertEqual(sc.phase, "collecting", "voters can still change their vote");
+      advanceTo(game.startTime!.getTime() - 20 * 60_000);
+      await sc.activateTrigger("close", "manual", guild as any);
+      assertEqual(sc.phase, "ready", "automatic tally is ready for review");
+      const result = sc.snapshot()!;
+      const red = result.data.captainRed as string;
+      const blue = result.data.captainBlue as string;
+      assert(red !== blue, "elected captains distinct");
+      const revision = sc.controlRevision;
+      game.teams.UNDECIDED = game.teams.UNDECIDED.filter((p) => p.discordSnowflake !== red);
+      await sc.onRegistrationChanged(red, false);
+      assertEqual(sc.phase, "needs_review", "departing captain invalidates result controls");
+      let staleReview = false;
+      try { sc.reviewElectionRoster(revision, "RED"); } catch { staleReview = true; }
+      assert(staleReview, "old replacement controls rejected");
+      sc.reviewElectionRoster(sc.controlRevision, "RED");
+      const next = sc.snapshot()!;
+      assert(next.data.captainRed !== red && next.data.captainRed !== blue, "next supported registered candidate replaces unavailable captain");
+      assertEqual(next.data.captainBlue, blue, "other winner preserved");
+      await command.confirmScenarioCaptains(guild as any, next.data.captainRed as string, blue, sc.controlRevision);
+      assertEqual(sc.phase, "completed", "organiser confirmation completes election");
+      assertEqual(sc.automationBlock("draft"), null, "normal draft released");
+      assert(published.every((message) => !JSON.stringify(message).includes("vote:")), "no individual ballot choices published");
+    });
+  } finally {
+    game.reset();
+    (game as any).scenarios = original;
+    TeamCommand.instance = originalCommand;
+    Channels.gameFeed = savedFeed;
+  }
+});
+
+test("People's Captains rejects legacy volunteer snapshots and blocks changed voting rosters", async () => {
+  const { game, roster } = fakeCoordinator();
+  (game as any).getCaptainOfTeam = () => null;
+  const sc = new ScenarioCoordinator(game);
+  (game as any).scenarios = sc;
+  try {
+    sc.configure("peoples-captains");
+    game.announced = true;
+    sc.confirmAnnouncement();
+    const legacy = sc.snapshot()!;
+    legacy.version = 1;
+    legacy.triggers!.push({ id: "candidate", status: "active" });
+    sc.restore(legacy, game.getLifecycleToken());
+    assertEqual(sc.phase, "needs_review", "legacy snapshot is reviewable");
+    let refused = false;
+    try { sc.resumeAfterReview(); } catch { refused = true; }
+    assert(refused, "legacy candidate slate never silently reused");
+    await sc.cancel();
+    game.announced = false;
+    sc.configure("peoples-captains");
+    game.announced = true;
+    sc.confirmAnnouncement();
+    sc.setData("slate", roster.map((p) => p.discordSnowflake));
+    const state = sc.snapshot()!;
+    state.triggers![0].rosterIds = roster.map((p) => p.discordSnowflake);
+    sc.restore(state, game.getLifecycleToken());
+    roster.push({ discordSnowflake: "1003", captain: false });
+    refused = false;
+    try { sc.resumeAfterReview(); } catch { refused = true; }
+    assert(refused, "changed or incomplete frozen roster never reruns silently");
+  } finally { sc.reset(); }
+});
+
 test("Cancelling a scenario team preview does not apply team assignments", async () => {
   const game = GameInstance.getInstance();
   game.reset();
@@ -697,4 +866,140 @@ test("Scenario proposal uses shared TeamCommand roster lock and role synchronisa
     game.reset();
     (game as any).scenarios = original;
   }
+});
+
+test("Scenario editors track real completion and reject stale private controls", async () => {
+  const { game } = fakeCoordinator();
+  const sc = new ScenarioCoordinator(game);
+  (game as any).scenarios = sc;
+  const owner = "1002";
+  await withScenarioClock(sc, async () => {
+    sc.configure("mystery-dungeon");
+    game.announced = true;
+    game.startTime = new Date(Date.now() + 45 * 60_000);
+    sc.confirmAnnouncement();
+    const first = await sc.registrationPrompt(owner);
+    const idOf = (prompt: any) => prompt.components[0].toJSON().components[0].custom_id as string;
+    const originalId = idOf(first);
+    const second = await sc.applyAction(originalId, owner, ["answer:0:1"]);
+    assert(typeof second !== "string" && second.content.includes("not yet submitted"), "first answer is progress only");
+    assertEqual(sc.snapshot()!.prompts![0].status, "delivered", "intermediate choice is not complete");
+    assert(!sc.snapshot()!.actions[0].submittedAt, "no final submission timestamp");
+    let rejected = false;
+    try { await sc.applyAction(originalId, owner, ["answer:0:0"]); } catch { rejected = true; }
+    assert(rejected, "old editor cannot mutate a later step");
+    let prompt = second;
+    for (let i = 1; i < 5; i++)
+      prompt = await sc.applyAction(idOf(prompt), owner, [`answer:${i}:1`]);
+    prompt = await sc.applyAction(idOf(prompt), owner, ["submit"]);
+    assert(typeof prompt !== "string" && prompt.content.includes("Submission saved"), "explicit confirmation");
+    assertEqual(sc.snapshot()!.prompts![0].status, "completed", "only full submission counted");
+    assert(sc.triggerStatus().includes("1/1 complete"), "dashboard counts true completion");
+    const edited = await sc.applyAction(idOf(prompt), owner, ["edit"]);
+    assert(typeof edited !== "string" && edited.content.includes("not yet submitted"), "editing reopens the task");
+    assertEqual(sc.snapshot()!.prompts![0].status, "delivered", "completion is reversible while editable");
+  });
+});
+
+test("Scenario targeted delivery and one-shot reminders remain private and match-bound", async () => {
+  const { game, newMatch } = fakeCoordinator();
+  const sc = new ScenarioCoordinator(game);
+  (game as any).scenarios = sc;
+  const saved = Channels.gameFeed;
+  const guild = new FakeGuild();
+  guild.addMember(new FakeGuildMember("1002"));
+  let fail = true;
+  let attempts = 0;
+  const dm: any[] = [];
+  const publicMessages: any[] = [];
+  const client = { users: { fetch: async (id: string) => {
+    assertEqual(id, "1002", "DM targets only assigned participant");
+    return { send: async (message: any) => {
+      attempts++;
+      if (fail) throw new Error("DMs closed");
+      dm.push(message);
+    } };
+  } } };
+  (guild as any).client = client;
+  Channels.gameFeed = { guild, client, send: async (message: any) => publicMessages.push(message) } as any;
+  try {
+    await withScenarioClock(sc, async ({ tasks, advanceTo }) => {
+      sc.configure("mystery-dungeon");
+      game.announced = true;
+      game.startTime = new Date(Date.now() + 45 * 60_000);
+      sc.confirmAnnouncement();
+      const result = await deliverScenarioAction(game, "1002", client as any);
+      assertEqual(result, "failed", "closed DMs reported");
+      assertEqual(sc.snapshot()!.prompts![0].status, "failed", "delivery failure recorded");
+      assertEqual(publicMessages.length, 1, "one safe public fallback");
+      assert(!publicMessages[0].content.includes("Question 1"), "fallback contains no private editor");
+      const id = sc.snapshot()!.actions[0].id;
+      const reminderId = `scenario-reminder:${game.getLifecycleToken()}:${id}`;
+      const original = tasks.get(reminderId)!;
+      assert(!!original, "incomplete choice has a reminder");
+      game.startTime = new Date(Date.now() + 55 * 60_000);
+      sc.syncTriggerSchedule();
+      const replacement = tasks.get(reminderId)!;
+      assert(replacement.at > original.at, "reminder moves with registration cutoff");
+      advanceTo(original.at);
+      await original.callback();
+      assertEqual(attempts, 1, "stale scheduled reminder cannot send");
+      fail = false;
+      advanceTo(replacement.at);
+      await replacement.callback();
+      assertEqual(dm.length, 1, "one private reminder delivered");
+      assert(dm[0].content.includes("Scenario reminder"), "reminder identifies outstanding task");
+      assertEqual(sc.snapshot()!.prompts![0].status, "delivered", "successful retry clears delivery failure");
+      await replacement.callback();
+      assertEqual(dm.length, 1, "duplicate callback cannot send again");
+      await sc.cancel();
+      newMatch();
+      await replacement.callback();
+      assertEqual(dm.length, 1, "cancelled or replaced game cannot notify old player");
+    });
+  } finally { Channels.gameFeed = saved; }
+});
+
+test("Scenario dashboard and targeted open reject non-organisers and obsolete review controls", async () => {
+  const { game } = fakeCoordinator();
+  const registry = new ScenarioRegistry([definition({
+    triggers: [{ id: "lock", type: "manual", manual: true }],
+    implementation: { activateTrigger: () => { throw new Error("must not run"); } },
+  })]);
+  const sc = new ScenarioCoordinator(game, registry);
+  (game as any).scenarios = sc;
+  const guild = new FakeGuild();
+  const member = new FakeGuildMember("1002");
+  guild.addMember(member);
+  const saved = Channels.gameFeed;
+  Channels.gameFeed = { guild } as any;
+  try {
+    sc.configure("fixture");
+    game.announced = true;
+    sc.confirmAnnouncement();
+    const id = `fwscpanel:${game.getLifecycleToken()}:start:lock:${sc.controlRevision}`;
+    const errors: any[] = [];
+    const interaction = {
+      customId: id, guild, user: { id: "1002" },
+      reply: async (message: any) => { errors.push(message); },
+      deferUpdate: async () => { interaction.deferred = true; },
+      followUp: async (message: any) => { errors.push(message); },
+      deferred: false, replied: false,
+    };
+    await handleScenarioDashboard(game, interaction as any);
+    assert(errors[0].content.includes("Only organisers"), "ordinary player cannot use dashboard");
+    const command = new GameCommand();
+    await command.execute({
+      guild, user: { id: "1002" },
+      options: { getSubcommand: () => "open", getSubcommandGroup: () => "scenario", getUser: () => ({ id: "1001" }) },
+      reply: async (message: any) => { errors.push(message); },
+    } as any);
+    assert(errors[1].content.includes("Only organisers"), "ordinary player cannot resend another editor");
+    await member.roles.add(ConfigManager.getConfig().roles.organiserRole);
+    sc.needsReview("old result");
+    sc.resumeAfterReview();
+    await handleScenarioDashboard(game, interaction as any);
+    assert(errors[2].content.includes("changed"), "stale dashboard cannot start replacement stage");
+    assertEqual(sc.phase, "collecting", "no mutation from rejected controls");
+  } finally { sc.reset(); Channels.gameFeed = saved; }
 });

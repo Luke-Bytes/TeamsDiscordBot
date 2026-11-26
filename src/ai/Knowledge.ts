@@ -1,11 +1,13 @@
 import { createHash } from "crypto";
 import { lstatSync, readFileSync, realpathSync } from "fs";
 import { relative, resolve, sep } from "path";
+import { scenarioMetadata } from "../logic/scenarios/ScenarioMetadata";
+import { scenarioQuestionHeadings } from "./ScenarioKnowledge";
 
 export type KnowledgeScope = "player" | "organiser";
 export type KnowledgeChunk = {
   id: string;
-  topic?: "shotbow" | "fw-tournament" | "fw-vocabulary";
+  topic?: "shotbow" | "fw-tournament" | "fw-vocabulary" | "fw-scenario";
   content: string;
   source: string;
   heading: string;
@@ -18,7 +20,7 @@ export type KnowledgeChunk = {
 export type ApprovedSource = {
   path: string;
   scope: KnowledgeScope;
-  topic?: "shotbow" | "fw-tournament" | "fw-vocabulary";
+  topic?: "shotbow" | "fw-tournament" | "fw-vocabulary" | "fw-scenario";
   headings: readonly string[];
 };
 
@@ -27,6 +29,27 @@ export type ApprovedSource = {
  * Adding more content requires deliberate approval, not a directory scan.
  */
 export const APPROVED: readonly ApprovedSource[] = [
+  {
+    path: "docs/ai/player-scenarios.md",
+    scope: "player",
+    topic: "fw-scenario",
+    headings: [
+      "Friendly Wars scenarios - guide, registration and private prompts",
+      ...Object.values(scenarioMetadata).map((scenario) => scenario.name),
+    ],
+  },
+  {
+    path: "docs/ai/organiser-scenarios.md",
+    scope: "organiser",
+    topic: "fw-scenario",
+    headings: [
+      "Announce and prepare a scenario game",
+      "Scenario status, reminders and resend prompts",
+      "Scenario game start, team selection and Cursed Classes pool",
+      "Scenario recovery, manual start, resume and cancel",
+      "Scenario privacy and live questions",
+    ],
+  },
   {
     path: "docs/ai/player-guide.md",
     scope: "player",
@@ -629,6 +652,7 @@ export function retrieveApprovedKnowledge(
   const shotbowQuestion = asksAboutShotbow(question);
   const fwTournamentQuestion = asksAboutFwTournament(question);
   const fwVocabularyQuestion = asksAboutFwVocabulary(question);
+  const scenarioHeadings = scenarioQuestionHeadings(question);
   const tournamentResultsQuestion =
     shotbowQuestion &&
     /\b(?:tournaments?|clans?)\b/i.test(question) &&
@@ -652,7 +676,8 @@ export function retrieveApprovedKnowledge(
       (chunk) =>
         (chunk.topic !== "shotbow" || shotbowQuestion) &&
         (chunk.topic !== "fw-tournament" || fwTournamentQuestion) &&
-        (chunk.topic !== "fw-vocabulary" || fwVocabularyQuestion)
+        (chunk.topic !== "fw-vocabulary" || fwVocabularyQuestion) &&
+        (chunk.topic !== "fw-scenario" || scenarioHeadings.has(chunk.heading))
     )
     .map((chunk) => {
       const body = terms(chunk.content);
@@ -672,6 +697,8 @@ export function retrieveApprovedKnowledge(
         if (titleCommands.has(command)) score += 35;
         else if (bodyCommands.has(command)) score += 8;
       }
+      // Scenario-specific rules take priority over ordinary draft and registration guides.
+      if (chunk.topic === "fw-scenario") score += 40;
       // Public-game excerpts should rank when explicitly requested, but never
       // drown out precise FW command documentation in mixed questions.
       if (shotbowQuestion && chunk.topic === "shotbow" && matchingTerms)

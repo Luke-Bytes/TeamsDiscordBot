@@ -62,7 +62,7 @@ Optionally add a configurable "prioritise pair preservation" versus "prioritise 
 - Prior captain appointments: if already selected, captains must be assigned to opposite teams; any duo linking two captains **cannot** be honoured. Show this before confirmation.
 - A registered player cannot be included in two pairs or roster positions. Discard stale references on change.
 
-## Optional future variation — Rivals
+## Optional future variation - Rivals
 
 A related but **separate** scenario could let consenting players nominate an opponent they would love to face, with mutual rival choices prioritised for **opposite** teams. Do not mix "partner" and "rival" intentions in the same hidden button without clear labelling and mutual consent.
 

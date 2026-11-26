@@ -6,7 +6,7 @@
 
 Captains can no longer scan the full pool and always take the obvious strongest player. **Each turn, the bot deals three randomly chosen available players; the captain must draft one of those three.** Players are still chosen strategically, but the constrained hand injects unpredictability, comebacks and funny "I had to pick you" moments.
 
-The goal is a short, entertaining draft — not a long gambling-style system, and not a mechanism for hiding or punishing weaker players.
+The goal is a short, entertaining draft - not a long gambling-style system, and not a mechanism for hiding or punishing weaker players.
 
 ## Proposed v1 rules
 
@@ -22,10 +22,10 @@ The goal is a short, entertaining draft — not a long gambling-style system, an
 ## Example
 
 ```text
-DRAFT ROULETTE — RED CAPTAIN'S TURN
+DRAFT ROULETTE - RED CAPTAIN'S TURN
 Pick 1 of your 3 players:
 
-[ Alex — 1050 Elo ]  [ Blake — 1120 Elo ]  [ Casey — 1012 Elo ]
+[ Alex - 1050 Elo ]  [ Blake - 1120 Elo ]  [ Casey - 1012 Elo ]
 
 Rerolls remaining: 1
 [Pick Alex] [Pick Blake] [Pick Casey] [Reroll]

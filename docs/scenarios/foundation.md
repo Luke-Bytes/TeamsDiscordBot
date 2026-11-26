@@ -1,4 +1,4 @@
-# Friendly Wars scenario foundation — implemented integration guide
+# Friendly Wars scenario foundation - implemented integration guide
 
 This document describes the **implemented foundation**, not gameplay for any of the seven designs. Read the [catalogue](./README.md), [shared design](./shared-design.md), and the specific scenario proposal first. All seven planned scenarios are **disabled** until their mechanics and Discord UX are complete.
 
@@ -19,13 +19,13 @@ This document describes the **implemented foundation**, not gameplay for any of 
 
 ## Stable registry IDs
 
-- `mystery-dungeon`: **Mystery Dungeon — Personality Test** (team formation)
+- `mystery-dungeon`: **Mystery Dungeon - Personality Test** (team formation)
 - `peoples-captains`: **The People's Captains** (captain election)
 - `partners-in-crime`: **Partners in Crime** (team formation)
 - `masked-draft`: **The Masked Draft** (draft)
 - `draft-roulette`: **Draft Roulette** (draft)
 - `captains-wildcards`: **Captain's Wildcards** (draft extension)
-- `class-hex`: **Class Hex — Cursed Classes** (pre-game restriction)
+- `class-hex`: **Cursed Classes** (pre-game restriction)
 
 `ScenarioRegistry.requireAvailable(id)` requires a known definition with **both** `enabled: true` and a real `implementation`. Planned definitions have neither. `/announce start scenario` derives its choice list from `scenarioRegistry.available()` plus `none`, so no unfinished game mode can be advertised. Changing a definition requires the next normal command registration to publish the new choices. No external command registration/deployment was performed as part of this foundation.
 
@@ -58,7 +58,7 @@ Phases: `configured`, `collecting`, `ready`, `completed`, `needs_review`, `cance
 - **Captain election** (People's Captains): holds automatic captains and premature draft until elected captains are confirmed.
 - **Custom draft** (Masked, Roulette): holds normal drafting; elected or organiser captains can still be chosen when appropriate.
 - **Normal-draft extension** (Wildcards): allows the ordinary draft, uses `onDraftTurn` to affect it.
-- **Gameplay restriction** (Class Hex): allows ordinary captain/team selection and draft, uses `onTeamsFinalized`, and requires a completed restriction phase before match start.
+- **Gameplay restriction** (Cursed Classes): allows ordinary captain/team selection and draft, uses `onTeamsFinalized`, and requires a completed restriction phase before match start.
 
 On failure or a restart, `needs_review` blocks automatic progression and `/game start`. Inspect `/game diagnostics` for the scenario phase and start block. **Explicit organiser escape hatch:** `/team scenario-fallback` cancels a pre-game scenario before teams are finalised, informs the game feed, and re-enables ordinary `/captain` and `/team generate` workflows. It deliberately does not auto-replace existing captains or change partially applied Discord roles; inspect them first. `resumeAfterReview()` is a typed primitive for future per-scenario organiser UX; never call it without an authenticated organiser review and fresh interaction publication.
 
@@ -126,7 +126,7 @@ Example: Mystery Dungeon team formation.
 4. Present the result via `await TeamCommand.instance!.previewScenarioTeams(guild, {red, blue, undecided, method: "BALANCE"})`. Do not assign team arrays or roles yourself. On confirmed captain election, instead use `confirmScenarioCaptains`; for custom drafts use a specialised `TeamPickingSession` but still route final confirmation through `TeamCommand`.
 5. Add all scenario-specific failure, deadline, dropout, nonresponse, roster-race and recovery tests with **offline** Discord/db fakes.
 6. In `ScenarioRegistry.ts`, attach `implementation: mysteryDungeon` and `enabled: true` **only when steps 1–5 work**. Then re-register commands through the normal deployment process (outside this task). `/announce start` will automatically list it without a new special case.
-7. Confirm `/scenario` remains the **development-only** utility and untouched.
+7. Confirm `/debug-scenario` remains a **development-only** utility.
 
 ## Trigger policies, automatic activation and organiser controls
 
@@ -145,20 +145,20 @@ Policies use stable short `id` values. Optional `minPlayers`, `requireCaptains`,
 
 The per-stage statuses are `pending`, `scheduled`, `running`, `active`, `completed`, `missed`, and `failed`. `markReady` and `complete` advance the shared scenario phase independently of the trigger status. Only one execution per stage is admitted, including simultaneous manual/timer requests. `captureRoster` saves sorted unique Discord snowflakes; `assertCapturedRoster(stageId)` rejects a stale roster. `TeamCommand` also checks captured rosters before confirming a scenario captain result or team proposal.
 
-Normal captain automation still runs at T−15 **unless** a scenario owns captain selection (e.g. People's Captains) or pre-empts team formation (e.g. Mystery Dungeon). For custom drafts with ordinary captains, auto-captain selection remains allowed but the next draft step dispatches `on_draft_start` instead of an ordinary snake session. Class Hex does not block ordinary captain/draft setup; its activation follows finalised teams. Stage ownership is driven by registry `capabilities`, not scenario IDs.
+Normal captain automation still runs at T−15 **unless** a scenario owns captain selection (e.g. People's Captains) or pre-empts team formation (e.g. Mystery Dungeon). For custom drafts with ordinary captains, auto-captain selection remains allowed but the next draft step dispatches `on_draft_start` instead of an ordinary snake session. Cursed Classes does not block ordinary captain/draft setup; its activation follows finalised teams. Stage ownership is driven by registry `capabilities`, not scenario IDs.
 
 The scheduler is the existing recovery-aware `SchedulerUtil`. Each task is scoped to the announcement token and stage ID and is cancelled on scenario cancellation/reset/review; changing the start time through the announcement controls rearms the same stage at the new offset. If a target time has already passed, status is `missed` and **no automatic catch-up** occurs. An organiser can review and manually activate the stage if policy permits. Timer callbacks verify the match token, phase, live status, schedule and prerequisites before the implementation runs. A hook exception records a failure reason and pauses the scenario for review; it does not trigger a second draw or restart.
 
-- `/game scenario status` — organiser-only private status: selected scenario, phase, stage timing/status, eligible count, completion and any blocker.
-- `/game scenario start [stage]` — organiser-only early/manual activation; omitting `stage` selects the next pending manual-eligible stage. Exactly the same coordinator path handles scheduled starts.
-- `/game scenario resume` — organiser-only explicit release from `needs_review`. Old actions and timers are **not replayed**. A future scenario must safely restore or re-create its pending interaction state before further gameplay.
-- `/game scenario open` — registered participants reopen their own pending or editable private action, always ephemerally. Never exposes another player's response.
+- `/game scenario status` - organiser-only private status: selected scenario, phase, stage timing/status, eligible count, completion and any blocker.
+- `/game scenario start [stage]` - organiser-only early/manual activation; omitting `stage` selects the next pending manual-eligible stage. Exactly the same coordinator path handles scheduled starts.
+- `/game scenario resume` - organiser-only explicit release from `needs_review`. Old actions and timers are **not replayed**. A future scenario must safely restore or re-create its pending interaction state before further gameplay.
+- `/game scenario open` - registered participants reopen their own pending or editable private action, always ephemerally. Never exposes another player's response.
 
 For registration entry points the scenario supplies `registrationPrompt(game, userId, customId)` returning private content and Discord component rows. The coordinator creates the owner-bound `fwsc:` action and delivery state before invoking this renderer, and it reuses the same action on retries. Self-registration sends an ephemeral follow-up; organiser-initiated registration and `/massregister` attempt a direct DM. If Discord delivery fails, registration remains intact and the player can run `/game scenario open`. The public registration announcement advertises this fallback when a scenario is selected. A single-use submitted action is not prompted again. Deadline expiry, roster changes, and game-token replacement reject stale buttons. No default placeholder questionnaire/vote is ever sent when a scenario lacks its actual UX hook.
 
 A preserved restart restores validated trigger and prompt metadata but **never rearms timers or redistributes private actions**. Unfinished scenarios become `needs_review` and must be inspected before manually resuming or using the existing `/team scenario-fallback`. Earlier snapshots missing trigger fields remain valid. Completed matches only persist safe public scenario metadata, not private inputs.
 
-### Example A — Mystery Dungeon (integration sketch, not implemented)
+### Example A - Mystery Dungeon (integration sketch, not implemented)
 
 ```ts
 const triggers = [
@@ -186,25 +186,10 @@ const implementation: ScenarioImplementation = {
 
 At registration, the answer action opens privately. Its deadline is T−15 by default (or a policy-specific earlier offset); reopening allows edits. T−15 or manual `/game scenario start stage:lock` runs the same roster snapshot/lock logic once. The future scenario handles questionnaire scoring and proposal creation; an organiser still confirms teams through `TeamCommand` before match start. Late roster changes require review, not silent recalculation.
 
-### Example B — The People's Captains (integration sketch, not implemented)
+### Example B - The People's Captains
 
-```ts
-const triggers = [
-  { id: "election", type: "before_game_start", offsetMinutes: 15,
-    manual: true, minPlayers: 2, captureRoster: true, requiredPhase: "collecting" },
-] satisfies ScenarioTriggerPolicy[];
-
-const implementation: ScenarioImplementation = {
-  activateTrigger(game, policy, rosterIds) {
-    if (policy.id !== "election") return;
-    // Future election UX: freeze the candidate list and open player-bound
-    // private ballots via game.scenarios.openAction(...). Store no public votes.
-  },
-};
-```
-
-The scheduled election replaces automatic captain choice at T−15; `/game scenario start stage:election` can start it earlier. The stage stays active while ballots are collected. After voting closes and organisers approve results, the scenario calls `markReady()` and `TeamCommand.confirmScenarioCaptains(guild, redId, blueId)`, which commits captains once and calls `complete()`. That releases ownership of the **normal** draft. Organisers can then run the usual draft setup; no election hook itself assigns teams.
+The election opens at T-35 and closes at T-20. It freezes the eligible registered roster, with at least four players, and creates one private three-person ballot per player. Every registered player is a candidate at opening. The organiser may manually open a missed stage before the deadline. After voting closes, the scenario calls `markReady()`; organiser approval uses `TeamCommand.confirmScenarioCaptains(guild, redId, blueId)` to verify the roster, commit captains and call `complete()`. That releases ownership of the normal draft at T-15. See [The People's Captains](./peoples-captains.md) for scoring, review and recovery.
 
 ## Remaining decisions for each implementation
 
-Set question formats and timeouts, public progress indicators, how to handle nonresponse and tied results, rating policy for special scenarios, the precise organiser approval UX for captain-only selections, what private input is retained during recovery, and whether Class Hex relies on honour rules (the bot cannot enforce Minecraft class use). The foundation intentionally does not implement these scenario-specific policies or a multi-scenario composition engine. Scenario stage timers now reuse the existing `Scheduler`, not a new scheduling framework.
+Set question formats and timeouts, public progress indicators, how to handle nonresponse and tied results, rating policy for special scenarios, the precise organiser approval UX for captain-only selections, what private input is retained during recovery, and whether Cursed Classes relies on honour rules (the bot cannot enforce Minecraft class use). The foundation intentionally does not implement these scenario-specific policies or a multi-scenario composition engine. Scenario stage timers now reuse the existing `Scheduler`, not a new scheduling framework.

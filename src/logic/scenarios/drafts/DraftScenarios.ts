@@ -1,10 +1,11 @@
 import type { GameInstance } from "../../../database/GameInstance";
 import type { ScenarioImplementation, ScenarioValue } from "../ScenarioTypes";
 import { DiscordUtil } from "../../../util/DiscordUtil";
-import { Channels } from "../../../Channels";
+import { escapeIgn } from "../../../util/Utils";
+import { MYSTERY_HINT } from "./MaskedDraftHints";
 import TeamCommand from "../../../commands/TeamCommand";
 import { ScenarioDraftSession, ScenarioDraftProgress, ScenarioDraftMode } from "./ScenarioDraftSession";
-import { data, participantLabel } from "../ScenarioGameplay";
+import { data } from "../ScenarioGameplay";
 
 export function makeDraftScenario(mode: ScenarioDraftMode): ScenarioImplementation {
   const selected = mode === "masked" ? "masked-draft" : "draft-roulette";
@@ -19,15 +20,41 @@ export function makeDraftScenario(mode: ScenarioDraftMode): ScenarioImplementati
       if (mode !== "masked" || game.scenarios.selectedId !== selected ||
           game.scenarios.phase !== "completed" || !game.hasFinalizedPlayableTeams()) return;
       const progress = data<ScenarioDraftProgress | null>(game, "draft", null);
-      if (!progress || Object.keys(progress.cards).length !== progress.red.length + progress.blue.length)
+      if (!progress || progress.mode !== "masked" || !progress.finished || progress.remaining.length)
         throw new Error("Masked draft mapping is incomplete; identities cannot be revealed safely.");
-      const text = Object.entries(progress.cards).sort(([a], [b]) => a.localeCompare(b))
-        .map(([card, id]) => {
-          const side = game.getPlayersOfTeam("RED").some((p) => p.discordSnowflake === id)
-            ? "RED" : "BLUE";
-          return `**${card}** was ${participantLabel(game, id)} — **${side}**`;
-        }).join("\n");
-      await DiscordUtil.sendMessage("gameFeed", `🎭 **The Masked Draft — identities revealed!**\n${text}`);
+      const cards = Object.entries(progress.cards);
+      const picks = [...progress.red, ...progress.blue];
+      const red = game.getPlayersOfTeam("RED");
+      const blue = game.getPlayersOfTeam("BLUE");
+      const matches = (ids: string[], players: typeof red) =>
+        ids.length === players.length && new Set(ids).size === ids.length &&
+        players.every((player) => ids.includes(player.discordSnowflake));
+      if (cards.length !== picks.length || new Set(cards.map(([, id]) => id)).size !== picks.length ||
+          !cards.every(([card, id]) => /^M[0-9]{2,}$/.test(card) && picks.includes(id)) ||
+          new Set([progress.redCaptain, progress.blueCaptain, ...picks]).size !== picks.length + 2 ||
+          !matches([progress.redCaptain, ...progress.red], red) ||
+          !matches([progress.blueCaptain, ...progress.blue], blue))
+        throw new Error("Masked draft mapping does not match the confirmed teams.");
+      const lookup = new Map([...red, ...blue].map((player) => [player.discordSnowflake, player]));
+      const header = "🎭 **The Masked Draft - identities revealed!**";
+      const messages: string[] = [];
+      let message = header;
+      for (const side of ["RED", "BLUE"] as const) {
+        message += `\n\n**${side === "RED" ? "🔴 RED" : "🔵 BLUE"}**`;
+        for (const [card, id] of cards.filter(([, id]) => progress[side === "RED" ? "red" : "blue"].includes(id))) {
+          const player = lookup.get(id)!;
+          const name = escapeIgn(player.ignUsed ?? player.latestIGN ?? "Unnamed player");
+          const line = `\n**${card}** - ${name} · ${progress.cardHints?.[card] ?? MYSTERY_HINT}`;
+          if (message.length + line.length > 1800) {
+            messages.push(message);
+            message = `${header}\n\n**${side} (continued)**`;
+          }
+          message += line;
+        }
+      }
+      messages.push(message);
+      for (const content of messages)
+        await DiscordUtil.sendMessage("gameFeed", { content, allowedMentions: { parse: [] } });
     },
     publicResult(game): ScenarioValue {
       const p = data<ScenarioDraftProgress | null>(game, "draft", null);
@@ -39,7 +66,7 @@ export function makeDraftScenario(mode: ScenarioDraftMode): ScenarioImplementati
       };
     },
     publicSummary(game) {
-      return mode === "masked" ? "Anonymous cards are revealed only after team confirmation."
+      return mode === "masked" ? "Anonymous cards may show shared match results with today's captains, map records or other sample-backed match history, never Elo. Identities are revealed only after team confirmation."
         : "Each captain chooses from a frozen hand of up to three and has one reroll.";
     },
     organiserSummary(game) {

@@ -12,7 +12,7 @@ This is a QC inventory, **not** an AI knowledge source. The offline test compare
 | `ask`              | brief      | player-guide: privacy and limitations                                                           |
 | `event`            | full       | organiser-events-and-admin: draft, form, roster privacy, closure                                |
 | `sign`             | full       | player-community: sign-up, reserves, edit/withdraw                                              |
-| `announce`         | full       | organiser-game-ops: announcement preview and cancellation                                       |
+| `announce`         | full       | organiser-game-ops: announcement preview and cancellation; organiser-scenarios: scenario selection                                       |
 | `igns`             | brief      | player-community: command help; organiser-only diagnostics not needed                           |
 | `leaderboards`     | full       | player-stats-and-history: Ranked and Relaxed leaderboard                                        |
 | `register`         | full       | player-actions: register and linked-account correction                                          |
@@ -23,7 +23,7 @@ This is a QC inventory, **not** an AI knowledge source. The offline test compare
 | `captain`          | full       | organiser-game-ops: captain appointment                                                         |
 | `test`             | excluded   | developer/debug utility; not player knowledge                                                   |
 | `cleanup`          | excluded   | internal maintenance/debug, unsafe to surface                                                   |
-| `scenario`         | excluded   | developer/debug utility                                                                         |
+| `debug-scenario`   | excluded   | developer/debug utility                                                                         |
 | `registered`       | full       | player-actions: signed-up roster                                                                |
 | `unregister`       | full       | player-actions: leaving                                                                         |
 | `restart`          | restricted | organiser-guide: no forced restart; operator escalation only                                    |
@@ -31,7 +31,7 @@ This is a QC inventory, **not** an AI knowledge source. The offline test compare
 | `winner`           | full       | organiser-game-ops: confirmed winner                                                            |
 | `performance`      | brief      | low-priority utility; consult /help                                                             |
 | `mvp`              | full       | player-actions: vote                                                                            |
-| `game`             | full       | player-actions: request; organiser-game-ops: start/end/shutdown/diagnostics                     |
+| `game`             | full       | player-actions: request; organiser-game-ops: lifecycle; player-scenarios and organiser-scenarios: scenario commands                     |
 | `missing`          | brief      | low-priority roster utility; consult /help                                                      |
 | `captainnominate`  | full       | player-actions: nominations                                                                     |
 | `teamless`         | brief      | low-priority roster utility; consult /help                                                      |

@@ -21,6 +21,7 @@ import { DiscordUtil } from "../util/DiscordUtil";
 import { PermissionsUtil } from "../util/PermissionsUtil";
 import { escapeText } from "../util/Utils";
 import { createGameStartPrompt } from "./GameCommand";
+import { Channels } from "../Channels";
 import { GuildMembership } from "../logic/GuildMembership";
 import { GameRecoveryCoordinator } from "../logic/ActiveGameRecovery";
 import { ScenarioTeamPickingSession } from "../logic/scenarios/ScenarioTeamPickingSession";
@@ -127,14 +128,17 @@ export default class TeamCommand implements Command {
   }
 
   /** Scenario-created teams go through the same serialized preview and role finalisation as normal teams. */
-  async previewScenarioTeams(guild: Guild, proposal: ScenarioTeamProposal): Promise<void> {
+  async previewScenarioTeams(guild: Guild, proposal: ScenarioTeamProposal, expectedToken?: string, expectedRevision?: string): Promise<void> {
     await this.serialise(async () => {
       const game = CurrentGameManager.getCurrentGame();
+      const token = game.getLifecycleToken();
+      const revision = game.scenarios.controlRevision;
+      if ((expectedToken && expectedToken !== token) || (expectedRevision && expectedRevision !== revision))
+        throw new Error("That scenario proposal has changed.");
       if (this.isTeamPickingSessionActive() || game.teamsDecidedBy)
         throw new Error("Another team-selection session already exists.");
-      const token = game.getLifecycleToken();
       await GuildMembership.reconcile(guild, this);
-      if (game.getLifecycleToken() !== token || game.scenarios.phase !== "ready")
+      if (game.getLifecycleToken() !== token || game.scenarios.phase !== "ready" || game.scenarios.controlRevision !== revision)
         throw new Error("Scenario or roster changed before preview; recalculate teams.");
       const session = new ScenarioTeamPickingSession(proposal);
       await session.publishPreview();
@@ -143,13 +147,14 @@ export default class TeamCommand implements Command {
   }
 
   /** Complete a reviewed captain-election result without bypassing roster/role safeguards. */
-  async confirmScenarioCaptains(guild: Guild, redId: string, blueId: string): Promise<void> {
+  async confirmScenarioCaptains(guild: Guild, redId: string, blueId: string, expectedRevision?: string): Promise<void> {
     await this.serialise(async () => {
       const game = CurrentGameManager.getCurrentGame();
       const token = game.getLifecycleToken();
       if (!game.announced || game.getGameStartStatus() !== "idle" || game.isFinished ||
           game.teamsDecidedBy || this.isTeamPickingSessionActive() ||
-          game.scenarios.phase !== "ready" || !game.scenarios.definition?.capabilities.captains)
+          game.scenarios.phase !== "ready" || !game.scenarios.definition?.capabilities.captains ||
+          (expectedRevision !== undefined && game.scenarios.controlRevision !== expectedRevision))
         throw new Error("No ready, organiser-reviewed captain-election result is available.");
       if (redId === blueId) throw new Error("Captains must be different registered players.");
       // Reconcile membership before trusting the election's candidate set.
@@ -170,6 +175,8 @@ export default class TeamCommand implements Command {
           game.getLifecycleToken() !== token || game.scenarios.phase !== "ready")
         throw new Error("Candidate membership could not be verified; retry after review.");
       const roles = ConfigManager.getConfig().roles;
+      if (game.scenarios.selectedId === "peoples-captains" && game.scenarios.snapshot()?.version === 2)
+        game.scenarios.setData("roleAssignmentStarted", true);
       try {
         for (const [member, team] of [[redMember, "RED"], [blueMember, "BLUE"]] as const) {
           await member.roles.add(roles.captainRole);
@@ -683,11 +690,13 @@ export default class TeamCommand implements Command {
       }
       return;
     }
-    if (session instanceof ScenarioTeamPickingSession || session instanceof ScenarioDraftSession) {
+    if (session instanceof ScenarioTeamPickingSession || session instanceof ScenarioDraftSession ||
+        (session instanceof DraftTeamPickingSession && CurrentGameManager.getCurrentGame().scenarios.selectedId === "captains-wildcards")) {
       let member;
       try { member = await fetchGuildMember(interaction.guild, interaction.user.id); }
       catch { member = null; }
-      if (!PermissionsUtil.hasRole(member ?? undefined, "organiserRole")) {
+      if ((Channels.teamPicking?.guild && interaction.guild.id !== Channels.teamPicking.guild.id) ||
+          !PermissionsUtil.hasRole(member ?? undefined, "organiserRole")) {
         await interaction.reply({ content: "Only verified organisers can confirm scenario teams.", flags: MessageFlags.Ephemeral });
         return;
       }

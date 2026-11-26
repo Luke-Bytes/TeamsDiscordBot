@@ -38,10 +38,17 @@ import { setTimeout as delay } from "timers/promises";
 import { fetchGuildMember } from "../util/DiscordFailures";
 import TeamCommand from "./TeamCommand";
 import { configureHexPool, reportUnavailableClass } from "../logic/scenarios/classHex/ClassHex";
+import { scenarioDashboard } from "../logic/scenarios/ScenarioDashboard";
+import { scenarioGuide, GUIDE_MENU_ID, GUIDE_OPEN_ID, handleScenarioGuideMenu, handleScenarioGuideButton } from "../logic/scenarios/ScenarioGuide";
+import { clearScenarioInformation } from "../logic/scenarios/ScenarioAnnouncementInformation";
+import { deliverScenarioAction } from "../logic/scenarios/ScenarioPromptDelivery";
+import { Channels } from "../Channels";
 
 export const GAME_START_BUTTON_ID = "game-start-confirm";
 
 export function createGameStartPrompt(content = "Start game?") {
+  const block = GameInstance.getInstance().scenarios.startBlock();
+  if (block) return { content: `Teams selected. ${block}`, components: [] };
   return {
     content,
     components: [
@@ -76,15 +83,17 @@ export default class GameCommand implements Command {
         .setDescription("Complete the game and calculate elo")
     )
     .addSubcommandGroup((group) =>
-      group.setName("scenario").setDescription("Selected Friendly War scenario")
+      group.setName("scenario").setDescription("Friendly Wars scenarios")
+        .addSubcommand((sub) => sub.setName("guide").setDescription("Browse all Friendly Wars scenarios"))
         .addSubcommand((sub) => sub.setName("status").setDescription("Organiser scenario activation status"))
         .addSubcommand((sub) => sub.setName("start").setDescription("Start the next eligible scenario stage")
           .addStringOption((option) => option.setName("stage").setDescription("Stage ID (optional)").setRequired(false)))
         .addSubcommand((sub) => sub.setName("resume").setDescription("Resume a scenario paused for organiser review"))
-        .addSubcommand((sub) => sub.setName("open").setDescription("Open your own pending private scenario interaction"))
-        .addSubcommand((sub) => sub.setName("pool").setDescription("Organiser: approve the Class Hex class pool")
+        .addSubcommand((sub) => sub.setName("open").setDescription("Open your private scenario interaction or resend to a player")
+          .addUserOption((option) => option.setName("user").setDescription("Organiser only: send a private prompt to this player").setRequired(false)))
+        .addSubcommand((sub) => sub.setName("pool").setDescription("Organiser: approve the Cursed Classes pool")
           .addStringOption((option) => option.setName("classes").setDescription("At least three valid classes, comma-separated").setRequired(true)))
-        .addSubcommand((sub) => sub.setName("report-class").setDescription("Report that your assigned Class Hex class is unavailable"))
+        .addSubcommand((sub) => sub.setName("report-class").setDescription("Report that your assigned cursed class is unavailable"))
         .addSubcommand((sub) => sub.setName("cancel").setDescription("Organiser: cancel the selected scenario before match start"))
     )
     .addSubcommand((sub) =>
@@ -165,8 +174,11 @@ export default class GameCommand implements Command {
   }
 
   get buttonIds(): string[] {
-    return [GAME_START_BUTTON_ID, ...this.captainPlanDMManager.buttonIds];
+    return [GUIDE_OPEN_ID, GAME_START_BUTTON_ID, ...this.captainPlanDMManager.buttonIds];
   }
+
+  public selectMenuIds = [GUIDE_MENU_ID];
+  public handleSelectMenu = handleScenarioGuideMenu;
 
   public isAwaitingCaptainPlan(userId: string): boolean {
     return this.captainPlanDMManager.hasPendingSession(userId);
@@ -179,9 +191,44 @@ export default class GameCommand implements Command {
       return;
     }
     if (interaction.options.getSubcommandGroup?.(false) === "scenario") {
+      if (subCommand === "guide") {
+        await interaction.reply({ ...scenarioGuide()!, flags: MessageFlags.Ephemeral });
+        return;
+      }
       const game = GameInstance.getInstance();
+      const token = game.getLifecycleToken();
+      const revision = game.scenarios.controlRevision;
+      const assertCurrent = () => {
+        if (token !== game.getLifecycleToken() || revision !== game.scenarios.controlRevision)
+          throw new Error("The scenario has changed. Run the command again.");
+      };
+      const gameGuild = Channels.gameFeed?.guild ?? Channels.teamPicking?.guild;
+      if (!interaction.guild || (gameGuild && interaction.guild.id !== gameGuild.id)) {
+        await interaction.reply({ content: "Use this scenario command in the current game server.", flags: MessageFlags.Ephemeral });
+        return;
+      }
       if (subCommand === "open") {
-        if (!interaction.guild || !game.getPlayers().some((p) => p.discordSnowflake === interaction.user.id)) {
+        const target = interaction.options.getUser?.("user");
+        if (target && target.id !== interaction.user.id) {
+          const guild = interaction.guild;
+          const member = guild ? await fetchGuildMember(guild, interaction.user.id).catch(() => undefined) : undefined;
+          if (!guild || (Channels.gameFeed?.guild && guild.id !== Channels.gameFeed.guild.id) ||
+              !PermissionsUtil.hasRole(member ?? undefined, "organiserRole")) {
+            await interaction.reply({ content: "Only organisers can resend another player's prompt.", flags: MessageFlags.Ephemeral });
+            return;
+          }
+          await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+          if (token !== game.getLifecycleToken() || revision !== game.scenarios.controlRevision) {
+            await interaction.editReply("The scenario has changed. Run the command again.");
+            return;
+          }
+          const outcome = await deliverScenarioAction(game, target.id, interaction.client);
+          await interaction.editReply(outcome === "delivered" ? "Private prompt sent to the player." :
+            outcome === "failed" ? "DM delivery failed. Ask the player to use /game scenario open in the server." :
+            "No eligible interaction is currently available for that player.");
+          return;
+        }
+        if (!interaction.guild || (Channels.gameFeed?.guild && interaction.guild.id !== Channels.gameFeed.guild.id) || !game.getPlayers().some((p) => p.discordSnowflake === interaction.user.id)) {
           await interaction.reply({ content: "You must be registered in the current game to open a private scenario interaction.", flags: MessageFlags.Ephemeral });
           return;
         }
@@ -202,24 +249,33 @@ export default class GameCommand implements Command {
       if (subCommand === "report-class") {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         try {
-          const result = TeamCommand.instance
-            ? await TeamCommand.instance.runRosterOperation(async () => reportUnavailableClass(game, interaction.user.id))
-            : reportUnavailableClass(game, interaction.user.id);
+          const report = async () => { assertCurrent(); return reportUnavailableClass(game, interaction.user.id); };
+          const result = TeamCommand.instance ? await TeamCommand.instance.runRosterOperation(report) : await report();
           await interaction.editReply(result);
-          await DiscordUtil.sendMessage("gameFeed", "⚠️ Class Hex class availability has been challenged. Organisers must resolve it before game start.");
+          await DiscordUtil.sendMessage("gameFeed", "⚠️ Cursed Classes availability has been challenged. Organisers must resolve it before game start.");
         } catch (error) {
           await interaction.editReply(error instanceof Error ? error.message : "Could not report class availability.");
         }
         return;
       }
-      if (!(await PermissionsUtil.isUserAuthorised(interaction))) return;
+      let organiser = false;
+      try {
+        organiser = PermissionsUtil.hasRole((await fetchGuildMember(interaction.guild, interaction.user.id)) ?? undefined, "organiserRole");
+      } catch { /* Deny if membership cannot be verified. */ }
+      if (!organiser) {
+        await interaction.reply({ content: "Only organisers have permission to manage scenarios.", flags: MessageFlags.Ephemeral });
+        return;
+      }
       if (subCommand === "pool") {
         try {
-          const classes = TeamCommand.instance
-            ? await TeamCommand.instance.runRosterOperation(async () =>
-                configureHexPool(game, interaction.options.getString("classes", true), interaction.user.id))
-            : configureHexPool(game, interaction.options.getString("classes", true), interaction.user.id);
-          await interaction.reply({ content: `Reviewed Class Hex pool saved: ${classes.join(", ")}. Start the hex stage once teams are finalised.`, flags: MessageFlags.Ephemeral });
+          const configure = async () => {
+            assertCurrent();
+            return configureHexPool(game, interaction.options.getString("classes", true), interaction.user.id);
+          };
+          const classes = TeamCommand.instance ? await TeamCommand.instance.runRosterOperation(configure) : await configure();
+          await interaction.reply({ content: `Reviewed Cursed Classes pool saved: ${classes.join(", ")}. Assignments open automatically once teams and captains are ready.`, flags: MessageFlags.Ephemeral });
+          if (token === game.getLifecycleToken() && game.hasFinalizedPlayableTeams() && game.getCaptainOfTeam("RED") && game.getCaptainOfTeam("BLUE"))
+            await game.scenarios.activateType("on_teams_finalized", interaction.guild);
         } catch (error) {
           await interaction.reply({ content: error instanceof Error ? error.message : "Cannot approve class pool.", flags: MessageFlags.Ephemeral });
         }
@@ -228,13 +284,19 @@ export default class GameCommand implements Command {
       if (subCommand === "cancel") {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         try {
-          if (game.getGameStartStatus() !== "idle" || game.isFinished)
-            throw new Error("Scenario cancellation is only available before match start.");
-          if (TeamCommand.instance?.isTeamPickingSessionActive())
-            throw new Error("Cancel the active team-picking preview/session first.");
-          const previous = game.scenarios.definition?.name;
-          if (!previous) throw new Error("No scenario to cancel.");
-          await game.scenarios.cancel();
+          const cancel = async () => {
+            assertCurrent();
+            if (game.getGameStartStatus() !== "idle" || game.isFinished)
+              throw new Error("Scenario cancellation is only available before match start.");
+            if (TeamCommand.instance?.isTeamPickingSessionActive())
+              throw new Error("Cancel the active team-picking preview/session first.");
+            const previous = game.scenarios.definition?.name;
+            if (!previous) throw new Error("No scenario to cancel.");
+            await game.scenarios.cancel();
+            return previous;
+          };
+          const previous = TeamCommand.instance ? await TeamCommand.instance.runRosterOperation(cancel) : await cancel();
+          await clearScenarioInformation(game, token, previous);
           await DiscordUtil.sendMessage("gameFeed", `⚠️ An organiser cancelled ${previous}. Existing finalized teams remain unchanged.`);
           await interaction.editReply("Scenario cancelled. Check current teams, captains and roles before starting.");
         } catch (error) {
@@ -243,13 +305,17 @@ export default class GameCommand implements Command {
         return;
       }
       if (subCommand === "status") {
-        await interaction.reply({ content: game.scenarios.triggerStatus(), flags: MessageFlags.Ephemeral });
+        await interaction.reply({ ...scenarioDashboard(game), flags: MessageFlags.Ephemeral });
         return;
       }
       if (subCommand === "resume") {
         try {
-          game.scenarios.resumeAfterReview();
-          await interaction.reply({ content: "Scenario resumed for organiser-controlled recovery. Timers and old prompts were not replayed. Inspect status and start an eligible stage manually.", flags: MessageFlags.Ephemeral });
+          const resume = async () => { assertCurrent(); return game.scenarios.resumeAfterReview(interaction.guild ?? undefined); };
+          if (TeamCommand.instance) await TeamCommand.instance.runRosterOperation(resume);
+          else await resume();
+          await interaction.reply({ content: game.scenarios.selectedId === "peoples-captains" && game.scenarios.snapshot()?.data.slate
+            ? "Election resumed with the same ballots and votes. Players can use /game scenario open for fresh controls. Check status for the voting deadline or manual close."
+            : "Scenario resumed for organiser-controlled recovery. Timers and old prompts were not replayed. Inspect status and start an eligible stage manually.", flags: MessageFlags.Ephemeral });
         } catch (error) {
           await interaction.reply({ content: error instanceof Error ? error.message : "Cannot resume scenario.", flags: MessageFlags.Ephemeral });
         }
@@ -258,6 +324,7 @@ export default class GameCommand implements Command {
       if (subCommand === "start") {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         try {
+          assertCurrent();
           await interaction.editReply(await game.scenarios.startNextManualTrigger(interaction.options.getString("stage") ?? undefined, interaction.guild!));
         } catch (error) {
           await interaction.editReply(error instanceof Error ? error.message : "Scenario stage could not start.");
@@ -589,6 +656,10 @@ export default class GameCommand implements Command {
   }
 
   async handleButtonPress(interaction: ButtonInteraction) {
+    if (interaction.customId === GUIDE_OPEN_ID) {
+      await handleScenarioGuideButton(interaction);
+      return;
+    }
     if (interaction.customId === GAME_START_BUTTON_ID ||
         interaction.customId.startsWith(`${GAME_START_BUTTON_ID}:`)) {
       await this.handleStartButton(interaction);

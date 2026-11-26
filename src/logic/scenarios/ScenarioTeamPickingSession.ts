@@ -72,7 +72,7 @@ export class ScenarioTeamPickingSession extends TeamPickingSession {
     const text = (players: PlayerInstance[]) =>
       players.map((p) => escapeIgn(p.ignUsed ?? p.discordSnowflake)).join("\n").slice(0, 1024) || "None";
     const embed = new EmbedBuilder()
-      .setTitle(`Scenario team preview — ${this.game.scenarios.definition?.name ?? "Scenario"}`)
+      .setTitle(`Scenario team preview - ${this.game.scenarios.definition?.name ?? "Scenario"}`)
       .setDescription("Organiser confirmation required. No game teams or roles change until accepted.")
       .addFields(
         { name: `🔴 RED (${teams.RED.length})`, value: text(teams.RED), inline: true },

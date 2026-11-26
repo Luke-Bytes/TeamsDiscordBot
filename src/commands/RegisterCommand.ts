@@ -295,14 +295,19 @@ export default class RegisterCommand implements Command {
       return;
     }
 
+    const electionNote = game.scenarios.selectedId === "peoples-captains"
+      ? game.scenarios.phase === "collecting" && !game.scenarios.snapshot()?.data.slate
+        ? " Everyone who registers can be elected captain. Look out for your private ballot!"
+        : " The captain election has already reached its voting or review stage; late registrations may require organiser review."
+      : "";
     // success messages
     if (PermissionsUtil.isSameUser(interaction, targetUser.id)) {
       await interaction.editReply({
-        content: `You have successfully registered as \`${resolvedUsername}\`!${ignNudge}${nicknameNote}`,
+        content: `You have successfully registered as \`${resolvedUsername}\`!${ignNudge}${nicknameNote}${electionNote}`,
       });
     } else {
       await interaction.editReply({
-        content: `${safeDiscordUserName} has been successfully registered as \`${resolvedUsername}\`!${nicknameNote}`,
+        content: `${safeDiscordUserName} has been successfully registered as \`${resolvedUsername}\`!${nicknameNote}${electionNote}`,
       });
     }
     await deliverScenarioRegistrationPrompt(interaction, game, discordUserId);

@@ -9,8 +9,8 @@ import { GameInstance } from "../database/GameInstance";
 
 export default class ScenarioCommand implements Command {
   public data = new SlashCommandBuilder()
-    .setName("scenario")
-    .setDescription("Run predefined scenarios.")
+    .setName("debug-scenario")
+    .setDescription("Development only: set up test game fixtures.")
     .addSubcommand((sub) =>
       sub
         .setName("game-playing")
@@ -25,8 +25,8 @@ export default class ScenarioCommand implements Command {
       sub.setName("game-prepare").setDescription("Prepares the bot for a game.")
     );
 
-  public name = "scenario";
-  public description = "Run predefined scenarios.";
+  public name = "debug-scenario";
+  public description = "Development only: set up test game fixtures.";
   public buttonIds: string[] = [];
 
   constructor() {}

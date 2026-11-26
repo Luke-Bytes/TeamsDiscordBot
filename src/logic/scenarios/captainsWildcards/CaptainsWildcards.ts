@@ -2,7 +2,7 @@ import type { GameInstance } from "../../../database/GameInstance";
 import type { ScenarioAction, ScenarioImplementation, ScenarioValue } from "../ScenarioTypes";
 import { DraftTeamPickingSession } from "../../teams/DraftTeamPickingSession";
 import TeamCommand from "../../../commands/TeamCommand";
-import { choice, data, deliverPrivate, openScenarioAction, participantLabel, selectPrompt } from "../ScenarioGameplay";
+import { choice, data, deliverAction, openScenarioAction, participantLabel, selectPrompt } from "../ScenarioGameplay";
 
 type Side = "RED" | "BLUE";
 interface Pending {
@@ -46,12 +46,12 @@ function render(game: GameInstance, action: ScenarioAction, customId: string) {
   if (pending.step === "power") {
     const options = [
       ...(turn.next !== turn.team && turn.pool.length >= 4
-        ? [{ label: "🚫 Veto — block one player for opponent's next pick", value: "power:veto" }] : []),
+        ? [{ label: "🚫 Veto - block one player for opponent's next pick", value: "power:veto" }] : []),
       ...(turn.own.length && turn.pool.length
-        ? [{ label: "🔄 Switcheroo — swap your drafted player for a free player", value: "power:swap" }] : []),
+        ? [{ label: "🔄 Switcheroo - swap your drafted player for a free player", value: "power:swap" }] : []),
     ];
     if (!options.length) return { content: "You have one wildcard, but no powers are currently legal. Keep drafting normally." };
-    return selectPrompt(`🃏 **Captain's Wildcards — ${turn.team}**\nOne credit available. Choose a power, review your targets, then confirm. The normal pick timer continues.`, customId, options);
+    return selectPrompt(`🃏 **Captain's Wildcards - ${turn.team}**\nOne credit available. Choose a power, review your targets, then confirm. The normal pick timer continues.`, customId, options);
   }
   if (pending.step === "review") {
     const review = pending.power === "veto"
@@ -94,12 +94,16 @@ export const captainsWildcards: ScenarioImplementation = {
       id: customId.split(":")[2], turn: turn.index, step: "power", page: 0,
     };
     game.scenarios.setData("wildcards", state as unknown as ScenarioValue);
-    void deliverPrivate(game, turn.owner, render(game,
-      { id: state.pending[turn.owner].id, kind: "wildcard", ownerId: turn.owner,
-        role: "captain", phase: "collecting", deadline: new Date(Date.now() + 120_000).toISOString(), allowUpdates: true },
-      customId));
+    void deliverAction(game, turn.owner, customId);
   },
   renderAction: (game, action, customId) => render(game, action, customId),
+  isActionAvailable(game, action) {
+    const turn = active()?.wildcardTurn();
+    const state = current(game);
+    return !!turn?.team && turn.owner === action.ownerId && !!state.credits[turn.team] &&
+      state.pending[action.ownerId]?.id === action.id && state.pending[action.ownerId]?.turn === turn.index;
+  },
+  isActionComplete: (game, action) => !current(game).pending[action.ownerId],
   validateAction(game, action, value) {
     const session = active();
     const turn = session?.wildcardTurn();

@@ -114,6 +114,10 @@ export interface ScenarioImplementation {
   approveResult?(game: GameInstance, guild: Guild): Promise<void>;
   validateAction?(game: GameInstance, action: ScenarioAction, value: ScenarioValue): void;
   onActionSubmitted?(game: GameInstance, action: ScenarioAction): Promise<void> | void;
+  /** True only when the editor has saved a complete response. */
+  isActionComplete?(game: GameInstance, action: ScenarioAction): boolean;
+  /** Optional actions are never chased by automated reminders. */
+  isActionAvailable?(game: GameInstance, action: ScenarioAction): boolean;
   /** Only public/auditable data is copied into finished match metadata; never raw ballots. */
   publicResult?(game: GameInstance): ScenarioValue;
   onDraftTurn?(game: GameInstance, team: "RED" | "BLUE"): Promise<void> | void;
@@ -124,10 +128,19 @@ export interface ScenarioImplementation {
   onRestore?(game: GameInstance): void;
 }
 
+export interface ScenarioInformation {
+  players: string;
+  rules: string;
+  deadlines: string;
+  captains?: string;
+  organiser?: string;
+}
+
 export interface ScenarioDefinition {
   id: string;
   name: string;
   description: string;
+  information?: ScenarioInformation;
   category: ScenarioCategory;
   stage: ScenarioStage;
   version: number;

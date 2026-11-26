@@ -1,6 +1,30 @@
-# Friendly Wars scenarios — design catalogue
+# Friendly Wars scenarios - design catalogue
 
-**Status:** The shared [scenario foundation](./foundation.md) and optional announcement fields are implemented. **None of the seven player-facing gameplay scenarios is currently implemented or enabled.** These design documents capture the intended experience, suggested v1 rules, edge cases and acceptance criteria; they are not claims about completed scenario gameplay.
+**Status:** All seven scenarios and their shared lifecycle are implemented and selectable from `/announce start scenario:`. The individual design documents retain proposed rules and future ideas; consult the current implementation for authoritative behaviour.
+
+## Playing and managing a scenario
+
+Use `/game scenario guide` (also linked in `/help`) to browse all seven scenarios privately, even before a game is announced. The dropdown includes a home page and a clearly labelled coming-soon preview of The Impostors. Announcements and the game feed reuse the same detailed scenario page, with **Learn About Scenarios** and **Open My Scenario** controls. The guide is read-only; the latter button opens only your own current action. Ordinary games have no extra scenario page.
+
+Current player-facing names, short descriptions and detailed rules are maintained together in `src/logic/scenarios/ScenarioMetadata.ts`. The registry and shared `ScenarioGuide.ts` renderer consume that catalogue. Update the metadata when mechanics change; the design documents below are historical proposals, not a second authoritative player guide. Information delivery is advisory and never changes the selected scenario or Elo policy.
+
+Players register normally. The registration channel explains the selected scenario and offers **Open My Scenario**, which opens only the invoking member's private editor. Registration scenarios also send a private prompt when the player joins. All private prompts show their deadline and whether participation is optional or required. Players can recover their own editor with `/game scenario open`; partial questionnaire or class assignment edits do not count as final submissions.
+
+Organisers use `/game scenario status` for the current stage, scheduled transition, outstanding actions, delivery failures and contextual controls. The existing `/game scenario start stage:`, `resume` and `cancel` remain advanced/recovery alternatives. Team proposals and elections still require explicit organiser confirmation. To resend an editor, use `/game scenario open user:@Player`; the bot DMs that player, never the organiser. If private delivery fails, the player can use the public recovery button or slash command.
+
+| Scenario | Player / captain action | Automatic progression and organiser action |
+| --- | --- | --- |
+| Mystery Dungeon | Optional five-question quiz; explicitly submit | Generate at T-15, confirm team preview |
+| Partners in Crime | Optional private partner or no preference | Generate at T-15, confirm team preview |
+| The People's Captains | Everyone is eligible; vote privately | Voting opens T-35, closes T-20; confirm elected captains |
+| The Masked Draft | Captains pick anonymous cards | Draft entry follows captain/draft preparation; timeout picks, then confirm teams |
+| Draft Roulette | Captains pick from offered hands; optional reroll | Same draft entry/confirmation; timeout picks from offer |
+| Captain's Wildcards | Optional private power on eligible draft turn | Uses normal draft timing and team confirmation |
+| Cursed Classes | Both captains submit three distinct enemy assignments | Approve pool via `/game scenario pool`; opens once teams and captains are ready; reveals after both submit; T-3 deadline |
+
+Reminders are shared, scheduled against the action's actual cutoff, and sent at most once per action: five minutes before long deadlines or halfway through shorter windows (none for windows under one minute or optional wildcard turns). Completed, expired, replaced, cancelled and recovered actions do not receive stale reminders. Failed DMs are tracked per action; scheduled reminders do not repeatedly ping the public channel. Discord timestamps display in each member's local time zone.
+
+Recovery deliberately does not replay collectors or notifications after a restart. An organiser must inspect, resume where supported or cancel. Interrupted drafts require cancellation/rebuilding. The existing roster, role and game-start safety checks remain authoritative. Cursed Classes is an organiser-enforced honour rule; class access reports block game start. No Elo policy is changed.
 
 A *scenario* changes how one Friendly War is prepared or played. It should enrich the familiar announcement → registration → team selection → game → result flow, **not** create a separate match lifecycle.
 
@@ -8,15 +32,15 @@ A *scenario* changes how one Friendly War is prepared or played. It should enric
 
 | Scenario | Primary twist | Stage | Suggested first implementation |
 | --- | --- | --- | --- |
-| [Mystery Dungeon — Personality Test](./mystery-dungeon.md) | Five-question personality quiz guides the roster split | Before teams | Medium |
+| [Mystery Dungeon - Personality Test](./mystery-dungeon.md) | Five-question personality quiz guides the roster split | Before teams | Medium |
 | [The People's Captains](./peoples-captains.md) | Personalised three-candidate ballots elect both captains | Captain selection | Medium |
 | [Partners in Crime](./partners-in-crime.md) | Mutual teammate preferences influence balanced teams | Before teams | Small–medium |
 | [The Masked Draft](./masked-draft.md) | Captains draft anonymous player cards; reveal later | Draft | Medium |
 | [Draft Roulette](./draft-roulette.md) | Every pick comes from a hand of three candidates | Draft | Small–medium |
 | [Captain's Wildcards](./captains-wildcards.md) | Each captain can spend one tactical draft power | Draft add-on | Medium |
-| [Class Hex — Cursed Classes](./class-hex.md) | Captains assign three randomly chosen awkward classes to enemy players for the entire game | After teams, before start | Medium; voluntary in-game enforcement |
+| [Cursed Classes](./class-hex.md) | Captains assign three randomly chosen awkward classes to enemy players for the entire game | After teams, before start | Medium; voluntary in-game enforcement |
 
-These seven concepts were selected for the roadmap. No other previously brainstormed scenarios are in scope here.
+The seven above remain the only playable scenarios. [The Impostors (coming soon)](./the-impostors-development.md) is the next planned scenario; its temporary development brief is not live rules or Navi knowledge. It is not selectable until implemented and validated.
 
 ## Read first
 
@@ -26,13 +50,13 @@ These seven concepts were selected for the roadmap. No other previously brainsto
 
 ## Composability
 
-For a first release, **one primary team-formation method per match**. For example, Mystery Dungeon and Partners in Crime should not both try to assign teams. Captain election can feed into a compatible team-formation method; Wildcards can attach to a compatible draft; Class Hex can run after any finalized team formation.
+For a first release, **one primary team-formation method per match**. For example, Mystery Dungeon and Partners in Crime should not both try to assign teams. Captain election can feed into a compatible team-formation method; Wildcards can attach to a compatible draft; Cursed Classes can run after any finalized team formation.
 
 Suggested combinations once individual modes work:
-- People's Captains → ordinary snake draft → Class Hex.
+- People's Captains → ordinary snake draft → Cursed Classes.
 - People's Captains → Draft Roulette + Captain's Wildcards (limited to roulette-compatible powers).
-- People's Captains → Masked Draft → Class Hex.
-- Partners in Crime → organiser-appointed captains → Class Hex.
+- People's Captains → Masked Draft → Cursed Classes.
+- Partners in Crime → organiser-appointed captains → Cursed Classes.
 - Mystery Dungeon → captains chosen *after* team formation, using one eligible player on each side.
 
 Do not silently combine modes or try to reconcile overlapping team assignment algorithms. The announcement preview should make the entire configuration visible.
@@ -49,13 +73,13 @@ The goal is an understandable player experience with minimal ceremony. A future 
 
 ## Relevant existing code
 
-- `src/commands/AnnouncementCommand.ts` — preview, confirmation, maps, modifiers.
-- `src/commands/RegisterCommand.ts` and `src/database/GameInstance.ts` — registered roster and live game state.
-- `src/commands/CaptainCommand.ts`, `src/commands/CaptainNominate.ts`, `src/logic/AutoCaptainSelector.ts` — captain management.
-- `src/commands/TeamCommand.ts`, `src/logic/teams/` — team previews, random/balance/Elo generation and draft sessions.
-- `src/logic/CurrentGameManager.ts` — pre-game automatic captain/draft scheduling.
-- `src/commands/SignCommand.ts`, `src/logic/EventService.ts` — **standalone event** form UX patterns only, not a ready-made scenario questionnaire store.
-- `src/logic/ModifierSelector.ts`, `modifiers-config.json`, `src/commands/ClassbanCommand.ts` — existing modifier/class-ban system.
-- `src/database/MatchPersistence.ts`, `src/logic/ActiveGameRecovery.ts`, `prisma/schema.prisma` — persisted matches and recovery compatibility.
+- `src/commands/AnnouncementCommand.ts` - preview, confirmation, maps, modifiers.
+- `src/commands/RegisterCommand.ts` and `src/database/GameInstance.ts` - registered roster and live game state.
+- `src/commands/CaptainCommand.ts`, `src/commands/CaptainNominate.ts`, `src/logic/AutoCaptainSelector.ts` - captain management.
+- `src/commands/TeamCommand.ts`, `src/logic/teams/` - team previews, random/balance/Elo generation and draft sessions.
+- `src/logic/CurrentGameManager.ts` - pre-game automatic captain/draft scheduling.
+- `src/commands/SignCommand.ts`, `src/logic/EventService.ts` - **standalone event** form UX patterns only, not a ready-made scenario questionnaire store.
+- `src/logic/ModifierSelector.ts`, `modifiers-config.json`, `src/commands/ClassbanCommand.ts` - existing modifier/class-ban system.
+- `src/database/MatchPersistence.ts`, `src/logic/ActiveGameRecovery.ts`, `prisma/schema.prisma` - persisted matches and recovery compatibility.
 
-**Naming collision:** the existing `/scenario` command (`src/commands/ScenarioCommand.ts`) is a developer-only test fixture. A future player-facing scenario command should be designed separately or explicitly migrate that command; do not confuse the two.
+**Command naming:** `/game scenario guide` is the player-facing guide. `/debug-scenario` (`src/commands/ScenarioCommand.ts`) is a development-only test fixture.

@@ -28,6 +28,7 @@ import "./cases/captainNominate.test";
 import "./cases/basicCommands.test";
 import "./cases/announcementModifiers.test";
 import "./cases/scenarioFoundation.test";
+import "./cases/scenarioGuide.test";
 import "./cases/scenarioImplementations.test";
 import "./cases/announcementPreflight.test";
 import "./cases/e2eHappyPath.test";

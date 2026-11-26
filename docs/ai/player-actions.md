@@ -17,7 +17,7 @@ Leaving during team picking or after teams are decided may be reviewed by organi
 These are different views: registered players can still be unassigned, so an IGN in `/registered` may not appear on either team in `/team list`. Generating or resetting teams is organiser-controlled; ask an organiser if picking has not finished.
 
 ## How do I volunteer to captain? `/captainnominate`
-If you are registered for the announced game and it has not started, use `/captainnominate` with no options. It sends a nomination for an organiser to consider; **it does not appoint you captain**. You cannot nominate again if you already have an active nomination.
+If you are registered for the announced game and it has not started, use `/captainnominate` with no options. It sends a nomination for an organiser to consider; **it does not appoint you captain**. You cannot nominate again if you already have an active nomination. In The People's Captains scenario, everyone registered when voting opens is eligible without nominating.
 The command rejects unregistered players and nominations after the game starts. An organiser must select captains; captain changes are not available while team picking is in progress.
 
 ## How do captains ban classes? `/class ban` and `/class bans`
