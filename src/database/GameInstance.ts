@@ -140,6 +140,7 @@ export class GameInstance {
   }
 
   public reset() {
+    this.scenarios.assertRuntimeResetSafe();
     void NeedCommand.instance?.expireAll();
     this.lifecycleVersion += 1;
     this.lifecycleToken = randomUUID();
@@ -314,6 +315,7 @@ export class GameInstance {
   public static async resetGameInstance() {
     const currentInstance = this.getInstance();
     if (currentInstance) {
+      currentInstance.scenarios.assertRuntimeResetSafe();
       await prismaClient.game.saveGameFromInstance(currentInstance);
       // Ensure any scheduled vote tasks and poll messages are cleaned up
       // before we drop references in reset().
@@ -345,11 +347,12 @@ export class GameInstance {
     if (this.mapVoteManager) {
       this.mapVoteManager.cancelVote();
     }
-    const token = this.getLifecycleToken();
+    // The preview's vote manager survives confirmation, which rotates the token.
+    // Manager identity still rejects votes from reset or replaced games.
     const manager = new MapVoteManager(maps);
     this.mapVoteManager = manager;
     manager.on("pollEnd", (winningMap) => {
-      if (this.getLifecycleToken() !== token || this.mapVoteManager !== manager ||
+      if (this.mapVoteManager !== manager ||
           !this.announced || this.isFinished || GameRecoveryCoordinator.isFrozen()) return;
       this.setMap(winningMap);
     });
@@ -453,6 +456,7 @@ export class GameInstance {
     ignUsed: string,
     uuid?: string
   ) {
+    const token = this.getLifecycleToken();
     if (this.getPlayers().some((p) => p.discordSnowflake === discordSnowflake)) {
       return { error: "This player is already registered." } as const;
     }
@@ -483,6 +487,9 @@ export class GameInstance {
     if (!ign || !MojangAPI.validateUsername(ign)) {
       return { error: "Unable to verify a Minecraft username for this account." } as const;
     }
+
+    if (this.getLifecycleToken() !== token || this.isRestarting)
+      return { error: "The announced game changed. Please register again." } as const;
 
     // An overlapping registration may have completed during the awaits above.
     if (this.getPlayers().some((p) => p.discordSnowflake === discordSnowflake ||
@@ -529,8 +536,12 @@ export class GameInstance {
       player.ignUsed = ign;
     }
 
+    // Never commit a pending registration into a replacement game.
+    if (this.getLifecycleToken() !== token || this.isRestarting)
+      return { error: "The announced game changed. Please register again." } as const;
     // Check again after database writes in case an overlapping call succeeded.
-    if (this.getPlayers().some((p) => p.discordSnowflake === discordSnowflake)) {
+    if (this.getPlayers().some((p) => p.discordSnowflake === discordSnowflake ||
+        p.primaryMinecraftAccount === uuid)) {
       return { error: "This player is already registered." } as const;
     }
     this.teams["UNDECIDED"].push(player);
@@ -1124,6 +1135,7 @@ export class GameInstance {
         this.getPlayersTeam(player) !== fromTeam) return false;
     this.removePlayerFromAllTeams(player);
     this.teams[toTeam].push(player);
+    if (this.scenarios.hasRuntime) await this.scenarios.onRegistrationChanged(player.discordSnowflake, true);
     console.info(
       `Player ${playerName} successfully moved from ${JSON.stringify(fromTeam)} to ${JSON.stringify(toTeam)}.`
     );
@@ -1133,6 +1145,7 @@ export class GameInstance {
   public async setGameWinner(team: Team) {
     void NeedCommand.instance?.expireAll();
     this.gameWinner = team;
+    await this.scenarios.runtimeWinnerReported();
   }
 
   public voteMvp(voterId: string, targetId: string): { error?: string } {

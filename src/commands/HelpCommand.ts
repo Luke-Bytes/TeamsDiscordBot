@@ -21,6 +21,7 @@ const MANUAL_OVERRIDES: Record<string, HelpCategory> = {
   team: "user",
   spectate: "user",
   website: "user",
+  shotbow: "user",
   wiki: "user",
   profile: "user",
   profilecreate: "user",

@@ -29,7 +29,7 @@ function assignedQuestions(ids?: readonly QuestionId[]): readonly Question[] {
       new Set(ids).size !== QUESTION_COUNT ||
       !ids.every((id) => Object.prototype.hasOwnProperty.call(questions, id)))
     throw new Error("Invalid saved questionnaire.");
-  return ids.map((id) => questions[id]);
+  return ids.map((id: QuestionId) => questions[id]);
 }
 function validAnswer(question: Question | undefined, answer: unknown): answer is number {
   return !!question && typeof answer === "number" && Number.isInteger(answer) &&
@@ -66,7 +66,8 @@ function render(game: GameInstance, user: string, customId: string) {
       customId, [{ label: "Edit answers", value: "edit" }, { label: quiz.hidden ? "Show my archetype" : "Hide my archetype", value: "visibility" }],
     );
   }
-  if (quiz.cursor === QUESTION_COUNT) {
+  const firstUnanswered = assigned.findIndex((q, i) => !validAnswer(q, quiz.answers[i]));
+  if (quiz.cursor === QUESTION_COUNT && firstUnanswered === -1) {
     const review = assigned.map((q, i) =>
       `${i + 1}. ${q.title}\n   ${validAnswer(q, quiz.answers[i]) ? q.answers[quiz.answers[i]!][0] : "❔ Unanswered"}`).join("\n");
     return selectPrompt(`**Mystery Dungeon - Review**\n${review}\nChoose a question to edit, or submit all five answers.`,
@@ -75,14 +76,14 @@ function render(game: GameInstance, user: string, customId: string) {
         { label: "Submit my personality test", value: "submit" },
       ]);
   }
-  const i = quiz.cursor;
+  const i = quiz.cursor === QUESTION_COUNT ? firstUnanswered : quiz.cursor;
   return selectPrompt(
     `**Mystery Dungeon - Question ${i + 1}/${QUESTION_COUNT}**\n${assigned[i].title}\n\n${assigned.filter((q, index) => validAnswer(q, quiz.answers[index])).length} of ${QUESTION_COUNT} answered. You can go back and edit before submitting.`,
     customId,
     [
       ...assigned[i].answers.map(([label], index) => ({ label, value: `answer:${i}:${index}` })),
       ...(i > 0 ? [{ label: "← Previous question", value: `nav:${i - 1}` }] : []),
-      { label: "Review all answers", value: "nav:5" },
+      ...(firstUnanswered === -1 ? [{ label: "Review all answers", value: `nav:${QUESTION_COUNT}` }] : []),
     ],
   );
 }
@@ -99,8 +100,9 @@ export const mysteryDungeon: ScenarioImplementation = {
       if (validAnswer(assigned[Number(answer[1])], Number(answer[2]))) return;
       throw new Error("Invalid answer for this question.");
     }
-    if (/^nav:[0-5]$/.test(input) || input === "edit" || input === "visibility") return;
-    if (input === "submit" && assigned.every((q, i) => validAnswer(q, quiz.answers[i]))) return;
+    if (/^nav:[0-4]$/.test(input) || input === "edit" || input === "visibility") return;
+    if ((input === `nav:${QUESTION_COUNT}` || input === "submit") &&
+        assigned.every((q, i) => validAnswer(q, quiz.answers[i]))) return;
     throw new Error("Answer all five questions before submitting.");
   },
   isActionComplete: (game, action) => all(game)[action.ownerId]?.submitted ?? false,

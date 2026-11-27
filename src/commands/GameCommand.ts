@@ -234,12 +234,12 @@ export default class GameCommand implements Command {
         }
         const prompt = await game.scenarios.reopenAction(interaction.user.id);
         if (!prompt) {
-          await interaction.reply({ content: "No unanswered or editable scenario interaction is currently available for you.", flags: MessageFlags.Ephemeral });
+          await interaction.reply({ content: "There’s nothing for you to fill in right now. Register first if you haven’t already, and keep an eye on the game feed.", flags: MessageFlags.Ephemeral });
           return;
         }
         try {
           await interaction.reply({ ...prompt, flags: MessageFlags.Ephemeral });
-          game.scenarios.markPromptDelivered(interaction.user.id);
+          if (token === game.getLifecycleToken()) game.scenarios.markPromptDelivered(interaction.user.id);
         } catch (error) {
           game.scenarios.markPromptFailed(interaction.user.id);
           throw error;
@@ -403,35 +403,55 @@ export default class GameCommand implements Command {
           return;
         }
 
-        gameInstance.endTime ??= new Date();
-        gameInstance.isFinished = true;
-        await interaction.reply(
-          "Moving players back to team picking and starting MVP votes.."
-        );
-        await movePlayersToTeamPickingAfterGameEnd(guild);
+        const finishOrdinaryEnd = async () => {
+          await movePlayersToTeamPickingAfterGameEnd(guild);
 
-        await captureTeamPlansFromChannels(guild, gameInstance);
+          await captureTeamPlansFromChannels(guild, gameInstance);
 
-        const config = ConfigManager.getConfig();
-        const blueTeamRoleId = config.roles.blueTeamRole;
-        const redTeamRoleId = config.roles.redTeamRole;
+          const config = ConfigManager.getConfig();
+          const blueTeamRoleId = config.roles.blueTeamRole;
+          const redTeamRoleId = config.roles.redTeamRole;
 
-        if (Object.keys(gameInstance.mvpVotes.RED).length === 0) {
-          await DiscordUtil.sendMessage(
-            "redTeamChat",
-            `The game has now ended, voting for the team MVP is now open! Type \`/MVP Vote [MCID]\` to pick for <@&${redTeamRoleId}>!`
-          );
+          if (Object.keys(gameInstance.mvpVotes.RED).length === 0) {
+            await DiscordUtil.sendMessage(
+              "redTeamChat",
+              `The game has now ended, voting for the team MVP is now open! Type \`/MVP Vote [MCID]\` to pick for <@&${redTeamRoleId}>!`
+            );
+          }
+
+          if (Object.keys(gameInstance.mvpVotes.BLUE).length === 0) {
+            await DiscordUtil.sendMessage(
+              "blueTeamChat",
+              `The game has now ended, voting for the team MVP is now open! Type \`/MVP Vote [MCID]\` to pick for <@&${blueTeamRoleId}>!`
+            );
+          }
+
+          gameInstance.calculateMeanEloAndExpectedScore();
+        };
+        if (gameInstance.scenarios.hasRuntime) {
+          const token = gameInstance.getLifecycleToken();
+          await interaction.deferReply();
+          const end = async () => {
+            if (token !== gameInstance.getLifecycleToken() || gameInstance.isFinished ||
+                gameInstance.getGameStartStatus() !== "started")
+              throw new Error("That game has changed or already ended.");
+            gameInstance.endTime ??= new Date();
+            gameInstance.isFinished = true;
+            await gameInstance.scenarios.endRuntime(finishOrdinaryEnd);
+          };
+          try {
+            if (TeamCommand.instance) await TeamCommand.instance.runRosterOperation(end);
+            else await end();
+            await interaction.editReply("Match ended. Check the game feed for scenario discussion or cleanup.");
+          } catch {
+            await interaction.editReply("Unable to finish the scenario end workflow. Organisers should inspect scenario status before shutdown.");
+          }
+        } else {
+          gameInstance.endTime ??= new Date();
+          gameInstance.isFinished = true;
+          await interaction.reply("Moving players back to team picking and starting MVP votes..");
+          await finishOrdinaryEnd();
         }
-
-        if (Object.keys(gameInstance.mvpVotes.BLUE).length === 0) {
-          await DiscordUtil.sendMessage(
-            "blueTeamChat",
-            `The game has now ended, voting for the team MVP is now open! Type \`/MVP Vote [MCID]\` to pick for <@&${blueTeamRoleId}>!`
-          );
-        }
-
-        gameInstance.calculateMeanEloAndExpectedScore();
-
         break;
       }
 
@@ -453,6 +473,11 @@ export default class GameCommand implements Command {
           await interaction.reply({
             content: "A game shutdown is already in progress!",
           });
+          return;
+        }
+        const runtimeBlock = gameInstance.scenarios.runtimeShutdownBlock();
+        if (runtimeBlock) {
+          await interaction.reply({ content: runtimeBlock, flags: MessageFlags.Ephemeral });
           return;
         }
         GameInstance.getInstance().isRestarting = true;
@@ -494,6 +519,7 @@ export default class GameCommand implements Command {
     game: GameInstance
   ): Promise<"acquired" | "inProgress" | "alreadyStarted"> {
     const attemptStart = async () => {
+      game.scenarios.prepareRuntime(guild);
       const scenarioBlock = game.scenarios.startBlock();
       if (scenarioBlock) throw new Error(`Game start blocked: ${scenarioBlock}`);
       if (game.organiserNoElo && game.isDoubleElo)
@@ -507,15 +533,20 @@ export default class GameCommand implements Command {
       const startedAt = Date.now();
       console.info(`event=game.start game=${token} outcome=started`);
       try {
+        if (game.scenarios.hasRuntime) await game.scenarios.beforeRuntimeStart();
         await this.runGameStartWorkflow(guild, client, game);
         if (game.getLifecycleToken() !== token) {
           throw new Error("The game changed during the start workflow.");
         }
         game.completeGameStart();
+        if (game.scenarios.hasRuntime) await game.scenarios.runtimeStarted();
         console.info(`event=game.start game=${token} outcome=succeeded duration_ms=${Date.now() - startedAt}`);
         return "acquired" as const;
       } catch (error) {
-        if (game.getLifecycleToken() === token) game.releaseGameStart();
+        if (game.getLifecycleToken() === token && game.getGameStartStatus() !== "started") {
+          try { if (game.scenarios.hasRuntime) await game.scenarios.runtimeStartFailed(); }
+          finally { game.releaseGameStart(); }
+        }
         console.error(`event=game.start game=${token} outcome=failed duration_ms=${Date.now() - startedAt} error_type=${error instanceof Error ? error.name : "unknown"}`);
         throw error;
       }
@@ -656,7 +687,7 @@ export default class GameCommand implements Command {
   }
 
   async handleButtonPress(interaction: ButtonInteraction) {
-    if (interaction.customId === GUIDE_OPEN_ID) {
+    if (interaction.customId === GUIDE_OPEN_ID || interaction.customId.startsWith(`${GUIDE_OPEN_ID}:`)) {
       await handleScenarioGuideButton(interaction);
       return;
     }

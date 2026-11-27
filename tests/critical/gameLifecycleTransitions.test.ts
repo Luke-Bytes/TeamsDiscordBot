@@ -235,17 +235,23 @@ test("stale announcement Cancel button is rejected after teams finalize", async 
   const game = GameInstance.getInstance();
   const command = new AnnouncementCommand();
   const guild = new FakeGuild() as any;
+  const organiser = new FakeGuildMember("cancel-org");
+  await organiser.roles.add(ConfigManager.getConfig().roles.organiserRole);
+  guild.addMember(organiser);
   const originalCancel = CurrentGameManager.cancelCurrentGame;
   let cancellations = 0;
   (CurrentGameManager as any).cancelCurrentGame = async () => {
     cancellations++;
     game.reset();
+    return true;
   };
 
   const pressCancel = async () => {
     let response = "";
     await command.handleButtonPress({
       customId: "announcement-cancel",
+      message: game.announcementPreviewMessage,
+      user: { id: organiser.id },
       guild,
       deferReply: async () => {},
       editReply: async (value: any) => {
@@ -258,6 +264,7 @@ test("stale announcement Cancel button is rejected after teams finalize", async 
   try {
     game.reset();
     game.announced = true;
+    game.announcementPreviewMessage = { id: "preview-one" } as any;
     assert(
       /cancelled announcement/i.test(await pressCancel()),
       "Cancel should work before finalization"
@@ -268,6 +275,7 @@ test("stale announcement Cancel button is rejected after teams finalize", async 
     );
 
     game.announced = true;
+    game.announcementPreviewMessage = { id: "preview-two" } as any;
     game.settings.map = "DUELSTAL";
     game.teamsDecidedBy = "RANDOMISED";
     game.teams.RED.push(player("red"));
@@ -292,6 +300,59 @@ test("stale announcement Cancel button is rejected after teams finalize", async 
   } finally {
     (CurrentGameManager as any).cancelCurrentGame = originalCancel;
     game.reset();
+  }
+});
+
+test("Cancellation waits for the roster lock, rejects duplicate requests and preserves played results", async () => {
+  const game = GameInstance.getInstance();
+  const previousTeam = TeamCommand.instance;
+  const teamCommand = new TeamCommand();
+  const guild = new FakeGuild() as any;
+  const originalClean = DiscordUtil.cleanUpAllChannelMessages;
+  DiscordUtil.cleanUpAllChannelMessages = async () => {};
+  let release!: () => void;
+  let entered!: () => void;
+  const enteredLock = new Promise<void>(resolve => { entered = resolve; });
+  const pendingIO = new Promise<void>(resolve => { release = resolve; });
+  try {
+    game.reset();
+    game.beginConfirmedAnnouncement();
+    const token = game.getLifecycleToken();
+    const registration = teamCommand.runRosterOperation(async () => {
+      entered();
+      await pendingIO;
+      game.teams.UNDECIDED.push(player("queued-registration"));
+    });
+    await enteredLock;
+    const first = CurrentGameManager.cancelCurrentGame(guild, token);
+    const second = CurrentGameManager.cancelCurrentGame(guild, token);
+    assert(game.getLifecycleToken() === token, "cancellation cannot reset a pending roster operation");
+    release();
+    await registration;
+    assert(await first, "first cancellation succeeds after roster operation");
+    assert(!(await second), "duplicate cancellation is obsolete");
+    assert(game.getPlayers().length === 0, "registration cannot survive the reset");
+    game.beginConfirmedAnnouncement();
+    game.teamsDecidedBy = "RANDOMISED";
+    game.teams.RED.push(player("red"));
+    game.teams.BLUE.push(player("blue"));
+    assert(await CurrentGameManager.cancelCurrentGame(guild), "finalised but unplayed game can be explicitly cancelled");
+    game.beginConfirmedAnnouncement();
+    game.teamsDecidedBy = "RANDOMISED";
+    game.teams.RED.push(player("red"));
+    game.teams.BLUE.push(player("blue"));
+    game.tryBeginGameStart();
+    game.completeGameStart();
+    assert(!(await CurrentGameManager.cancelCurrentGame(guild)), "started match cannot be discarded");
+    game.isFinished = true;
+    game.gameWinner = "RED";
+    assert(!(await CurrentGameManager.cancelCurrentGame(guild)), "completed match cannot be discarded");
+    assert(game.gameWinner === "RED" && game.getPlayers().length === 2, "result and roster retained");
+  } finally {
+    release();
+    game.reset();
+    TeamCommand.instance = previousTeam;
+    DiscordUtil.cleanUpAllChannelMessages = originalClean;
   }
 });
 

@@ -23,6 +23,17 @@ export async function deliverScenarioAction(
     const guild = Channels.gameFeed?.guild ?? Channels.teamPicking?.guild;
     if (!guild || !(await fetchGuildMember(guild, userId))) return "unavailable";
     if (game.getLifecycleToken() !== token) return "unavailable";
+    if (game.scenarios.hasRuntime) {
+      const user = await client.users.fetch(userId);
+      if (game.getLifecycleToken() !== token || !game.scenarios.hasRuntime) return "unavailable";
+      const privatePrompt = await game.scenarios.reopenAction(userId);
+      if (!privatePrompt) return "unavailable";
+      try {
+        await user.send({ content: privatePrompt.content, components: privatePrompt.components });
+        if (game.getLifecycleToken() === token) game.scenarios.markPromptDelivered(userId);
+        return "delivered";
+      } catch { return "failed"; }
+    }
     prompt = id ? await game.scenarios.renderPrivateAction(id) : await game.scenarios.reopenAction(userId);
     if (!id) id = game.scenarios.availableActions().reverse().find((a) => a.ownerId === userId)?.id;
     const active = () => game.getLifecycleToken() === token &&
@@ -39,7 +50,7 @@ export async function deliverScenarioAction(
         !game.scenarios.availableActions().some((a) => a.id === id && a.ownerId === userId)) return "unavailable";
     game.scenarios.markPromptFailed(userId, id);
     if (!reminder && notifyFallback) await DiscordUtil.sendMessage("gameFeed", {
-      content: `A private scenario prompt could not be delivered to <@${userId}>. Use the button below or /game scenario open in the server.`,
+      content: `<@${userId}>, I couldn’t send you your scenario instructions. Click below to open them privately.`,
       components: [openScenarioButton(game)],
       allowedMentions: { users: [userId] },
     }).catch(() => {});
@@ -52,9 +63,10 @@ import { GameInstance } from "../../database/GameInstance";
 export async function deliverScenarioRegistrationPrompt(
   interaction: ChatInputCommandInteraction,
   game: GameInstance,
-  userId: string
+  userId: string,
+  token = game.getLifecycleToken(),
 ): Promise<void> {
-  const token = game.getLifecycleToken();
+  if (game.getLifecycleToken() !== token) return;
   try {
     const prompt = await game.scenarios.registrationPrompt(userId);
     if (!prompt || !game.announced || game.getLifecycleToken() !== token ||
@@ -63,6 +75,7 @@ export async function deliverScenarioRegistrationPrompt(
       await interaction.followUp({ ...prompt, flags: MessageFlags.Ephemeral });
     } else {
       const target = await interaction.client.users.fetch(userId);
+      if (game.getLifecycleToken() !== token) return;
       await target.send({ content: prompt.content, components: prompt.components });
     }
     if (game.getLifecycleToken() === token) game.scenarios.markPromptDelivered(userId);
@@ -70,7 +83,7 @@ export async function deliverScenarioRegistrationPrompt(
     if (game.getLifecycleToken() === token) {
       game.scenarios.markPromptFailed(userId);
       if (Channels.gameFeed?.guild) await DiscordUtil.sendMessage("gameFeed", {
-        content: `A private scenario prompt could not reach <@${userId}>. Use /game scenario open or the button below.`,
+        content: `<@${userId}>, I couldn’t send you your scenario instructions. Click below to open them privately.`,
         components: [openScenarioButton(game)],
         allowedMentions: { users: [userId] },
       }).catch(() => {});

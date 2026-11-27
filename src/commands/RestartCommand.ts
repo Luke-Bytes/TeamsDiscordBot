@@ -102,6 +102,17 @@ export default class RestartCommand implements Command {
     this.requests.delete(id);
     try {
       await interaction.update({ content: request.preserve ? "Saving a validated game snapshot..." : "Restarting the bot...", components: [] });
+      const game = CurrentGameManager.getCurrentGame();
+      if (game.scenarios.hasRuntime) {
+        try {
+          const prepare = () => game.scenarios.prepareRuntimeRestart();
+          if (TeamCommand.instance) await TeamCommand.instance.runRosterOperation(prepare);
+          else await prepare();
+        } catch {
+          await interaction.editReply("Restart cancelled: scenario cleanup is unresolved. Inspect the scenario dashboard before retrying.");
+          return;
+        }
+      }
       if (request.preserve) {
         try {
           const snapshot = await GameRecoveryCoordinator.capture(

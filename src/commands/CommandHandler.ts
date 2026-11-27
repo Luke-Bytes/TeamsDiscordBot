@@ -39,6 +39,7 @@ import ClassbanCommand from "../commands/ClassbanCommand";
 import SeasonCommand from "../commands/SeasonCommand";
 import UsernameCommand from "../commands/UsernameCommand";
 import NameHistoryCommand from "./NameHistoryCommand";
+import ShotbowCommand from "./ShotbowCommand";
 import ForfeitCommand from "../commands/ForfeitCommand";
 import MapsCommand from "../commands/MapsCommand";
 import CoinflipCommand from "../commands/CoinflipCommand";
@@ -108,6 +109,7 @@ export class CommandHandler {
   seasonCommand = new SeasonCommand();
   usernameCommand = new UsernameCommand();
   nameHistoryCommand = new NameHistoryCommand();
+  shotbowCommand = new ShotbowCommand();
   forfeitCommand = new ForfeitCommand();
   mapsCommand = new MapsCommand();
   coinflipCommand = new CoinflipCommand();
@@ -167,6 +169,7 @@ export class CommandHandler {
       this.seasonCommand,
       this.usernameCommand,
       this.nameHistoryCommand,
+      this.shotbowCommand,
       this.forfeitCommand,
       this.mapsCommand,
       this.coinflipCommand,

@@ -16,6 +16,7 @@ import { RandomTeamPickingSession } from "../../src/logic/teams/RandomTeamPickin
 import { Scheduler } from "../../src/util/SchedulerUtil";
 import { PermissionsUtil } from "../../src/util/PermissionsUtil";
 import { createChatInputInteraction, FakeGuild, FakeGuildMember } from "../framework/mocks";
+import { ConfigManager } from "../../src/ConfigManager";
 import { TeamsBot } from "../../src/TeamsBot";
 import AnnouncementCommand from "../../src/commands/AnnouncementCommand";
 import { MatchRecoveryGate } from "../../src/logic/MatchRecoveryGate";
@@ -710,6 +711,19 @@ test("Recovered game can be reset and a subsequent announcement uses a new lifec
   });
 });
 
+test("A preview map vote remains valid after confirmation rotates the lifecycle", () => {
+  const game = setup(0);
+  game.reset();
+  game.startMapVote([AnniMap.ARID1V1]);
+  const manager = game.mapVoteManager!;
+  const previewToken = game.getLifecycleToken();
+  game.beginConfirmedAnnouncement();
+  assert(game.getLifecycleToken() !== previewToken, "confirmation rotates identity");
+  manager.emit("pollEnd", AnniMap.ARID1V1);
+  assertEqual(game.settings.map, AnniMap.ARID1V1, "current vote sets the map");
+  game.reset();
+});
+
 test("Old map vote callbacks cannot mutate a subsequent game", () => {
   const game = setup(2);
   game.startMapVote([AnniMap.ARID1V1]);
@@ -844,11 +858,18 @@ test("Recovered game blocks stale announcement confirmation and a fresh /announc
   const originalId = game.gameId;
   const command = new AnnouncementCommand();
   let denial = "";
+  const guild = new FakeGuild();
+  const organiser = new FakeGuildMember("recovered-org");
+  await organiser.roles.add(ConfigManager.getConfig().roles.organiserRole);
+  guild.addMember(organiser);
   await command.handleButtonPress({
     customId: "announcement-confirm-ping",
+    guild,
+    user: { id: organiser.id },
+    message: { id: "unavailable-preview" },
     reply: async (payload: any) => { denial = payload.content; },
   } as any);
-  assert(denial.includes("existing announcement"), "stale confirmation rejected without re-sending");
+  assert(denial.includes("no longer active"), "stale confirmation rejected without re-sending");
   let startReply = "";
   await (command as any).handleAnnouncementStart({
     deferReply: async () => {},

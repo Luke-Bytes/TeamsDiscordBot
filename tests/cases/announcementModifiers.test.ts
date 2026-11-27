@@ -12,6 +12,7 @@ type TestInteraction = {
   values?: string[];
   user: { id: string };
   guild: FakeGuild;
+  message?: any;
   replies: any[];
   updates: any[];
   reply: (payload: any) => Promise<void>;
@@ -33,6 +34,7 @@ function makeInteraction(
     values,
     user: { id: userId },
     guild,
+    message: CurrentGameManager.getCurrentGame().announcementPreviewMessage,
     replies,
     updates,
     reply: async (payload: any) => {
@@ -78,12 +80,12 @@ async function chooseCustomModifier(
   value: string
 ) {
   await command.handleSelectMenu(
-    makeInteraction("announcement-custom-category", userId, guild, [
+    makeInteraction(`announcement-custom-category:${command.customModifierSessions.get(userId).id}`, userId, guild, [
       category,
     ]) as any
   );
   await command.handleSelectMenu(
-    makeInteraction("announcement-custom-value", userId, guild, [value]) as any
+    makeInteraction(`announcement-custom-value:${command.customModifierSessions.get(userId).id}`, userId, guild, [value]) as any
   );
 }
 
@@ -428,7 +430,7 @@ test("Custom reset and cancel discard staged modifier changes", async () => {
     "Staged edits must not apply early"
   );
 
-  const reset = makeInteraction("announcement-custom-reset", "org", guild);
+  const reset = makeInteraction(`announcement-custom-reset:${command.customModifierSessions.get("org").id}`, "org", guild);
   await command.handleButtonPress(reset as any);
   const session = command.customModifierSessions.get("org");
   assert(
@@ -441,7 +443,7 @@ test("Custom reset and cancel discard staged modifier changes", async () => {
   );
 
   await chooseCustomModifier(command, guild, "org", "Nexus HP", "125");
-  const cancel = makeInteraction("announcement-custom-cancel", "org", guild);
+  const cancel = makeInteraction(`announcement-custom-cancel:${command.customModifierSessions.get("org").id}`, "org", guild);
   await command.handleButtonPress(cancel as any);
   assertEqual(
     command.customModifierSessions.size,
@@ -480,7 +482,7 @@ test("Custom save applies all staged choices atomically and refreshes preview", 
     "1 Captain Ban Each (Shared)"
   );
 
-  const save = makeInteraction("announcement-custom-save", "org", guild);
+  const save = makeInteraction(`announcement-custom-save:${command.customModifierSessions.get("org").id}`, "org", guild);
   await command.handleButtonPress(save as any);
 
   assertEqual(
@@ -540,10 +542,10 @@ test("Older Custom sessions expire after another organiser saves", async () => {
   await chooseCustomModifier(command, guild, "org-a", "Nexus HP", "100");
   await chooseCustomModifier(command, guild, "org-b", "Nexus HP", "125");
 
+  const staleSave = makeInteraction(`announcement-custom-save:${command.customModifierSessions.get("org-b").id}`, "org-b", guild);
   await command.handleButtonPress(
-    makeInteraction("announcement-custom-save", "org-a", guild) as any
+    makeInteraction(`announcement-custom-save:${command.customModifierSessions.get("org-a").id}`, "org-a", guild) as any
   );
-  const staleSave = makeInteraction("announcement-custom-save", "org-b", guild);
   await command.handleButtonPress(staleSave as any);
 
   assert(
@@ -564,6 +566,7 @@ test("Modifier editing and rerolling lock after announcement confirmation", asyn
   const custom = prepareCustomCommand();
   const guild = new FakeGuild();
   await addOrganiser(guild, "org");
+  custom.game.announced = true;
   custom.command.announcementMessage = { edit: async () => {} };
 
   const customClick = makeInteraction(

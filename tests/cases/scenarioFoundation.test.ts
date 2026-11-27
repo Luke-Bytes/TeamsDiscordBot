@@ -56,7 +56,7 @@ test("Scenario trigger policies are declared for all seven enabled definitions",
   for (const id of ["masked-draft", "draft-roulette", "captains-wildcards"])
     assert(policies.get(id)!.includes("on_draft_start"), `${id} hooks draft`);
   assert(policies.get("class-hex")!.includes("on_teams_finalized"), "Class Hex follows final teams");
-  for (const planned of plannedScenarios) {
+  for (const planned of plannedScenarios.filter(s => s.enabled)) {
     assertEqual(planned.enabled, true, "scenario is enabled");
     assert(!!planned.implementation?.activateTrigger || !!planned.implementation?.onDraftTurn, "scenario has gameplay hooks");
   }
@@ -196,7 +196,7 @@ test("Scenario stage manual starts, concurrency and prerequisites share one idem
 async function withScenarioClock(
   sc: ScenarioCoordinator,
   run: (clock: {
-    tasks: Map<string, { callback: () => Promise<void> | void; at: number }>;
+    tasks: Map<string, { callback: Parameters<typeof Scheduler.schedule>[1]; at: number }>;
     cancelled: string[];
     advanceTo: (time: number) => void;
   }) => Promise<void>
@@ -205,7 +205,7 @@ async function withScenarioClock(
   const originalSchedule = Scheduler.schedule;
   const originalCancel = Scheduler.cancel;
   let now = Date.UTC(2026, 10, 25, 12);
-  const tasks = new Map<string, { callback: () => Promise<void> | void; at: number }>();
+  const tasks = new Map<string, { callback: Parameters<typeof Scheduler.schedule>[1]; at: number }>();
   const cancelled: string[] = [];
   Date.now = () => now;
   Scheduler.schedule = (id, callback, targetTime) => {
@@ -365,13 +365,18 @@ test("Scenario recovery retains trigger state but pauses all scheduled and priva
   await recovered.cancel();
 });
 
-test("Scenario catalogue includes seven planned IDs and advertises only implemented, enabled scenarios", () => {
-  assertEqual(plannedScenarios.length, 7, "seven planned scenarios");
-  assertEqual(new Set(plannedScenarios.map((d) => d.id)).size, 7, "unique scenario IDs");
+test("Scenario catalogue includes eight planned IDs and advertises only implemented, enabled scenarios", () => {
+  assertEqual(plannedScenarios.length, 8, "eight planned scenarios");
+  assertEqual(new Set(plannedScenarios.map((d) => d.id)).size, 8, "unique scenario IDs");
   assertEqual(scenarioRegistry.available().length, 7, "all seven gameplay implementations advertised");
   for (const scenario of plannedScenarios) {
     assertEqual(scenarioRegistry.get(scenario.id)?.name, scenario.name, "lookup matches catalogue");
-    assertEqual(scenarioRegistry.requireAvailable(scenario.id).id, scenario.id, `${scenario.id} selectable`);
+    if (scenario.enabled) assertEqual(scenarioRegistry.requireAvailable(scenario.id).id, scenario.id, `${scenario.id} selectable`);
+    else {
+      let rejected = false;
+      try { scenarioRegistry.requireAvailable(scenario.id); } catch { rejected = true; }
+      assert(rejected, `${scenario.id} not selectable before release`);
+    }
   }
   let unknown = false;
   try { scenarioRegistry.requireAvailable("no-such-scenario"); } catch { unknown = true; }

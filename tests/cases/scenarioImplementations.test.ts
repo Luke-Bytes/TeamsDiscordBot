@@ -97,6 +97,9 @@ test("Mystery Dungeon scores exactly five complete answers and deterministically
   assert(JSON.stringify(selectQuestions(() => 0)) !== JSON.stringify(selectQuestions((max) => max - 1)), "different draws select different questions");
   const first = await mysteryDungeon.registrationPrompt!(game, user, "fwsc:x:a:y");
   assert(first.content.includes("Question 1"), "private first question");
+  const menuValues = (prompt: typeof first) => (prompt.components?.[0] as any).toJSON().components[0].options.map((option: any) => option.value);
+  assert(!menuValues(first).includes("nav:5"), "review is hidden until all five are answered");
+  throws(() => mysteryDungeon.validateAction!(game, responseAction(user, "questionnaire", "nav:5"), ["nav:5"]), "premature review rejected server-side");
   const ids = data().quizzes[user].questionIds as QuestionId[];
   assertEqual(new Set(ids).size, 5, "five unique questions saved before answering");
   assertEqual((await mysteryDungeon.registrationPrompt!(game, user, "fwsc:x:a:y")).content, first.content, "reopening preserves question order");
@@ -115,6 +118,9 @@ test("Mystery Dungeon scores exactly five complete answers and deterministically
   throws(() => mysteryDungeon.validateAction!(game, responseAction(user, "questionnaire", "submit"), ["submit"]), "must finish all five");
   for (let i = 1; i < 5; i++)
     mysteryDungeon.onActionSubmitted!(game, responseAction(user, "questionnaire", `answer:${i}:1`));
+  const review = await mysteryDungeon.registrationPrompt!(game, user, "fwsc:x:a:y");
+  assert(review.content.includes("Mystery Dungeon - Review"), "fifth answer opens review automatically");
+  assert(menuValues(review).includes("submit"), "completed review offers submission");
   mysteryDungeon.validateAction!(game, responseAction(user, "questionnaire", "submit"), ["submit"]);
   mysteryDungeon.onActionSubmitted!(game, responseAction(user, "questionnaire", "submit"));
   assertEqual(data().quizzes[user].submitted, true, "explicit submission");

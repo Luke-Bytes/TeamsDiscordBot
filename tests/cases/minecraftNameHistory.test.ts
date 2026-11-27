@@ -84,6 +84,9 @@ function mockHistoryFetch(handler: typeof fetch): void {
     if (target.startsWith("https://mcprofiles.me/api/player/")) {
       return json({ kind: "profile", data: { uuid: target.split("/").pop(), usernameHistory: [] } });
     }
+    if (target.startsWith("https://api.crafty.gg/api/v2/players/")) {
+      return json({ success: true, data: { uuid, username: "Current", usernames: [] } });
+    }
     return handler(url, init);
   };
 }
@@ -93,7 +96,7 @@ async function offline(run: () => Promise<void>): Promise<void> {
   const lookup = MojangAPI.lookupUsername;
   const reverse = MojangAPI.uuidToUsername;
   const database = DatabaseNameHistory.lookup;
-  const keys = ["LABY_API_TOKEN", "WINSTREAK_API_KEY", "BISAI_API_KEY", "MC_NAME_HISTORY_SUPPRESSED_UUIDS"];
+  const keys = ["LABY_API_TOKEN", "WINSTREAK_API_KEY", "BISAI_API_KEY", "CRAFTY_API_TOKEN", "MC_NAME_HISTORY_SUPPRESSED_UUIDS"];
   const original = keys.map((key) => process.env[key]);
   const now = Date.now;
   try {
@@ -221,7 +224,7 @@ test("name history handles abort and timeout independently of a successful provi
   assert(result.names.some((n) => n.normalizedName === "other"), "Successful provider survives timeout");
 }));
 
-test("/name history registers, defers privately and renders an unregistered account", async () => offline(async () => {
+test("/name history registers, defers publicly and renders an unregistered account", async () => offline(async () => {
   const command = new NameHistoryCommand();
   assertEqual(command.data.toJSON().name, "name");
   assertEqual(command.data.toJSON().options?.[0].name, "history");
@@ -231,9 +234,14 @@ test("/name history registers, defers privately and renders an unregistered acco
   let flags: unknown;
   request.deferReply = (async (options: any) => { flags = options.flags; request.deferred = true; }) as any;
   await command.execute(request);
-  assertEqual(flags, MessageFlags.Ephemeral);
+  assertEqual(flags, undefined);
   const edit = request.replies.find((r) => r.type === "editReply")?.payload;
-  assert(!!edit.embeds[0].data.description.includes("Current username"), "Current identity must be shown");
+  const embed = edit.embeds[0].data;
+  assertEqual(embed.title, "Current");
+  assertEqual(embed.description, "No previous names found.");
+  assertEqual(embed.thumbnail.url, `https://mc-heads.net/avatar/${uuid}/64.png`);
+  assert(!embed.footer.text.includes("Page 1/1"), "Single page needs no page number");
+  assert(!embed.footer.text.includes("not configured"), "Do not show provider configuration");
   assertEqual(edit.allowedMentions.parse.length, 0);
   const invalid = createChatInputInteraction("name-tester2", { guild: new FakeGuild() as any, subcommand: "history", strings: { username: "invalid name" } });
   await command.execute(invalid);
@@ -296,9 +304,10 @@ test("database name history merges UUID-linked rows, isolates player-only aliase
       assertEqual(organiser.localPlayerNames?.[0].earliest?.value, "2020-05-01T12:00:00.000Z");
       assertEqual(organiser.names.length, ordinary.names.length);
       assertEqual(playerQueries, 2);
-      const page = buildNameHistoryPages(organiser).pages[0].data.description!;
-      assert(page.includes("Friendly Wars database") && page.includes("UUID unverified"), "Source and identity caveat must be shown");
-      assert(!buildNameHistoryPages(ordinary).pages[0].data.description!.includes("Legacy"), "No organiser aliases in ordinary result");
+      const page = buildNameHistoryPages(organiser).pages[0].data;
+      assert(page.footer?.text.includes("Friendly Wars") && page.footer.text.includes("recorded associations"), "Source and identity caveat must be shown");
+      assert(!page.description?.toLowerCase().includes("legacy"), "No organiser aliases in public result");
+      assertEqual(page.description, buildNameHistoryPages(ordinary).pages[0].data.description);
       process.env.MC_NAME_HISTORY_SUPPRESSED_UUIDS = uuid;
       const suppressed = await MinecraftNameHistoryAPI.lookupByUUID(uuid, { guildId: "guild-1", includePlayerRecords: true });
       assertEqual(suppressed.names.length, 1);
@@ -350,7 +359,7 @@ test("database name history handles missing and ambiguous players, independent f
   }
 });
 
-test("/name history requests player-linked records only for organisers", async () => offline(async () => {
+test("/name history never requests private player-linked records, even for organisers", async () => offline(async () => {
   const permission = PermissionsUtil.hasRole;
   const scopes: boolean[] = [];
   try {
@@ -366,7 +375,7 @@ test("/name history requests player-linked records only for organisers", async (
       });
       await command.execute(request);
     }
-    assertEqual(scopes.join(","), "false,true");
+    assertEqual(scopes.join(","), "false,false");
   } finally { PermissionsUtil.hasRole = permission; }
 }));
 
@@ -413,7 +422,83 @@ test("name history Bisai validates paging and retains separate observed usage pe
   assertEqual(parseHistory("bisai", uuid, { ...bisai, total: 0, names: [] }).status, "noHistory");
 });
 
-test("name history default public provider and keyed Bisai isolate credentials", async () => offline(async () => {
+const craftyProfile = {
+  success: true,
+  data: {
+    uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    username: "Current",
+    deleted: false,
+    usernames: [
+      { username: "Old_Name", available: true, changed_at: "2019-02-03T04:05:06Z", hidden: false },
+      { username: "Crafty_Only", available: false, changed_at: "2020-04-05T00:00:00Z", hidden: false },
+      { username: "Current", changed_at: "2021-01-01T00:00:00Z", hidden: false },
+    ],
+    socials: [{ handle: "not-history" }],
+  },
+};
+
+test("Crafty validates UUID and visible history, discards unrelated profile data", () => {
+  const result = parseHistory("crafty", uuid, craftyProfile);
+  assertEqual(result.status, "success");
+  assertEqual(result.observations.length, 3);
+  assertEqual(result.observations[0].date.kind, "reported");
+  assertEqual(result.observations[0].date.value, "2019-02-03T04:05:06.000Z");
+  assertEqual(parseHistory("crafty", other, craftyProfile).status, "uuidMismatch");
+  assertEqual(parseHistory("crafty", uuid, { success: false, message: "error" }).status, "invalidResponse");
+  const profile = (usernames: unknown[]) => ({ ...craftyProfile, data: { ...craftyProfile.data, usernames } });
+  assertEqual(parseHistory("crafty", uuid, profile([])).status, "noHistory");
+  assertEqual(parseHistory("crafty", uuid, profile([{ username: "Old_Name", changed_at: null }])).status, "invalidResponse");
+  assertEqual(parseHistory("crafty", uuid, profile([{ username: "Old_Name", changed_at: null, hidden: false }])).observations[0].date.kind, "unknown");
+  const hidden = parseHistory("crafty", uuid, profile([...craftyProfile.data.usernames, { username: "Hidden", hidden: true }]));
+  assertEqual(hidden.status, "withheld");
+  assertEqual(hidden.observations.length, 0);
+  assertEqual(mergeNameHistory("Current", [hidden, parseHistory("bisai", uuid, bisai)]).length, 1);
+  assertEqual(parseHistory("crafty", uuid, { ...craftyProfile, data: { ...craftyProfile.data, deleted: true } }).status, "withheld");
+  assertEqual(parseHistory("crafty", uuid, profile(Array.from({ length: 501 }, () => craftyProfile.data.usernames[0]))).limited, true);
+  const overflowHidden = profile([...Array.from({ length: 500 }, () => craftyProfile.data.usernames[0]), { hidden: true }]);
+  assertEqual(parseHistory("crafty", uuid, overflowHidden).status, "withheld");
+});
+
+test("Crafty optional token, canonical username lookup, cache and Retry-After", async () => offline(async () => {
+  process.env.CRAFTY_API_TOKEN = "test-crafty";
+  const calls: string[] = [];
+  let status = 200;
+  globalThis.fetch = async (url, init) => {
+    const target = String(url);
+    const headers = new Headers(init?.headers);
+    if (target.startsWith("https://mcprofiles.me/")) {
+      assert(!headers.has("Authorization"), "Crafty credential must not leak");
+      return json(mcProfile);
+    }
+    assertEqual(target, "https://api.crafty.gg/api/v2/players/Current");
+    assertEqual(headers.get("Authorization"), "Bearer test-crafty");
+    assertEqual(init?.redirect, "error");
+    assert(!!init?.signal, "Crafty must be abortable");
+    calls.push(target);
+    return status === 200 ? json(craftyProfile) : json({}, status, { "Retry-After": "60" });
+  };
+  const [one, two] = await Promise.all([MinecraftNameHistoryAPI.lookup("current"), MinecraftNameHistoryAPI.lookupByUUID(uuid)]);
+  assertEqual(calls.length, 1);
+  assertEqual(one.names.length, two.names.length);
+  assert(one.names.some((n) => n.name === "Crafty_Only"), "Crafty-only name should merge");
+  assert(buildNameHistoryPages(one).pages[0].data.footer?.text.includes("Crafty"), "Attribute Crafty in public footer");
+  const again = await MinecraftNameHistoryAPI.lookupByUUID(uuid);
+  assertEqual(again.providers.find((p) => p.provider === "crafty")?.cached, true);
+  assertEqual(calls.length, 1);
+  MinecraftNameHistoryAPI.invalidate(uuid);
+  status = 429;
+  const limited = await MinecraftNameHistoryAPI.lookupByUUID(uuid);
+  assertEqual(limited.providers.find((p) => p.provider === "crafty")?.status, "rateLimited");
+  await MinecraftNameHistoryAPI.lookupByUUID(uuid);
+  assertEqual(calls.length, 2);
+  const now = Date.now();
+  Date.now = () => now + 61_000;
+  status = 200;
+  await MinecraftNameHistoryAPI.lookupByUUID(uuid);
+  assertEqual(calls.length, 3);
+}));
+
+test("name history default public providers and keyed Bisai isolate credentials", async () => offline(async () => {
   process.env.LABY_API_TOKEN = "";
   process.env.WINSTREAK_API_KEY = "   ";
   process.env.BISAI_API_KEY = "   ";
@@ -427,6 +512,11 @@ test("name history default public provider and keyed Bisai isolate credentials",
       assert(!headers.has("X-API-Key"), "No Bisai key on MCProfiles");
       return json(mcProfile);
     }
+    if (target.startsWith("https://api.crafty.gg/")) {
+      assertEqual(target, "https://api.crafty.gg/api/v2/players/Current");
+      assert(!headers.has("X-API-Key"), "No Bisai key on Crafty");
+      return json(craftyProfile);
+    }
     assertEqual(headers.get("X-API-Key"), "test-bisai");
     assert(target.includes("?limit=500"), "Bounded page");
     return json(bisai);
@@ -436,21 +526,22 @@ test("name history default public provider and keyed Bisai isolate credentials",
   assertEqual(initial.providers[1].status, "notConfigured");
   assertEqual(initial.providers[2].status, "success");
   assertEqual(initial.providers[3].status, "notConfigured");
-  assertEqual(calls.length, 1);
+  assertEqual(initial.providers[4].status, "success");
+  assertEqual(calls.length, 2);
   process.env.BISAI_API_KEY = "test-bisai";
   const result = await MinecraftNameHistoryAPI.lookupByUUID(uuid);
   assertEqual(result.providers[3].status, "success");
-  assertEqual(calls.length, 2);
-  assertEqual(result.names.find((n) => n.normalizedName === "old_name")?.providers.length, 2);
+  assertEqual(calls.length, 3);
+  assertEqual(result.names.find((n) => n.normalizedName === "old_name")?.providers.length, 3);
   delete process.env.BISAI_API_KEY;
   const removed = await MinecraftNameHistoryAPI.lookupByUUID(uuid);
   assertEqual(removed.providers[3].status, "notConfigured");
-  assertEqual(calls.length, 2);
+  assertEqual(calls.length, 3);
   process.env.MC_NAME_HISTORY_SUPPRESSED_UUIDS = uuid;
   const suppressed = await MinecraftNameHistoryAPI.lookupByUUID(uuid);
   assert(suppressed.suppressed, "Suppression also covers the public provider");
   assertEqual(suppressed.names.length, 1);
-  assertEqual(calls.length, 2);
+  assertEqual(calls.length, 3);
 }));
 
 test("name history pages fit embed limits and include an explicit overflow attachment", () => {
@@ -461,7 +552,11 @@ test("name history pages fit embed limits and include an explicit overflow attac
     providers: [], suppressed: false, partial: true,
   };
   const { pages, overflow } = buildNameHistoryPages(result);
-  assert(pages.length <= 4, "Bounded private messages");
+  assert(pages.length <= 4, "Bounded public messages");
   assert(pages.every((p) => p.length <= 6000 && (p.data.description?.length ?? 0) <= 4096), "Discord limits");
   assert(!!overflow?.toString().includes("Past\\_Name\\_499"), "Overflow should include every escaped name");
+  assert(!overflow?.toString().includes(uuid), "No UUID in public attachment");
+  assert(pages.every((p) => p.data.title === "Current" && !p.data.description?.includes(uuid)), "No UUID or redundant title in public pages");
+  assert(pages.every((p) => p.data.footer?.text.includes("Sources: Laby")), "Attribute once per page");
+  assert(pages.every((p) => !p.data.description?.includes("Sources:")), "No repeated source per name");
 });

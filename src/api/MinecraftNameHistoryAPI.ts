@@ -126,7 +126,7 @@ export class MinecraftNameHistoryAPI {
     const epoch = this.epoch;
     const [external, local] = this.isSuppressed(uuid)
       ? [historyAdapters.map((a) => providerResult(a.id, "withheld")), { history: providerResult("database", "withheld"), playerRecords: [] }]
-      : await Promise.all([this.histories(uuid), this.databaseHistory(uuid, scope)]);
+      : await Promise.all([this.histories(uuid, currentUsername), this.databaseHistory(uuid, scope)]);
     const results = [...external, local.history];
     // An invalidation during a request may represent a removal request. Do
     // not publish evidence obtained before it. A fresh lookup can try again.
@@ -157,11 +157,11 @@ export class MinecraftNameHistoryAPI {
     };
   }
 
-  private static histories(uuid: string): Promise<ProviderHistory[]> {
+  private static histories(uuid: string, currentUsername: string): Promise<ProviderHistory[]> {
     const pending = this.inFlight.get(uuid);
     if (pending) return pending.epoch === this.epoch ? pending.work : Promise.resolve(historyAdapters.map((a) => providerResult(a.id, "unavailable", "History invalidated during lookup.")));
     if (this.inFlight.size >= MAX_CONCURRENT) return Promise.resolve(historyAdapters.map((a) => providerResult(a.id, "rateLimited", "Local lookup capacity reached.")));
-    const work = Promise.allSettled(historyAdapters.map((adapter) => this.query(adapter, uuid)))
+    const work = Promise.allSettled(historyAdapters.map((adapter) => this.query(adapter, uuid, currentUsername)))
       .then((results) => results.map((result, i) => result.status === "fulfilled" ? result.value : providerResult(historyAdapters[i].id, "unavailable")))
       .finally(() => this.inFlight.delete(uuid));
     this.inFlight.set(uuid, { epoch: this.epoch, work });
@@ -179,10 +179,10 @@ export class MinecraftNameHistoryAPI {
     this.cache.set(key, { until: Date.now() + ttl, result: structuredClone(result) });
   }
 
-  private static async query(adapter: HistoryAdapter, uuid: string): Promise<ProviderHistory> {
+  private static async query(adapter: HistoryAdapter, uuid: string, currentUsername: string): Promise<ProviderHistory> {
     const id = adapter.id;
     const token = adapter.credential ? process.env[adapter.credential]?.trim() : undefined;
-    if (adapter.credential && !token) return providerResult(id, "notConfigured");
+    if (adapter.credential && !adapter.optionalCredential && !token) return providerResult(id, "notConfigured");
     if (this.isSuppressed(uuid)) return providerResult(id, "withheld");
     const key = id + ":" + uuid;
     const cached = this.cache.get(key);
@@ -201,7 +201,7 @@ export class MinecraftNameHistoryAPI {
     let result: ProviderHistory;
     let ttl = FAILURE_TTL;
     try {
-      const response = await fetch(adapter.url(uuid), {
+      const response = await fetch(adapter.url(uuid, currentUsername), {
         method: "GET",
         redirect: "error",
         signal: controller.signal,

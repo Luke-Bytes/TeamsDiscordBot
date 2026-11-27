@@ -12,7 +12,7 @@ export function scenarioInformation(definition: Pick<ScenarioDefinition, "name" 
   const info = definition.information;
   const embed = new EmbedBuilder().setColor(0x5865f2)
     .setTitle(definition.name).setDescription(definition.description)
-    .setFooter({ text: "Missed your prompt? Use /game scenario open" });
+    .setFooter({ text: "Already registered and missed your instructions? Use /game scenario open." });
   if (!info) return embed;
   return embed.addFields(
     { name: "What players do", value: info.players },
@@ -36,7 +36,7 @@ export function scenarioGuide(page = HOME) {
     .setDescription("Fancy a Friendly War with a twist? Scenarios change things up with fun quizzes, unusual drafts, special rules and more!")
     .addFields(
       { name: "How to join", value: "Just register as usual! Keep an eye on your DMs and the game feed. The bot will let you know if there’s anything extra to do." },
-      { name: "Missed a prompt?", value: "Use /game scenario open or press Open My Scenario to pick up where you left off." },
+      { name: "Missed your instructions?", value: "If you’ve registered and have something to do, use /game scenario open to pick up where you left off." },
       { name: "Explore the scenarios", value: "Pick a scenario from the menu below to see how it works." },
     );
   if (isUpcoming && selected) {
@@ -51,9 +51,10 @@ export function scenarioGuide(page = HOME) {
   return { embeds: [embed], components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu)] };
 }
 
-export function scenarioGuideButton() {
+export function scenarioGuideButton(gameToken?: string) {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(GUIDE_OPEN_ID).setLabel("Learn About Scenarios").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(gameToken ? `${GUIDE_OPEN_ID}:${gameToken}` : GUIDE_OPEN_ID)
+      .setLabel("Learn About Scenarios").setStyle(ButtonStyle.Secondary),
   );
 }
 
@@ -70,7 +71,7 @@ export async function handleScenarioGuideMenu(interaction: StringSelectMenuInter
 }
 
 export async function handleScenarioGuideButton(interaction: ButtonInteraction) {
-  if (interaction.customId !== GUIDE_OPEN_ID) return;
+  if (interaction.customId !== GUIDE_OPEN_ID && !interaction.customId.startsWith(`${GUIDE_OPEN_ID}:`)) return;
   const page = scenarioGuide();
   if (page) await interaction.reply({ ...page, flags: MessageFlags.Ephemeral });
 }

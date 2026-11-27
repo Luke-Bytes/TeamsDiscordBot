@@ -87,8 +87,8 @@ export const upcomingScenarioMetadata = {
     information: {
       players: "Once teams are picked, check your private role. If you're innocent, play as usual and keep an eye on your teammates. You can make an early guess at who's an impostor before the game starts!",
       rules: "Impostors get five secret missions and aim to complete any four without getting caught. Expect a few suspicious goings-on and temporary voice chat sabotages. Everyone still tries to win. Only assigned sabotage is allowed, and no sharing role cards or screensharing in team voice chat.",
-      deadlines: "After the game, you'll have four minutes to discuss your suspicions, then one minute to vote privately. You get one vote per impostor on your team. Impostors submit their mission proof after voting closes, then it's time for the big reveal!",
-      organiser: "Teams are picked as usual. The bot will handle the secret roles, sabotage windows, votes and mission checks. An impostor's perfect victory means winning the game, completing their missions and escaping detection.",
+      deadlines: "After the game, you'll have four minutes to discuss your suspicions, then vote privately. You get one vote per impostor on your team. Once voting closes, we'll find out which missions were completed. Have one last guess before the impostors are revealed!",
+      organiser: "Teams are picked as usual. The bot will handle the secret roles, sabotage windows, votes and reveal. Impostors report their own completed missions. An impostor's perfect victory means winning the game, completing their missions and escaping detection.",
     },
   },
 } satisfies Record<string, Metadata>;

@@ -24,6 +24,8 @@ test("AnnouncementCommand handleButtonPress default path responds", async () => 
   const interaction = createChatInputInteraction("u1", { guild });
   await cmd.handleButtonPress!({
     customId: "unknown-button",
+    user: { id: "stranger" },
+    reply: async () => {},
     deferReply: async () => ({}) as any,
     editReply: async (_: any) => ({}) as any,
     guild,
@@ -37,6 +39,10 @@ test("AnnouncementCommand reroll modifiers is rate-limited to once every 15 seco
   const game = CurrentGameManager.getCurrentGame();
   game.reset();
   game.modifierMode = "randomised";
+  const organiser = new FakeGuildMember("reroll-org");
+  await organiser.roles.add(ConfigManager.getConfig().roles.organiserRole);
+  guild.addMember(organiser);
+  game.announcementPreviewMessage = { id: "reroll-preview" } as any;
 
   let rerolls = 0;
   const originalRunSelection = ModifierSelector.runSelection;
@@ -51,6 +57,8 @@ test("AnnouncementCommand reroll modifiers is rate-limited to once every 15 seco
   const replies: string[] = [];
   const interaction: any = {
     customId: "announcement-edit-modifiers",
+    user: { id: organiser.id },
+    message: game.announcementPreviewMessage,
     deferReply: async () => ({}),
     editReply: async (payload: any) => {
       replies.push(typeof payload === "string" ? payload : String(payload));
@@ -131,6 +139,7 @@ test("Custom modifier editor stages changes and applies only on save", async () 
   const editorReplies: any[] = [];
   await cmd.handleButtonPress({
     customId: "announcement-edit-modifiers",
+    message: preview,
     user: { id: organiser.id },
     guild,
     reply: async (payload: any) => editorReplies.push(payload),
@@ -140,7 +149,7 @@ test("Custom modifier editor stages changes and applies only on save", async () 
   const updates: any[] = [];
   const select = async (customId: string, value: string) =>
     cmd.handleSelectMenu({
-      customId,
+      customId: `${customId}:${cmd.customModifierSessions.get(organiser.id).id}`,
       values: [value],
       user: { id: organiser.id },
       guild,
@@ -156,7 +165,7 @@ test("Custom modifier editor stages changes and applies only on save", async () 
   );
 
   await cmd.handleButtonPress({
-    customId: "announcement-custom-save",
+    customId: `announcement-custom-save:${cmd.customModifierSessions.get(organiser.id).id}`,
     user: { id: organiser.id },
     guild,
     update: async (payload: any) => updates.push(payload),

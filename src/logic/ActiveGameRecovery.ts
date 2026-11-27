@@ -237,6 +237,7 @@ export function createGameSnapshot(
     game.gameId === game.getLifecycleToken(),
     "game and lifecycle identity differ"
   );
+  game.scenarios.assertRuntimeResetSafe();
   const metadata = game.exportRecoveryMetadata();
   const session = teamCommand?.teamPickingSession;
   const draft =

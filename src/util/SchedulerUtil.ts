@@ -5,7 +5,7 @@ export class Scheduler {
 
   static schedule(
     id: string,
-    callback: () => Promise<void> | void,
+    callback: () => Promise<void | "skipped" | "needs_review"> | void | "skipped" | "needs_review",
     targetTime: Date
   ) {
     const now = new Date();
@@ -33,8 +33,8 @@ export class Scheduler {
           return;
         }
         try {
-          await callback();
-          console.info(`Task '${id}' executed successfully.`);
+          const outcome = await callback();
+          console.info(`Task '${id}' ${outcome === "skipped" ? "skipped" : outcome === "needs_review" ? "requires organiser attention" : "executed successfully"}.`);
         } catch (error) {
           console.error(`Scheduled task '${id}' failed:`, error);
         } finally {
@@ -55,8 +55,6 @@ export class Scheduler {
       clearTimeout(timeout);
       this.tasks.delete(id);
       console.info(`[INFO] Task '${id}' canceled.`);
-    } else {
-      console.warn(`[WARN] No task found with ID '${id}' to cancel.`);
     }
   }
 }

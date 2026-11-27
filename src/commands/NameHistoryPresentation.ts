@@ -31,12 +31,35 @@ function providerLabel(id: HistoryProvider, current: string): string {
     winstreak: "[Winstreak API](https://api.winstreak.ws/)",
     mcprofiles: "[MCProfiles](https://mcprofiles.me/docs)",
     bisai: "[Bisai](https://mc-api.bisai.dev/docs)",
+    crafty: "[Crafty](https://crafty.gg/public-api)",
     database: "Friendly Wars database",
   }[id];
 }
 
-function historyLine(name: HistoricalName, current: string): string {
-  return `**${escapeText(name.name)}** — ${formatHistoryDate(name.bestDate)}${name.conflictingDates ? " (different reported change dates)" : ""}\nSources: ${name.providers.map((p) => providerLabel(p, current)).join(", ")}`;
+const publicSourceLabels: Record<HistoryProvider, string> = {
+  laby: "Laby",
+  winstreak: "Winstreak",
+  mcprofiles: "MCProfiles",
+  bisai: "Bisai",
+  crafty: "Crafty",
+  database: "Friendly Wars",
+};
+
+function historyLine(name: HistoricalName): string {
+  const date = name.bestDate;
+  const labels = {
+    accurateChange: "Reported change",
+    estimatedChange: "Estimated change",
+    firstObserved: "First seen",
+    lastObserved: "Last seen",
+    reported: "Reported",
+    unknown: "Date unknown",
+    withheld: "Date withheld",
+  };
+  const value = date.value
+    ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(date.value))
+    : "";
+  return `**${escapeText(name.name)}** - ${labels[date.kind]}${value ? " " + value : ""}${name.conflictingDates ? " (dates differ)" : ""}`;
 }
 
 export function historyProviderSummary(result: NameHistoryResult): string {
@@ -68,29 +91,24 @@ export function combinedHistorySummary(result: NameHistoryResult | undefined): s
 export function buildNameHistoryPages(result: NameHistoryResult): { pages: EmbedBuilder[]; overflow?: Buffer } {
   if (result.status !== "found" || !result.currentUsername || !result.uuid) return { pages: [] };
   const current = result.currentUsername;
-  const names = result.names.filter((n) => !n.current);
-  const localNames = result.suppressed ? [] : result.localPlayerNames ?? [];
-  const lines = [
-    ...names.map((n) => historyLine(n, current)),
-    ...localNames.map((n) => `**${escapeText(n.name)}** — ${formatHistoryDate(n.bestDate)}\nFriendly Wars player record (UUID unverified; may be another account)`),
-  ];
-  const dates = result.names.flatMap((n) => n.earliest?.value ? [n.earliest] : []).sort((a, b) => Date.parse(a.value!) - Date.parse(b.value!));
-  const summary = [
-    `Current username: **${escapeText(current)}**`,
-    `UUID: \`${result.uuid}\``,
-    `Distinct visible previous names: ${names.length}`,
-    ...(localNames.length ? [`Additional player-linked names (organiser only, UUID unverified): ${localNames.length}`] : []),
-    ...(dates[0] ? [`Earliest dated evidence: ${formatHistoryDate(dates[0])}`] : []),
-    historyProviderSummary(result),
-    ...(result.providers.some((p) => p.provider === "database" && p.status === "success") ? ["Database names are stored associations, not verified rename events."] : []),
-    ...(result.suppressed ? ["Historical records are withheld."] : result.partial ? ["Coverage is partial or unavailable."] : []),
-  ].join("\n");
-  // At most 4 private embed pages; if a provider's bounded response is larger,
-  // include every visible name in a private text attachment as well.
+  // This presentation is public even if a privileged caller supplied extra records.
+  const names = result.suppressed ? [] : result.names.filter((n) => !n.current);
+  const sources = result.suppressed ? [] : [...new Set(result.names.flatMap((n) => n.providers))];
+  const sourceText = sources.length ? `Sources: ${sources.map((p) => publicSourceLabels[p]).join(", ")}` : "";
+  // Discord footer text cannot contain clickable Markdown links.
+  // Keep the required Winstreak attribution link once, not on every record.
+  const attribution = sources.includes("winstreak") ? providerLabel("winstreak", current) : "";
+  const caveat = sources.includes("database")
+    ? "History may be incomplete; database names are recorded associations."
+    : "History may be incomplete.";
+  const available = !result.suppressed && result.providers.some((p) => p.status === "success" || p.status === "noHistory");
+  const emptyMessage = available ? "No previous names found." : "Name history unavailable.";
+  const lines = names.map(historyLine);
+  // At most four public embed messages, with a complete list attached if needed.
   const chunks: string[][] = [[]];
   for (const line of lines) {
     let chunk = chunks[chunks.length - 1];
-    if (chunk.join("\n\n").length + line.length > 2600) {
+    if (chunk.join("\n").length + line.length + 1 > 2600 || chunk.length >= 40) {
       chunk = [];
       chunks.push(chunk);
     }
@@ -98,18 +116,20 @@ export function buildNameHistoryPages(result: NameHistoryResult): { pages: Embed
   }
   const count = Math.min(chunks.length, 4);
   const overflow = chunks.length > count ? Buffer.from(
-    `${current} — Minecraft name history\nUUID: ${result.uuid}\n${names.length} distinct visible previous names; ${localNames.length} additional UUID-unverified player-linked names\n\n${lines.join("\n\n")}\n\nHistorical records may be incomplete.`,
+    [current, `${names.length} previous names`, lines.join("\n"), sourceText, attribution, caveat].filter(Boolean).join("\n\n"),
     "utf8"
   ) : undefined;
   const pages = chunks.slice(0, count).map((chunk, index) =>
     new EmbedBuilder()
-      .setTitle(`${escapeText(current)} — Name History`)
+      .setTitle(escapeText(current))
+      .setThumbnail(`https://mc-heads.net/avatar/${result.uuid}/64.png`)
       .setDescription([
-        index === 0 ? summary : `Minecraft UUID: \`${result.uuid}\``,
-        chunk.join("\n\n") || "No visible previous names returned.",
-        ...(index === 0 && overflow ? ["Full visible list attached as a private text file."] : []),
+        ...(index === 0 && names.length ? [`${names.length} previous ${names.length === 1 ? "name" : "names"}`] : []),
+        chunk.join("\n") || emptyMessage,
+        ...(index === 0 && overflow ? ["Full list attached."] : []),
+        ...(attribution ? [attribution] : []),
       ].join("\n\n"))
-      .setFooter({ text: `Page ${index + 1}/${count} · Historical records may be incomplete; distinct names are not exact rename counts.` })
+      .setFooter({ text: [sourceText, count > 1 ? `Page ${index + 1}/${count}` : "", caveat].filter(Boolean).join(" · ") })
   );
   return { pages, overflow };
 }

@@ -45,7 +45,7 @@ This is a QC inventory, **not** an AI knowledge source. The offline test compare
 | `class`            | full       | player-actions: captain ban and view                                                            |
 | `season`           | full       | player-stats-and-history: view; organiser-game-ops: status/rollover                             |
 | `username`         | restricted | organiser-events-and-admin: identity review and safe correction; no AI mutation                 |
-| `name`             | brief      | player-community: private name history command; no AI access to historical names                |
+| `name`             | brief      | player-community: public name history command; no AI access to historical names                |
 | `forfeit`          | full       | player-actions: confirmed captain forfeit                                                       |
 | `maps`             | brief      | player-community: map list                                                                      |
 | `coinflip`         | brief      | general utility; consult /help                                                                  |
@@ -53,6 +53,7 @@ This is a QC inventory, **not** an AI knowledge source. The offline test compare
 | `help`             | brief      | player-guide: available-command discovery                                                       |
 | `spectate`         | full       | player-actions: request, rejoin, stop                                                           |
 | `website`          | brief      | link utility; consult /help                                                                     |
+| `shotbow`          | full       | player-community: public server status and game-mode player counts                              |
 | `wiki`             | brief      | player-community: wiki navigation                                                               |
 | `profile`          | full       | player-community: view                                                                          |
 | `profilecreate`    | full       | player-community: edit                                                                          |

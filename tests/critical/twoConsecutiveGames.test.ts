@@ -127,6 +127,7 @@ function stubPrismaAndMojang() {
 
 async function runOneGame(params: {
   gameNumber: number;
+  announcementCmd: AnnouncementCommand;
   guild: any;
   organiser: FakeGuildMember;
   players: FakeGuildMember[];
@@ -153,7 +154,7 @@ async function runOneGame(params: {
   game.host = `TestHost-${params.gameNumber}`;
 
   // Announcements are required for the real flow. Confirming will also kick off map polling.
-  const announcementCmd = new AnnouncementCommand();
+  const announcementCmd = params.announcementCmd;
   const announceInteraction: any = createChatInputInteraction(organiser.id, {
     guild,
     member: organiser as any,
@@ -185,6 +186,7 @@ async function runOneGame(params: {
 
   const confirmInteraction: any = {
     customId: "announcement-confirm-noping",
+    message: game.announcementPreviewMessage,
     guild,
     user: { id: organiser.id },
     deferReply: async () => {},
@@ -559,9 +561,12 @@ fastTest(
       new Date(Date.now() + 150)
     );
 
+    // Reuse the production-style persistent command across both games.
+    const announcementCmd = new AnnouncementCommand();
     // Game 1
     await runOneGame({
       gameNumber: 1,
+      announcementCmd,
       guild,
       organiser,
       players,
@@ -605,6 +610,7 @@ fastTest(
     // Game 2 (different announced map and bans) should behave like a fresh process.
     await runOneGame({
       gameNumber: 2,
+      announcementCmd,
       guild,
       organiser,
       players,

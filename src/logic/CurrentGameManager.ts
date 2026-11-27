@@ -18,6 +18,8 @@ export class CurrentGameManager {
   static captainReminderTimeout?: NodeJS.Timeout;
   static captainEnforceTimeout?: NodeJS.Timeout;
   static draftAutoStartTimeout?: NodeJS.Timeout;
+  private static attendanceDeadline?: { token: string; at: number };
+  private static lastAttendanceRun?: { token: string; at: number };
   public static getCurrentGame() {
     if (!this.currentGame) {
       this.currentGame = GameInstance.getInstance();
@@ -72,7 +74,25 @@ export class CurrentGameManager {
     game.reset();
   }
 
-  public static async cancelCurrentGame(guild: Guild) {
+  public static async cancelCurrentGame(guild: Guild, token = this.getCurrentGame().getLifecycleToken(), automatic = false, expectedDeadline?: number): Promise<boolean> {
+    const cancel = async () => {
+      const game = this.getCurrentGame();
+      if (game.getLifecycleToken() !== token || game.isFinished || game.getGameStartStatus() !== "idle" || game.isRestarting ||
+          (automatic && (!game.announced || !game.shouldAutoCancelForLowRegistration() ||
+            (expectedDeadline !== undefined && game.startTime?.getTime() !== expectedDeadline + 15 * 60_000)))) return false;
+      const registered = game.getRegisteredPlayerCount();
+      await this.cancelCurrentGameLocked(guild);
+      if (automatic) {
+        const notice = `⚠️ The announced game has been automatically cancelled because only ${registered} players were registered at the automatic start time. A minimum of ${GameInstance.MIN_AUTO_START_REGISTERED_COUNT} registered players is required 15 minutes before the announced start time.`;
+        await DiscordUtil.sendMessage("gameFeed", notice);
+        await DiscordUtil.sendMessage("registration", notice);
+      }
+      return true;
+    };
+    return TeamCommand.instance ? TeamCommand.instance.runRosterOperation(cancel) : cancel();
+  }
+
+  private static async cancelCurrentGameLocked(guild: Guild) {
     const config = ConfigManager.getConfig();
     const game = this.getCurrentGame();
     try {
@@ -100,7 +120,7 @@ export class CurrentGameManager {
       game.announcementPreviewMessage,
     ]) {
       if (typeof message?.delete === "function") {
-        await message.delete().catch(() => {});
+        await message.delete().catch((error) => console.warn("Failed to delete cancelled announcement message:", error));
       }
     }
     game.announcementPingMessage = undefined;
@@ -283,7 +303,6 @@ export class CurrentGameManager {
     if (!game.startTime) return;
     const token = game.getLifecycleToken();
     this.clearCaptainTimers();
-    game.scenarios.syncTriggerSchedule(Date.now(), guild);
     // The rest of the logic has been moved to AutoCaptainSelector; keep timer scheduling here.
 
     const now = Date.now();
@@ -315,7 +334,8 @@ export class CurrentGameManager {
       this.captainReminderTimeout = setTimeout(remindCaptains, reminderTime.getTime() - now);
     }
 
-    if (enforceTime.getTime() > now) {
+    if (enforceTime.getTime() > now && !(this.lastAttendanceRun?.token === token && this.lastAttendanceRun.at === enforceTime.getTime())) {
+      this.attendanceDeadline = { token, at: enforceTime.getTime() };
       const autoSelectCaptains = async () => {
         const done = GameRecoveryCoordinator.enterOperation();
         if (!done) {
@@ -325,16 +345,21 @@ export class CurrentGameManager {
         try {
           if (this.getCurrentGame() !== game || game.getLifecycleToken() !== token ||
               !game.announced || game.getGameStartStatus() !== "idle" || game.isFinished) return;
-          if (await this.cancelForLowRegistrationAtAutomaticStart(guild)) {
+          if (this.attendanceDeadline?.token !== token || this.attendanceDeadline.at !== enforceTime.getTime()) return;
+          this.lastAttendanceRun = { token, at: enforceTime.getTime() };
+          if (await this.cancelForLowRegistrationAtAutomaticStart(guild, token, enforceTime.getTime())) {
             return;
           }
 
           if (game.getLifecycleToken() !== token || !game.announced ||
-              game.getGameStartStatus() !== "idle") return;
+              game.getGameStartStatus() !== "idle" || game.startTime?.getTime() !== enforceTime.getTime() + 15 * 60_000) return;
           const captainBlock = game.scenarios.automationBlock("captains");
           const draftBlock = game.scenarios.automationBlock("draft");
           if (captainBlock || (draftBlock && game.scenarios.definition?.capabilities.teams)) {
-            await DiscordUtil.sendMessage("gameFeed", `⚠️ Automatic captain/draft preparation paused: ${captainBlock ?? draftBlock} Organisers should review the scenario.`);
+            // Scenario-owned preparation is normal, not a failure. Its stage
+            // reports unmet prerequisites itself.
+            if (game.scenarios.phase === "needs_review" || !game.scenarios.definition?.capabilities.teams)
+              await DiscordUtil.sendMessage("gameFeed", `⚠️ Automatic captain/draft preparation paused: ${captainBlock ?? draftBlock} Organisers should review the scenario.`);
             return;
           }
           // A scenario-owned draft may still use ordinary captain selection,
@@ -354,9 +379,11 @@ export class CurrentGameManager {
           const teamCommand = TeamCommand.instance;
           const result = teamCommand
             ? await teamCommand.runRosterOperation(() =>
-                AutoCaptainSelector.randomiseCaptains(guild, false)
+                game.getLifecycleToken() === token && game.startTime?.getTime() === enforceTime.getTime() + 15 * 60_000
+                  ? AutoCaptainSelector.randomiseCaptains(guild, false) : Promise.resolve(undefined)
               )
             : await AutoCaptainSelector.randomiseCaptains(guild, false);
+          if (!result || game.getLifecycleToken() !== token) return;
           if ("error" in result) {
             await DiscordUtil.sendMessage("gameFeed", result.error);
             return;
@@ -367,34 +394,30 @@ export class CurrentGameManager {
               result.blue.ignUsed ?? "Unknown"
             )}, RED - ${escapeIgn(result.red.ignUsed ?? "Unknown")}.`
           );
-          await this.attemptAutoStartDraft(guild);
+          if (game.getLifecycleToken() === token) await this.attemptAutoStartDraft(guild);
         } catch (e) {
           console.error("Error enforcing auto-captain selection:", e);
         } finally { done(); }
       };
       this.captainEnforceTimeout = setTimeout(autoSelectCaptains, enforceTime.getTime() - now);
     }
+    // Arm attendance enforcement before any scenario stage at the same deadline.
+    game.scenarios.syncTriggerSchedule(now, guild);
   }
 
-  private static async cancelForLowRegistrationAtAutomaticStart(
-    guild: Guild
-  ): Promise<boolean> {
+  private static async cancelForLowRegistrationAtAutomaticStart(guild: Guild, token: string, at: number): Promise<boolean> {
     const game = this.getCurrentGame();
-    if (!game.announced) {
-      return false;
+    if (game.getLifecycleToken() !== token || !game.announced || !game.shouldAutoCancelForLowRegistration()) return false;
+    return this.cancelCurrentGame(guild, token, true, at);
+  }
+
+  /** The scenario timer may fire first; apply the same attendance decision before preparing teams. */
+  public static async attendanceAllowsScheduledScenario(guild: Guild, token: string, at: number): Promise<boolean> {
+    const deadline = this.attendanceDeadline;
+    if (deadline?.token === token && deadline.at === at) {
+      await this.cancelForLowRegistrationAtAutomaticStart(guild, token, at);
     }
-
-    const registeredPlayerCount = game.getRegisteredPlayerCount();
-    if (!game.shouldAutoCancelForLowRegistration()) {
-      return false;
-    }
-
-    await this.cancelCurrentGame(guild);
-
-    const cancelMessage = `⚠️ The announced game has been automatically cancelled because only ${registeredPlayerCount} players were registered at the automatic start time. A minimum of ${GameInstance.MIN_AUTO_START_REGISTERED_COUNT} registered players is required 15 minutes before the announced start time.`;
-    await DiscordUtil.sendMessage("gameFeed", cancelMessage);
-    await DiscordUtil.sendMessage("registration", cancelMessage);
-    return true;
+    return this.getCurrentGame().getLifecycleToken() === token;
   }
 
   public static async attemptAutoStartDraft(guild: Guild): Promise<void> {
@@ -408,6 +431,10 @@ export class CurrentGameManager {
       return;
     }
     if (game.teamsDecidedBy) {
+      if (game.scenarios.definition?.capabilities.runtime && game.hasFinalizedPlayableTeams())
+        await teamCommand.runRosterOperation(async () => {
+          if (game.getLifecycleToken() === token) game.scenarios.prepareRuntime(guild);
+        });
       if (game.scenarios.selectedId === "class-hex" && game.hasFinalizedPlayableTeams() &&
           game.getCaptainOfTeam("RED") && game.getCaptainOfTeam("BLUE"))
         await game.scenarios.activateType("on_teams_finalized", guild);
@@ -428,7 +455,7 @@ export class CurrentGameManager {
           await game.scenarios.activateType("on_draft_start", guild);
           if (game.scenarios.automationBlock("draft")) return;
         }
-        const started = await teamCommand.startAutomaticDraft(guild);
+        const started = await teamCommand.startAutomaticDraft(guild, token);
         if (!started) {
           console.warn("Automatic draft not started; roster, captains or lifecycle changed.");
         }
@@ -533,6 +560,7 @@ export class CurrentGameManager {
   }
 
   private static clearCaptainTimers() {
+    this.attendanceDeadline = undefined;
     if (this.captainReminderTimeout) {
       clearTimeout(this.captainReminderTimeout);
       this.captainReminderTimeout = undefined;

@@ -96,6 +96,7 @@ export const APPROVED: readonly ApprovedSource[] = [
       "Can I get a personal end-of-season recap? `/wrapped`",
       "Where can I find maps, wiki links or a command list?",
       "Can I check Minecraft username history? `/name history`",
+      "Is Shotbow online? Server status and player count `/shotbow`",
       "How do I make a Discord timestamp? `/timestamp`",
     ],
   },
@@ -650,6 +651,12 @@ export function retrieveApprovedKnowledge(
   if (!queryTerms.size) return [];
   const queryCommands = commands(question);
   const shotbowQuestion = asksAboutShotbow(question);
+  const shotbowStatusQuestion =
+    (/\bshotbow\b/i.test(question) &&
+      /\b(?:online|offline|down|up|status|reachable|unreachable|player count|how many players)\b/i.test(
+        question
+      )) ||
+    /\b(?:minecraft )?server status\b/i.test(question);
   const fwTournamentQuestion = asksAboutFwTournament(question);
   const fwVocabularyQuestion = asksAboutFwVocabulary(question);
   const scenarioHeadings = scenarioQuestionHeadings(question);
@@ -697,6 +704,12 @@ export function retrieveApprovedKnowledge(
         if (titleCommands.has(command)) score += 35;
         else if (bodyCommands.has(command)) score += 8;
       }
+      // Live status questions need the command, not historical wiki excerpts.
+      if (
+        shotbowStatusQuestion &&
+        chunk.heading === "Is Shotbow online? Server status and player count `/shotbow`"
+      )
+        score += 40;
       // Scenario-specific rules take priority over ordinary draft and registration guides.
       if (chunk.topic === "fw-scenario") score += 40;
       // Public-game excerpts should rank when explicitly requested, but never

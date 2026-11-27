@@ -1,5 +1,6 @@
 import type { GameInstance } from "../../database/GameInstance";
 import type { Guild } from "discord.js";
+import type { ScenarioRuntimeSession } from "./ScenarioRuntimeSession";
 
 export type ScenarioCategory =
   | "captain-selection"
@@ -94,6 +95,7 @@ export interface ScenarioCapabilities {
   draft?: boolean;
   normalDraft?: boolean;
   requiresFinalTeams?: boolean;
+  runtime?: boolean;
 }
 
 /** Hooks run inside the current match, never a second game manager. */
@@ -110,6 +112,8 @@ export interface ScenarioImplementation {
   /** One invocation per stage, guarded by the shared roster/recovery lock. */
   activateTrigger?(game: GameInstance, policy: ScenarioTriggerPolicy, rosterIds: readonly string[]): Promise<void> | void;
   onTeamsFinalized?(game: GameInstance): Promise<void> | void;
+  /** Explicit opt-in: live/post-game state is not part of preparation actions. */
+  createRuntime?(game: GameInstance, guild: Guild): ScenarioRuntimeSession;
   /** Authenticated organiser confirmation runs outside the activation roster lock. */
   approveResult?(game: GameInstance, guild: Guild): Promise<void>;
   validateAction?(game: GameInstance, action: ScenarioAction, value: ScenarioValue): void;

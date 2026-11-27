@@ -3,7 +3,6 @@ import type { GameInstance } from "../../database/GameInstance";
 import type { ScenarioDefinition } from "./ScenarioTypes";
 import { Channels } from "../../Channels";
 import { scenarioInformation, scenarioGuideButton, GUIDE_OPEN_ID } from "./ScenarioGuide";
-import { openScenarioButton } from "./ScenarioPromptDelivery";
 
 /** Keep the primary announcement first for existing recovery and edit paths. */
 export function announcementScenarioEmbeds(base: EmbedBuilder, definition?: ScenarioDefinition): EmbedBuilder[] {
@@ -24,7 +23,7 @@ export async function publishScenarioInformation(game: GameInstance, base: Embed
   try {
     if (current()) await game.announcementMessage?.edit({
       embeds: announcementScenarioEmbeds(base, definition),
-      components: [scenarioGuideButton(), openScenarioButton(game)],
+      components: [scenarioGuideButton(token)],
     });
   } catch (error) {
     console.warn("Could not attach scenario information to announcement:", error instanceof Error ? error.message : String(error));
@@ -33,7 +32,7 @@ export async function publishScenarioInformation(game: GameInstance, base: Embed
     if (!current() || feedMessages.get(game)?.token === token || !Channels.gameFeed?.isSendable()) return;
     const message = await Channels.gameFeed.send({
       embeds: [scenarioInformation(definition)],
-      components: [scenarioGuideButton(), openScenarioButton(game)],
+      components: [scenarioGuideButton(token)],
     });
     if (current()) feedMessages.set(game, { token, message });
     else await message.delete();
@@ -85,7 +84,8 @@ export async function clearScenarioInformation(game: GameInstance, token: string
       const ids = message.components.flatMap((row) =>
         row.type === ComponentType.ActionRow ? row.components.flatMap((component) =>
           "customId" in component ? [component.customId] : []) : []);
-      if (ids.includes(GUIDE_OPEN_ID) && ids.includes(`fwscopen:${token}`)) {
+      if (ids.includes(`${GUIDE_OPEN_ID}:${token}`) ||
+          (ids.includes(GUIDE_OPEN_ID) && ids.includes(`fwscopen:${token}`))) {
         await message.delete();
       }
     }

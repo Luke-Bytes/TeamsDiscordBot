@@ -107,6 +107,9 @@ test("Scenario publication is advisory, avoids duplicate feed pages and cleans u
     await publishScenarioInformation(game, base);
     await publishScenarioInformation(game, base);
     assertEqual(sent.length, 1, "no duplicate feed page");
+    assertEqual(sent[0].components.length, 1, "public guide has no premature private action button");
+    assertEqual(edits[0].components.length, 1, "announcement has no premature private action button");
+    assertEqual(sent[0].components[0].toJSON().components[0].custom_id, `${GUIDE_OPEN_ID}:${game.getLifecycleToken()}`, "guide button remains match-bound");
     assertEqual(JSON.stringify(sent[0].embeds[0].toJSON()), JSON.stringify(edits[0].embeds[1].toJSON()), "identical public page");
     await game.scenarios.cancel();
     await clearScenarioInformation(game, game.getLifecycleToken());
@@ -138,13 +141,14 @@ test("Scenario cancellation after recovery only deletes the exact match-bound bo
   try {
     (Channels as any).gameFeed = { client: { user: { id: "bot" } }, messages: { fetch: async () => [
       message("match", "bot", "Cursed Classes", token, true),
+      { ...message("new-match", "bot", "Cursed Classes", token, false), components: [{ type: ComponentType.ActionRow, components: [{ customId: `${GUIDE_OPEN_ID}:${token}` }] }] },
       message("old-game", "bot", "Cursed Classes", "old-token", true),
       message("other-author", "player", "Cursed Classes", token, true),
       message("other-page", "bot", "Other page", token, true),
       message("ordinary-prompt", "bot", "Cursed Classes", token, false),
     ] } };
     await clearScenarioInformation(game, token, "Cursed Classes");
-    assertEqual(removed.join(","), "match", "only exact recovered information page removed");
+    assertEqual(removed.join(","), "match,new-match", "only exact recovered information pages removed");
   } finally {
     (Channels as any).gameFeed = channel;
     game.reset();

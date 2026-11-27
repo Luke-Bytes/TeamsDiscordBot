@@ -19,6 +19,7 @@ export async function cleanUpAfterGame(guild: Guild) {
   console.info(`event=match.cleanup game=${matchId} outcome=started`);
   // Authoritative DB commitment must precede potentially partial Discord cleanup.
   // A failed/uncertain commit leaves the in-memory result intact for inspection.
+  game.scenarios.assertRuntimeResetSafe();
   await game.countMVPVotes();
   await prismaClient.game.saveGameFromInstance(game);
   console.info(`event=match.persist game=${matchId} outcome=succeeded duration_ms=${Date.now() - cleanupStartedAt}`);

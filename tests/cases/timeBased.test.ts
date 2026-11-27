@@ -2,12 +2,153 @@ import { test } from "../framework/test";
 import { assert } from "../framework/assert";
 import { CurrentGameManager } from "../../src/logic/CurrentGameManager";
 import { DiscordUtil } from "../../src/util/DiscordUtil";
-import { FakeGuild, FakeGuildMember } from "../framework/mocks";
+import { createChatInputInteraction, FakeGuild, FakeGuildMember } from "../framework/mocks";
+import AnnouncementCommand from "../../src/commands/AnnouncementCommand";
+import { ConfigManager } from "../../src/ConfigManager";
+import { SeasonService } from "../../src/database/SeasonService";
+import { SeasonType } from "@prisma/client";
+import { GameChannelPreflight } from "../../src/util/GameChannelPreflight";
+import { Scheduler } from "../../src/util/SchedulerUtil";
 import { Channels } from "../../src/Channels";
 import { withImmediateTimers } from "../framework/timers";
 import { DraftTeamPickingSession } from "../../src/logic/teams/DraftTeamPickingSession";
 import { PlayerInstance } from "../../src/database/PlayerInstance";
 import TeamCommand from "../../src/commands/TeamCommand";
+
+test("Automatic attendance cancellation permits another announcement on the same command, even if the scenario timer fires first", async () => {
+  const game = CurrentGameManager.getCurrentGame();
+  const previousTeam = TeamCommand.instance;
+  new TeamCommand();
+  const command = new AnnouncementCommand();
+  const guild = new FakeGuild();
+  const organiser = new FakeGuildMember("attendance-org");
+  const otherOrganiser = new FakeGuildMember("attendance-other-org");
+  for (const member of [organiser, otherOrganiser]) {
+    await member.roles.add(ConfigManager.getConfig().roles.organiserRole);
+    guild.addMember(member);
+  }
+  const previous = {
+    announcements: Channels.announcements, registration: Channels.registration, gameFeed: Channels.gameFeed,
+    season: SeasonService.requireActiveSeason, preflight: GameChannelPreflight.run,
+    clean: DiscordUtil.cleanUpAllChannelMessages, send: DiscordUtil.sendMessage,
+    setTimeout: global.setTimeout, clearTimeout: global.clearTimeout, now: Date.now,
+  };
+  const callbacks = new Map<any, () => Promise<void>>();
+  const notices: string[] = [];
+  let nextId = 0;
+  let publications = 0;
+  const message = () => ({
+    id: `attendance-msg-${++nextId}`,
+    edit: async () => {},
+    delete: async () => {},
+    embeds: [],
+  });
+  const channel = (id: string, announcement = false) => ({
+    id, isSendable: () => true, isTextBased: () => true,
+    send: async () => { if (announcement) publications++; return message(); },
+    messages: { fetch: async () => null },
+  });
+  const button = (customId: string, source: any, user = otherOrganiser.id) => {
+    const replies: string[] = [];
+    return {
+      customId, message: source, guild, user: { id: user }, replies,
+      deferReply: async () => {},
+      reply: async (payload: any) => { replies.push(payload.content); },
+      editReply: async (payload: any) => { replies.push(String(payload)); },
+    };
+  };
+  const start = async (scenario: string, minutes = 20) => {
+    const interaction = createChatInputInteraction(organiser.id, {
+      guild: guild as any, subcommand: "start",
+      strings: { when: new Date(Date.now() + minutes * 60_000).toISOString(), modifiers: "none",
+        banned_classes: "none", map: "DUELSTAL", organiser: "Organiser", host: "Host", scenario },
+    });
+    interaction.editReply = (async (payload: any) => {
+      interaction.replies.push(payload);
+      return message();
+    }) as any;
+    await command.execute(interaction);
+    assert(!!game.announcementPreviewMessage, "new preview created");
+    assert(typeof interaction.replies.at(-1) !== "string", "preview was not rejected");
+    return game.announcementPreviewMessage;
+  };
+  try {
+    game.reset();
+    Channels.announcements = channel("attendance-announcements", true) as any;
+    Channels.registration = channel("attendance-registration") as any;
+    Channels.gameFeed = channel("attendance-feed") as any;
+    SeasonService.requireActiveSeason = (async () => ({ type: SeasonType.RANKED })) as any;
+    GameChannelPreflight.run = async () => ({ checked: 10, ok: true, issues: [] });
+    DiscordUtil.cleanUpAllChannelMessages = async () => {};
+    DiscordUtil.sendMessage = async (_channel, payload) => { notices.push(String(payload)); };
+    global.setTimeout = ((callback: () => Promise<void>) => {
+      const handle = {};
+      callbacks.set(handle, callback);
+      return handle;
+    }) as any;
+    global.clearTimeout = ((handle: any) => { callbacks.delete(handle); }) as any;
+    for (const [scenario, count] of [["mystery-dungeon", 1], ["none", 14], ["mystery-dungeon", 0], ["mystery-dungeon", 2]] as const) {
+      Date.now = previous.now;
+      const preview = await start(scenario);
+      if (count === 1) preview!.delete = (async () => { throw new Error("Discord deletion failed"); }) as any;
+      const confirm = button("announcement-confirm-noping", preview);
+      const duplicate = button("announcement-confirm-noping", preview);
+      const before = publications;
+      await Promise.all([command.handleButtonPress(confirm as any), command.handleButtonPress(duplicate as any)]);
+      assert(game.announced && publications === before + 1, "one publication for concurrent confirmations");
+      for (let i = 0; i < count; i++) game.getPlayersOfTeam("UNDECIDED").push(mkPlayer(`attendance-${i}`, `Player${i}`));
+      const attendance = callbacks.get(CurrentGameManager.captainEnforceTimeout)!;
+      assert(!!attendance, "attendance scheduled");
+      const token = game.getLifecycleToken();
+      const scenarioTimer = (Scheduler as any).tasks.get(`scenario:${token}:lock`);
+      Date.now = () => game.startTime!.getTime() - 15 * 60_000;
+      const dueAt = Date.now();
+      Date.now = () => dueAt;
+      if (scenario === "mystery-dungeon") {
+        assert(!!scenarioTimer, "scenario lock scheduled");
+        await callbacks.get(scenarioTimer)!();
+      }
+      await attendance();
+      assert(!game.announced && game.getPlayers().length === 0, "attendance cancelled and reset the game");
+      assert(!notices.some(n => /did not activate|review the scenario/i.test(n)), "no misleading scenario notices");
+      const replacement = await start("partners-in-crime");
+      for (const id of ["announcement-cancel", "announcement-edit-time", "announcement-edit-map", "announcement-edit-banned-classes", "announcement-confirm-ping"]) {
+        const stale = button(id, preview);
+        await command.handleButtonPress(stale as any);
+        assert(stale.replies.some(r => /no longer active/.test(r)), "stale control rejected");
+        const unauthorised = button(id, replacement, "not-an-organiser");
+        await command.handleButtonPress(unauthorised as any);
+        assert(unauthorised.replies.some(r => /Only organisers/.test(r)), "unauthorised control rejected");
+      }
+      assert(game.scenarios.selectedId === "partners-in-crime" && !game.announced, "replacement preview unchanged");
+      await command.handleButtonPress(button("announcement-cancel", replacement) as any);
+      assert(!game.announcementPreviewMessage, "different organiser can cancel current preview");
+    }
+    Date.now = previous.now;
+    const shortPreview = await start("mystery-dungeon", 10);
+    const shortConfirmation = button("announcement-confirm-noping", shortPreview);
+    await command.handleButtonPress(shortConfirmation as any);
+    assert(game.announced && !CurrentGameManager.captainEnforceTimeout, "short-notice game is not immediately cancelled");
+    assert(shortConfirmation.replies.some(r => /deadlines have passed/.test(r)), "organiser warned about missed deadline");
+    game.getPlayersOfTeam("UNDECIDED").push(mkPlayer("100012345678901234", "ShortPlayer"));
+    assert(!!await game.scenarios.registrationPrompt("100012345678901234"), "short-notice scenario still collects a questionnaire");
+    await command.handleButtonPress(button("announcement-cancel", shortPreview) as any);
+    assert(!game.announced, "confirmed short-notice game can be cancelled");
+  } finally {
+    Date.now = previous.now;
+    await CurrentGameManager.resetCurrentGame();
+    global.setTimeout = previous.setTimeout;
+    global.clearTimeout = previous.clearTimeout;
+    Channels.announcements = previous.announcements;
+    Channels.registration = previous.registration;
+    Channels.gameFeed = previous.gameFeed;
+    SeasonService.requireActiveSeason = previous.season;
+    GameChannelPreflight.run = previous.preflight;
+    DiscordUtil.cleanUpAllChannelMessages = previous.clean;
+    DiscordUtil.sendMessage = previous.send;
+    TeamCommand.instance = previousTeam;
+  }
+});
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));

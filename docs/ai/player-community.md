@@ -62,7 +62,11 @@ If it says no wrapped data was found for that season, try a completed season you
 
 ## Can I check Minecraft username history? `/name history`
 
-Use `/name history username:<current IGN>` in the server for a private, read-only lookup, even if the account is not registered with the bot. It verifies the current Java account, then checks configured public history providers and UUID-linked Friendly Wars database records. Organisers can also see additional player-linked names separately, which may belong to other accounts. Results may be incomplete; previous names are not a count of renames or evidence of an alt. Navi can explain this command but cannot look up or disclose name history itself. Do not share private results in public channels.
+Use `/name history username:<current IGN>` in the server for a public, read-only lookup, even if the account is not registered with the bot. It verifies the current Java account, then shows recorded previous names, dates and contributing sources. Organiser-only player-linked names are never included in the public result. Results may be incomplete; previous names are not a count of renames or evidence of an alt. Navi can explain this command but cannot look up or disclose name history itself.
+
+## Is Shotbow online? Server status and player count `/shotbow`
+
+Use `/shotbow` to check whether the Shotbow Minecraft server is online, offline or its status is unavailable, and how many players are connected, including populated MineZ, SMASH, Annihilation, GG, Slaughter and Ghostcraft modes. Empty modes are hidden. Anyone in the Discord server can use it without parameters or registration. The result is public and cached briefly. The Java address is `play.shotbow.net`. If status is unavailable, try again shortly; it does not mean Shotbow is offline. Navi can explain the command but cannot check live Shotbow status itself.
 
 ## How do I make a Discord timestamp? `/timestamp`
 

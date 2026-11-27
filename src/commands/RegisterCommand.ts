@@ -245,6 +245,11 @@ export default class RegisterCommand implements Command {
       return;
     }
 
+    if (game.getLifecycleToken() !== gameToken || !game.announced) {
+      await interaction.editReply({ content: "The game changed while you were registering. Please check the current announcement." });
+      return;
+    }
+
     // Use the latest verified IGN committed to the roster, not an input alias.
     // Nickname updates are best-effort and never invalidate a registration.
     resolvedUsername = result.playerInstance.ignUsed ?? resolvedUsername;
@@ -253,6 +258,10 @@ export default class RegisterCommand implements Command {
       discordUserId,
       resolvedUsername
     );
+    if (game.getLifecycleToken() !== gameToken || !game.announced) {
+      await interaction.editReply({ content: "The game changed while you were registering. Please check the current announcement." });
+      return;
+    }
     const nicknameNote =
       nicknameResult === "failed"
         ? " The server nickname could not be updated; registration still succeeded."
@@ -277,7 +286,7 @@ export default class RegisterCommand implements Command {
           content: `${safeDiscordUserName} has been successfully registered as \`${resolvedUsername}\`, but it's a late sign-up during team picking.${nicknameNote}`,
         });
       }
-      await deliverScenarioRegistrationPrompt(interaction, game, discordUserId);
+      await deliverScenarioRegistrationPrompt(interaction, game, discordUserId, gameToken);
       return;
     }
 
@@ -291,7 +300,7 @@ export default class RegisterCommand implements Command {
           content: `${safeDiscordUserName} has been successfully registered as \`${resolvedUsername}\`, but it's a late sign-up post team picking.${nicknameNote}`,
         });
       }
-      await deliverScenarioRegistrationPrompt(interaction, game, discordUserId);
+      await deliverScenarioRegistrationPrompt(interaction, game, discordUserId, gameToken);
       return;
     }
 
@@ -310,6 +319,6 @@ export default class RegisterCommand implements Command {
         content: `${safeDiscordUserName} has been successfully registered as \`${resolvedUsername}\`!${nicknameNote}${electionNote}`,
       });
     }
-    await deliverScenarioRegistrationPrompt(interaction, game, discordUserId);
+    await deliverScenarioRegistrationPrompt(interaction, game, discordUserId, gameToken);
   }
 }

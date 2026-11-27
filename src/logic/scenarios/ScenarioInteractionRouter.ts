@@ -13,7 +13,7 @@ import { handleScenarioDashboard } from "./ScenarioDashboard";
 type ScenarioInteraction = ButtonInteraction | StringSelectMenuInteraction | UserSelectMenuInteraction | ModalSubmitInteraction;
 
 export function isScenarioInteraction(interaction: { customId: string }): boolean {
-  return interaction.customId.startsWith("fwsc:") ||
+  return interaction.customId.startsWith("fwscr:") || interaction.customId.startsWith("fwsc:") ||
     interaction.customId.startsWith("fwscapprove:") ||
     interaction.customId.startsWith("fwscdraft:") || interaction.customId.startsWith("fwscpanel:") || interaction.customId.startsWith("fwscopen:");
 }
@@ -21,7 +21,7 @@ export function isScenarioInteraction(interaction: { customId: string }): boolea
 /** Common private Discord adapter. Unique game/user/phase/deadline checks live in the coordinator. */
 export async function routeScenarioInteraction(interaction: ScenarioInteraction): Promise<void> {
   const game = GameInstance.getInstance();
-  if (interaction.customId.startsWith("fwscpanel:") && interaction.isButton()) {
+  if (interaction.customId.startsWith("fwscpanel:") && (interaction.isButton() || interaction.isUserSelectMenu())) {
     await handleScenarioDashboard(game, interaction);
     return;
   }
@@ -35,7 +35,7 @@ export async function routeScenarioInteraction(interaction: ScenarioInteraction)
       const token = game.getLifecycleToken();
       const prompt = await game.scenarios.reopenAction(interaction.user.id);
       if (!prompt || token !== game.getLifecycleToken())
-        throw new Error("You have no available scenario interaction. Use /game scenario open to check again.");
+        throw new Error("There’s nothing for you to fill in right now. Register first if you haven’t already, and keep an eye on the game feed.");
       await interaction.reply({ ...prompt, flags: MessageFlags.Ephemeral });
       if (token === game.getLifecycleToken()) game.scenarios.markPromptDelivered(interaction.user.id);
     } catch (error) {
@@ -110,7 +110,7 @@ export async function routeScenarioInteraction(interaction: ScenarioInteraction)
     if (typeof result === "string") {
       await interaction.reply({ content: result, flags: MessageFlags.Ephemeral });
     } else {
-      if (interaction.isModalSubmit()) await interaction.reply({ ...result, flags: MessageFlags.Ephemeral });
+      if (interaction.isModalSubmit() || (interaction.customId.startsWith("fwscr:") && interaction.guild && !interaction.message.flags.has(MessageFlags.Ephemeral))) await interaction.reply({ ...result, flags: MessageFlags.Ephemeral });
       else await interaction.update({ content: result.content, components: result.components ?? [] });
     }
   } catch (error) {

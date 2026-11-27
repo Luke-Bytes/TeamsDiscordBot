@@ -471,7 +471,9 @@ test("An unavailable pre-flight audit never blocks announcement confirmation", a
     command.handleAnnouncementConfirm = async () => {
       confirmations++;
     };
+    game.announcementPreviewMessage = { id: "preview" } as any;
     await command.handleButtonPress({
+      message: game.announcementPreviewMessage,
       customId: "announcement-confirm-noping",
       guild: fixture.guild,
       user: { id: "organiser-user" },
@@ -509,7 +511,9 @@ test("An actual announcement delivery failure does not claim success", async () 
       throw new Error("Announcement channel send failed");
     };
     console.error = () => {};
+    game.announcementPreviewMessage = { id: "preview" } as any;
     await command.handleButtonPress({
+      message: game.announcementPreviewMessage,
       customId: "announcement-confirm-ping",
       guild: fixture.guild,
       user: { id: "organiser-user" },
@@ -562,7 +566,10 @@ test("/announce check is organiser-only and confirmation warns without blocking 
 
     const confirm = async (userId = "organiser-user", ping = false) => {
       const response: string[] = [];
+      game.announcementPreviewMessage = { id: "preview" } as any;
       await command.handleButtonPress({
+        message: game.announcementPreviewMessage,
+        reply: async (payload: any) => { response.push(payload.content); },
         customId: ping
           ? "announcement-confirm-ping"
           : "announcement-confirm-noping",

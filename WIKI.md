@@ -54,13 +54,17 @@ Commands (excluding subcommands):
 `/announcement` `/igns` `/leaderboards` `/register` `/role` `/stats` `/team` `/season`
 `/captain` `/test` `/cleanup` `/debug-scenario` `/registered` `/unregister`
 `/restart` `/player` `/winner` `/performance` `/mvp` `/game` `/missing`
-`/captainNominate` `/teamless` `/plan` `/massRegister` `/name` `/modcheck`
+`/captainNominate` `/teamless` `/plan` `/massRegister` `/name` `/modcheck` `/shotbow`
 
 Friendly Wars: `/game scenario guide` browses scenarios, and `/game scenario open` recovers your private action.
 
+### Shotbow server status
+
+Use `/shotbow` to publicly check the Java server at `play.shotbow.net` and its connected player count, including populated MineZ, SMASH, Annihilation, GG, Slaughter and Ghostcraft modes. No parameters or registration are required. Results are cached for 30 seconds; unavailable status means the check failed, not necessarily that Shotbow is offline. The command uses Crafty's public ping API with the optional existing `CRAFTY_API_TOKEN` and Shotbow's official server list for the player breakdown. If the ping fails, available official counts are still shown as reported counts.
+
 ### Minecraft name history
 
-Use `/name history username:<current IGN>` in the server for a private, read-only lookup of a Java account's recorded previous usernames from external providers and the Friendly Wars database. Registration is not required. Results can be incomplete; distinct names are not a count of renames. Organisers also see additional player-linked, UUID-unverified names separately and a combined UUID-linked summary in `/modcheck`. See [Minecraft name history](docs/minecraft-name-history.md) for configuration and privacy.
+Use `/name history username:<current IGN>` in the server for a public, read-only lookup of a Java account's recorded previous usernames from external providers and the Friendly Wars database. Registration is not required. Results can be incomplete; distinct names are not a count of renames. Organiser-only player-linked records are excluded from the public command; `/modcheck` provides a private moderation summary. See [Minecraft name history](docs/minecraft-name-history.md) for configuration and privacy.
 
 ### Standalone event controls
 

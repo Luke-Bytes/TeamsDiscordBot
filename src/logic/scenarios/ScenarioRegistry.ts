@@ -1,5 +1,6 @@
 import { ScenarioDefinition } from "./ScenarioTypes";
-import { scenarioMetadata } from "./ScenarioMetadata";
+import { scenarioMetadata, upcomingScenarioMetadata } from "./ScenarioMetadata";
+import { ImpostorSession } from "./impostors/ImpostorSession";
 import { mysteryDungeon } from "./mysteryDungeon/MysteryDungeon";
 import { partnersInCrime } from "./partnersInCrime/PartnersInCrime";
 import { peoplesCaptains } from "./peoplesCaptains/PeoplesCaptains";
@@ -16,6 +17,11 @@ export const plannedScenarios: ScenarioDefinition[] = [
   { id: "draft-roulette", ...scenarioMetadata["draft-roulette"], category: "draft", stage: "draft", version: 1, capabilities: { draft: true }, enabled: true, get implementation() { return draftRoulette; }, triggers: [{ id: "draft", type: "on_draft_start", manual: true, requireCaptains: true, minPlayers: 4, captureRoster: true }] },
   { id: "captains-wildcards", ...scenarioMetadata["captains-wildcards"], category: "draft-extension", stage: "draft", version: 1, capabilities: { normalDraft: true }, enabled: true, get implementation() { return captainsWildcards; }, compatibility: ["draft", "snake"], triggers: [{ id: "wildcards", type: "on_draft_start", manual: true, requireCaptains: true }] },
   { id: "class-hex", ...scenarioMetadata["class-hex"], category: "gameplay-restriction", stage: "pre-game", version: 1, capabilities: { requiresFinalTeams: true }, enabled: true, get implementation() { return classHex; }, triggers: [{ id: "hex", type: "on_teams_finalized", manual: true, requireCaptains: true, requireFinalTeams: true, minPlayers: 6, captureRoster: true }, { id: "deadline", type: "before_game_start", offsetMinutes: 3, manual: true, requireFinalTeams: true, requireCaptains: true }] },
+  // Release gate: implementation must pass integration, permission and recovery validation before selection.
+  { id: "the-impostors", ...upcomingScenarioMetadata["the-impostors"], category: "gameplay-restriction", stage: "pre-game", version: 1, capabilities: { requiresFinalTeams: true, runtime: true }, enabled: false, implementation: {
+    validateConfig(config) { if (Object.keys(config).length) throw new Error("The Impostors has no custom configuration."); },
+    createRuntime(game, guild) { return new ImpostorSession(game, guild); },
+  } },
 ];
 
 export class ScenarioRegistry {

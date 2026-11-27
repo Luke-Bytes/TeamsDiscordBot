@@ -6,8 +6,9 @@ import {
 
 export interface HistoryAdapter {
   id: ExternalHistoryProvider;
-  url: (uuid: string) => string;
+  url: (uuid: string, currentUsername: string) => string;
   credential?: string;
+  optionalCredential?: boolean;
   ttlMs: number;
   requestsPer30s: number;
 }
@@ -19,6 +20,8 @@ export const historyAdapters: readonly HistoryAdapter[] = [
   // Shared-IP bot traffic uses a key conservatively; the public sample alone
   // does not establish the reset window or a separate shared-backend quota.
   { id: "bisai", url: (uuid) => `https://mc-api.bisai.dev/v1/profile/${uuid}/names?limit=500`, credential: "BISAI_API_KEY", ttlMs: 600_000, requestsPer30s: 10 },
+  // Documented username endpoint: anonymous access is supported; verify UUID in the response.
+  { id: "crafty", url: (_uuid, currentUsername) => `https://api.crafty.gg/api/v2/players/${encodeURIComponent(currentUsername)}`, credential: "CRAFTY_API_TOKEN", optionalCredential: true, ttlMs: 120_000, requestsPer30s: 30 },
 ];
 
 export function providerResult(provider: HistoryProvider, status: ProviderStatus, reason?: string): ProviderHistory {
@@ -70,6 +73,14 @@ export function parseHistory(provider: ExternalHistoryProvider, uuid: string, pa
       result.limited = total > records.length;
       break;
     }
+    case "crafty": {
+      if (root?.success !== true || !data) return providerResult(provider, "invalidResponse");
+      if (normalizeHistoryUUID(data.uuid) !== uuid) return providerResult(provider, "uuidMismatch");
+      if (withheld(data) || data.deleted === true) return providerResult(provider, "withheld");
+      if (typeof data.username !== "string" || !MojangAPI.validateUsername(data.username)) return providerResult(provider, "invalidResponse");
+      records = data.usernames;
+      break;
+    }
     case "laby": records = payload; break;
     case "winstreak": records = root?.nameHistory; break;
   }
@@ -77,7 +88,7 @@ export function parseHistory(provider: ExternalHistoryProvider, uuid: string, pa
   result.limited ||= records.length > 500 || (provider === "winstreak" && records.length >= 100);
   const observations: NameObservation[] = [];
   let invalid = false;
-  const nameField = provider === "mcprofiles" ? "username" : "name";
+  const nameField = provider === "mcprofiles" || provider === "crafty" ? "username" : "name";
   // Check all returned rows for privacy and identity before retaining anything.
   for (const item of records) {
     const row = object(item);
@@ -111,6 +122,14 @@ export function parseHistory(provider: ExternalHistoryProvider, uuid: string, pa
         continue;
       }
       observations.push({ provider, name, date: historyDate(row.observedAt, "lastObserved"), occurrence });
+    } else if (provider === "crafty") {
+      // Do not publish records without an explicit visible flag.
+      if (row.hidden !== false || !("changed_at" in row)) {
+        invalid = true;
+        continue;
+      }
+      // Crafty calls this changed_at, but does not document date accuracy.
+      observations.push({ provider, name, date: historyDate(row.changed_at, "reported"), occurrence });
     } else if (provider === "bisai") {
       if (!nonnegativeInteger(row.occurrence) || !("first_seen" in row) || !("last_seen" in row)) {
         invalid = true;

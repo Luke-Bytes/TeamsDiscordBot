@@ -1,4 +1,4 @@
-export type ExternalHistoryProvider = "laby" | "winstreak" | "mcprofiles" | "bisai";
+export type ExternalHistoryProvider = "laby" | "winstreak" | "mcprofiles" | "bisai" | "crafty";
 export type HistoryProvider = ExternalHistoryProvider | "database";
 
 export interface NameHistoryScope {

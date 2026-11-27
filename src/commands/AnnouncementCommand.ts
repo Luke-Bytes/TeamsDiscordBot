@@ -15,6 +15,8 @@ import {
   StringSelectMenuInteraction,
 } from "discord.js";
 import { readFileSync } from "fs";
+import { randomUUID } from "crypto";
+import TeamCommand from "./TeamCommand";
 import path from "path";
 import { Command } from "../commands/CommandInterface.js";
 import { AnniClass, AnniMap, SeasonType } from "@prisma/client";
@@ -33,7 +35,6 @@ import { MatchRecoveryGate } from "../logic/MatchRecoveryGate";
 import { ModifierSelector } from "../logic/ModifierSelector";
 import { SeasonService } from "../database/SeasonService";
 import { scenarioRegistry } from "../logic/scenarios/ScenarioRegistry";
-import { openScenarioButton } from "../logic/scenarios/ScenarioPromptDelivery";
 import { announcementScenarioEmbeds, publishScenarioInformation } from "../logic/scenarios/ScenarioAnnouncementInformation";
 import {
   GameChannelPreflight,
@@ -45,6 +46,7 @@ interface CustomModifierSession {
   selectedCategory?: string;
   previewMessage: Message;
   revision: number;
+  id: string;
 }
 
 export default class AnnouncementCommand implements Command {
@@ -69,13 +71,25 @@ export default class AnnouncementCommand implements Command {
     "announcement-custom-value",
   ];
 
-  private announcementPreviewMessage?: Message;
-  private announcementMessage?: Message;
+  private get announcementPreviewMessage() { return GameInstance.getInstance().announcementPreviewMessage; }
+  private set announcementPreviewMessage(message: Message | undefined) { GameInstance.getInstance().announcementPreviewMessage = message; }
+  private get announcementMessage() { return GameInstance.getInstance().announcementMessage; }
+  private set announcementMessage(message: Message | undefined) { GameInstance.getInstance().announcementMessage = message; }
+
+  private isCurrentAnnouncementMessage(interaction: ButtonInteraction): boolean {
+    const message = interaction.message;
+    return !!message && [this.announcementPreviewMessage, this.announcementMessage].some(
+      (current) => !!current && (current === message || (!!current.id && current.id === message.id))
+    );
+  }
+
+  private async runLifecycleOperation<T>(operation: () => Promise<T>): Promise<T> {
+    return TeamCommand.instance ? TeamCommand.instance.runRosterOperation(operation) : operation();
+  }
 
   /** Reattach the original Discord-owned message; never announce or ping again. */
   public attachRecoveredAnnouncementMessage(message: Message<boolean>): void {
     this.announcementMessage = message;
-    GameInstance.getInstance().announcementMessage = message;
   }
   private static readonly namesPath = path.resolve(
     process.cwd(),
@@ -355,15 +369,12 @@ export default class AnnouncementCommand implements Command {
   private async handleAnnouncementStart(
     interaction: ChatInputCommandInteraction
   ) {
-    await interaction.deferReply();
     if (GameInstance.getInstance().announced) {
       await interaction.editReply("A game is already announced. Finish or explicitly cancel it before starting another announcement.");
       return;
     }
     const organiser = interaction.options.getString("organiser");
     const host = interaction.options.getString("host");
-    this.lastModifiersRerollAt = undefined;
-
     if (this.announcementPreviewMessage) {
       await interaction.editReply(
         "A proposed announcement has already started. Please cancel that one or edit it."
@@ -387,6 +398,8 @@ export default class AnnouncementCommand implements Command {
     game.organiserNoElo = noElo;
     game.noElo = noElo;
 
+    this.lastModifiersRerollAt = undefined;
+    this.customModifierChoices = {};
     this.customModifierSessions.clear();
     this.customModifierRevision += 1;
 
@@ -436,8 +449,7 @@ export default class AnnouncementCommand implements Command {
     GameInstance.getInstance().host = host;
 
     this.announcementPreviewMessage = await interaction.editReply(embed);
-    GameInstance.getInstance().announcementPreviewMessage = this
-      .announcementPreviewMessage as Message<boolean>;
+
   }
 
   private resetModifierDerivedState(): void {
@@ -475,14 +487,6 @@ export default class AnnouncementCommand implements Command {
     }
   }
 
-  private async handleAnnouncementCancel(guild: Guild) {
-    await CurrentGameManager.cancelCurrentGame(guild);
-    this.lastModifiersRerollAt = undefined;
-    this.customModifierSessions.clear();
-    this.customModifierChoices = {};
-    this.announcementMessage = undefined;
-    this.announcementPreviewMessage = undefined;
-  }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const member = interaction.guild?.members.cache.get(interaction.user.id);
@@ -522,11 +526,25 @@ export default class AnnouncementCommand implements Command {
     }
 
     switch (subcommand) {
-      case "start":
-        await this.handleAnnouncementStart(interaction);
+      case "start": {
+        await interaction.deferReply();
+        await this.runLifecycleOperation(async () => {
+          const game = GameInstance.getInstance();
+          try {
+            await this.handleAnnouncementStart(interaction);
+          } finally {
+            if (!game.announced && !game.announcementPreviewMessage) game.reset();
+          }
+        });
         break;
-      case "cancel":
-        await this.handleAnnouncementCancel(interaction.guild!);
+      }
+      case "cancel": {
+        const token = GameInstance.getInstance().getLifecycleToken();
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const cancelled = await CurrentGameManager.cancelCurrentGame(interaction.guild!, token);
+        await interaction.editReply(cancelled ? "Cancelled announcement." : "The game changed or has already started. Use the normal game end and shutdown commands for a played game.");
+        break;
+      }
     }
   }
 
@@ -554,8 +572,7 @@ export default class AnnouncementCommand implements Command {
     this.announcementMessage = await Channels.announcements.send({
       embeds: [embed],
     });
-    GameInstance.getInstance().announcementMessage = this
-      .announcementMessage as Message<boolean>;
+
 
     const notifyRoleId = ConfigManager.getConfig().roles.gameNotify;
     if (ping && notifyRoleId) {
@@ -572,8 +589,7 @@ export default class AnnouncementCommand implements Command {
       await Channels.registration.send({
         content: "**A friendly wars game has been announced!** 🎉\n" +
           "Sign up by typing the `/register [MCID]` command in this chat. If you sign up but can't play then run `/unregister`." +
-          (scenario ? `\n**${scenario.name}:** ${scenario.description}\nIf you have a private scenario action, use the button below or ` + "`/game scenario open`." : ""),
-        components: scenario ? [openScenarioButton(game)] : [],
+          (scenario ? `\n**${scenario.name}:** ${scenario.description}\nThe bot will let you know if there’s anything extra to do.` : ""),
       });
     }
 
@@ -590,7 +606,7 @@ export default class AnnouncementCommand implements Command {
     await publishScenarioInformation(GameInstance.getInstance(), embed);
 
     await CurrentGameManager.getCurrentGame().announce();
-    await GameInstance.getInstance().scenarios.onAnnounced(guild);
+    await GameInstance.getInstance().scenarios.onAnnounced();
 
     CurrentGameManager.scheduleClassBanTimers();
     CurrentGameManager.scheduleCaptainTimers(guild);
@@ -629,9 +645,17 @@ export default class AnnouncementCommand implements Command {
     }
 
     try {
-      await this.handleAnnouncementConfirm(interaction.guild!, ping);
+      const confirmed = await this.runLifecycleOperation(async () => {
+        if (!this.isCurrentAnnouncementMessage(interaction) || GameInstance.getInstance().announced) return false;
+        await this.handleAnnouncementConfirm(interaction.guild!, ping);
+        return true;
+      });
+      if (!confirmed) {
+        await interaction.editReply("This announcement has already been confirmed or is no longer active.");
+        return;
+      }
       await interaction.editReply(
-        `Announcement sent${ping ? " with ping" : ""}!${preflightNotice}`
+        `Announcement sent${ping ? " with ping" : ""}!${preflightNotice}${this.preparationNotice()}`
       );
     } catch (error) {
       console.error("Announcement confirmation failed:", error);
@@ -710,26 +734,18 @@ export default class AnnouncementCommand implements Command {
   public async handleButtonPress(
     interaction: ButtonInteraction
   ): Promise<void> {
-    // A recovered announcement whose original Discord message could not be
-    // reattached is still authoritative. Do not replay its stale controls.
-    if (this.buttonIds.includes(interaction.customId) &&
-        GameInstance.getInstance().announced && !this.announcementMessage &&
-        interaction.customId !== "announcement-cancel") {
-      await interaction.reply({
-        content: "The existing announcement could not be verified after recovery. Its old controls are paused; use normal game commands.",
-        flags: MessageFlags.Ephemeral,
-      });
+    if (!this.isOrganiserInteraction(interaction)) {
+      await interaction.reply({ content: "Only organisers can manage announcements.", flags: MessageFlags.Ephemeral });
       return;
     }
-    if (
-      interaction.customId === "announcement-custom-save" ||
-      interaction.customId === "announcement-custom-reset" ||
-      interaction.customId === "announcement-custom-cancel"
-    ) {
+    if (interaction.customId.startsWith("announcement-custom-")) {
       await this.handleCustomModifierButton(interaction);
       return;
     }
-
+    if (!this.isCurrentAnnouncementMessage(interaction)) {
+      await interaction.reply({ content: "This announcement is no longer active.", flags: MessageFlags.Ephemeral });
+      return;
+    }
     if (
       interaction.customId === "announcement-edit-modifiers" &&
       GameInstance.getInstance().modifierMode === "custom"
@@ -752,19 +768,27 @@ export default class AnnouncementCommand implements Command {
       return;
     }
 
-    const isConfirmed = !!this.announcementMessage || GameInstance.getInstance().announced;
+    if (!this.isCurrentAnnouncementMessage(interaction)) {
+      await interaction.editReply("This announcement is no longer active.");
+      return;
+    }
+    const token = GameInstance.getInstance().getLifecycleToken();
+    const isConfirmed = GameInstance.getInstance().announced;
 
     switch (interaction.customId) {
       case "announcement-cancel":
         if (CurrentGameManager.getCurrentGame().hasFinalizedPlayableTeams()) {
           await interaction.editReply(
-            "This announcement can no longer be cancelled because teams have been finalized. Use the normal `/game end` and `/game shutdown` flow."
+            "This announcement can no longer be cancelled using this button because teams have been finalised. If the game hasn't started, use /announce cancel. For a played game, use the normal /game end and /game shutdown commands."
           );
           break;
         }
-        await this.handleAnnouncementCancel(interaction.guild!);
-        await interaction.editReply("Cancelled announcement.");
-        break;
+        if (await CurrentGameManager.cancelCurrentGame(interaction.guild!, token)) {
+          await interaction.editReply("Cancelled announcement.");
+        } else {
+          await interaction.editReply("The game changed or has already started. Use the normal game end and shutdown commands for a played game.");
+        }
+        return;
 
       case "announcement-confirm-ping":
         if (!isConfirmed) {
@@ -833,17 +857,13 @@ export default class AnnouncementCommand implements Command {
         break;
     }
 
-    if (isConfirmed) {
-      if (this.announcementMessage) {
-        await this.announcementMessage.edit({ embeds: this.createGameAnnouncementEmbed(false).embeds });
-      }
-    }
+
   }
 
   private isOrganiserInteraction(
     interaction: ButtonInteraction | StringSelectMenuInteraction
   ): boolean {
-    const member = interaction.guild?.members.cache.get(interaction.user.id);
+    const member = interaction.guild?.members.cache.get(interaction.user?.id);
     return PermissionsUtil.hasRole(member, "organiserRole");
   }
 
@@ -855,7 +875,7 @@ export default class AnnouncementCommand implements Command {
       !!this.announcementPreviewMessage &&
       session.previewMessage === this.announcementPreviewMessage &&
       session.revision === this.customModifierRevision &&
-      !this.announcementMessage &&
+      !GameInstance.getInstance().announced &&
       GameInstance.getInstance().modifierMode === "custom"
     );
   }
@@ -878,7 +898,7 @@ export default class AnnouncementCommand implements Command {
       : "No changes from baseline defaults.";
 
     const categorySelect = new StringSelectMenuBuilder()
-      .setCustomId("announcement-custom-category")
+      .setCustomId(`announcement-custom-category:${session.id}`)
       .setPlaceholder("Choose a modifier category")
       .setMinValues(1)
       .setMaxValues(1)
@@ -905,7 +925,7 @@ export default class AnnouncementCommand implements Command {
 
     if (selectedCategory) {
       const valueSelect = new StringSelectMenuBuilder()
-        .setCustomId("announcement-custom-value")
+        .setCustomId(`announcement-custom-value:${session.id}`)
         .setPlaceholder(`Choose ${selectedCategory.name}`.slice(0, 150))
         .setMinValues(1)
         .setMaxValues(1)
@@ -926,15 +946,15 @@ export default class AnnouncementCommand implements Command {
     components.push(
       new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
-          .setCustomId("announcement-custom-save")
+          .setCustomId(`announcement-custom-save:${session.id}`)
           .setLabel("Save")
           .setStyle(ButtonStyle.Success),
         new ButtonBuilder()
-          .setCustomId("announcement-custom-reset")
+          .setCustomId(`announcement-custom-reset:${session.id}`)
           .setLabel("Reset to Defaults")
           .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
-          .setCustomId("announcement-custom-cancel")
+          .setCustomId(`announcement-custom-cancel:${session.id}`)
           .setLabel("Cancel")
           .setStyle(ButtonStyle.Danger)
       )
@@ -956,7 +976,7 @@ export default class AnnouncementCommand implements Command {
       });
       return;
     }
-    if (this.announcementMessage) {
+    if (GameInstance.getInstance().announced) {
       await interaction.reply({
         content: "Modifiers are locked because the announcement has been sent.",
         flags: MessageFlags.Ephemeral,
@@ -975,6 +995,7 @@ export default class AnnouncementCommand implements Command {
       choices: { ...this.customModifierChoices },
       previewMessage: this.announcementPreviewMessage,
       revision: this.customModifierRevision,
+      id: randomUUID(),
     };
     this.customModifierSessions.set(interaction.user.id, session);
     await interaction.reply({
@@ -995,8 +1016,7 @@ export default class AnnouncementCommand implements Command {
     }
 
     const session = this.customModifierSessions.get(interaction.user.id);
-    if (!this.isCustomModifierSessionCurrent(session)) {
-      this.customModifierSessions.delete(interaction.user.id);
+    if (!this.isCustomModifierSessionCurrent(session) || !["save", "reset", "cancel"].some(action => interaction.customId === `announcement-custom-${action}:${session.id}`)) {
       await interaction.reply({
         content: "This custom modifier editor has expired.",
         flags: MessageFlags.Ephemeral,
@@ -1004,7 +1024,7 @@ export default class AnnouncementCommand implements Command {
       return;
     }
 
-    if (interaction.customId === "announcement-custom-cancel") {
+    if (interaction.customId === `announcement-custom-cancel:${session.id}`) {
       this.customModifierSessions.delete(interaction.user.id);
       await interaction.update({
         content: "Custom modifier changes discarded.",
@@ -1013,7 +1033,7 @@ export default class AnnouncementCommand implements Command {
       return;
     }
 
-    if (interaction.customId === "announcement-custom-reset") {
+    if (interaction.customId === `announcement-custom-reset:${session.id}`) {
       session.choices = this.modifierSelector.getDefaultChoices();
       session.selectedCategory = undefined;
       await interaction.update(
@@ -1028,12 +1048,11 @@ export default class AnnouncementCommand implements Command {
     ModifierSelector.applySelection(
       this.modifierSelector.selectionsFromChoices(this.customModifierChoices)
     );
-    this.customModifierSessions.delete(interaction.user.id);
-    await interaction.update({
-      content: "Custom modifiers saved.",
-      components: [],
-    });
-    await this.updateAnnouncementMessages();
+    this.customModifierSessions.clear();
+    await Promise.all([
+      this.updateAnnouncementMessages(),
+      interaction.update({ content: "Custom modifiers saved.", components: [] }),
+    ]);
   }
 
   public async handleSelectMenu(
@@ -1048,8 +1067,7 @@ export default class AnnouncementCommand implements Command {
     }
 
     const session = this.customModifierSessions.get(interaction.user.id);
-    if (!this.isCustomModifierSessionCurrent(session)) {
-      this.customModifierSessions.delete(interaction.user.id);
+    if (!this.isCustomModifierSessionCurrent(session) || !["category", "value"].some(action => interaction.customId === `announcement-custom-${action}:${session.id}`)) {
       await interaction.reply({
         content: "This custom modifier editor has expired.",
         flags: MessageFlags.Ephemeral,
@@ -1058,7 +1076,7 @@ export default class AnnouncementCommand implements Command {
     }
 
     const categories = this.modifierSelector.getCategories();
-    if (interaction.customId === "announcement-custom-category") {
+    if (interaction.customId === `announcement-custom-category:${session.id}`) {
       const category = categories.find(
         (entry) => entry.name === interaction.values[0]
       );
@@ -1070,7 +1088,7 @@ export default class AnnouncementCommand implements Command {
         return;
       }
       session.selectedCategory = category.name;
-    } else if (interaction.customId === "announcement-custom-value") {
+    } else if (interaction.customId === `announcement-custom-value:${session.id}`) {
       const category = categories.find(
         (entry) => entry.name === session.selectedCategory
       );
@@ -1297,18 +1315,30 @@ export default class AnnouncementCommand implements Command {
 
   private async updateAnnouncementMessages() {
     const { embeds } = this.createGameAnnouncementEmbed(false);
-    const isConfirmed = !!this.announcementMessage;
+    const isConfirmed = GameInstance.getInstance().announced;
+    const preview = this.announcementPreviewMessage;
+    const announcement = this.announcementMessage;
 
-    if (this.announcementPreviewMessage) {
-      await this.announcementPreviewMessage.edit({
+    if (preview) {
+      await preview.edit({
         embeds,
         components: this.getEditComponents(isConfirmed),
       });
     }
 
-    if (this.announcementMessage) {
-      await this.announcementMessage.edit({ embeds });
+    if (announcement) {
+      await announcement.edit({ embeds });
     }
+  }
+
+  private preparationNotice(): string {
+    const game = CurrentGameManager.getCurrentGame();
+    const missedAttendance = !!game.startTime && game.startTime.getTime() - Date.now() <= 15 * 60_000;
+    const missedScenario = game.scenarios.snapshot()?.triggers?.some(run => run.status === "missed");
+    if (!missedAttendance && !missedScenario) return "";
+    return "\n\nSome automatic preparation deadlines have passed. " +
+      (missedAttendance ? "Prepare captains and teams manually when enough players have registered. " : "") +
+      (game.scenarios.definition ? "Use /game scenario status to check the next steps; you can prepare manually or adjust the start time." : "");
   }
 
   private isCollectorGameCurrent(token: string, previewMessage: Message<boolean> | undefined) {
@@ -1339,7 +1369,7 @@ export default class AnnouncementCommand implements Command {
       time: 30000,
     });
 
-    collector.on("collect", async (msg) => {
+    collector.on("collect", async (msg) => this.runLifecycleOperation(async () => {
       if (!this.isCollectorGameCurrent(token, previewMessage)) {
         collector.stop();
         await interaction.followUp("This announcement input has expired; the game has changed.");
@@ -1355,19 +1385,19 @@ export default class AnnouncementCommand implements Command {
       date.setSeconds(0);
       const game = CurrentGameManager.getCurrentGame();
       game.startTime = date;
+      if (game.announced) {
+        CurrentGameManager.scheduleClassBanTimers();
+        CurrentGameManager.scheduleCaptainTimers(interaction.guild!);
+      }
       await game.mapVoteManager?.rescheduleFinalization();
       if (!this.isCollectorGameCurrent(token, previewMessage)) return;
-
       await this.updateAnnouncementMessages();
       if (!this.isCollectorGameCurrent(token, previewMessage)) return;
-
-      CurrentGameManager.scheduleClassBanTimers();
-      CurrentGameManager.scheduleCaptainTimers(interaction.guild!);
       await interaction.followUp(
-        `The announcement time has been updated to ${formatTimestamp(date)}.`
+        `The announcement time has been updated to ${formatTimestamp(date)}.${game.announced ? this.preparationNotice() : ""}`
       );
       collector.stop();
-    });
+    }).catch((error) => console.error("Announcement input failed:", error)));
 
     collector.on("end", async (_, reason) => {
       if (reason === "time") {
@@ -1398,7 +1428,7 @@ export default class AnnouncementCommand implements Command {
       time: 30000,
     });
 
-    collector.on("collect", async (msg) => {
+    collector.on("collect", async (msg) => this.runLifecycleOperation(async () => {
       if (!this.isCollectorGameCurrent(token, previewMessage)) {
         collector.stop();
         await interaction.followUp("This announcement input has expired; the game has changed.");
@@ -1411,13 +1441,19 @@ export default class AnnouncementCommand implements Command {
         return;
       }
 
+      const game = CurrentGameManager.getCurrentGame();
+      const previousVote = game.mapVoteManager;
+      game.mapVoteManager = undefined;
+      await previousVote?.cancelVote();
+      if (!this.isCollectorGameCurrent(token, previewMessage)) return;
       switch (chosenMap.chooseMapType) {
         case "vote":
-          CurrentGameManager.getCurrentGame().startMapVote(chosenMap.maps);
+          game.startMapVote(chosenMap.maps);
+          if (game.announced) await game.announce();
           break;
         case "random":
         case "specific":
-          CurrentGameManager.getCurrentGame().setMap(chosenMap.map);
+          game.setMap(chosenMap.map);
           break;
       }
 
@@ -1426,7 +1462,7 @@ export default class AnnouncementCommand implements Command {
         `The map has been updated to ${chosenMap.map ?? "a voting map list."}`
       );
       collector.stop();
-    });
+    }).catch((error) => console.error("Announcement input failed:", error)));
 
     collector.on("end", async (_, reason) => {
       if (reason === "time") {
@@ -1457,7 +1493,7 @@ export default class AnnouncementCommand implements Command {
       time: 30000,
     });
 
-    collector.on("collect", async (msg) => {
+    collector.on("collect", async (msg) => this.runLifecycleOperation(async () => {
       if (!this.isCollectorGameCurrent(token, previewMessage)) {
         collector.stop();
         await interaction.followUp("This announcement input has expired; the game has changed.");
@@ -1483,7 +1519,7 @@ export default class AnnouncementCommand implements Command {
         }.`
       );
       collector.stop();
-    });
+    }).catch((error) => console.error("Announcement input failed:", error)));
 
     collector.on("end", async (_, reason) => {
       if (reason === "time") {

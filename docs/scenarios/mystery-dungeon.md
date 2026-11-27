@@ -41,7 +41,7 @@ Scoring: +1 to the matching archetype for each selected answer. Highest score wi
 ## Discord interaction sketch
 
 - Public: "Mystery Dungeon Night! 14/20 players have discovered their class personality. Quiz closes at HH:MM." No individual raw answers.
-- Private: one question at a time, two to four answer options; **Back / Next / Review / Submit**. Players may edit until the freeze.
+- Private: one question at a time, two to four answer options. Review and submission become available only after all five questions are answered. Players may edit until the freeze.
 - Private result: "You are a **Pathfinder** - a player who spots opportunities others miss."
 - Final public reveal: short personality summary + RED and BLUE roster with icons/labels. Only after roles are final.
 - Organiser preview: answer count, nonrespondents, current roster version, mean Elo and archetype distribution.
@@ -49,7 +49,7 @@ Scoring: +1 to the matching archetype for each selected answer. Highest score wi
 ## Edge cases and fallback
 
 - No/very few quiz responses: still form normal Elo-balanced teams; announce that personality matching had too little data and show fewer/no personality labels. Do not cancel the match solely because nobody answered.
-- Late sign-up before lock: give them the quiz with the remaining time. After lock: follow the normal late-signup policy; do not silently reassign already revealed teams.
+- Late sign-up before lock (normally 15 minutes before the announced start): give them the quiz with the remaining time. After lock, new registrations do not receive a quiz and stay unassigned pending organiser review. The frozen roster is invalidated; there is no automatic pair placement after teams are revealed.
 - Unregistration or missing Discord member before confirmation: invalidate and recalculate the pending preview; do not put an absent member into a team.
 - Tie score: deterministic, repeatable resolution; **do not** repeatedly change a player's archetype when they reopen their result.
 - Captain appointment before quiz conclusion: if organisers already chose captains, either anchor them to opposite teams as a hard allocation constraint or require organisers to clear/reconcile those appointments **before** confirmation. Do not silently move a captain.

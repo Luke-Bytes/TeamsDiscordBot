@@ -1,16 +1,15 @@
 import {
-  AttachmentBuilder, ChatInputCommandInteraction, GuildMember, InteractionContextType,
+  AttachmentBuilder, ChatInputCommandInteraction, InteractionContextType,
   MessageFlags, SlashCommandBuilder,
 } from "discord.js";
 import { MojangAPI } from "../api/MojangAPI";
 import { MinecraftNameHistoryAPI } from "../api/MinecraftNameHistoryAPI";
 import { Command } from "./CommandInterface";
-import { PermissionsUtil } from "../util/PermissionsUtil";
 import { buildNameHistoryPages } from "./NameHistoryPresentation";
 
 export default class NameHistoryCommand implements Command {
   name = "name";
-  description = "Look up visible Minecraft Java username history";
+  description = "Look up visible Minecraft username history";
   buttonIds: string[] = [];
   private readonly cooldowns = new Map<string, number>();
 
@@ -19,7 +18,7 @@ export default class NameHistoryCommand implements Command {
     .setDescription(this.description)
     .setContexts(InteractionContextType.Guild)
     .addSubcommand((sub) => sub.setName("history")
-      .setDescription("Privately look up a current Minecraft Java username")
+      .setDescription("Look up previous names of a Minecraft account")
       .addStringOption((option) => option.setName("username")
         .setDescription("Current Minecraft username").setRequired(true).setMaxLength(16)));
 
@@ -42,11 +41,11 @@ export default class NameHistoryCommand implements Command {
       return;
     }
     this.cooldowns.set(interaction.user.id, now + 30_000);
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    await interaction.deferReply({});
     try {
       const result = await MinecraftNameHistoryAPI.lookup(username, {
         guildId: interaction.guildId ?? interaction.guild?.id,
-        includePlayerRecords: PermissionsUtil.hasRole(interaction.member as GuildMember | undefined, "organiserRole"),
+        includePlayerRecords: false,
       });
       if (result.status !== "found") {
         await interaction.editReply({
@@ -67,7 +66,7 @@ export default class NameHistoryCommand implements Command {
         ...(overflow ? { files: [new AttachmentBuilder(overflow, { name: "name-history.txt" })] } : {}),
       });
       for (const page of pages.slice(1)) {
-        await interaction.followUp({ ...privateReply, embeds: [page] });
+        await interaction.followUp({ allowedMentions: { parse: [] }, embeds: [page] });
       }
     } catch {
       await interaction.editReply({

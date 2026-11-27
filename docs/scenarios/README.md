@@ -4,11 +4,11 @@
 
 ## Playing and managing a scenario
 
-Use `/game scenario guide` (also linked in `/help`) to browse all seven scenarios privately, even before a game is announced. The dropdown includes a home page and a clearly labelled coming-soon preview of The Impostors. Announcements and the game feed reuse the same detailed scenario page, with **Learn About Scenarios** and **Open My Scenario** controls. The guide is read-only; the latter button opens only your own current action. Ordinary games have no extra scenario page.
+Use `/game scenario guide` (also linked in `/help`) to browse all seven scenarios privately, even before a game is announced. The dropdown includes a home page and a clearly labelled coming-soon preview of The Impostors. Announcements and the game feed reuse the same detailed scenario page, with a **Learn About Scenarios** button. The guide is read-only; private-action buttons appear when there is something to do. Ordinary games have no extra scenario page.
 
 Current player-facing names, short descriptions and detailed rules are maintained together in `src/logic/scenarios/ScenarioMetadata.ts`. The registry and shared `ScenarioGuide.ts` renderer consume that catalogue. Update the metadata when mechanics change; the design documents below are historical proposals, not a second authoritative player guide. Information delivery is advisory and never changes the selected scenario or Elo policy.
 
-Players register normally. The registration channel explains the selected scenario and offers **Open My Scenario**, which opens only the invoking member's private editor. Registration scenarios also send a private prompt when the player joins. All private prompts show their deadline and whether participation is optional or required. Players can recover their own editor with `/game scenario open`; partial questionnaire or class assignment edits do not count as final submissions.
+Players register normally. The registration channel explains the selected scenario. Registration scenarios send a private prompt when the player joins, while other scenarios send instructions when needed. Where provided, **Open My Scenario** opens only the invoking member’s private editor. All private prompts show their deadline and whether participation is optional or required. Players can recover their own editor with `/game scenario open`; partial questionnaire or class assignment edits do not count as final submissions.
 
 Organisers use `/game scenario status` for the current stage, scheduled transition, outstanding actions, delivery failures and contextual controls. The existing `/game scenario start stage:`, `resume` and `cancel` remain advanced/recovery alternatives. Team proposals and elections still require explicit organiser confirmation. To resend an editor, use `/game scenario open user:@Player`; the bot DMs that player, never the organiser. If private delivery fails, the player can use the public recovery button or slash command.
 
@@ -40,7 +40,7 @@ A *scenario* changes how one Friendly War is prepared or played. It should enric
 | [Captain's Wildcards](./captains-wildcards.md) | Each captain can spend one tactical draft power | Draft add-on | Medium |
 | [Cursed Classes](./class-hex.md) | Captains assign three randomly chosen awkward classes to enemy players for the entire game | After teams, before start | Medium; voluntary in-game enforcement |
 
-The seven above remain the only playable scenarios. [The Impostors (coming soon)](./the-impostors-development.md) is the next planned scenario; its temporary development brief is not live rules or Navi knowledge. It is not selectable until implemented and validated.
+The seven above remain the only playable scenarios. [The Impostors (implementation preview)](./the-impostors.md) is registered but disabled until release validation is complete. Its [reviewed development brief](./the-impostors-development.md) is not live rules or Navi knowledge.
 
 ## Read first
 

@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, type ButtonInteraction, MessageFlags } from "discord.js";
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, type ButtonInteraction, type UserSelectMenuInteraction, UserSelectMenuBuilder, MessageFlags } from "discord.js";
 import type { GameInstance } from "../../database/GameInstance";
 import { Channels } from "../../Channels";
 import { PermissionsUtil } from "../../util/PermissionsUtil";
@@ -30,7 +30,19 @@ export function scenarioDashboard(game: GameInstance) {
   if (state?.phase === "ready" && scenario.definition?.implementation?.approveResult)
     row.addComponents(new ButtonBuilder().setCustomId(`fwscpanel:${token}:approve:result:${revision}`)
       .setLabel("Confirm Result").setStyle(ButtonStyle.Success));
-  const rows = state ? [row] : [];
+  if (scenario.hasRuntime) {
+    row.addComponents(new ButtonBuilder().setCustomId(`fwscpanel:${token}:runtime-stop:runtime:${revision}`)
+      .setLabel("Stop Scenario").setStyle(ButtonStyle.Danger));
+    if (scenario.runtimeShutdownBlock()?.includes("reconciliation"))
+      row.addComponents(new ButtonBuilder().setCustomId(`fwscpanel:${token}:runtime-cleanup:runtime:${revision}`)
+        .setLabel("Confirm Manual Cleanup").setStyle(ButtonStyle.Danger));
+  }
+  const rows: (ActionRowBuilder<ButtonBuilder> | ActionRowBuilder<UserSelectMenuBuilder>)[] = state ? [row] : [];
+  if (scenario.hasRuntime) {
+    rows.push(new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(
+      new UserSelectMenuBuilder().setCustomId(`fwscpanel:${token}:runtime-moderation:runtime:${revision}`)
+        .setPlaceholder("Stop and preserve staff voice action for member").setMinValues(1).setMaxValues(1)));
+  }
   if (state?.id === "peoples-captains" && state.version === 2 && state.data.ranked && !state.data.confirmed && !state.data.roleAssignmentStarted &&
       ["ready", "needs_review"].includes(state.phase) && !game.getCaptainOfTeam("RED") && !game.getCaptainOfTeam("BLUE")) {
     const recovery = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -46,7 +58,7 @@ export function scenarioDashboard(game: GameInstance) {
   return { content: scenario.triggerStatus(), components: rows };
 }
 
-export async function handleScenarioDashboard(game: GameInstance, interaction: ButtonInteraction): Promise<void> {
+export async function handleScenarioDashboard(game: GameInstance, interaction: ButtonInteraction | UserSelectMenuInteraction): Promise<void> {
   try {
     const [prefix, token, action, stage, revision] = interaction.customId.split(":");
     const guild = interaction.guild;
@@ -57,6 +69,8 @@ export async function handleScenarioDashboard(game: GameInstance, interaction: B
     if (!PermissionsUtil.hasRole(member ?? undefined, "organiserRole"))
       throw new Error("Only organisers can manage scenario preparation.");
     if (token !== game.getLifecycleToken()) throw new Error("That game has changed.");
+    if (interaction.isUserSelectMenu?.() && action !== "runtime-moderation") throw new Error("Invalid scenario control.");
+    if (action === "runtime-moderation" && !interaction.isUserSelectMenu()) throw new Error("Invalid scenario control.");
     if (action === "refresh") {
       await interaction.update(scenarioDashboard(game));
       return;
@@ -68,6 +82,19 @@ export async function handleScenarioDashboard(game: GameInstance, interaction: B
       await game.scenarios.startNextManualTrigger(stage, guild);
     else if (action === "approve" && game.scenarios.phase === "ready")
       await game.scenarios.approveResult(guild, revision);
+    else if (stage === "runtime" && (action === "runtime-stop" || action === "runtime-cleanup" || action === "runtime-moderation")) {
+      const operate = async () => {
+        if (token !== game.getLifecycleToken() || revision !== game.scenarios.controlRevision || !game.scenarios.hasRuntime)
+          throw new Error("That scenario dashboard is no longer available.");
+        if (action === "runtime-stop") await game.scenarios.stopRuntime();
+        else if (action === "runtime-moderation" && interaction.isUserSelectMenu() && interaction.values.length === 1)
+          await game.scenarios.preserveRuntimeModeration(interaction.values[0]);
+        else if (action === "runtime-cleanup") game.scenarios.confirmRuntimeCleanup();
+        else throw new Error("Invalid scenario control.");
+      };
+      if (TeamCommand.instance) await TeamCommand.instance.runRosterOperation(operate);
+      else await operate();
+    }
     else if ((action === "review" && stage === "roster") || (action === "replace" && (stage === "RED" || stage === "BLUE"))) {
       const command = TeamCommand.instance;
       if (!command) throw new Error("Team picking is unavailable.");

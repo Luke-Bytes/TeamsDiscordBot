@@ -4,10 +4,12 @@ import type { Guild } from "discord.js";
 import { ScenarioReminderScheduler } from "./ScenarioReminderScheduler";
 import { Scheduler } from "../../util/SchedulerUtil";
 import TeamCommand from "../../commands/TeamCommand";
+import { CurrentGameManager } from "../CurrentGameManager";
 import { GameRecoveryCoordinator } from "../ActiveGameRecovery";
 import { MatchRecoveryGate } from "../MatchRecoveryGate";
 import { GuildMembership } from "../GuildMembership";
 import { ScenarioRegistry, scenarioRegistry } from "./ScenarioRegistry";
+import type { ScenarioRuntimeSession } from "./ScenarioRuntimeSession";
 import {
   ScenarioAction, ScenarioDefinition, ScenarioPhase, ScenarioRole,
   ScenarioState, ScenarioValue, ScenarioTriggerPolicy, ScenarioTriggerRun,
@@ -96,6 +98,11 @@ export function validateScenarioState(input: unknown, registry: ScenarioRegistry
 /** One coordinator per GameInstance; all state is keyed to its lifecycle token. */
 export class ScenarioCoordinator {
   private state: ScenarioState | null = null;
+  private runtime?: ScenarioRuntimeSession;
+  get hasRuntime(): boolean { return !!this.currentRuntime(); }
+  private currentRuntime(): ScenarioRuntimeSession | undefined {
+    return this.runtime?.token === this.game.getLifecycleToken() ? this.runtime : undefined;
+  }
   private readonly scheduledIds = new Set<string>();
   private readonly reminders = new ScenarioReminderScheduler(this.game, this);
   private revision = randomUUID().slice(0, 12);
@@ -130,6 +137,7 @@ export class ScenarioCoordinator {
   }
 
   async reopenAction(userId: string): Promise<ScenarioPrivatePrompt | null> {
+    if (this.hasRuntime) return this.currentRuntime()!.open(userId);
     const action = this.availableActions().reverse().find((entry) => entry.ownerId === userId);
     if (action) return this.renderPrivateAction(action.id);
     return this.registrationPrompt(userId);
@@ -199,11 +207,11 @@ export class ScenarioCoordinator {
     this.state.phase = "collecting";
   }
 
-  async onAnnounced(guild?: Guild): Promise<void> {
+  async onAnnounced(): Promise<void> {
     if (!this.state) return;
     try {
       await this.definition?.implementation?.onAnnounced?.(this.game, this.state);
-      this.syncTriggerSchedule(Date.now(), guild);
+      // CurrentGameManager arms all announcement timers together.
     } catch (error) {
       this.needsReview("Scenario announcement setup failed; inspect the workflow before continuing.");
       throw error;
@@ -211,6 +219,10 @@ export class ScenarioCoordinator {
   }
 
   async onRegistrationChanged(userId: string, joined: boolean): Promise<void> {
+    if (this.definition?.capabilities.runtime) {
+      await this.currentRuntime()?.rosterChanged();
+      return;
+    }
     if (!this.state || this.state.gameToken !== this.game.getLifecycleToken() ||
         !this.game.announced || this.game.isFinished || this.game.getGameStartStatus() !== "idle" ||
         this.state.phase === "cancelled") return;
@@ -231,6 +243,13 @@ export class ScenarioCoordinator {
       const votes = this.state.data.votes;
       if (!joined && plainRecord(votes)) delete votes[userId];
     }
+    // A new, unassigned late signup (or departure of one) does not change
+    // already-confirmed Mystery Dungeon/Partners teams. Preserve the ordinary
+    // late-signup workflow; never silently rewrite the confirmed assignment.
+    if ((this.state.id === "mystery-dungeon" || this.state.id === "partners-in-crime") &&
+        this.state.phase === "completed" && this.game.hasFinalizedPlayableTeams() &&
+        !this.state.triggers?.some(run => run.rosterIds?.includes(userId)) &&
+        (!joined || this.game.getPlayersOfTeam("UNDECIDED").some(player => player.discordSnowflake === userId))) return;
     // Never retain a departed player's private response. A published proposal
     // cannot be confirmed after any participant change.
     if (!joined) {
@@ -262,12 +281,67 @@ export class ScenarioCoordinator {
     // Schedule activation after it has released that lock.
     const token = this.game.getLifecycleToken();
     queueMicrotask(() => { if (token === this.game.getLifecycleToken()) void this.activateType("on_teams_finalized", guild); });
-    try { await this.definition?.implementation?.onTeamsFinalized?.(this.game); }
+    try {
+      await this.definition?.implementation?.onTeamsFinalized?.(this.game);
+      if (guild) this.prepareRuntime(guild);
+    }
     catch (error) {
       this.needsReview("Scenario teams-finalised hook failed.");
       throw error;
     }
   }
+  /** Called inside the existing final-team/start roster lock. */
+  prepareRuntime(guild: Guild): void {
+    if (!this.definition?.capabilities.runtime || this.currentRuntime() ||
+        this.state?.data.runtimeVoided || !this.isLive() || this.state?.phase !== "collecting" ||
+        !this.game.hasFinalizedPlayableTeams()) return;
+    const create = this.definition.implementation?.createRuntime;
+    if (!this.definition.enabled || !create) return;
+    try {
+      this.runtime = create(this.game, guild);
+      this.complete();
+      this.runtime.prepare();
+    } catch {
+      this.needsReview("Scenario requires eligible, finalised teams. Review or cancel the scenario before starting.");
+    }
+  }
+
+  async beforeRuntimeStart(): Promise<void> { await this.currentRuntime()?.beforeStart(); }
+  async runtimeStartFailed(): Promise<void> { await this.currentRuntime()?.startFailed(); }
+  async runtimeStarted(): Promise<void> { await this.currentRuntime()?.started(); }
+  async runtimeWinnerReported(): Promise<void> { await this.currentRuntime()?.winnerReported(); }
+  async endRuntime(continuation: () => Promise<void>): Promise<void> {
+    const runtime = this.currentRuntime();
+    if (runtime) await runtime.end(continuation);
+    else await continuation();
+  }
+  runtimeShutdownBlock(): string | null { return this.currentRuntime()?.shutdownBlock() ?? null; }
+  assertRuntimeResetSafe(): void {
+    const block = this.runtime?.shutdownBlock();
+    if (block) throw new Error(block);
+  }
+  async stopRuntime(): Promise<void> {
+    const runtime = this.currentRuntime();
+    if (!runtime) throw new Error("No scenario runtime is active.");
+    await runtime.abort();
+  }
+  async preserveRuntimeModeration(memberId: string): Promise<void> {
+    const runtime = this.currentRuntime();
+    if (!runtime?.preserveModeration) throw new Error("No scenario moderation handoff is available.");
+    await runtime.preserveModeration(memberId);
+  }
+  confirmRuntimeCleanup(): void {
+    const runtime = this.currentRuntime();
+    if (!runtime) throw new Error("No scenario runtime is active.");
+    runtime.confirmManualCleanup();
+  }
+  async prepareRuntimeRestart(): Promise<void> {
+    if (!this.hasRuntime) return;
+    await this.stopRuntime();
+    this.assertRuntimeResetSafe();
+    if (this.state) this.state.data.runtimeVoided = true;
+  }
+
   async onDraftTurn(team: "RED" | "BLUE"): Promise<void> {
     if (!this.isLive()) return;
     const token = this.game.getLifecycleToken();
@@ -304,6 +378,8 @@ export class ScenarioCoordinator {
     if (this.state.phase !== "completed") return `${this.definition?.name ?? this.state.id} preparation is incomplete. An organiser should review /game scenario status before starting.`;
     if (this.definition?.capabilities.requiresFinalTeams && !this.game.hasFinalizedPlayableTeams())
       return "Scenario requires finalised teams.";
+    if (this.definition?.capabilities.runtime && !this.state.data.runtimeVoided)
+      return this.currentRuntime()?.startBlock() ?? (this.hasRuntime ? null : "Scenario role preparation is unavailable; review or cancel it.");
     return this.definition?.implementation?.checkReadyToStart?.(this.game) ?? null;
   }
   markReady(data?: Record<string, ScenarioValue>): void {
@@ -482,6 +558,10 @@ export class ScenarioCoordinator {
     this.state.actions = [];
   }
   invalidateTeams(): void {
+    if (this.definition?.capabilities.runtime) {
+      this.currentRuntime()?.invalidate();
+      return;
+    }
     if (this.state && (
       this.state.phase === "ready" ||
       (this.definition?.capabilities.requiresFinalTeams && ["collecting", "completed"].includes(this.state.phase)) ||
@@ -490,6 +570,11 @@ export class ScenarioCoordinator {
   }
   async cancel(): Promise<void> {
     if (!this.state || this.state.phase === "cancelled") return;
+    if (this.runtime) {
+      await this.runtime.abort();
+      this.assertRuntimeResetSafe();
+      this.runtime = undefined;
+    }
     const previous = this.state;
     this.state.phase = "cancelled";
     this.revision = randomUUID().slice(0, 12);
@@ -500,7 +585,12 @@ export class ScenarioCoordinator {
     catch (error) { console.error("Scenario cleanup failed:", error instanceof Error ? error.message : String(error)); }
     if (this.state === previous) this.state = null;
   }
-  reset(): void { this.clearTriggerTimers(); this.state = null; }
+  reset(): void {
+    this.assertRuntimeResetSafe();
+    this.runtime = undefined;
+    this.clearTriggerTimers();
+    this.state = null;
+  }
 
   /** Stop automatic resumes of private collectors/timers after a preserved restart. */
   restore(raw: ScenarioState | null, token: string): void {
@@ -510,6 +600,15 @@ export class ScenarioCoordinator {
     validateScenarioState(raw, this.registry);
     if (raw.gameToken !== token) throw new Error("Scenario belongs to a different game.");
     this.state = copy(raw);
+    this.runtime = undefined;
+    // Live overlays are deliberately not replayed after a process restart.
+    if (this.definition?.capabilities.runtime) {
+      this.state.data = { runtimeVoided: true };
+      this.state.actions = [];
+      this.state.prompts = [];
+      this.state.phase = "completed";
+      this.state.reviewReason = "Runtime void after restart. Inspect restricted cleanup receipts; do not blindly clear voice flags.";
+    }
     // A hook interrupted during restart must not be treated as still running
     // forever or automatically retried with fresh random results.
     for (const run of this.state.triggers ?? []) if (run.status === "running") {
@@ -583,6 +682,12 @@ export class ScenarioCoordinator {
     return action.allowUpdates ? "Choice saved; you may update it before the deadline." : "Choice submitted.";
   }
   async applyAction(customId: string, actorId: string, value: ScenarioValue, isOrganiser = false): Promise<string | ScenarioPrivatePrompt> {
+    if (customId.startsWith("fwscr:")) {
+      const runtime = this.currentRuntime();
+      if (!runtime || !validValue(value) || JSON.stringify(value).length > 8_000)
+        throw new Error("That scenario interaction is no longer available.");
+      return runtime.apply(customId, actorId, value);
+    }
     const message = this.submitAction(customId, actorId, value, isOrganiser);
     const action = this.state?.actions.find((a) => customId === this.actionCustomId(a));
     if (action) {
@@ -712,24 +817,7 @@ export class ScenarioCoordinator {
   syncTriggerSchedule(now = Date.now(), guild?: Guild): void {
     this.clearTriggerTimers(false);
     if (!this.isLive() || !this.game.startTime) return;
-    // Update pending private action deadlines alongside any announcement time edit.
-    // Submitted answers retain their original response; no prompt is resent.
-    const collection = this.definition?.triggers?.find((p) => p.type === "on_registration");
-    const close = this.definition?.triggers?.find((p) => p.type === "before_game_start");
-    if (this.state?.id === "peoples-captains" && this.state.phase === "collecting") {
-      const at = this.game.startTime.getTime() - 20 * 60_000;
-      for (const action of this.state.actions) if (action.kind === "ballot" && Date.parse(action.deadline) > now)
-        action.deadline = new Date(at).toISOString();
-    }
-    if (collection && this.state?.phase === "collecting") {
-      const at = this.game.startTime.getTime() -
-        (collection.offsetMinutes ?? close?.offsetMinutes ?? 0) * 60_000;
-      for (const prompt of this.state.prompts ?? []) {
-        const action = this.state.actions.find((a) => a.id === prompt.actionId && a.ownerId === prompt.userId);
-        if (action && at > now) action.deadline = new Date(at).toISOString();
-      }
-    }
-    for (const action of this.availableActions(now)) this.scheduleReminder(action.id, now);
+
     for (const policy of this.definition?.triggers ?? []) {
       if (policy.type !== "before_game_start") continue;
       const run = this.getRun(policy.id);
@@ -749,17 +837,50 @@ export class ScenarioCoordinator {
       Scheduler.schedule(taskId, async () => {
         if (this.game.getLifecycleToken() !== token || !this.isLive() ||
             !this.game.startTime || this.game.startTime.getTime() - (policy.offsetMinutes ?? 15) * 60_000 > Date.now())
-          return;
+          return "skipped";
+        if (guild && !await CurrentGameManager.attendanceAllowsScheduledScenario(guild, token, at)) return "skipped";
+        if (this.game.getLifecycleToken() !== token || !this.isLive() ||
+            this.game.startTime?.getTime() !== at + (policy.offsetMinutes ?? 15) * 60_000) return "skipped";
         try { await this.activateTrigger(policy.id, "automatic", guild); }
         catch (error) {
-          console.warn(`Scenario stage ${policy.id} requires organiser attention:`, error instanceof Error ? error.message : String(error));
+          if (this.game.getLifecycleToken() !== token || !this.game.announced || this.game.isFinished || this.state?.id !== this.definition?.id) return "skipped";
+          const reason = error instanceof Error ? error.message : String(error);
+          if (run.status === "failed") console.error(`Scenario stage ${policy.id} failed:`, error);
+          else console.warn(`Scenario stage ${policy.id} requires organiser attention:`, reason);
           const { DiscordUtil } = await import("../../util/DiscordUtil");
+          if (this.game.getLifecycleToken() !== token || !this.game.announced || this.game.isFinished) return "skipped";
           await DiscordUtil.sendMessage("gameFeed",
-            `⚠️ Scenario ${this.definition?.name ?? "stage"} did not activate: ${error instanceof Error ? error.message.slice(0, 300) : "review required"}. Use /game scenario status.`
-          ).catch(() => {});
+            `⚠️ Scenario ${this.definition?.name ?? "stage"} did not activate: ${reason.slice(0, 300)}. Use /game scenario status.`
+          );
+          return "needs_review";
         }
       }, new Date(at));
     }
+    // Update collecting actions, not completed stages. Preserve submitted responses.
+    if (this.state?.phase === "collecting") {
+      if (this.state.id === "peoples-captains") {
+        const at = this.game.startTime.getTime() - 20 * 60_000;
+        for (const action of this.state.actions) if (action.kind === "ballot") action.deadline = new Date(at).toISOString();
+      }
+      const at = this.registrationDeadline();
+      if (at !== undefined) for (const prompt of this.state.prompts ?? []) {
+        const action = this.state.actions.find((a) => a.id === prompt.actionId && a.ownerId === prompt.userId);
+        if (action) action.deadline = new Date(at).toISOString();
+      }
+    }
+    for (const action of this.availableActions(now)) this.scheduleReminder(action.id, now);
+  }
+
+  /** Short-notice team scenarios may still collect until the organiser locks teams or the announced start. */
+  private registrationDeadline(): number | undefined {
+    const collection = this.definition?.triggers?.find((p) => p.type === "on_registration");
+    if (!collection || !this.game.startTime) return undefined;
+    const close = this.definition?.triggers?.find((p) => p.type === "before_game_start");
+    const at = this.game.startTime.getTime() - (collection.offsetMinutes ?? close?.offsetMinutes ?? 0) * 60_000;
+    if ((this.state?.id === "mystery-dungeon" || this.state?.id === "partners-in-crime") &&
+        close && this.state.phase === "collecting" && this.getRun(close.id).status === "missed" && !this.getRun(close.id).rosterIds)
+      return this.game.startTime.getTime();
+    return at;
   }
 
   clearSchedules(): void { this.clearTriggerTimers(); }
@@ -829,9 +950,8 @@ export class ScenarioCoordinator {
     const policy = this.definition?.triggers?.find((t) => t.type === "on_registration");
     const render = this.definition?.implementation?.registrationPrompt;
     if (!policy || !render || !this.game.startTime) return null;
-    const close = this.definition?.triggers?.find((t) => t.type === "before_game_start");
-    const deadline = this.game.startTime.getTime() - (policy.offsetMinutes ?? close?.offsetMinutes ?? 0) * 60_000;
-    if (deadline <= Date.now()) return null;
+    const deadline = this.registrationDeadline();
+    if (deadline === undefined || deadline <= Date.now()) return null;
     this.state.prompts ??= [];
     let record = this.state.prompts.find((p) => p.userId === userId && p.triggerId === policy.id);
     if (!record) {
@@ -863,6 +983,7 @@ export class ScenarioCoordinator {
   }
 
   markPromptDelivered(userId: string, actionId?: string): void {
+    this.currentRuntime()?.delivered(userId);
     const record = [...(this.state?.prompts ?? [])].reverse().find((p) => p.userId === userId && (!actionId || p.actionId === actionId));
     if (record && record.status !== "completed") record.status = "delivered";
   }
@@ -880,6 +1001,7 @@ export class ScenarioCoordinator {
 
   triggerStatus(): string {
     if (!this.state) return "Scenario: None. Ordinary game preparation applies.";
+    if (this.hasRuntime) return `**${this.definition?.name ?? this.state.id}**\n${this.currentRuntime()!.summary()}`;
     const collecting = actionsDescription(this.state.id, this.state.actions);
     const stage = { configured: "Waiting for announcement", collecting, ready: "Waiting for organiser confirmation", completed: "Scenario preparation complete", needs_review: "Organiser review required", cancelled: "Cancelled" }[this.state.phase];
     const actions = this.availableActions();
@@ -929,7 +1051,9 @@ export class ScenarioCoordinator {
   }
 
   publicMatchMetadata(): ScenarioValue | null {
-    const result = this.definition?.implementation?.publicResult?.(this.game);
+    const result = this.hasRuntime ? this.currentRuntime()!.publicResult() :
+      this.definition?.capabilities.runtime && this.state?.data.runtimeVoided ? { status: "void" } :
+      this.definition?.implementation?.publicResult?.(this.game);
     if (result === undefined) return null;
     if (!validValue(result) || JSON.stringify(result).length > 8_000)
       throw new Error("Scenario public result is invalid or too large.");

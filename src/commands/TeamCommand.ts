@@ -68,11 +68,10 @@ export default class TeamCommand implements Command {
   }
 
   /** Automatic starts use the same roster lock and reconciliation as /team generate. */
-  async startAutomaticDraft(guild: Guild): Promise<boolean> {
+  async startAutomaticDraft(guild: Guild, token = CurrentGameManager.getCurrentGame().getLifecycleToken()): Promise<boolean> {
     return this.serialise(async () => {
       const game = CurrentGameManager.getCurrentGame();
-      const token = game.getLifecycleToken();
-      if (!game.announced || game.isFinished || game.getGameStartStatus() !== "idle" ||
+      if (game.getLifecycleToken() !== token || !game.announced || game.isFinished || game.getGameStartStatus() !== "idle" ||
           game.teamsDecidedBy || this.teamPickingSession || game.scenarios.automationBlock("draft")) return false;
 
       try {
