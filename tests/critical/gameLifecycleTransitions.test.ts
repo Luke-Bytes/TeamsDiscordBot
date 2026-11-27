@@ -388,6 +388,8 @@ test("accidental game end cannot poison registration after a new announcement", 
   const originalFindMany = (prismaClient as any).playerPunishment.findMany;
   const originalUpdateMany = (prismaClient as any).playerPunishment.updateMany;
   const originalUsernameToUuid = MojangAPI.usernameToUUID;
+  const originalUuidToUsername = MojangAPI.uuidToUsername;
+  const originalProfileLookup = prismaClient.profile.findUnique;
   const originalAddPlayer = game.addPlayerByDiscordId;
   (prismaClient as any).player.byDiscordSnowflake = async () => null;
   (prismaClient as any).playerPunishment.findFirst = async () => null;
@@ -396,6 +398,8 @@ test("accidental game end cannot poison registration after a new announcement", 
     count: 0,
   });
   (MojangAPI as any).usernameToUUID = async () => "0123456789abcdef0123456789abcdef";
+  (MojangAPI as any).uuidToUsername = async () => "FreshPlayer";
+  (prismaClient.profile as any).findUnique = async () => null;
   (game as any).addPlayerByDiscordId = async (id: string, ign: string) => {
     const registered = player(id);
     registered.ignUsed = ign;
@@ -434,6 +438,8 @@ test("accidental game end cannot poison registration after a new announcement", 
     (prismaClient as any).playerPunishment.findMany = originalFindMany;
     (prismaClient as any).playerPunishment.updateMany = originalUpdateMany;
     (MojangAPI as any).usernameToUUID = originalUsernameToUuid;
+    MojangAPI.uuidToUsername = originalUuidToUsername;
+    prismaClient.profile.findUnique = originalProfileLookup;
     (game as any).addPlayerByDiscordId = originalAddPlayer;
     game.reset();
   }

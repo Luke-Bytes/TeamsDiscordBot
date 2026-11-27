@@ -1,4 +1,8 @@
-import { SeasonType } from "@prisma/client";
+import { Prisma, SeasonType } from "@prisma/client";
+import {
+  changeUnlockedTitles,
+  runTitleTransaction,
+} from "../database/TitlePersistence";
 import { prismaClient } from "../database/prismaClient";
 import { TitleStore } from "../util/TitleStore";
 import { formatTitleLabel } from "../util/ProfileUtil";
@@ -20,7 +24,11 @@ export type TitleReconciliationResult = {
 /** Idempotent title calculation shared by season closure and /scripts repair. */
 export class TitleService {
   static async reconcile(
-    closingSeasonId?: string
+    closingSeasonId?: string,
+    commitClosure?: (
+      tx: Prisma.TransactionClient,
+      result: TitleReconciliationResult
+    ) => Promise<void>
   ): Promise<TitleReconciliationResult> {
     const available = new Set(TitleStore.loadTitles().map((title) => title.id));
     const awards = new Map<string, Set<string>>();
@@ -32,7 +40,15 @@ export class TitleService {
     };
 
     const [stats, mvps, history, players] = await Promise.all([
-      prismaClient.playerStats.findMany(),
+      prismaClient.playerStats.findMany({
+        select: {
+          playerId: true,
+          seasonId: true,
+          wins: true,
+          losses: true,
+          elo: true,
+        },
+      }),
       prismaClient.gameParticipation.findMany({
         where: { mvp: true },
         select: { playerId: true },
@@ -91,6 +107,7 @@ export class TitleService {
       ? [
           await prismaClient.season.findUnique({
             where: { id: closingSeasonId },
+            select: { id: true, type: true },
           }),
         ]
       : await prismaClient.season.findMany({
@@ -98,49 +115,64 @@ export class TitleService {
             isActive: false,
             OR: [{ type: SeasonType.RANKED }, { type: null }],
           },
+          select: { id: true, type: true },
         });
+    const rankedBySeason = new Map<string, typeof stats>();
     for (const season of placementSeasons) {
       if (season && season.type !== SeasonType.RELAXED) {
-        const ranked = stats
-          .filter((row) => row.seasonId === season.id)
-          .sort((a, b) => b.elo - a.elo);
-        let previousElo: number | undefined;
-        let competitionRank = 0;
-        ranked.forEach((row, index) => {
-          if (row.elo !== previousElo) competitionRank = index + 1;
-          previousElo = row.elo;
-          if (competitionRank === 1) award(row.playerId, "CHAMPION");
-          if (competitionRank <= 2) award(row.playerId, "ACE");
-          if (competitionRank <= 3) award(row.playerId, "ELITE");
-        });
+        rankedBySeason.set(season.id, []);
       }
+    }
+    for (const row of stats) rankedBySeason.get(row.seasonId)?.push(row);
+    for (const ranked of rankedBySeason.values()) {
+      ranked.sort((a, b) => b.elo - a.elo);
+      let previousElo: number | undefined;
+      let competitionRank = 0;
+      ranked.forEach((row, index) => {
+        if (row.elo !== previousElo) competitionRank = index + 1;
+        previousElo = row.elo;
+        if (competitionRank === 1) award(row.playerId, "CHAMPION");
+        if (competitionRank <= 2) award(row.playerId, "ACE");
+        if (competitionRank <= 3) award(row.playerId, "ELITE");
+      });
     }
 
     const playerById = new Map(players.map((player) => [player.id, player]));
-    const newlyUnlocked: NewlyUnlockedTitle[] = [];
-    for (const [playerId, playerAwards] of awards) {
-      const existing = await prismaClient.profile.findUnique({
-        where: { playerId },
-      });
-      const old = existing?.unlockedTitles ?? [];
-      const newIds = [...playerAwards].filter((id) => !old.includes(id));
-      await prismaClient.profile.upsert({
-        where: { playerId },
-        update: { unlockedTitles: [...new Set([...old, ...playerAwards])] },
-        create: { playerId, unlockedTitles: [...playerAwards] },
-      });
-      if (newIds.length) {
-        const player = playerById.get(playerId);
-        newlyUnlocked.push({
-          playerId,
-          ign: player?.latestIGN ?? "Unknown",
-          discordSnowflake: player?.discordSnowflake ?? null,
-          titleIds: newIds,
+    return runTitleTransaction(async (tx) => {
+      if (commitClosure && closingSeasonId) {
+        const season = await tx.season.findUnique({
+          where: { id: closingSeasonId },
+          select: { titlesProcessedAt: true },
         });
+        if (!season) throw new Error("Closing season no longer exists.");
+        if (season.titlesProcessedAt) return { newlyUnlocked: [], blocks: [] };
       }
-    }
-
-    return { newlyUnlocked, blocks: this.buildAnnouncement(newlyUnlocked) };
+      const newlyUnlocked: NewlyUnlockedTitle[] = [];
+      for (const [playerId, playerAwards] of awards) {
+        const { newlyUnlocked: newIds } = await changeUnlockedTitles(
+          tx,
+          playerId,
+          playerAwards
+        );
+        if (newIds.length) {
+          const player = playerById.get(playerId);
+          newlyUnlocked.push({
+            playerId,
+            ign: player?.latestIGN ?? "Unknown",
+            discordSnowflake: player?.discordSnowflake ?? null,
+            titleIds: newIds,
+          });
+        }
+      }
+      const result = {
+        newlyUnlocked,
+        blocks: this.buildAnnouncement(newlyUnlocked),
+      };
+      // For season closure, the title writes, announcement outbox and checkpoint
+      // must commit together or none of them may survive a failed attempt.
+      if (commitClosure) await commitClosure(tx, result);
+      return result;
+    });
   }
 
   private static buildAnnouncement(rows: NewlyUnlockedTitle[]): string[] {

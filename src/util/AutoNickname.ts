@@ -8,24 +8,27 @@ import { prismaClient } from "../database/prismaClient";
 export async function syncRegistrationNickname(
   guild: Guild,
   discordUserId: string,
-  registeredIgn: string
+  registeredIgn: string,
+  knownPlayerId?: string
 ): Promise<"updated" | "skipped" | "failed"> {
   try {
     // Re-read the preference after registration so a recently changed opt-out
     // is respected, including for members registered by an organiser.
-    const player = await prismaClient.player.byDiscordSnowflake(discordUserId);
-    if (!player || !registeredIgn) return "skipped";
+    if (!registeredIgn) return "skipped";
+    const playerId = knownPlayerId ?? (await prismaClient.player.byDiscordSnowflake(discordUserId))?.id;
+    if (!playerId) return "skipped";
 
     // Profiles are optional. Missing profiles or unset preferences mean on.
     const profile = await prismaClient.profile.findUnique({
-      where: { playerId: player.id },
+      where: { playerId },
       select: { autoNickname: true },
     });
     if (profile?.autoNickname === false) return "skipped";
 
     const member = await guild.members.fetch(discordUserId);
     if (member.nickname === registeredIgn) return "skipped";
-    if (!member.manageable) return "failed";
+    // Discord role hierarchy restrictions are an expected reason to skip sync.
+    if (!member.manageable) return "skipped";
 
     await member.setNickname(registeredIgn, "Automatic IGN sync on /register");
     return "updated";

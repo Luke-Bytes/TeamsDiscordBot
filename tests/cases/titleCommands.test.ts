@@ -59,6 +59,7 @@ test("/title add/remove updates unlocked titles", async () => {
 
   const origFind = (PrismaUtils as any).findPlayer;
   const origProfile = (prismaClient as any).profile;
+  const origTransaction = prismaClient.$transaction;
 
   try {
     (PrismaUtils as any).findPlayer = async (_id: string) => ({
@@ -67,6 +68,8 @@ test("/title add/remove updates unlocked titles", async () => {
       latestIGN: "PlayerOne",
     });
     let unlocked: string[] = [];
+    (prismaClient as any).$transaction = async (work: any) =>
+      work(prismaClient);
     (prismaClient as any).profile = {
       findUnique: async () => ({ unlockedTitles: unlocked }),
       upsert: async (args: any) => {
@@ -106,8 +109,11 @@ test("/title add/remove updates unlocked titles", async () => {
       update: async (_payload: any) => ({}),
       reply: async (_payload: any) => ({}),
     };
+    // Automatic award after opening the organiser session must survive.
+    unlocked = ["ACE"];
     await cmd.handleSelectMenu!(selectAdd);
     assert(unlocked.includes("CHAMPION"), "Title added");
+    assert(unlocked.includes("ACE"), "Concurrent award retained");
 
     const buttonRemove: any = {
       customId: "title-remove",
@@ -126,11 +132,17 @@ test("/title add/remove updates unlocked titles", async () => {
       update: async (_payload: any) => ({}),
       reply: async (_payload: any) => ({}),
     };
+    unlocked = [...unlocked, "LEGACY"];
     await cmd.handleSelectMenu!(selectRemove);
     assert(!unlocked.includes("CHAMPION"), "Title removed");
+    assert(
+      unlocked.includes("ACE") && unlocked.includes("LEGACY"),
+      "Unrelated titles retained"
+    );
   } finally {
     (PrismaUtils as any).findPlayer = origFind;
     (prismaClient as any).profile = origProfile;
+    prismaClient.$transaction = origTransaction;
     TitleStore.clearOverride();
   }
 });

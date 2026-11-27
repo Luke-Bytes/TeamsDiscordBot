@@ -2,6 +2,7 @@ import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
 import { Command } from "./CommandInterface";
 import { MojangAPI } from "../api/MojangAPI";
 import { prismaClient } from "../database/prismaClient";
+import { RegistrationIdentity } from "../database/RegistrationIdentity";
 import { updatePlayerIdentityAndEventSignups } from "../logic/EventIdentitySync";
 import { escapeText } from "../util/Utils";
 import { PermissionsUtil } from "../util/PermissionsUtil";
@@ -50,8 +51,8 @@ export default class UsernameCommand implements Command {
       return;
     }
 
-    const oldLookup = await MojangAPI.lookupUsername(oldUsername);
-    const newLookup = await MojangAPI.lookupUsername(newUsername);
+    const oldLookup = await MojangAPI.lookupUsername(oldUsername, true);
+    const newLookup = await MojangAPI.lookupUsername(newUsername, true);
     if (oldLookup.status !== "found" || newLookup.status !== "found") {
       const unavailable =
         oldLookup.status === "unavailable" ||
@@ -67,7 +68,7 @@ export default class UsernameCommand implements Command {
     const newUUID = newLookup.uuid;
 
     const oldPlayer = await prismaClient.player.findFirst({
-      where: { primaryMinecraftAccount: oldUUID },
+      where: { primaryMinecraftAccount: { equals: oldUUID, mode: "insensitive" } },
     });
 
     if (!oldPlayer) {
@@ -77,13 +78,12 @@ export default class UsernameCommand implements Command {
       return;
     }
 
-    // Check both primary and secondary associations, including case-only name
-    // conflicts. This is a precondition, NOT a cross-player uniqueness guarantee.
+    // Fast rejection before entering the shared writer queue; the transaction
+    // rechecks these conditions under the same lock used by registrations.
     const conflictingPlayers = await prismaClient.player.findMany({
       where: {
         OR: [
-          { primaryMinecraftAccount: newUUID },
-          { minecraftAccounts: { has: newUUID } },
+          ...RegistrationIdentity.ownershipConditions(newUUID),
           { latestIGN: { equals: newUsername, mode: "insensitive" } },
         ],
         NOT: { id: oldPlayer.id },
@@ -98,18 +98,21 @@ export default class UsernameCommand implements Command {
       return;
     }
 
-    // Compare-and-swap protects against two concurrent changes to the *same*
-    // primary account. A global UUID claim table is still needed to exclude
-    // simultaneous claims by different players.
+    // The shared writer queue and conditional update protect concurrent bot
+    // requests. A database ownership constraint is still needed across processes.
     let changed: { count: number };
     try {
       changed = await updatePlayerIdentityAndEventSignups(
         oldPlayer,
-        oldUUID,
+        oldPlayer.primaryMinecraftAccount ?? oldUUID,
         newUUID,
         newUsername
       );
     } catch (error) {
+      if (error instanceof Error && error.message === RegistrationIdentity.ownershipConflict) {
+        await interaction.editReply(`The requested identity is already associated with a player; no change was made: ${safeNewUsername}`);
+        return;
+      }
       console.error(
         "[UsernameCommand] Identity and event sign-up mutation failed; organiser review required",
         error

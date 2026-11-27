@@ -1,5 +1,9 @@
 export class MaintenanceLoggingUtil {
+  private static started = false;
+
   static startLogging() {
+    if (this.started) return;
+    this.started = true;
     const now = new Date();
     const nextHalfHour = new Date(now);
 
@@ -19,6 +23,6 @@ export class MaintenanceLoggingUtil {
 
   private static logBotStatus() {
     const memoryUsage = process.memoryUsage().heapUsed / 1024 / 1024;
-    console.info(`Bot is online. Memory usage: ${memoryUsage.toFixed(2)} MB`);
+    console.info(`Bot process heartbeat. Heap usage: ${memoryUsage.toFixed(2)} MiB`);
   }
 }

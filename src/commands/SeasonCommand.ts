@@ -19,7 +19,7 @@ import { DiscordUtil } from "../util/DiscordUtil";
 import { Channels } from "../Channels";
 
 type PendingOperation = (
-  | { kind: "end"; userId: string; nextType?: SeasonType }
+  | { kind: "end"; userId: string; seasonId: string; nextType?: SeasonType }
   | { kind: "start"; userId: string; type: SeasonType; number?: number }
 ) & { messageId?: string; expiresAt?: number };
 
@@ -188,14 +188,16 @@ export default class SeasonCommand implements Command {
         const nextType = interaction.options.getString(
           "next-type"
         ) as SeasonType | null;
+        const season = await SeasonService.requireActiveSeason();
         return this.requestConfirmation(
           interaction,
           {
             kind: "end",
             userId: interaction.user.id,
+            seasonId: season.id,
             nextType: nextType ?? undefined,
           },
-          "Close the active season, publish its recap and titles, and activate its successor?"
+          `Close Season ${season.number}, publish its recap and titles, and activate its successor?`
         );
       }
 
@@ -306,7 +308,8 @@ export default class SeasonCommand implements Command {
         pending.kind === "end"
           ? await SeasonService.closeActiveSeason(
               SeasonClosureReason.MANUAL,
-              pending.nextType
+              pending.nextType,
+              pending.seasonId
             )
           : await SeasonService.bootstrap(pending.type, pending.number);
       console.info(`event=season.operation outcome=succeeded kind=${pending.kind} season=${season.number}`);
@@ -406,14 +409,22 @@ export default class SeasonCommand implements Command {
     const [games, participations] = await Promise.all([
       prismaClient.game.findMany({
         where: { seasonId: season.id, finished: true },
+        select: { id: true },
       }),
       prismaClient.gameParticipation.findMany({
         where: { seasonId: season.id },
+        select: { gameId: true, playerId: true },
       }),
     ]);
-    const gameSizes = games.map(
-      (game) => participations.filter((p) => p.gameId === game.id).length
-    );
+    const sizesByGame = new Map<string, number>();
+    const finishedGameIds = new Set(games.map((game) => game.id));
+    let largestGame = 0;
+    for (const { gameId } of participations) {
+      if (!finishedGameIds.has(gameId)) continue;
+      const size = (sizesByGame.get(gameId) ?? 0) + 1;
+      sizesByGame.set(gameId, size);
+      largestGame = Math.max(largestGame, size);
+    }
     const embed = new EmbedBuilder()
       .setTitle(
         `📅 Season ${season.number} ${season.type === SeasonType.RELAXED ? "Relaxed" : "Ranked"} Stats`
@@ -437,7 +448,7 @@ export default class SeasonCommand implements Command {
         },
         {
           name: "Largest Game",
-          value: Math.max(...gameSizes, 0).toString(),
+          value: largestGame.toString(),
           inline: true,
         }
       )

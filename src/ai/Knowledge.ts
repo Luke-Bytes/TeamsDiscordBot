@@ -74,7 +74,7 @@ export const APPROVED: readonly ApprovedSource[] = [
       "How do I vote for MVP? `/mvp vote`",
       "Can a captain forfeit? `/forfeit`",
       "Our team needs a replacement: `/need`",
-      "How do I propose a special game? `/game request`",
+      "How do I format a game request for Shotbow hosts? `/game request`",
       "How do I ask to spectate someone's voice channel? `/spectate`",
       "How do I rejoin or stop spectating? `/spectate`",
     ],

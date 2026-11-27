@@ -4,51 +4,96 @@ import { PrismaUtils } from "../../src/util/PrismaUtils";
 import { prismaClient } from "../../src/database/prismaClient";
 import RegisterCommand from "../../src/commands/RegisterCommand";
 import PunishedCommand from "../../src/commands/PunishedCommand";
-import { createChatInputInteraction, FakeGuild } from "../framework/mocks";
+import { createChatInputInteraction, FakeGuild, FakeGuildMember } from "../framework/mocks";
 import { CurrentGameManager } from "../../src/logic/CurrentGameManager";
 import TeamCommand from "../../src/commands/TeamCommand";
 import { PermissionsUtil } from "../../src/util/PermissionsUtil";
 
-test("updatePunishmentsForExpiry clears expired entries only", async () => {
-  const now = new Date();
-  const past = new Date(now.getTime() - 60_000);
-  const future = new Date(now.getTime() + 60_000);
-
+test("updatePunishmentsForExpiry conditionally clears only expired entries in one write", async () => {
+  const past = new Date(Date.now() - 60_000);
+  const future = new Date(Date.now() + 60_000);
   const punishments = [
-    { id: "p1", punishmentExpiry: past },
-    { id: "p2", punishmentExpiry: future },
-    { id: "p3", punishmentExpiry: null },
+    { id: "expired", punishmentExpiry: past, reasons: ["history"] },
+    { id: "active", punishmentExpiry: future },
+    { id: "cleared", punishmentExpiry: null },
+    { id: "missing" },
+    { id: "extended", punishmentExpiry: past },
+    { id: "boundary", punishmentExpiry: past },
   ];
-
-  const updated: string[] = [];
-  const origFind = (prismaClient as any).playerPunishment?.findMany;
-  const origUpdate = (prismaClient as any).playerPunishment?.update;
+  const original = (prismaClient as any).playerPunishment;
+  let calls = 0;
   (prismaClient as any).playerPunishment = {
-    findMany: async () => punishments,
-    update: async ({ where }: any) => {
-      updated.push(where.id);
-      return {};
+    updateMany: async ({ where, data }: any) => {
+      calls++;
+      const filter = where.punishmentExpiry;
+      assertEqual(filter.isSet, true, "Missing expiry must be excluded");
+      assertEqual(filter.not, null, "Null expiry must be excluded");
+      assert(filter.lte instanceof Date, "Use a timestamp cutoff");
+      assertEqual(Object.keys(data).join(","), "punishmentExpiry", "History is untouched");
+      // Simulate an extension committed before the conditional write.
+      punishments[4].punishmentExpiry = future;
+      if (calls === 1) punishments[5].punishmentExpiry = filter.lte;
+      let count = 0;
+      for (const entry of punishments) {
+        if (entry.punishmentExpiry instanceof Date && entry.punishmentExpiry <= filter.lte) {
+          entry.punishmentExpiry = data.punishmentExpiry;
+          count++;
+        }
+      }
+      return { count };
     },
   };
-
   try {
-    const count = await PrismaUtils.updatePunishmentsForExpiry();
-    assertEqual(count, 1, "Should update exactly one expired punishment");
-    assert(
-      updated.length === 1 && updated[0] === "p1",
-      "Should only update the expired record"
-    );
+    assertEqual(await PrismaUtils.updatePunishmentsForExpiry(), 2, "Expected expiry result");
+    assertEqual(await PrismaUtils.updatePunishmentsForExpiry(), 0, "Expected expiry result");
+    assertEqual(calls, 2, "Exactly one database call per refresh");
+    assertEqual(punishments[0].punishmentExpiry, null, "Expected expiry result");
+    assertEqual(punishments[0].reasons?.[0], "history", "Expected expiry result");
+    assertEqual(punishments[1].punishmentExpiry, future, "Expected expiry result");
+    assertEqual(punishments[3].punishmentExpiry, undefined, "Expected expiry result");
+    assertEqual(punishments[4].punishmentExpiry, future, "Expected expiry result");
+    assertEqual(punishments[5].punishmentExpiry, null, "Expected expiry result");
   } finally {
-    if (origFind || origUpdate) {
-      (prismaClient as any).playerPunishment = {
-        findMany: origFind,
-        update: origUpdate,
-      };
-    }
+    (prismaClient as any).playerPunishment = original;
   }
 });
 
-test("/register triggers punishment expiry refresh", async () => {
+test("expiry refresh retries only rolled-back write conflicts", async () => {
+  const original = (prismaClient as any).playerPunishment;
+  const conflict = Object.assign(new Error("Write conflict"), { code: "P2034" });
+  let calls = 0;
+  try {
+    (prismaClient as any).playerPunishment = {
+      updateMany: async () => {
+        if (++calls === 1) throw conflict;
+        // The concurrently extended punishment no longer matches.
+        return { count: 0 };
+      },
+    };
+    assertEqual(await PrismaUtils.updatePunishmentsForExpiry(), 0, "Retry respects changed expiry");
+    assertEqual(calls, 2, "One retry after a write conflict");
+
+    for (const [error, attempts] of [[conflict, 3], [new Error("Database unavailable"), 1]] as const) {
+      calls = 0;
+      (prismaClient as any).playerPunishment.updateMany = async () => {
+        calls++;
+        throw error;
+      };
+      let caught: unknown;
+      try {
+        await PrismaUtils.updatePunishmentsForExpiry();
+      } catch (failure) {
+        caught = failure;
+      }
+      assertEqual(caught, error, "Unrecoverable failures are propagated");
+      assertEqual(calls, attempts, "Only known write conflicts have bounded retries");
+    }
+  } finally {
+    (prismaClient as any).playerPunishment = original;
+  }
+});
+
+test("/register refreshes punishments only after basic eligibility checks", async () => {
   const teamCommand = new TeamCommand();
   const cmd = new RegisterCommand(teamCommand);
   const game = CurrentGameManager.getCurrentGame();
@@ -65,21 +110,30 @@ test("/register triggers punishment expiry refresh", async () => {
   (PermissionsUtil as any).isChannel = () => true;
 
   const guild = new FakeGuild() as any;
-  const targetUser = { id: "target", username: "TargetUser" } as any;
-  const member = { roles: { cache: { has: () => true } } } as any;
-  const interaction = createChatInputInteraction("caller", {
-    channelId: "registration",
-    guild,
-    users: { discorduser: targetUser },
-    member,
-  });
+  const caller = guild.addMember(new FakeGuildMember("caller"));
+  const originalLookup = prismaClient.player.byDiscordSnowflake;
+  (prismaClient as any).player.byDiscordSnowflake = async () => null;
 
   try {
-    await cmd.execute(interaction as any);
-    assert(called, "Expected updatePunishmentsForExpiry to be called");
+    const denied = createChatInputInteraction(caller.id, {
+      channelId: "registration",
+      guild,
+      users: { discorduser: { id: "target", username: "TargetUser" } as any },
+    });
+    await cmd.execute(denied);
+    assert(!called, "Ineligible requests must not refresh punishments");
+
+    const eligible = createChatInputInteraction(caller.id, {
+      channelId: "registration",
+      guild,
+    });
+    await cmd.execute(eligible);
+    assert(called, "Eligible requests still refresh expired punishments");
   } finally {
+    (prismaClient as any).player.byDiscordSnowflake = originalLookup;
     PrismaUtils.updatePunishmentsForExpiry = origUpdate;
     (PermissionsUtil as any).isChannel = origIsChannel;
+    game.reset();
   }
 });
 
@@ -92,9 +146,13 @@ test("/punished triggers punishment expiry refresh", async () => {
     return 0;
   };
 
-  const origFind = (prismaClient as any).playerPunishment?.findMany;
+  const original = (prismaClient as any).playerPunishment;
+  let filter: any;
   (prismaClient as any).playerPunishment = {
-    findMany: async () => [],
+    findMany: async ({ where }: any) => {
+      filter = where.punishmentExpiry;
+      return [];
+    },
   };
 
   const interaction = createChatInputInteraction("u1", {});
@@ -102,10 +160,10 @@ test("/punished triggers punishment expiry refresh", async () => {
   try {
     await cmd.execute(interaction as any);
     assert(called, "Expected updatePunishmentsForExpiry to be called");
+    assert(filter?.isSet === true && filter.not === null && filter.gt instanceof Date,
+      "Active list excludes missing/null and already-expired records independently of cleanup");
   } finally {
     PrismaUtils.updatePunishmentsForExpiry = origUpdate;
-    if (origFind) {
-      (prismaClient as any).playerPunishment = { findMany: origFind };
-    }
+    (prismaClient as any).playerPunishment = original;
   }
 });

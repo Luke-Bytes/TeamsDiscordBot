@@ -521,14 +521,30 @@ test("season recap loader tolerates orphaned game participation players", async 
       },
     ],
   };
+  let identityReads = 0;
+  let supportReads = 0;
+  const stats = [{ playerId: "present", player: player("present", "Renamed") }];
   (prismaClient as any).player = {
-    findMany: async () => [player("present", "Present")],
+    findMany: async ({ where }: any) => {
+      identityReads++;
+      assert(
+        where.id.in.join() === "missing",
+        "Only identities missing from the stats relation are requested"
+      );
+      return [];
+    },
   };
-  (prismaClient as any).playerStats = { findMany: async () => [] };
+  (prismaClient as any).playerStats = {
+    findMany: async ({ select }: any) => {
+      assert(select.player && !select.createdAt, "Only recap fields are read");
+      return stats;
+    },
+  };
   (prismaClient as any).eloHistory = { findMany: async () => [] };
-  (prismaClient as any).$runCommandRaw = async () => ({
-    cursor: { firstBatch: [] },
-  });
+  (prismaClient as any).$runCommandRaw = async () => {
+    supportReads++;
+    return { cursor: { firstBatch: [] } };
+  };
 
   try {
     const data = await loadSeasonRecapData(3);
@@ -543,6 +559,27 @@ test("season recap loader tolerates orphaned game participation players", async 
     assert(
       missing?.ignUsed === "MissingHistoricalIgn",
       "Orphaned participation still keeps historical IGN"
+    );
+    assert(
+      data.games[0].gameParticipations[0].player?.latestIGN === "Renamed" &&
+        data.games[0].gameParticipations[0].ignUsed === "Present",
+      "Current identity is reused without replacing the historical IGN"
+    );
+    assert(
+      identityReads === 1 && supportReads === 1,
+      "Recap reads missing identities and support once"
+    );
+    stats.push({ playerId: "missing", player: player("missing", "Restored") });
+    stats[0].player.latestIGN = "Corrected";
+    const fresh = await loadSeasonRecapData(3, { includeGameSupport: false });
+    assert(
+      identityReads === 1 && supportReads === 1,
+      "No redundant identity or support query for Wrapped"
+    );
+    assert(
+      fresh.games[0].gameParticipations[0].player?.latestIGN === "Corrected" &&
+        fresh.games[0].gameParticipations[1].player?.latestIGN === "Restored",
+      "A later load sees identity corrections and restored records"
     );
   } finally {
     (prismaClient as any).season = originalSeason;

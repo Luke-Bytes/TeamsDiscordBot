@@ -240,8 +240,9 @@ test("/name history registers, defers publicly and renders an unregistered accou
   assertEqual(embed.title, "Current");
   assertEqual(embed.description, "No previous names found.");
   assertEqual(embed.thumbnail.url, `https://mc-heads.net/avatar/${uuid}/64.png`);
-  assert(!embed.footer.text.includes("Page 1/1"), "Single page needs no page number");
-  assert(!embed.footer.text.includes("not configured"), "Do not show provider configuration");
+  assert(!embed.footer?.text.includes("Page 1/1"), "Single page needs no page number");
+  assert(!embed.footer?.text.includes("not configured"), "Do not show provider configuration");
+  assert(!embed.footer?.text, "No footer needed without contributing sources or issues");
   assertEqual(edit.allowedMentions.parse.length, 0);
   const invalid = createChatInputInteraction("name-tester2", { guild: new FakeGuild() as any, subcommand: "history", strings: { username: "invalid name" } });
   await command.execute(invalid);
@@ -339,7 +340,8 @@ test("database name history merges UUID-linked rows, isolates player-only aliase
       assertEqual(organiser.names.length, ordinary.names.length);
       assertEqual(playerQueries, 2);
       const page = buildNameHistoryPages(organiser).pages[0].data;
-      assert(page.footer?.text.includes("Friendly Wars") && page.footer.text.includes("recorded associations"), "Source and identity caveat must be shown");
+      assert(page.footer?.text.includes("Friendly Wars"), "Attribute local records");
+      assert(page.description?.includes("**Event\\_Name** - Friendly Wars record"), "Label database-only associations inline");
       assert(!page.description?.toLowerCase().includes("legacy"), "No organiser aliases in public result");
       assertEqual(page.description, buildNameHistoryPages(ordinary).pages[0].data.description);
       process.env.MC_NAME_HISTORY_SUPPRESSED_UUIDS = uuid;
@@ -577,6 +579,115 @@ test("name history default public providers and keyed Bisai isolate credentials"
   assertEqual(suppressed.names.length, 1);
   assertEqual(calls.length, 3);
 }));
+
+test("public name history shows compact dates and estimated calendar-day durations", () => {
+  const result: NameHistoryResult = {
+    status: "found", uuid, currentUsername: "Current",
+    names: mergeNameHistory("Current", [parseHistory("crafty", uuid, craftyProfile)]),
+    verifiedAt: "2021-01-11T13:00:00Z",
+    providers: [], suppressed: false, partial: true,
+  };
+  const page = buildNameHistoryPages(result).pages[0].data;
+  assertEqual(page.description, "Since 1 Jan 2021 (10 days)\n\n2 previous names\n\n**Crafty\\_Only** - Reported 5 Apr 2020 (271 days)\n**Old\\_Name** - Reported 3 Feb 2019 (427 days)");
+  assertEqual(page.footer?.text, "Sources: Crafty · Estimated durations");
+
+  const rows = [
+    { name: "Old", changed_at: "2020-02-28", accurate: true },
+    { name: "Middle", changed_at: "2020-02-29", accurate: true },
+    { name: "Current", changed_at: "2020-03-01", accurate: true },
+  ];
+  result.names = mergeNameHistory("Current", [parseHistory("laby", uuid, rows)]);
+  result.verifiedAt = "2020-03-01T23:59:59Z";
+  assertEqual(buildNameHistoryPages(result).pages[0].data.description,
+    "Since 1 Mar 2020 (0 days)\n\n2 previous names\n\n**Middle** - 29 Feb 2020 (1 day)\n**Old** - Reported 28 Feb 2020 (1 day)");
+  result.names = mergeNameHistory("Current", [parseHistory("laby", uuid, rows.slice(0, 2))]);
+  assertEqual(buildNameHistoryPages(result).pages[0].data.description,
+    "2 previous names\n\n**Middle** - 29 Feb 2020\n**Old** - Reported 28 Feb 2020 (1 day)");
+});
+
+test("public name history avoids durations for observations, conflicts and withheld dates", () => {
+  const rows = [
+    { name: "Old", changed_at: "2019-01-01", accurate: true },
+    { name: "Observed", changed_at: "2020-01-01", accurate: false },
+    { name: "Repeated", changed_at: "2021-01-01", accurate: true },
+    { name: "Repeated", changed_at: "2022-01-01", accurate: true },
+    { name: "Current", changed_at: "2023-01-01", accurate: true },
+  ];
+  const result: NameHistoryResult = {
+    status: "found", uuid, currentUsername: "Current",
+    names: mergeNameHistory("Current", [parseHistory("laby", uuid, rows)]),
+    verifiedAt: "2023-01-02T00:00:00Z",
+    providers: [], suppressed: false, partial: true,
+  };
+  let page = buildNameHistoryPages(result).pages[0].data;
+  assertEqual(page.description, "Since 1 Jan 2023 (1 day)\n\n3 previous names\n\n**Repeated** - 1 Jan 2022 (dates differ)\n**Observed** - First seen 1 Jan 2020\n**Old** - Reported 1 Jan 2019");
+  assertEqual(page.footer?.text, "Sources: Laby · Estimated durations");
+
+  result.names = mergeNameHistory("Current", [parseHistory("laby", uuid, [
+    rows[0], { name: "HiddenDate", changed_at: null, accurate: false }, rows[2], rows[4],
+  ])]);
+  page = buildNameHistoryPages(result).pages[0].data;
+  assert(page.description?.includes("**HiddenDate** - Date withheld"), "Withheld date stays withheld");
+  assert(!page.description?.includes(" days)"), "Do not bridge withheld dates");
+
+  result.names = mergeNameHistory("Current", [parseHistory("crafty", uuid, {
+    ...craftyProfile, data: { ...craftyProfile.data, usernames: [
+      { username: "Old", changed_at: "2020-01-01", hidden: false },
+      { username: "Old", changed_at: "2021-01-01", hidden: false },
+      { username: "Current", changed_at: "2022-01-01", hidden: false },
+    ] },
+  })]);
+  result.verifiedAt = "2022-01-02T00:00:00Z";
+  assertEqual(buildNameHistoryPages(result).pages[0].data.description, "Since 1 Jan 2022 (1 day)\n\n1 previous name\n\n**Old** - Reported 1 Jan 2021");
+});
+
+test("public history only flags actual provider issues and never guesses the current name's tenure", () => {
+  const summary = (provider: Parameters<typeof providerResult>[0], status: Parameters<typeof providerResult>[1], limited = false) => {
+    const { observations, ...rest } = providerResult(provider, status);
+    return { ...rest, limited, observationCount: observations.length };
+  };
+  const result: NameHistoryResult = {
+    status: "found", uuid, currentUsername: "Current", verifiedAt: "2023-01-02T00:00:00Z",
+    names: mergeNameHistory("Current", [parseHistory("laby", uuid, [
+      { name: "Current", changed_at: "2023-01-01", accurate: false },
+    ])]),
+    providers: [summary("laby", "success"), summary("crafty", "notConfigured"), summary("bisai", "notFound")],
+    suppressed: false, partial: true,
+  };
+  let page = buildNameHistoryPages(result).pages[0].data;
+  assertEqual(page.description, "First seen 1 Jan 2023\n\nNo previous names found.");
+  assertEqual(page.footer?.text, "Sources: Laby");
+  result.providers.push(summary("mcprofiles", "timeout"), summary("winstreak", "success", true));
+  page = buildNameHistoryPages(result).pages[0].data;
+  assertEqual(page.footer?.text, "Sources: Laby · Unavailable: MCProfiles · Limited records: Winstreak");
+  result.names = mergeNameHistory("Current", [parseHistory("laby", uuid, [
+    { name: "Current", changed_at: "2020-01-01", accurate: true },
+    { name: "Old", changed_at: "2021-01-01", accurate: true },
+    { name: "Current", changed_at: "2022-01-01", accurate: true },
+  ])]);
+  page = buildNameHistoryPages(result).pages[0].data;
+  assert(page.description?.startsWith("Recorded 1 Jan 2022"), "Repeated current names are not continuous tenure");
+  result.suppressed = true;
+  page = buildNameHistoryPages(result).pages[0].data;
+  assertEqual(page.description, "Name history unavailable.");
+  assertEqual(page.footer, undefined);
+});
+
+test("generic Winstreak timestamps remain reported dates and never establish tenure", () => {
+  const names = mergeNameHistory("Current", [parseHistory("winstreak", uuid, {
+    nameHistory: [
+      { name: "Old", timestamp: Date.UTC(2020, 0, 1) },
+      { name: "Current", timestamp: Date.UTC(2021, 0, 1) },
+    ],
+  })]);
+  const page = buildNameHistoryPages({
+    status: "found", uuid, currentUsername: "Current", names,
+    verifiedAt: "2022-01-01T00:00:00Z", providers: [], suppressed: false, partial: true,
+  }).pages[0].toJSON();
+  assert(page.description?.includes("Reported 1 Jan 2021"), "Generic current date remains qualified");
+  assert(page.description?.includes("Reported 1 Jan 2020"), "Generic old date remains qualified");
+  assert(!page.description?.includes("Since") && !page.description?.includes("days)"), "Unknown timestamp semantics cannot establish duration");
+});
 
 test("name history pages fit embed limits and include an explicit overflow attachment", () => {
   const rows = Array.from({ length: 500 }, (_, i) => ({ name: "Past_Name_" + i, changed_at: "2020-02-01", accurate: false }));

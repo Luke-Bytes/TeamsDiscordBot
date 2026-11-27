@@ -11,6 +11,16 @@ export type MinecraftNameLookup =
 export class MojangAPI {
   private static readonly timeoutMs = 4500;
   private static readonly successfulNames = new Map<string, { id: string; until: number }>();
+  private static readonly pendingNames = new Map<string, Promise<MinecraftNameLookup>>();
+  private static readonly pendingProfiles = new Map<string, Promise<string | null>>();
+
+  private static async discard(response: Response): Promise<void> {
+    try {
+      await response.body?.cancel();
+    } catch {
+      // A closed/aborted response needs no further cleanup.
+    }
+  }
 
   public static validUUID(value: unknown): value is string {
     return typeof value === "string" && /^[0-9a-f]{32}$/i.test(value);
@@ -27,6 +37,7 @@ export class MojangAPI {
           const seconds = retryAfter ? Number(retryAfter) : NaN;
           const until = retryAfter ? Date.parse(retryAfter) - Date.now() : NaN;
           const wait = Number.isFinite(seconds) ? seconds * 1000 : Number.isFinite(until) ? until : 300;
+          await this.discard(response);
           await new Promise((resolve) => setTimeout(resolve, Math.max(0, Math.min(2000, wait))));
           continue;
         }
@@ -42,8 +53,12 @@ export class MojangAPI {
   private static async lookupUUID(url: string, source: string): Promise<{ id: string | null; unavailable: boolean }> {
     try {
       const response = await this.request(url);
-      if (response.status === 404) return { id: null, unavailable: false };
+      if (response.status === 404) {
+        await this.discard(response);
+        return { id: null, unavailable: false };
+      }
       if (!response.ok) {
+        await this.discard(response);
         console.warn(`${source} UUID lookup unavailable: HTTP ${response.status}`);
         return { id: null, unavailable: true };
       }
@@ -70,14 +85,30 @@ export class MojangAPI {
     const key = username.toLowerCase();
     const cached = this.successfulNames.get(key);
     if (!fresh && cached && cached.until > Date.now()) return { status: "found", uuid: cached.id };
-    if (fresh) this.successfulNames.delete(key);
+    if (cached || fresh) this.successfulNames.delete(key);
+    const pending = this.pendingNames.get(key);
+    if (!fresh && pending) return pending;
 
+    // Fresh lookups always start new work. Older requests must not repopulate
+    // the cache after a fresh lookup has superseded them.
+    const work = this.lookupUsernameUncached(username).then((result) => {
+      if (this.pendingNames.get(key) === work && result.status === "found") {
+        this.cache(key, result.uuid);
+      }
+      return result;
+    }).finally(() => {
+      if (this.pendingNames.get(key) === work) this.pendingNames.delete(key);
+    });
+    this.pendingNames.set(key, work);
+    return work;
+  }
+
+  private static async lookupUsernameUncached(username: string): Promise<MinecraftNameLookup> {
     const primary = await this.lookupUUID(
       `https://api.mojang.com/users/profiles/minecraft/${encodeURIComponent(username)}`,
       "Mojang"
     );
     if (primary.id) {
-      this.cache(key, primary.id);
       return { status: "found", uuid: primary.id };
     }
     if (!primary.unavailable) return { status: "notFound" };
@@ -87,33 +118,58 @@ export class MojangAPI {
       "Gapple"
     );
     if (fallback.id) {
-      this.cache(key, fallback.id);
       return { status: "found", uuid: fallback.id };
     }
     return { status: "unavailable" };
   }
 
   /** Backwards-compatible registration API: never return unverified UUIDs. */
-  public static async usernameToUUID(username: string): Promise<string | null> {
-    const result = await this.lookupUsername(username);
+  public static async usernameToUUID(username: string, fresh = false): Promise<string | null> {
+    const result = await this.lookupUsername(username, fresh);
     return result.status === "found" ? result.uuid : null;
   }
 
   private static cache(key: string, id: string): void {
-    if (this.successfulNames.size >= 500) this.successfulNames.clear();
+    const now = Date.now();
+    this.successfulNames.delete(key);
+    if (this.successfulNames.size >= 500) {
+      for (const [name, entry] of this.successfulNames) {
+        if (entry.until <= now) this.successfulNames.delete(name);
+      }
+      if (this.successfulNames.size >= 500) {
+        const oldest = this.successfulNames.keys().next().value;
+        if (oldest !== undefined) this.successfulNames.delete(oldest);
+      }
+    }
     this.successfulNames.set(key, { id, until: Date.now() + 5 * 60_000 });
   }
 
   public static async uuidToUsername(uuid: string, verifyUUID = false): Promise<string | null> {
     if (!this.validUUID(uuid)) return null;
+    // Strict identity verification (including name history) never joins an
+    // ordinary in-flight profile lookup.
+    if (verifyUUID) return this.lookupProfile(uuid, true);
+    const key = uuid.toLowerCase();
+    const pending = this.pendingProfiles.get(key);
+    if (pending) return pending;
+    const work = this.lookupProfile(uuid, false).finally(() => this.pendingProfiles.delete(key));
+    this.pendingProfiles.set(key, work);
+    return work;
+  }
+
+  private static async lookupProfile(uuid: string, verifyUUID: boolean): Promise<string | null> {
     for (const [source, url] of [
       ["Mojang", `https://sessionserver.mojang.com/session/minecraft/profile/${uuid}`],
       ["Gapple", `https://api.gapple.pw/cors/profile/${uuid}`],
     ]) {
       try {
         const response = await this.request(url);
-        if (response.status === 404 && source === "Mojang") continue;
+        if (response.status === 404 && source === "Mojang") {
+          await this.discard(response);
+          continue;
+        }
         if (!response.ok) {
+          await this.discard(response);
           console.warn(`${source} username lookup unavailable: HTTP ${response.status}`);
           continue;
         }

@@ -1,5 +1,7 @@
+import { randomUUID } from "crypto";
 import { Prisma, StandaloneEvent, EventSignup } from "@prisma/client";
 import { prismaClient } from "../database/prismaClient";
+import { RegistrationIdentity } from "../database/RegistrationIdentity";
 import { MojangAPI } from "../api/MojangAPI";
 import {
   eventAdmissionStatus,
@@ -33,6 +35,8 @@ export interface EventApplication {
   formRevision: number;
   acceptedTerms: boolean;
   minecraftUsername?: string;
+  // Bound to the verified identity displayed when the form was opened.
+  expectedMinecraftUUID?: string;
   editing?: boolean;
   expectedSignupUpdatedAt?: Date;
 }
@@ -41,8 +45,25 @@ export function eventQuestions(
 ): EventQuestion[] {
   return event.questions as unknown as EventQuestion[];
 }
-const policy = (event: StandaloneEvent) =>
+type PromotionEvent = Pick<
+  StandaloneEvent,
+  "id" | "state" | "capacity" | "signupDeadline"
+>;
+const policy = (event: PromotionEvent) =>
   event as unknown as EventAdmissionPolicy;
+
+function promotionLimit(
+  event: PromotionEvent,
+  confirmedCount: number,
+  withdrawalPlaces = 0
+): number {
+  if (!["OPEN", "CLOSED"].includes(event.state)) return 0;
+  return event.capacity === null
+    ? regularEventSignupOpen(policy(event), confirmedCount, new Date())
+      ? Infinity
+      : withdrawalPlaces
+    : Math.max(0, event.capacity - confirmedCount);
+}
 
 export function validateEventQuestions(questions: EventQuestion[]): void {
   if (questions.length > 20)
@@ -331,7 +352,11 @@ export class EventService {
       if (state === "FINISHED")
         await tx.eventSignup.updateMany({
           where: { eventId },
-          data: { roleSyncPending: true, promotionPending: false },
+          data: {
+            roleSyncPending: true,
+            roleSyncToken: randomUUID(),
+            promotionPending: false,
+          },
         });
       else await this.promote(tx, result);
       return result;
@@ -389,6 +414,7 @@ export class EventService {
   ): Promise<{ uuid: string; username: string }> {
     const player = await this.db.player.findUnique({
       where: { discordSnowflake: userId },
+      select: { primaryMinecraftAccount: true, latestIGN: true },
     });
     if (
       MojangAPI.validUUID(player?.primaryMinecraftAccount) &&
@@ -401,24 +427,23 @@ export class EventService {
       };
     if (!username)
       throw new Error("Please provide your Minecraft username first.");
-    const uuid = await MojangAPI.usernameToUUID(username);
+    // Fresh verification is intentional: a cached name may have a new owner.
+    const uuid = await MojangAPI.usernameToUUID(username, true);
     if (!uuid)
       throw new Error(
         "Could not verify that Minecraft username. Check its spelling or retry later."
       );
     if (
       player?.primaryMinecraftAccount &&
-      player.primaryMinecraftAccount !== uuid
+      player.primaryMinecraftAccount.toLowerCase() !== uuid.toLowerCase()
     )
       throw new Error("You already have a different linked Minecraft account.");
     const owner = await this.db.player.findFirst({
       where: {
-        OR: [
-          { primaryMinecraftAccount: uuid },
-          { minecraftAccounts: { has: uuid } },
-        ],
+        OR: RegistrationIdentity.ownershipConditions(uuid),
         NOT: { discordSnowflake: userId },
       },
+      select: { id: true },
     });
     if (owner)
       throw new Error(
@@ -427,9 +452,9 @@ export class EventService {
     // The existing Friendly Wars identity is authoritative. A supplied
     // alias may verify to the same UUID, but must not rename the Player.
     return {
-      uuid,
+      uuid: player?.primaryMinecraftAccount || uuid,
       username:
-        player?.primaryMinecraftAccount === uuid && player.latestIGN
+        player?.primaryMinecraftAccount?.toLowerCase() === uuid.toLowerCase() && player.latestIGN
           ? player.latestIGN
           : username,
     };
@@ -440,20 +465,26 @@ export class EventService {
     withdrawalPlaces = 0
   ) {
     if (!["OPEN", "CLOSED"].includes(event.state)) return;
-    const count = await tx.eventSignup.count({
-      where: { eventId: event.id, status: "CONFIRMED" },
-    });
+    const count =
+      event.capacity === null
+        ? 0
+        : await tx.eventSignup.count({
+            where: { eventId: event.id, status: "CONFIRMED" },
+          });
+    const limit = promotionLimit(event, count, withdrawalPlaces);
+    if (!limit) return;
     const reserves = await tx.eventSignup.findMany({
       where: { eventId: event.id, status: "RESERVE" },
       orderBy: [{ queuedAt: "asc" }, { id: "asc" }],
+      select: { id: true },
+      ...(Number.isFinite(limit) ? { take: limit } : {}),
     });
+    // Preserve the deadline check at selection time for unlimited events.
     const selected = reserves.slice(
       0,
       event.capacity === null
-        ? regularEventSignupOpen(policy(event), count, new Date())
-          ? reserves.length
-          : withdrawalPlaces
-        : Math.max(0, event.capacity - count)
+        ? promotionLimit(event, count, withdrawalPlaces)
+        : limit
     );
     if (selected.length)
       await tx.eventSignup.updateMany({
@@ -462,7 +493,9 @@ export class EventService {
           status: "CONFIRMED",
           confirmedAt: new Date(),
           roleSyncPending: true,
+          roleSyncToken: randomUUID(),
           promotionPending: true,
+          promotionToken: randomUUID(),
         },
       });
   }
@@ -473,117 +506,121 @@ export class EventService {
     application: EventApplication
   ) {
     const identity = await this.identity(userId, application.minecraftUsername);
-    return this.transaction(async (tx) => {
-      const event = await this.lock(tx, guildId, eventId);
-      const current = await tx.eventGuildState.findUnique({
-        where: { guildId },
-      });
-      if (current?.currentEventId !== eventId)
-        throw new Error("This is no longer the current event.");
-      if (!["OPEN", "CLOSED"].includes(event.state))
-        throw new Error("This event is not accepting applications.");
-      if (
-        !application.acceptedTerms ||
-        application.formRevision !== event.formRevision
-      )
-        throw new Error(
-          "Review the current form and explicitly accept the terms."
-        );
-      validateEventAnswers(eventQuestions(event), application.answers);
-      const owner = await tx.player.findFirst({
-        where: {
-          OR: [
-            { primaryMinecraftAccount: identity.uuid },
-            { minecraftAccounts: { has: identity.uuid } },
-          ],
-          NOT: { discordSnowflake: userId },
-        },
-      });
-      if (owner)
-        throw new Error(
-          "That Minecraft account is already linked to another member."
-        );
-      const player = await tx.player.findUnique({
-        where: { discordSnowflake: userId },
-      });
-      if (
-        player?.primaryMinecraftAccount &&
-        player.primaryMinecraftAccount !== identity.uuid
-      )
-        throw new Error(
-          "Your linked Minecraft account changed; restart the form."
-        );
-      // Event registration must never overwrite a linked player's current
-      // name. Only initialise the identity if the account is not linked yet.
-      const username =
-        player?.primaryMinecraftAccount === identity.uuid && player.latestIGN
-          ? player.latestIGN
-          : identity.username;
-      if (!player?.primaryMinecraftAccount || !player.latestIGN) {
-        await tx.player.upsert({
-          where: { discordSnowflake: userId },
-          create: {
-            discordSnowflake: userId,
-            primaryMinecraftAccount: identity.uuid,
-            minecraftAccounts: [username],
-            latestIGN: username,
-          },
-          update: {
-            primaryMinecraftAccount: identity.uuid,
-            latestIGN: username,
-            ...(player?.minecraftAccounts.includes(username)
-              ? {}
-              : { minecraftAccounts: { push: username } }),
+    if (application.expectedMinecraftUUID !== undefined &&
+        identity.uuid.toLowerCase() !== application.expectedMinecraftUUID.toLowerCase())
+      throw new Error("The verified Minecraft account changed. Restart the form.");
+    return RegistrationIdentity.serializeMutation(() =>
+      this.transaction(async (tx) => {
+        const event = await this.lock(tx, guildId, eventId);
+        const current = await tx.eventGuildState.findUnique({
+          where: { guildId },
+        });
+        if (current?.currentEventId !== eventId)
+          throw new Error("This is no longer the current event.");
+        if (!["OPEN", "CLOSED"].includes(event.state))
+          throw new Error("This event is not accepting applications.");
+        if (
+          !application.acceptedTerms ||
+          application.formRevision !== event.formRevision
+        )
+          throw new Error(
+            "Review the current form and explicitly accept the terms."
+          );
+        validateEventAnswers(eventQuestions(event), application.answers);
+        const owner = await tx.player.findFirst({
+          where: {
+            OR: RegistrationIdentity.ownershipConditions(identity.uuid),
+            NOT: { discordSnowflake: userId },
           },
         });
-      }
-      await this.promote(tx, event);
-      const old = await tx.eventSignup.findUnique({
-        where: { eventId_discordUserId: { eventId, discordUserId: userId } },
-      });
-      if (
-        application.editing &&
-        (!old ||
-          old.status === "WITHDRAWN" ||
-          !application.expectedSignupUpdatedAt ||
-          old.updatedAt.getTime() !==
-            application.expectedSignupUpdatedAt.getTime())
-      ) {
-        throw new Error(
-          "Your sign-up changed while editing. Restart the form."
-        );
-      }
-      const now = new Date();
-      const count = await tx.eventSignup.count({
-        where: { eventId, status: "CONFIRMED" },
-      });
-      const status =
-        old && old.status !== "WITHDRAWN"
-          ? old.status
-          : eventAdmissionStatus(policy(event), count, now);
-      const data = {
-        minecraftUUID: identity.uuid,
-        minecraftUsername: username,
-        answers: application.answers as Prisma.InputJsonValue,
-        acceptedFormRevision: event.formRevision,
-        acceptedTermsAt: now,
-        status,
-        ...(old && old.status !== "WITHDRAWN"
-          ? {}
-          : {
-              queuedAt: now,
-              confirmedAt: status === "CONFIRMED" ? now : null,
-              withdrawnAt: null,
-              roleSyncPending: true,
-              promotionPending: false,
-            }),
-      };
-      return tx.eventSignup.upsert({
-        where: { eventId_discordUserId: { eventId, discordUserId: userId } },
-        create: { ...data, eventId, discordUserId: userId, queuedAt: now },
-        update: data,
-      });
-    });
+        if (owner)
+          throw new Error(
+            "That Minecraft account is already linked to another member."
+          );
+        const player = await tx.player.findUnique({
+          where: { discordSnowflake: userId },
+        });
+        if (
+          player?.primaryMinecraftAccount &&
+          player.primaryMinecraftAccount.toLowerCase() !== identity.uuid.toLowerCase()
+        )
+          throw new Error(
+            "Your linked Minecraft account changed; restart the form."
+          );
+        // Event registration must never overwrite a linked player's current
+        // name. Only initialise the identity if the account is not linked yet.
+        const username =
+          player?.primaryMinecraftAccount?.toLowerCase() === identity.uuid.toLowerCase() && player.latestIGN
+            ? player.latestIGN
+            : identity.username;
+        const uuid = player?.primaryMinecraftAccount || identity.uuid;
+        if (!player?.primaryMinecraftAccount || !player.latestIGN) {
+          await tx.player.upsert({
+            where: { discordSnowflake: userId },
+            create: {
+              discordSnowflake: userId,
+              primaryMinecraftAccount: uuid,
+              minecraftAccounts: [username],
+              latestIGN: username,
+            },
+            update: {
+              primaryMinecraftAccount: uuid,
+              latestIGN: username,
+              ...(player?.minecraftAccounts.includes(username)
+                ? {}
+                : { minecraftAccounts: { push: username } }),
+            },
+          });
+        }
+        await this.promote(tx, event);
+        const old = await tx.eventSignup.findUnique({
+          where: { eventId_discordUserId: { eventId, discordUserId: userId } },
+        });
+        if (
+          application.editing &&
+          (!old ||
+            old.status === "WITHDRAWN" ||
+            !application.expectedSignupUpdatedAt ||
+            old.updatedAt.getTime() !==
+              application.expectedSignupUpdatedAt.getTime())
+        ) {
+          throw new Error(
+            "Your sign-up changed while editing. Restart the form."
+          );
+        }
+        const now = new Date();
+        const count = await tx.eventSignup.count({
+          where: { eventId, status: "CONFIRMED" },
+        });
+        const status =
+          old && old.status !== "WITHDRAWN"
+            ? old.status
+            : eventAdmissionStatus(policy(event), count, now);
+        const data = {
+          minecraftUUID: uuid,
+          minecraftUsername: username,
+          answers: application.answers as Prisma.InputJsonValue,
+          acceptedFormRevision: event.formRevision,
+          acceptedTermsAt: now,
+          status,
+          ...(old && old.status !== "WITHDRAWN"
+            ? {}
+            : {
+                queuedAt: now,
+                confirmedAt: status === "CONFIRMED" ? now : null,
+                withdrawnAt: null,
+                roleSyncPending: true,
+                roleSyncToken: randomUUID(),
+                promotionPending: false,
+              }),
+        };
+        return tx.eventSignup.upsert({
+          where: { eventId_discordUserId: { eventId, discordUserId: userId } },
+          create: { ...data, eventId, discordUserId: userId, queuedAt: now },
+          update: data,
+        });
+      })
+    );
   }
   async withdraw(guildId: string, eventId: string, userId: string) {
     return this.transaction(async (tx) => {
@@ -601,6 +638,7 @@ export class EventService {
           status: "WITHDRAWN",
           withdrawnAt: new Date(),
           roleSyncPending: true,
+          roleSyncToken: randomUUID(),
           promotionPending: false,
         },
       });
@@ -611,10 +649,30 @@ export class EventService {
   async reconcile(guildId: string) {
     const state = await this.db.eventGuildState.findUnique({
       where: { guildId },
+      select: { currentEventId: true },
     });
     if (!state?.currentEventId) return;
-    const event = await this.get(guildId, state.currentEventId);
+    const event = await this.db.standaloneEvent.findFirst({
+      where: { id: state.currentEventId, guildId },
+      select: { id: true, state: true, capacity: true, signupDeadline: true },
+    });
+    if (!event) throw new Error("Event not found in this server.");
     if (!["OPEN", "CLOSED"].includes(event.state)) return;
+    if (event.capacity === null && !promotionLimit(event, 0)) return;
+
+    // A read-only preflight avoids incrementing the event revision on every
+    // idle tick. Eligibility is recalculated under the existing lock below.
+    const reserve = await this.db.eventSignup.findFirst({
+      where: { eventId: event.id, status: "RESERVE" },
+      select: { id: true },
+    });
+    if (!reserve) return;
+    if (event.capacity !== null) {
+      const confirmed = await this.db.eventSignup.count({
+        where: { eventId: event.id, status: "CONFIRMED" },
+      });
+      if (!promotionLimit(event, confirmed)) return;
+    }
     await this.transaction(async (tx) => {
       const locked = await this.lock(tx, guildId, event.id);
       await this.promote(tx, locked);
@@ -624,12 +682,6 @@ export class EventService {
     return this.db.eventSignup.findMany({
       where: { roleSyncPending: true, event: { guildId } },
       include: { event: true },
-    });
-  }
-  async markRoleSynced(signupId: string, updatedAt: Date) {
-    await this.db.eventSignup.updateMany({
-      where: { id: signupId, updatedAt },
-      data: { roleSyncPending: false },
     });
   }
 }

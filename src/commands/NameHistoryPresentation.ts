@@ -45,8 +45,7 @@ const publicSourceLabels: Record<HistoryProvider, string> = {
   database: "Friendly Wars",
 };
 
-function historyLine(name: HistoricalName): string {
-  const date = name.bestDate;
+function historyDateText(date: HistoryDate, compact = false): string {
   const labels = {
     accurateChange: "Reported change",
     estimatedChange: "Estimated change",
@@ -59,7 +58,78 @@ function historyLine(name: HistoricalName): string {
   const value = date.value
     ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(date.value))
     : "";
-  return `**${escapeText(name.name)}** - ${labels[date.kind]}${value ? " " + value : ""}${name.conflictingDates ? " (dates differ)" : ""}`;
+  const label = compact && value && date.kind === "accurateChange" ? "" : labels[date.kind];
+  return [label, value].filter(Boolean).join(" ");
+}
+
+function historyLine(name: HistoricalName, compact = false): string {
+  const date = compact && !name.bestDate.value && name.bestDate.kind !== "withheld" &&
+    name.providers.length === 1 && name.providers[0] === "database"
+    ? "Friendly Wars record"
+    : historyDateText(name.bestDate, compact);
+  return `**${escapeText(name.name)}** - ${date}${name.conflictingDates ? " (dates differ)" : ""}`;
+}
+
+function isChangeDate(kind: HistoryDate["kind"], provider?: HistoryProvider): boolean {
+  // Crafty and Laby supply changed_at; Winstreak's generic timestamp has
+  // undocumented semantics and cannot establish a rename date.
+  return kind === "accurateChange" || kind === "estimatedChange" ||
+    (kind === "reported" && (provider === "crafty" || provider === "laby"));
+}
+
+// Only change-like dates can bracket a possible period of username use.
+function changeDay(name: HistoricalName): number | undefined {
+  const date = name.bestDate;
+  if (!date.value || name.conflictingDates || !name.observations.some((observation) =>
+    observation.date.kind === date.kind && observation.date.value === date.value &&
+    isChangeDate(date.kind, observation.provider))) return;
+
+  // The merge groups names, not individual periods. Don't assign one duration
+  // to a name that has multiple distinct change dates from the same source.
+  const byProvider = new Map<HistoryProvider, string>();
+  for (const observation of name.observations) {
+    if (!observation.date.value || !isChangeDate(observation.date.kind, observation.provider)) continue;
+    const day = observation.date.value.slice(0, 10);
+    const previous = byProvider.get(observation.provider);
+    if (previous && previous !== day) return;
+    byProvider.set(observation.provider, day);
+  }
+  const day = Date.parse(date.value.slice(0, 10));
+  if (Number.isFinite(day)) return day;
+}
+
+function durationText(days: number | undefined): string {
+  return days === undefined ? "" : ` (${days} day${days === 1 ? "" : "s"})`;
+}
+
+function publicHistoryLine(name: HistoricalName, newer: HistoricalName | undefined): { line: string; duration: boolean } {
+  const start = changeDay(name);
+  const end = newer && changeDay(newer);
+  const days = start !== undefined && end !== undefined && end > start
+    ? (end - start) / 86_400_000
+    : undefined;
+  return { line: historyLine(name, true) + durationText(days), duration: days !== undefined };
+}
+
+function currentHistoryLine(name: HistoricalName | undefined, previous: HistoricalName[], now: number, withheld: boolean): { line: string; duration: boolean } {
+  if (!name || (!name.bestDate.value && name.bestDate.kind !== "withheld")) {
+    return { line: "", duration: false };
+  }
+  const start = changeDay(name);
+  const today = Math.floor(now / 86_400_000) * 86_400_000;
+  const laterPrevious = previous.some((old) => {
+    const day = changeDay(old);
+    return day !== undefined && start !== undefined && day > start;
+  });
+  const days = !withheld && !laterPrevious && start !== undefined && today >= start
+    ? (today - start) / 86_400_000
+    : undefined;
+  const label = days !== undefined ? "Since " : name.bestDate.kind === "accurateChange" ? "Recorded " : "";
+  const date = historyDateText(days !== undefined ? { ...name.bestDate, kind: "accurateChange" } : name.bestDate, true);
+  return {
+    line: label + date + durationText(days) + (name.conflictingDates ? " (dates differ)" : ""),
+    duration: days !== undefined,
+  };
 }
 
 export function historyProviderSummary(result: NameHistoryResult): string {
@@ -88,7 +158,7 @@ export function combinedHistorySummary(
     result.suppressed
       ? "Historical records withheld."
       : `**${old.length} previous name${old.length === 1 ? "" : "s"} found**`,
-    ...old.slice(0, 5).map(historyLine),
+    ...old.slice(0, 5).map((name) => historyLine(name)),
     ...(old.length > 5 ? [`…${old.length - 5} more · /name history`] : []),
     ...(sources.length
       ? [`Sources: ${sources.map((p) => p === "winstreak" ? providerLabel(p, current) : publicSourceLabels[p]).join(", ")}`]
@@ -108,12 +178,28 @@ export function buildNameHistoryPages(result: NameHistoryResult): { pages: Embed
   // Discord footer text cannot contain clickable Markdown links.
   // Keep the required Winstreak attribution link once, not on every record.
   const attribution = sources.includes("winstreak") ? providerLabel("winstreak", current) : "";
-  const caveat = sources.includes("database")
-    ? "History may be incomplete; database names are recorded associations."
-    : "History may be incomplete.";
+  const currentName = result.suppressed ? undefined : result.names.find((n) => n.current);
+  // Compute before pagination, so the first row on a new page still has its
+  // next change date. Never bridge an explicitly withheld date.
+  const withheld = result.names.some((n) => n.bestDate.kind === "withheld");
+  const rows = names.map((name, index) => publicHistoryLine(
+    name, withheld ? undefined : index === 0 ? currentName : names[index - 1],
+  ));
+  const lines = rows.map((row) => row.line);
+  const now = result.verifiedAt ? Date.parse(result.verifiedAt) : Date.now();
+  const currentRow = currentHistoryLine(currentName, names, now, withheld);
   const available = !result.suppressed && result.providers.some((p) => p.status === "success" || p.status === "noHistory");
   const emptyMessage = available ? "No previous names found." : "Name history unavailable.";
-  const lines = names.map(historyLine);
+  // Optional, unconfigured sources and ordinary empty results are not failures.
+  const unavailable = result.providers.filter((p) => !["success", "noHistory", "notFound", "notConfigured", "withheld"].includes(p.status));
+  const limited = result.providers.filter((p) => p.limited && (p.status === "success" || p.status === "noHistory"));
+  const caveat = [
+    currentRow.duration || rows.some((row) => row.duration) ? "Estimated durations" : "",
+    !result.suppressed && (available || names.length || currentRow.line) && unavailable.length
+      ? `Unavailable: ${unavailable.map((p) => publicSourceLabels[p.provider]).join(", ")}` : "",
+    !result.suppressed && limited.length
+      ? `Limited records: ${limited.map((p) => publicSourceLabels[p.provider]).join(", ")}` : "",
+  ].filter(Boolean).join(" · ");
   // At most four public embed messages, with a complete list attached if needed.
   const chunks: string[][] = [[]];
   for (const line of lines) {
@@ -126,20 +212,23 @@ export function buildNameHistoryPages(result: NameHistoryResult): { pages: Embed
   }
   const count = Math.min(chunks.length, 4);
   const overflow = chunks.length > count ? Buffer.from(
-    [current, `${names.length} previous names`, lines.join("\n"), sourceText, attribution, caveat].filter(Boolean).join("\n\n"),
+    [current, currentRow.line, `${names.length} previous names`, lines.join("\n"), sourceText, attribution, caveat].filter(Boolean).join("\n\n"),
     "utf8"
   ) : undefined;
-  const pages = chunks.slice(0, count).map((chunk, index) =>
-    new EmbedBuilder()
+  const pages = chunks.slice(0, count).map((chunk, index) => {
+    const page = new EmbedBuilder()
       .setTitle(escapeText(current))
       .setThumbnail(`https://mc-heads.net/avatar/${result.uuid}/64.png`)
       .setDescription([
+        ...(index === 0 && currentRow.line ? [currentRow.line] : []),
         ...(index === 0 && names.length ? [`${names.length} previous ${names.length === 1 ? "name" : "names"}`] : []),
         chunk.join("\n") || emptyMessage,
         ...(index === 0 && overflow ? ["Full list attached."] : []),
         ...(attribution ? [attribution] : []),
-      ].join("\n\n"))
-      .setFooter({ text: [sourceText, count > 1 ? `Page ${index + 1}/${count}` : "", caveat].filter(Boolean).join(" · ") })
-  );
+      ].join("\n\n"));
+    const footer = [sourceText, count > 1 ? `Page ${index + 1}/${count}` : "", caveat].filter(Boolean).join(" · ");
+    if (footer) page.setFooter({ text: footer });
+    return page;
+  });
   return { pages, overflow };
 }

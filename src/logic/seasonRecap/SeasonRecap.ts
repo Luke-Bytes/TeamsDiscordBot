@@ -64,10 +64,12 @@ export async function generateSeasonRecap(
 }
 
 export async function loadSeasonRecapData(
-  seasonNumber: number
+  seasonNumber: number,
+  options: { includeGameSupport?: boolean } = {}
 ): Promise<SeasonRecapData> {
   const season = await prismaClient.season.findUnique({
     where: { number: seasonNumber },
+    select: { id: true },
   });
 
   if (!season) {
@@ -100,10 +102,20 @@ export async function loadSeasonRecapData(
       },
       orderBy: { startTime: "asc" },
     }),
-    findGameSupportById(season.id),
+    options.includeGameSupport === false
+      ? Promise.resolve(new Map<string, { organiser: string; host: string }>())
+      : findGameSupportById(season.id),
     prismaClient.playerStats.findMany({
       where: { seasonId: season.id },
-      include: {
+      select: {
+        playerId: true,
+        elo: true,
+        wins: true,
+        losses: true,
+        winStreak: true,
+        loseStreak: true,
+        biggestWinStreak: true,
+        biggestLosingStreak: true,
         player: {
           select: {
             id: true,
@@ -115,15 +127,24 @@ export async function loadSeasonRecapData(
     }),
     prismaClient.eloHistory.findMany({
       where: { seasonId: season.id },
+      select: { playerId: true, gameId: true, elo: true, createdAt: true },
       orderBy: { createdAt: "asc" },
     }),
   ]);
 
-  const playerIds = Array.from(
-    new Set(
-      games.flatMap((game) => game.gameParticipations.map((gp) => gp.playerId))
-    )
-  );
+  const participationPlayerById = new Map<string, SeasonRecapPlayer>();
+  for (const stats of playerStats) {
+    if (stats.player) participationPlayerById.set(stats.playerId, stats.player);
+  }
+  const missingPlayerIds = new Set<string>();
+  for (const game of games) {
+    for (const gp of game.gameParticipations) {
+      if (!participationPlayerById.has(gp.playerId)) {
+        missingPlayerIds.add(gp.playerId);
+      }
+    }
+  }
+  const playerIds = [...missingPlayerIds];
   const participationPlayers = playerIds.length
     ? await prismaClient.player.findMany({
         where: { id: { in: playerIds } },
@@ -134,9 +155,9 @@ export async function loadSeasonRecapData(
         },
       })
     : [];
-  const participationPlayerById = new Map(
-    participationPlayers.map((player) => [player.id, player])
-  );
+  for (const player of participationPlayers) {
+    participationPlayerById.set(player.id, player);
+  }
 
   return {
     seasonNumber,

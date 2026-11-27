@@ -17,14 +17,13 @@ import { PermissionsUtil } from "../util/PermissionsUtil";
 import { TitleStore } from "../util/TitleStore";
 import { normalizeTitleIds } from "../util/ProfileUtil";
 import { prismaClient } from "../database/prismaClient";
+import {
+  changeUnlockedTitles,
+  runTitleTransaction,
+} from "../database/TitlePersistence";
 
 type ProfileModel = {
   findUnique: (args: { where: { playerId: string } }) => Promise<unknown>;
-  upsert: (args: {
-    where: { playerId: string };
-    update: Record<string, unknown>;
-    create: Record<string, unknown>;
-  }) => Promise<unknown>;
 };
 
 function getProfileModel(): ProfileModel | undefined {
@@ -172,6 +171,12 @@ export default class TitleCommand implements Command {
     }
 
     if (interaction.customId === "title-remove") {
+      const profile = await getProfileModel()?.findUnique({
+        where: { playerId: session.playerId },
+      });
+      session.unlocked = new Set(
+        (profile as { unlockedTitles?: string[] } | null)?.unlockedTitles ?? []
+      );
       const unlocked = Array.from(session.unlocked);
       if (!unlocked.length) {
         await this.safeReply(interaction, {
@@ -209,22 +214,18 @@ export default class TitleCommand implements Command {
     }
 
     const titles = TitleStore.loadTitles();
-    if (interaction.customId === "title-select:add") {
-      const add = normalizeTitleIds(interaction.values);
-      add.forEach((id) => session.unlocked.add(id));
-    } else if (interaction.customId === "title-select:remove") {
-      const remove = normalizeTitleIds(interaction.values);
-      remove.forEach((id) => session.unlocked.delete(id));
-    }
-
-    await getProfileModel()?.upsert({
-      where: { playerId: session.playerId },
-      update: { unlockedTitles: Array.from(session.unlocked) },
-      create: {
-        playerId: session.playerId,
-        unlockedTitles: Array.from(session.unlocked),
-      },
-    });
+    const isAdd = interaction.customId === "title-select:add";
+    if (!isAdd && interaction.customId !== "title-select:remove") return;
+    const selected = normalizeTitleIds(interaction.values);
+    const { unlocked } = await runTitleTransaction((tx) =>
+      changeUnlockedTitles(
+        tx,
+        session.playerId,
+        isAdd ? selected : [],
+        isAdd ? [] : selected
+      )
+    );
+    session.unlocked = new Set(unlocked);
 
     const embed = new EmbedBuilder()
       .setTitle("🏷️ Title Manager")

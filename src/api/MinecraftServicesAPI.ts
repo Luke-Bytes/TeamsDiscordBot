@@ -1,37 +1,15 @@
-import { randomBytes } from "node:crypto";
+import { createPublicKey, randomBytes } from "node:crypto";
 import { readJSON, record, requestFailure, retryDelay } from "./StatusHttp";
 
-export type MonitorStatus = "operational" | "possible" | "definite" | "unknown";
 export type ProbeStatus = "responding" | "error" | "unknown";
 
 export interface MinecraftServicesStatus {
-  session: MonitorStatus;
-  xbox: MonitorStatus;
-  minecraft: MonitorStatus;
   sessionProbe: ProbeStatus;
   keysProbe: ProbeStatus;
+  microsoftProbe: ProbeStatus;
 }
 
-type Monitor = Pick<MinecraftServicesStatus, "session" | "xbox" | "minecraft">;
-const UNKNOWN: Monitor = {
-  session: "unknown",
-  xbox: "unknown",
-  minecraft: "unknown",
-};
 const CACHE_MS = 60_000;
-
-function monitorStatus(value: unknown): MonitorStatus {
-  switch (value) {
-    case "Operational":
-      return "operational";
-    case "PossibleProblems":
-      return "possible";
-    case "DefiniteProblems":
-      return "definite";
-    default:
-      return "unknown";
-  }
-}
 
 interface Cache<T> {
   value?: T;
@@ -39,7 +17,7 @@ interface Cache<T> {
 }
 
 export class MinecraftServicesAPI {
-  private monitor: Cache<Monitor> = { expires: 0 };
+  private microsoft: Cache<ProbeStatus> = { expires: 0 };
   private session: Cache<ProbeStatus> = { expires: 0 };
   private keys: Cache<ProbeStatus> = { expires: 0 };
   private inFlight?: Promise<MinecraftServicesStatus>;
@@ -68,24 +46,27 @@ export class MinecraftServicesAPI {
     // A deliberately unjoined synthetic session. No actual account or token.
     sessionUrl.searchParams.set("username", "FWStatusProbe");
     sessionUrl.searchParams.set("serverId", randomBytes(20).toString("hex"));
-    const [monitor, sessionProbe, keysProbe] = await Promise.all([
+    const [microsoftProbe, sessionProbe, keysProbe] = await Promise.all([
       this.request(
-        this.monitor,
-        "mcping-services",
-        "https://mcping.me/api/services",
-        UNKNOWN,
-        async (response) => {
-          if (response.status !== 200) return UNKNOWN;
-          const root = record(await readJSON(response));
-          const result: Monitor = {
-            session: monitorStatus(root?.SessionServer),
-            xbox: monitorStatus(root?.["Xbox services"]),
-            minecraft: monitorStatus(root?.["Minecraft API"]),
-          };
-          if (Object.values(result).includes("unknown")) {
-            this.log("mcping-services", "reason=missing-or-invalid-status");
+        this.microsoft,
+        "microsoft-login",
+        "https://login.live.com/.well-known/openid-configuration",
+        "unknown",
+        async (response): Promise<ProbeStatus> => {
+          if (response.status !== 200) {
+            return this.probeFailure("microsoft-login", response);
           }
-          return result;
+          const root = record(await readJSON(response));
+          if (
+            root?.issuer === "https://login.live.com" &&
+            root.authorization_endpoint ===
+              "https://login.live.com/oauth20_authorize.srf" &&
+            root.token_endpoint === "https://login.live.com/oauth20_token.srf"
+          ) {
+            return "responding";
+          }
+          this.log("microsoft-login", "reason=invalid-response");
+          return "unknown";
         }
       ),
       this.request(
@@ -112,11 +93,20 @@ export class MinecraftServicesAPI {
           const validKeys = (value: unknown) =>
             Array.isArray(value) &&
             value.length > 0 &&
-            value.every(
-              (entry: unknown) =>
-                typeof record(entry)?.publicKey === "string" &&
-                !!(record(entry)?.publicKey as string).trim()
-            );
+            value.every((entry: unknown) => {
+              const key = record(entry)?.publicKey;
+              if (typeof key !== "string" || !key.trim()) return false;
+              try {
+                // Minecraft publishes base64-encoded DER SubjectPublicKeyInfo.
+                if (!/^[A-Za-z0-9+/]+={0,2}$/.test(key)) return false;
+                const der = Buffer.from(key, "base64");
+                if (der.toString("base64").replace(/=+$/, "") !== key.replace(/=+$/, "")) return false;
+                createPublicKey({ key: der, format: "der", type: "spki" });
+                return true;
+              } catch {
+                return false;
+              }
+            });
           if (
             validKeys(root?.profilePropertyKeys) &&
             validKeys(root?.playerCertificateKeys)
@@ -128,11 +118,15 @@ export class MinecraftServicesAPI {
         }
       ),
     ]);
-    return { ...monitor, sessionProbe, keysProbe };
+    return { microsoftProbe, sessionProbe, keysProbe };
   }
 
   private log(source: string, reason: string): void {
-    this.warn(`event=shotbow.check source=${source} ${reason}`);
+    try {
+      this.warn(`event=shotbow.check source=${source} ${reason}`);
+    } catch {
+      // Diagnostics must not invalidate an independent endpoint result.
+    }
   }
 
   private probeFailure(source: string, response: Response): ProbeStatus {

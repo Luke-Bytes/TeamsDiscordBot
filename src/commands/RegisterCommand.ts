@@ -7,7 +7,7 @@ import { Command } from "./CommandInterface.js";
 import { PermissionsUtil } from "../util/PermissionsUtil.js";
 import { CurrentGameManager } from "../logic/CurrentGameManager.js";
 import { prismaClient } from "../database/prismaClient";
-import { MojangAPI } from "../api/MojangAPI";
+import { RegistrationIdentity } from "../database/RegistrationIdentity";
 import { fetchGuildMember } from "../util/DiscordFailures";
 import TeamCommand from "../commands/TeamCommand";
 import { DraftTeamPickingSession } from "../logic/teams/DraftTeamPickingSession";
@@ -60,10 +60,8 @@ export default class RegisterCommand implements Command {
       return;
     }
 
-    await interaction.deferReply();
     const gameToken = game.getLifecycleToken();
-
-    await PrismaUtils.updatePunishmentsForExpiry();
+    await interaction.deferReply();
 
     const inGameNameOption = interaction.options.getString("ingamename");
     const targetUser =
@@ -98,107 +96,56 @@ export default class RegisterCommand implements Command {
       return;
     }
 
-    let player = await prismaClient.player.byDiscordSnowflake(discordUserId);
+    if (!game.announced || game.getLifecycleToken() !== gameToken) {
+      await interaction.editReply({ content: "The announced game changed. Please check the roster before registering again." });
+      return;
+    }
+    await PrismaUtils.updatePunishmentsForExpiry();
+    const player = await prismaClient.player.byDiscordSnowflake(discordUserId);
 
     if (player) {
-      const activePunishment = await prismaClient.playerPunishment.findFirst({
-        where: {
-          playerId: player?.id,
-          AND: [
-            { punishmentExpiry: { not: null } },
-            { punishmentExpiry: { gt: new Date() } },
-          ],
-        },
-      });
-
-      if (activePunishment) {
-        const expiryDate = activePunishment.punishmentExpiry
-          ? new Intl.DateTimeFormat("en-US", {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-            }).format(activePunishment.punishmentExpiry)
-          : "unknown";
-
-        await interaction.editReply({
-          content: `You cannot register because you are currently banned from friendly wars. Your punishment will expire on **${expiryDate}**.`,
-        });
+      const punishment = await PrismaUtils.registrationPunishmentError(player.id);
+      if (punishment) {
+        await interaction.editReply({ content: punishment });
         return;
       }
     }
-
-    let uuid: string | null = null;
-    let resolvedUsername: string | null = null;
-    const hasStoredIgn = Boolean(player?.primaryMinecraftAccount);
-
-    if (!inGameNameOption) {
-      if (!player || !player.primaryMinecraftAccount) {
-        await interaction.editReply({
-          content:
-            "You have not registered before. Please specify your in-game name with `/register <ingamename>`. Note, you must use the discord command box prompt!\nhttps://i.imgur.com/UIVbtqp.mp4",
-        });
-        return;
-      }
-
-      // Use stored UUID and retrieve the current username from Mojang
-      uuid = player.primaryMinecraftAccount;
-      resolvedUsername = await MojangAPI.uuidToUsername(uuid);
-
-      // Keep a previously verified identity during external outages; never invent one.
-      if (!resolvedUsername && MojangAPI.validUUID(uuid) &&
-          player.latestIGN && MojangAPI.validateUsername(player.latestIGN)) {
-        resolvedUsername = player.latestIGN;
-      }
-      if (!resolvedUsername) {
-        await interaction.editReply({ content: "Unable to retrieve a verified Minecraft username. Please retry later." });
-        return;
-      }
-    } else {
-      // Validate ign if provided by converting it to a UUID
-      uuid = await MojangAPI.usernameToUUID(inGameNameOption);
-      if (!uuid && player && MojangAPI.validUUID(player.primaryMinecraftAccount) &&
-          (player.latestIGN?.toLowerCase() === inGameNameOption.toLowerCase() ||
-            player.minecraftAccounts?.some((name) => name.toLowerCase() === inGameNameOption.toLowerCase()))) {
-        uuid = player.primaryMinecraftAccount;
-      }
-      if (!uuid) {
-        await interaction.editReply({
-          content:
-            "Could not verify that Minecraft username. Check its spelling or retry when the identity service is available.",
-        });
-        return;
-      }
-
-      // If user is already in DB with a different UUID, block them from registering a new account
-      if (
-        player &&
-        player.primaryMinecraftAccount &&
-        player.primaryMinecraftAccount !== uuid
-      ) {
-        await interaction.editReply({
-          content: `You are already registered with a different Minecraft account (\`${player.latestIGN}\`). You cannot register with another account.`,
-        });
-        return;
-      }
-
-      resolvedUsername = inGameNameOption;
-    }
-
-    if (!MojangAPI.validUUID(uuid) || !resolvedUsername) {
-      await interaction.editReply({ content: "Could not verify your Minecraft account. No registration was created." });
+    if (game.getPlayers().some((p) => p.discordSnowflake === discordUserId)) {
+      await interaction.editReply({ content: "You have already registered for the announced game!" });
       return;
     }
 
-    const validatedIgn = resolvedUsername;
+    const hasStoredIgn = Boolean(player?.primaryMinecraftAccount);
+    if (!inGameNameOption && !hasStoredIgn) {
+      await interaction.editReply({
+        content:
+          "You have not registered before. Please specify your in-game name with `/register <ingamename>`. Note, you must use the discord command box prompt!\nhttps://i.imgur.com/UIVbtqp.mp4",
+      });
+      return;
+    }
+
+    // Prepare UUID evidence before entering the roster lock; the current name
+    // is resolved at commit, after membership verification.
+    const prepared = await RegistrationIdentity.prepare(
+      discordUserId, gameToken, player, inGameNameOption ?? ""
+    );
+    if ("error" in prepared) {
+      await interaction.editReply({ content: prepared.error });
+      return;
+    }
+    const { identity } = prepared;
+    const validatedIgn = identity.ign;
 
     // Check if this user/UUID is already registered for the announced game
-    const isAlreadyRegistered = CurrentGameManager.getCurrentGame()
-      .getPlayers()
+    if (!game.announced || game.getLifecycleToken() !== gameToken) {
+      await interaction.editReply({ content: "The announced game changed. Please check the roster before registering again." });
+      return;
+    }
+    const isAlreadyRegistered = game.getPlayers()
       .some(
         (existingPlayer) =>
           existingPlayer.discordSnowflake === discordUserId ||
-          existingPlayer.primaryMinecraftAccount === uuid
+          existingPlayer.primaryMinecraftAccount?.toLowerCase() === identity.uuid.toLowerCase()
       );
 
     if (isAlreadyRegistered) {
@@ -220,12 +167,15 @@ export default class RegisterCommand implements Command {
         if (!(await fetchGuildMember(interaction.guild!, discordUserId))) {
           return { error: "That user left the server before registration completed." } as const;
         }
-        const added = await CurrentGameManager.getCurrentGame().addPlayerByDiscordId(
-          discordUserId, validatedIgn, uuid
+        if (!game.announced || game.getLifecycleToken() !== gameToken) {
+          return { error: "The announced game changed. Please check the roster before registering again." } as const;
+        }
+        const added = await game.addPlayerByDiscordId(
+          discordUserId, validatedIgn, identity
         );
         const session = this.teamCommand.teamPickingSession;
-        if (!added.error) registrationCommitted = true;
-        if (!added.error && session instanceof DraftTeamPickingSession && !session.latePickingStarted) {
+        if (added.error === false) registrationCommitted = true;
+        if (added.error === false && game.getLifecycleToken() === gameToken && session instanceof DraftTeamPickingSession && !session.latePickingStarted) {
           await session.registerLateSignup(added.playerInstance);
         }
         return added;
@@ -238,7 +188,7 @@ export default class RegisterCommand implements Command {
       return;
     }
 
-    if (result.error) {
+    if (result.error !== false) {
       await interaction.editReply({
         content: result.error,
       });
@@ -252,20 +202,24 @@ export default class RegisterCommand implements Command {
 
     // Use the latest verified IGN committed to the roster, not an input alias.
     // Nickname updates are best-effort and never invalidate a registration.
-    resolvedUsername = result.playerInstance.ignUsed ?? resolvedUsername;
+    const resolvedUsername = result.playerInstance.ignUsed ?? validatedIgn;
     const nicknameResult = await syncRegistrationNickname(
       interaction.guild,
       discordUserId,
-      resolvedUsername
+      resolvedUsername,
+      result.playerInstance.playerId
     );
     if (game.getLifecycleToken() !== gameToken || !game.announced) {
       await interaction.editReply({ content: "The game changed while you were registering. Please check the current announcement." });
       return;
     }
     const nicknameNote =
-      nicknameResult === "failed"
+      (nicknameResult === "failed"
         ? " The server nickname could not be updated; registration still succeeded."
-        : "";
+        : "") +
+      (result.scenarioWarning
+        ? " Scenario synchronisation failed; ask an organiser to review the scenario."
+        : "");
 
     // late signups
     const shouldNudgeIgn =

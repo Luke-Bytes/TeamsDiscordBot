@@ -344,6 +344,7 @@ test("Navi maintains system instructions across injected tool text in a second r
   const playerLookup = prismaClient.player.findUnique;
   const statsLookup = prismaClient.playerStats.findUnique;
   const rankLookup = prismaClient.playerStats.count;
+  const historyLookup = prismaClient.playerStats.findMany;
   const activeSeason = SeasonService.getActiveSeason;
   let rounds = 0;
   try {
@@ -359,6 +360,7 @@ test("Navi maintains system instructions across injected tool text in a second r
       loseStreak: 0,
     });
     (prismaClient.playerStats as any).count = async () => 0;
+    (prismaClient.playerStats as any).findMany = async () => [];
     (SeasonService as any).getActiveSeason = async () => ({
       id: "offline-season",
       number: 2,
@@ -416,6 +418,7 @@ test("Navi maintains system instructions across injected tool text in a second r
     prismaClient.player.findUnique = playerLookup;
     prismaClient.playerStats.findUnique = statsLookup;
     prismaClient.playerStats.count = rankLookup;
+    prismaClient.playerStats.findMany = historyLookup;
     SeasonService.getActiveSeason = activeSeason;
   }
 });

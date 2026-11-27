@@ -95,6 +95,8 @@ test("E2E happy path: announce -> register -> nominate -> set captains -> random
     const origMarkCleanup = (prismaClient as any).game.updateMany;
     const origAfterGameSaved = SeasonService.afterGameSaved;
     const origDisplayName = PrismaUtils.getDisplayNameWithTitle;
+    const origProfileLookup = prismaClient.profile.findUnique;
+    const origExit = process.exit;
 
     try {
       (DiscordUtil as any).sendMessage = async (_ch: any, content: any) => {
@@ -115,6 +117,8 @@ test("E2E happy path: announce -> register -> nominate -> set captains -> random
         id: config.channels.gameFeed,
         send: async (_: any) => {},
       } as any;
+
+      (prismaClient.profile as any).findUnique = async () => null;
 
       // Minimal prisma + Mojang stubs for registration and player lookup
       const nameToUUID = new Map<string, string>();
@@ -174,6 +178,7 @@ test("E2E happy path: announce -> register -> nominate -> set captains -> random
       (prismaClient as any).playerPunishment = {
         findFirst: async () => null,
         findMany: async () => [],
+        updateMany: async () => ({ count: 0 }),
         update: async () => {},
       };
       (prismaClient as any).season = {
@@ -197,7 +202,7 @@ test("E2E happy path: announce -> register -> nominate -> set captains -> random
         groupBy: async () => [],
       };
 
-      // Override addPlayerByDiscordId to in-memory
+      // Exercise the real registration path against the in-memory Prisma delegates.
       const game = CurrentGameManager.getCurrentGame();
       game.reset();
       (game as any).announced = true;
@@ -205,33 +210,6 @@ test("E2E happy path: announce -> register -> nominate -> set captains -> random
       game.organiser = "TestOrganiser";
       game.host = "TestHost";
       (game as any).isDoubleElo = false;
-
-      const origAdd = (game as any).addPlayerByDiscordId;
-      (game as any).addPlayerByDiscordId = async (
-        discordSnowflake: string,
-        ign: string,
-        uuid: string | null
-      ) => {
-        // upsert DB record
-        let rec = await (prismaClient as any).player.byDiscordSnowflake(
-          discordSnowflake
-        );
-        if (!rec)
-          rec = await (prismaClient as any).player.create({
-            data: { discordSnowflake, latestIGN: ign },
-          });
-        rec.latestIGN = ign;
-        idToPlayer.set(discordSnowflake, rec);
-        const player = {
-          discordSnowflake,
-          ignUsed: ign,
-          elo: 1000,
-          captain: false,
-          playerId: rec.id,
-        };
-        game.teams.UNDECIDED.push(player as any);
-        return { error: false, playerInstance: player } as const;
-      };
 
       // Step 2: Register 10 unique players
       const register = new RegisterCommand(new TeamCommand());
@@ -402,7 +380,6 @@ test("E2E happy path: announce -> register -> nominate -> set captains -> random
       assert(game.gameWinner === "BLUE", "Winner should be BLUE");
 
       // Step 11: Organiser shuts the game down
-      const origExit = process.exit;
       process.exit = ((code?: number) => {
         console.log("Intercepted exit", code);
       }) as any;
@@ -415,9 +392,8 @@ test("E2E happy path: announce -> register -> nominate -> set captains -> random
         subcommand: "shutdown",
       });
       await gameCmd.execute(shut);
-      // restore
-      process.exit = origExit;
     } finally {
+      process.exit = origExit;
       (DiscordUtil as any).sendMessage = origSend;
       (DiscordUtil as any).cleanUpAllChannelMessages = origClean;
       (DiscordUtil as any).moveToVC = origMoveToVC;
@@ -436,5 +412,6 @@ test("E2E happy path: announce -> register -> nominate -> set captains -> random
       (prismaClient as any).game.updateMany = origMarkCleanup;
       SeasonService.afterGameSaved = origAfterGameSaved;
       PrismaUtils.getDisplayNameWithTitle = origDisplayName;
+      prismaClient.profile.findUnique = origProfileLookup;
     }
   }));

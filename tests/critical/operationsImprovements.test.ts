@@ -28,23 +28,31 @@ test("game feed publishes only changes, retries failed edits, recreates deleted 
   let editCount = 0;
   let failEdit = false;
   let deleted = false;
+  let fetchCount = 0;
+  let fetchFailure: number | string | undefined;
+  let published: EmbedBuilder | undefined;
   const channel: any = {
     id: "feed-content-test",
     messages: {
-      fetch: async (_id: string) => {
-        if (deleted) throw new Error("Unknown Message");
-        return {
-          edit: async () => {
-            editCount++;
-            if (failEdit) {
-              failEdit = false;
-              throw new Error("temporary failure");
-            }
-          },
-        };
+      fetch: async (options: any) => {
+        fetchCount++;
+        assertEqual(options.force, true, "Do not trust cached message existence");
+        if (fetchFailure) throw { code: fetchFailure };
+        if (deleted) throw { code: 10008 };
+        return { embeds: published ? [published] : [] };
+      },
+      edit: async (_id: string, { embeds }: { embeds: EmbedBuilder[] }) => {
+        editCount++;
+        if (deleted) throw { code: 10008 };
+        if (failEdit) {
+          failEdit = false;
+          throw new Error("temporary failure");
+        }
+        published = embeds[0];
       },
     },
-    send: async () => {
+    send: async ({ embeds }: { embeds: EmbedBuilder[] }) => {
+      published = embeds[0];
       sendCount++;
       deleted = false;
       return { id: `published-${sendCount}`, delete: async () => {} };
@@ -58,10 +66,12 @@ test("game feed publishes only changes, retries failed edits, recreates deleted 
     await flush();
     assertEqual(editCount, 0, "Equivalent embed needs no edit");
 
+    const fetchesBeforeEdit = fetchCount;
     title = "changed";
     tick!();
     await flush();
     assertEqual(editCount, 1, "Changed embed edits once");
+    assertEqual(fetchCount, fetchesBeforeEdit, "Changed embed skips a GET");
     tick!();
     await flush();
     assertEqual(editCount, 1, "Successful publish is cached");
@@ -75,6 +85,13 @@ test("game feed publishes only changes, retries failed edits, recreates deleted 
     await flush();
     assertEqual(editCount, 3, "Failed content is retried");
 
+    for (const failure of [50013, 429, "ECONNRESET"]) {
+      fetchFailure = failure;
+      tick!();
+      await flush();
+      assertEqual(sendCount, 1, "Transient lookup failure cannot cause duplicate send");
+    }
+    fetchFailure = undefined;
     deleted = true;
     tick!();
     await flush();
@@ -83,15 +100,21 @@ test("game feed publishes only changes, retries failed edits, recreates deleted 
     await flush();
     assertEqual(editCount, 3, "Recreated content is recorded as published");
 
+    deleted = true;
+    title = "changed while deleted";
+    tick!();
+    await flush();
+    assertEqual(sendCount, 3, "Unknown Message during direct edit is recovered");
+
     gameFeed.removeFeedMessage(channel, "roster");
     gameFeed.addFeedMessage(channel, "roster", async () => new EmbedBuilder().setTitle(title));
     tick!();
     await flush();
-    assertEqual(sendCount, 3, "Removing and readding resets cached identity");
+    assertEqual(sendCount, 4, "Removing and readding resets cached identity");
     gameFeed.stopFeed(channel);
     gameFeed.addFeedMessage(channel, "roster", async () => new EmbedBuilder().setTitle(title));
     await gameFeed.startFeed(channel);
-    assertEqual(sendCount, 4, "Stop clears the previous publication");
+    assertEqual(sendCount, 5, "Stop clears the previous publication");
   } finally {
     gameFeed.stopFeed(channel);
     (global as any).setInterval = originalInterval;

@@ -5,13 +5,6 @@ import { PlayerInstance } from "../../database/PlayerInstance";
 import { EloUtil } from "../../util/EloUtil";
 import { escapeIgn } from "../../util/Utils";
 
-let cachedRedPlayersList = "";
-let cachedBluePlayersList = "";
-let cachedRedPlayersCount = 0;
-let cachedBluePlayersCount = 0;
-let redEloMean = 1000;
-let blueEloMean = 1000;
-
 const createTeamsGameFeed = async (): Promise<EmbedBuilder> => {
   const game = CurrentGameManager.getCurrentGame();
   const redPlayers = game.getPlayersOfTeam("RED");
@@ -38,19 +31,10 @@ const createTeamsGameFeed = async (): Promise<EmbedBuilder> => {
       : formattedList;
   };
 
-  if (
-    redPlayers.length !== cachedRedPlayersCount ||
-    bluePlayers.length !== cachedBluePlayersCount ||
-    cachedRedPlayersList === "" ||
-    cachedBluePlayersList === ""
-  ) {
-    cachedRedPlayersList = formatPlayers(redPlayers, redCaptain);
-    cachedBluePlayersList = formatPlayers(bluePlayers, blueCaptain);
-    cachedRedPlayersCount = redPlayers.length;
-    cachedBluePlayersCount = bluePlayers.length;
-    redEloMean = EloUtil.calculateMeanElo(redPlayers);
-    blueEloMean = EloUtil.calculateMeanElo(bluePlayers);
-  }
+  const redPlayersList = formatPlayers(redPlayers, redCaptain);
+  const bluePlayersList = formatPlayers(bluePlayers, blueCaptain);
+  const redEloMean = EloUtil.calculateMeanElo(redPlayers);
+  const blueEloMean = EloUtil.calculateMeanElo(bluePlayers);
 
   return new EmbedBuilder()
     .setTitle("Current Teams")
@@ -58,11 +42,11 @@ const createTeamsGameFeed = async (): Promise<EmbedBuilder> => {
     .addFields(
       {
         name: `🔴 Red Team [${redPlayers.length}]`,
-        value: cachedRedPlayersList || "No players",
+        value: redPlayersList || "No players",
       },
       {
         name: `🔵 Blue Team [${bluePlayers.length}]`,
-        value: cachedBluePlayersList || "No players",
+        value: bluePlayersList || "No players",
       }
     )
     .setFooter({

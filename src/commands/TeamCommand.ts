@@ -199,8 +199,24 @@ export default class TeamCommand implements Command {
     });
   }
 
-  async handleGuildDeparture(userId: string): Promise<boolean> {
-    return this.serialise(() => GuildMembership.handleDeparture(userId, this));
+  async handleGuildDeparture(userId: string, guildId: string): Promise<boolean> {
+    // Gateway events are scoped to the configured game guild and the game
+    // that existed when the event arrived, not the game at queue execution.
+    if (Channels.gameFeed?.guild?.id !== guildId) return false;
+    const token = CurrentGameManager.getCurrentGame().getLifecycleToken();
+    return this.serialise(async () => {
+      const game = CurrentGameManager.getCurrentGame();
+      const guild = Channels.gameFeed?.guild;
+      if (game.getLifecycleToken() !== token || guild?.id !== guildId ||
+          !game.announced || game.isFinished || game.getGameStartStatus() !== "idle" ||
+          !game.getPlayers().some((player) => player.discordSnowflake === userId)) return false;
+      // A queued gateway event is not proof that the member is still absent.
+      // Only Discord's explicit Unknown Member permits removal; other errors
+      // propagate to the gateway handler and leave the roster intact.
+      if (await fetchGuildMember(guild, userId)) return false;
+      if (game.getLifecycleToken() !== token || Channels.gameFeed?.guild?.id !== guildId) return false;
+      return GuildMembership.handleDeparture(userId, this);
+    });
   }
 
   async handleTeamPickingMessage(message: Message<boolean>): Promise<void> {

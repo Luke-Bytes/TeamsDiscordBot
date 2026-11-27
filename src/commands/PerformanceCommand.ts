@@ -4,6 +4,23 @@ import { prismaClient } from "../database/prismaClient";
 import { exec } from "child_process";
 import { promisify } from "util";
 const execAsync = promisify(exec);
+const DIAGNOSTIC_TIMEOUT_MS = 5000;
+
+// A deadline bounds the wait, not the underlying Prisma operation. Keep the
+// rejection handler attached so a later failure cannot be unhandled.
+async function boundedDiagnostic(operation: Promise<string>): Promise<string> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<string>((resolve) => {
+        timeout = setTimeout(() => resolve("Timed out"), DIAGNOSTIC_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
 
 export default class PerformanceCommand implements Command {
   data = new SlashCommandBuilder()
@@ -35,15 +52,17 @@ export default class PerformanceCommand implements Command {
         ? `${interaction.client.ws.ping} ms`
         : "N/A (Not Connected)";
 
-    const dbLatency = await pingDatabase();
-    const mojangPing = await pingMojangAPI();
-    const gappleStatus = await checkGappleAPI();
-    const gitBranch = await getGitBranch();
+    const [dbLatency, mojangPing, gappleStatus, gitBranch] = await Promise.all([
+      boundedDiagnostic(pingDatabase()),
+      pingHttp("Mojang", "https://api.mojang.com/users/profiles/minecraft/Notch"),
+      pingHttp("Gapple", "https://api.gapple.pw/status/"),
+      getGitBranch(),
+    ]);
 
     const usageStats = `
 **Uptime:** ${this.formatUptime(uptimeSeconds)}
 **WebSocket Ping:** ${websocketPing}
-**Database Latency:** ${dbLatency} ms
+**Database Latency:** ${dbLatency}
 **Mojang API Ping:** ${mojangPing}
 **Gapple API Status:** ${gappleStatus}
 
@@ -55,8 +74,8 @@ export default class PerformanceCommand implements Command {
 - Heap Total: ${(memoryUsage.heapTotal / 1024 / 1024).toFixed(2)} MB
 
 **CPU Usage:**
-- User: ${(cpuUsage.user / 1e6).toFixed(2)} ms
-- System: ${(cpuUsage.system / 1e6).toFixed(2)} ms
+- User: ${(cpuUsage.user / 1000).toFixed(2)} ms
+- System: ${(cpuUsage.system / 1000).toFixed(2)} ms
 `;
     await interaction.editReply({ content: usageStats });
   }
@@ -65,68 +84,40 @@ export default class PerformanceCommand implements Command {
 async function pingDatabase() {
   const start = performance.now();
   try {
-    await prismaClient.player.findFirst();
+    await prismaClient.player.findFirst({ select: { id: true } });
     const end = performance.now();
-    return (end - start).toFixed(2);
+    return `${(end - start).toFixed(2)} ms`;
   } catch (error) {
     console.error("Database ping failed:", error);
     return "Failed to connect";
   }
 }
 
-async function pingMojangAPI(): Promise<string> {
+async function pingHttp(service: string, url: string): Promise<string> {
   const start = performance.now();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DIAGNOSTIC_TIMEOUT_MS);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000); // Timeout after 5 seconds
-
-    const response = await fetch(
-      "https://api.mojang.com/users/profiles/minecraft/Notch",
-      {
-        signal: controller.signal,
-      }
-    );
-    clearTimeout(timeout);
-
-    if (response.ok) {
-      const end = performance.now();
-      return `${(end - start).toFixed(2)} ms`;
-    } else {
-      console.warn(`Mojang API returned status ${response.status}`);
-      return `Error: ${response.status}`;
-    }
-  } catch (error) {
-    console.error("Failed to connect to Mojang API:", error);
-    return "Failed to connect";
-  }
-}
-
-async function checkGappleAPI(): Promise<string> {
-  const start = performance.now();
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-
-    const response = await fetch("https://api.gapple.pw/status/", {
-      signal: controller.signal,
+    const response = await fetch(url, { signal: controller.signal });
+    const elapsed = (performance.now() - start).toFixed(2);
+    // The check only needs headers. Release the unused response body.
+    await response.body?.cancel().catch((error) => {
+      console.warn(`Failed to release ${service} API response:`, error);
     });
-    clearTimeout(timeout);
-
-    const end = performance.now();
-    if (response.ok) {
-      return `${(end - start).toFixed(2)} ms`;
-    } else {
-      return `Error: ${response.status}`;
-    }
+    if (response.ok) return `${elapsed} ms`;
+    console.warn(`${service} API returned status ${response.status}`);
+    return `Error: ${response.status}`;
   } catch (error) {
-    console.error("Failed to connect to Gapple API:", error);
+    console.error(`Failed to connect to ${service} API:`, error);
     return "Failed to connect";
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
 async function getGitBranch(): Promise<string> {
   try {
-    const { stdout } = await execAsync("git rev-parse --abbrev-ref HEAD");
+    const { stdout } = await execAsync("git rev-parse --abbrev-ref HEAD", { timeout: DIAGNOSTIC_TIMEOUT_MS });
     return stdout.trim();
   } catch (error) {
     console.error("Failed to retrieve Git branch:", error);

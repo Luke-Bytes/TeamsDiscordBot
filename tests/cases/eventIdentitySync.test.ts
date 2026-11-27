@@ -181,6 +181,36 @@ test("event signup cannot roll a linked player's updated username back to a supp
   }
 });
 
+test("unlinked event form requires fresh verification and cannot silently switch UUID", async () => {
+  const original = MojangAPI.usernameToUUID;
+  let resolved: string | null = primary;
+  let transactions = 0;
+  const db: any = {
+    player: { findUnique: async () => null, findFirst: async () => null },
+    $transaction: async () => { transactions++; throw new Error("unexpected write"); },
+  };
+  try {
+    MojangAPI.usernameToUUID = async (_name, fresh) => {
+      assert(fresh === true, "always verify current name ownership");
+      return resolved;
+    };
+    const service = new EventService(db);
+    const verified = await service.identity("user", "OriginalName");
+    const application = { answers: {}, formRevision: 0, acceptedTerms: true,
+      minecraftUsername: verified.username, expectedMinecraftUUID: verified.uuid };
+    for (const [next, message] of [[null, "Could not verify"], [replacement, "account changed"]] as const) {
+      resolved = next;
+      let rejected = false;
+      try { await service.signup("guild", "event", "user", application); }
+      catch (error) { rejected = String(error).includes(message); }
+      assert(rejected, "invalid identity evidence prevents submission");
+    }
+    assertEqual(transactions, 0, "verification failure never reaches writes");
+  } finally {
+    MojangAPI.usernameToUUID = original;
+  }
+});
+
 test("an event form started before an account switch cannot overwrite the new linked account", async () => {
   let reads = 0;
   let signups = 0;
@@ -281,12 +311,18 @@ test("username identity mutation updates live signups atomically and preserves h
     },
   ];
   let failSync = false;
+  let conflictingOwner = false;
   db.$transaction = async (callback: any) => {
     // Commit only when every operation succeeds, matching Mongo transactions.
     const pendingPlayer = { ...player };
     const pendingRows = rows.map((row) => ({ ...row }));
     const tx = {
       player: {
+        findFirst: async ({ where }: any) => {
+          assertEqual(where.NOT.id, player.id, "Recheck excludes original owner");
+          assertEqual(where.OR[0].primaryMinecraftAccount.mode, "insensitive", "Recheck catches differently cased UUID ownership");
+          return conflictingOwner ? { id: "concurrent-owner" } : null;
+        },
         updateMany: async ({ where, data }: any) => {
           if (
             where.id !== pendingPlayer.id ||
@@ -348,6 +384,17 @@ test("username identity mutation updates live signups atomically and preserves h
     return result;
   };
   try {
+    conflictingOwner = true;
+    let conflictRejected = false;
+    try {
+      await updatePlayerIdentityAndEventSignups(player, primary, replacement, "CurrentName");
+    } catch (error) {
+      conflictRejected = String(error).includes("already linked");
+    }
+    assert(conflictRejected, "Late ownership conflict rejects organiser identity mutation");
+    assertEqual(player.primaryMinecraftAccount, primary, "Conflicting claim cannot change canonical identity");
+    assertEqual(rows[0].minecraftUUID, primary, "Conflicting claim cannot change live signup");
+    conflictingOwner = false;
     failSync = true;
     let failed = false;
     try {

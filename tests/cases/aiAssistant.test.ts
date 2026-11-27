@@ -426,6 +426,7 @@ test("Ranked self-stats bind the authenticated Discord ID; Relaxed Elo and rank 
   const originalPlayer = prismaClient.player.findUnique;
   const originalStats = prismaClient.playerStats.findUnique;
   const originalCount = prismaClient.playerStats.count;
+  const originalHistory = prismaClient.playerStats.findMany;
   const originalSeason = SeasonService.getActiveSeason;
   let lookup: any;
   let type: SeasonType = SeasonType.RANKED;
@@ -442,6 +443,7 @@ test("Ranked self-stats bind the authenticated Discord ID; Relaxed Elo and rank 
       loseStreak: 0,
     });
     (prismaClient.playerStats as any).count = async () => 2;
+    (prismaClient.playerStats as any).findMany = async () => [];
     (SeasonService as any).getActiveSeason = async () => ({
       id: "s1",
       number: 23,
@@ -468,6 +470,7 @@ test("Ranked self-stats bind the authenticated Discord ID; Relaxed Elo and rank 
     prismaClient.player.findUnique = originalPlayer;
     prismaClient.playerStats.findUnique = originalStats;
     prismaClient.playerStats.count = originalCount;
+    prismaClient.playerStats.findMany = originalHistory;
     SeasonService.getActiveSeason = originalSeason;
   }
 });
@@ -854,6 +857,7 @@ test("A player stats question completes a safe tool round with verified data", a
   const previousPlayer = prismaClient.player.findUnique;
   const previousStats = prismaClient.playerStats.findUnique;
   const previousCount = prismaClient.playerStats.count;
+  const previousHistory = prismaClient.playerStats.findMany;
   const previousSeason = SeasonService.getActiveSeason;
   let turns = 0;
   try {
@@ -869,6 +873,7 @@ test("A player stats question completes a safe tool round with verified data", a
       loseStreak: 0,
     });
     (prismaClient.playerStats as any).count = async () => 1;
+    (prismaClient.playerStats as any).findMany = async () => [];
     (SeasonService as any).getActiveSeason = async () => ({
       id: "season-offline",
       number: 28,
@@ -920,6 +925,7 @@ test("A player stats question completes a safe tool round with verified data", a
     prismaClient.player.findUnique = previousPlayer;
     prismaClient.playerStats.findUnique = previousStats;
     prismaClient.playerStats.count = previousCount;
+    prismaClient.playerStats.findMany = previousHistory;
     SeasonService.getActiveSeason = previousSeason;
   }
 });

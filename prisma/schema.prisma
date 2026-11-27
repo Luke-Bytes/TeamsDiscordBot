@@ -46,13 +46,17 @@ model EventSignup {
   confirmedAt DateTime?
   withdrawnAt DateTime?
   roleSyncPending Boolean @default(true)
+  // Optional for legacy rows; each queued operation receives a fresh token.
+  roleSyncToken String?
   promotionPending Boolean @default(false)
+  promotionToken String?
   promotionNotifiedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([eventId, discordUserId])
   @@index([eventId, status, queuedAt])
+  @@index([discordUserId])
 }
 
 model EventGuildState {
@@ -159,6 +163,8 @@ model Player {
   profile      Profile?
 
   @@index([latestIGN])
+  @@index([primaryMinecraftAccount])
+  @@index([minecraftAccounts])
 }
 
 model Game {
@@ -195,6 +201,8 @@ model Game {
 
   seasonId String
   season   Season @relation(fields: [seasonId], references: [id])
+
+  @@index([seasonId, finished])
 }
 
 model GameParticipation {
@@ -218,6 +226,7 @@ model GameParticipation {
 
   @@unique([playerId, gameId])
   @@index([gameId])
+  @@index([seasonId, playerId])
 }
 
 model EloHistory {
@@ -236,6 +245,7 @@ model EloHistory {
 
   @@unique([playerId, gameId])
   @@index([playerId, seasonId, createdAt])
+  @@index([seasonId, createdAt])
 }
 
 type ModifierTypes {
@@ -270,6 +280,9 @@ model PlayerPunishment {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([playerId, punishmentExpiry])
+  @@index([punishmentExpiry])
 }
 
 model TemporaryVoiceChannel {

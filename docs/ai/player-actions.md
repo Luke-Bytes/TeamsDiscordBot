@@ -36,9 +36,9 @@ It will fail before the match starts, after it finishes, if the captain or team 
 After teams are decided, the current captain can use `/need` for their own team to post a **one-player** request. The optional `team` choice selects `Red` or `Blue` (useful when a team cannot be inferred); optional `ping` requests a game-notification-role mention. An organiser can also post or cancel a team's request.
 A request needs an announced, active game with completed team picking; only one open request per team is allowed. To fill one, **first use `/register`**, remain unassigned to a team, then press **Join** on the posted request. The captain or organiser can cancel it using its button. Expired, filled, or cancelled requests cannot be joined.
 
-## How do I propose a special game? `/game request`
-Use `/game request time:<when> banned_classes:<classes or none> map:<map>` to post a **formatted request template**, not to announce or schedule a match. Optional choices are `phase_5_type` (`Bleed`, `Double`, `Nothing`), `duel`, `looking_for_players` (both `Yes`/`No`), and `timezone` for natural-language times.
-Choose the offered map/class suggestions where possible. A time the bot cannot parse will be rejected; specify a clearer date/time or timezone. If you want an actual official game announced, ask an organiser—the template alone does not create one.
+## How do I format a game request for Shotbow hosts? `/game request`
+Use `/game request time:<when> banned_classes:<classes or none> map:<map>` to generate a **filled-in game request template** to send to Shotbow hosts for games separate from Friendly Wars. It does not submit a request to a host, announce or schedule a match. Optional choices are `phase_5_type` (`Bleed`, `Double`, `Nothing`), `duel`, `looking_for_players` (both `Yes`/`No`), and `timezone` for natural-language times.
+Choose the offered map/class suggestions where possible. A time the bot cannot parse will be rejected; specify a clearer date/time or timezone. Copy the generated request and send it to the appropriate host yourself.
 
 ## How do I ask to spectate someone's voice channel? `/spectate`
 Use `/spectate action:request user:@captain` (or a clan leader). The target must currently be in a voice channel and have the captain or clan-leader role. They can accept/deny the request sent by DM; an eligible leader can also use `/spectate action:allow user:@requester` **for an existing pending request**.

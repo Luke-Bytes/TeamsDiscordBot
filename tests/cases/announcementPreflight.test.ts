@@ -6,6 +6,9 @@ import {
 import AnnouncementCommand from "../../src/commands/AnnouncementCommand";
 import { ConfigManager, Config } from "../../src/ConfigManager";
 import { GameInstance } from "../../src/database/GameInstance";
+import { SeasonService } from "../../src/database/SeasonService";
+import { SeasonType } from "@prisma/client";
+import { Channels } from "../../src/Channels";
 import {
   GameChannelPreflight,
   formatGameChannelPreflight,
@@ -493,6 +496,50 @@ test("An unavailable pre-flight audit never blocks announcement confirmation", a
     GameChannelPreflight.run = originalAudit;
     command.handleAnnouncementConfirm = originalConfirm;
     console.error = originalError;
+    game.reset();
+    fixture.restore();
+  }
+});
+
+test("An announcement preview cannot silently change rating rules at confirmation", async () => {
+  const fixture = makeFixture();
+  const command = new AnnouncementCommand() as any;
+  const game = GameInstance.getInstance();
+  const previousSeason = SeasonService.requireActiveSeason;
+  const previousChannel = Channels.announcements;
+  const previousAudit = GameChannelPreflight.run;
+  const responses: string[] = [];
+  let sends = 0;
+  game.reset();
+  try {
+    GameChannelPreflight.run = async () => ({ issues: [], checked: 0 } as any);
+    Channels.announcements = {
+      isSendable: () => true,
+      send: async () => { sends++; throw new Error("Unexpected publication"); },
+    } as any;
+    for (const relaxed of [false, true]) {
+      game.isRelaxedSeason = relaxed;
+      game.isDoubleElo = !relaxed;
+      game.announcementPreviewMessage = { id: "season-preview" } as any;
+      SeasonService.requireActiveSeason = async () => ({
+        id: "successor", type: relaxed ? SeasonType.RANKED : SeasonType.RELAXED,
+      } as any);
+      await command.handleButtonPress({
+        message: game.announcementPreviewMessage,
+        customId: "announcement-confirm-noping",
+        guild: fixture.guild,
+        user: { id: "organiser-user" },
+        deferReply: async () => {},
+        editReply: async (value: string) => { responses.push(value); },
+      } as any);
+      assert(!game.announced, "Stale preview never creates a live game");
+      assert(responses.at(-1)?.includes("season rating rules changed"), "Organiser must recreate the preview");
+    }
+    assertEqual(sends, 0, "No Discord announcement or ping is published");
+  } finally {
+    SeasonService.requireActiveSeason = previousSeason;
+    Channels.announcements = previousChannel;
+    GameChannelPreflight.run = previousAudit;
     game.reset();
     fixture.restore();
   }

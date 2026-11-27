@@ -1,6 +1,7 @@
 import { ActivityType, Client, Message, TextBasedChannel } from "discord.js";
 import {
   AnnouncementDeliveryState,
+  Prisma,
   Season,
   SeasonAnnouncementKind,
   SeasonAnnouncement,
@@ -42,6 +43,43 @@ export class SeasonService {
   private static client?: Client;
   private static deadlineTimer?: NodeJS.Timeout;
   private static periodicTimer?: NodeJS.Timeout;
+  private static lifecycleQueue: Promise<unknown> = Promise.resolve();
+  private static queuedMaintenance?: Promise<void>;
+  private static deliveryTail: Promise<unknown> = Promise.resolve();
+  private static queuedDelivery?: Promise<void>;
+  private static closureInProgress = false;
+
+  /** Synchronous guard for game installation, including Discord recovery. */
+  static assertGameAdmission(): void {
+    if (this.closureInProgress)
+      throw new Error("Season rollover is in progress. Retry after it completes.");
+  }
+
+  /** Keep season selection and the synchronous game transition in one turn of the lifecycle queue. */
+  static withGameAdmission<T>(admit: (season: Season) => T): Promise<T> {
+    return this.serializeLifecycle(async () => {
+      const season = await this.requireActiveSeason();
+      if (season.lifecycleState === SeasonLifecycleState.CLOSING)
+        throw new Error("Season rollover is incomplete. Retry after it completes.");
+      return admit(season);
+    });
+  }
+
+  private static async withClosure<T>(work: () => Promise<T>): Promise<T> {
+    this.closureInProgress = true;
+    try {
+      return await work();
+    } finally {
+      this.closureInProgress = false;
+    }
+  }
+
+  /** Queue, rather than drop, overlapping lifecycle requests. */
+  private static serializeLifecycle<T>(work: () => Promise<T>): Promise<T> {
+    const result = this.lifecycleQueue.then(work);
+    this.lifecycleQueue = result.catch(() => undefined);
+    return result;
+  }
 
   static async getActiveSeason(): Promise<Season | null> {
     return prismaClient.season.findFirst({
@@ -115,7 +153,24 @@ export class SeasonService {
   }
 
   static async configure(configuration: SeasonConfiguration): Promise<Season> {
-    const season = await this.requireActiveSeason();
+    const target = await this.requireActiveSeason();
+    const { updated, closed } = await this.serializeLifecycle(async () => {
+      const season = await this.requireActiveSeason();
+      if (season.id !== target.id) {
+        throw new Error(
+          "The season changed before configuration could be saved. Check /season status and try again."
+        );
+      }
+      return this.configureSeason(season, configuration);
+    });
+    if (closed) await this.deliverPendingAnnouncements();
+    return updated;
+  }
+
+  private static async configureSeason(
+    season: Season,
+    configuration: SeasonConfiguration
+  ): Promise<{ updated: Season; closed: boolean }> {
     if (
       configuration.firstRolloverAt &&
       (!Number.isFinite(configuration.firstRolloverAt.getTime()) ||
@@ -141,6 +196,8 @@ export class SeasonService {
       configuration.currentType &&
       configuration.currentType !== (season.type ?? SeasonType.RANKED)
     ) {
+      if (CurrentGameManager.getCurrentGame().announced)
+        throw new Error("The current season type cannot change while a game is announced.");
       const finishedGames = await prismaClient.game.count({
         where: { seasonId: season.id, finished: true },
       });
@@ -184,14 +241,25 @@ export class SeasonService {
         ),
       },
     });
-    await this.evaluateRollover();
+    const { closed } = await this.evaluateRolloverInternal();
     await this.refreshPresence();
     const current = await this.getActiveSeason();
     if (current) this.scheduleDeadline(current);
-    return updated;
+    return { updated, closed };
   }
 
   static async bootstrap(
+    type: SeasonType,
+    requestedNumber?: number
+  ): Promise<Season> {
+    const season = await this.serializeLifecycle(() =>
+      this.bootstrapSeason(type, requestedNumber)
+    );
+    await this.deliverPendingAnnouncements();
+    return season;
+  }
+
+  private static async bootstrapSeason(
     type: SeasonType,
     requestedNumber?: number
   ): Promise<Season> {
@@ -219,19 +287,13 @@ export class SeasonService {
     await this.queueBlocks(season.id, SeasonAnnouncementKind.NEW_SEASON, [
       this.newSeasonMessage(season),
     ]);
-    await this.deliverPendingAnnouncements();
     await this.refreshPresence();
     return season;
   }
 
   static async initialize(client: Client): Promise<void> {
     this.client = client;
-    await this.recoverClosures();
-    await this.evaluateRollover();
-    await this.deliverPendingAnnouncements();
-    await this.refreshPresence();
-    const active = await this.getActiveSeason();
-    if (active) this.scheduleDeadline(active);
+    await this.serializeLifecycle(() => this.maintainSeasons());
     if (this.periodicTimer) clearInterval(this.periodicTimer);
     this.periodicTimer = setInterval(
       () => {
@@ -239,24 +301,38 @@ export class SeasonService {
       },
       15 * 60 * 1000
     );
+    await this.deliverPendingAnnouncements();
   }
 
-  private static async periodicMaintenance(): Promise<void> {
-    try {
-      await this.evaluateRollover();
-      await this.deliverPendingAnnouncements();
-      await this.refreshPresence();
-      const active = await this.getActiveSeason();
-      if (active) this.scheduleDeadline(active);
-    } catch (error) {
-      console.error("Season maintenance failed:", error);
-    }
+  private static periodicMaintenance(): Promise<void> {
+    // At most one pass may wait in the queue, in addition to the running pass.
+    // Keep one pending tick so a deadline reached mid-pass is not lost.
+    if (this.queuedMaintenance) return this.queuedMaintenance;
+    const work = this.serializeLifecycle(async () => {
+      this.queuedMaintenance = undefined;
+      await this.maintainSeasons();
+    })
+      // Discord delivery must not hold the season admission/lifecycle queue.
+      .then(() => this.deliverPendingAnnouncements())
+      .catch((error) => {
+        console.error("Season maintenance failed:", error);
+      });
+    this.queuedMaintenance = work;
+    return work;
+  }
+
+  private static async maintainSeasons(): Promise<void> {
+    await this.recoverClosures();
+    await this.evaluateRolloverInternal();
+    await this.refreshPresence();
+    const active = await this.getActiveSeason();
+    if (active) this.scheduleDeadline(active);
   }
 
   static async afterGameSaved(): Promise<void> {
     const outcome = await this.evaluateRollover(false);
     if (!outcome.closed) {
-      const { season, finishedGames } = await this.getStatus();
+      const season = await this.requireActiveSeason();
       if (season.firstRolloverAt) {
         await DiscordUtil.sendMessage(
           "gameFeed",
@@ -265,6 +341,11 @@ export class SeasonService {
         await this.refreshPresence();
         return;
       }
+      const finishedGames = season.gameLimit
+        ? await prismaClient.game.count({
+            where: { seasonId: season.id, finished: true },
+          })
+        : 0;
       const gameText = season.gameLimit
         ? `${Math.max(0, season.gameLimit - finishedGames)} game(s) remaining`
         : "no game limit";
@@ -285,7 +366,17 @@ export class SeasonService {
   }
 
   static async evaluateRollover(
-    gameActive = CurrentGameManager.getCurrentGame().announced
+    gameActive?: boolean
+  ): Promise<{ closed: boolean; pending: boolean }> {
+    const result = await this.serializeLifecycle(() =>
+      this.evaluateRolloverInternal(gameActive)
+    );
+    if (result.closed) await this.deliverPendingAnnouncements();
+    return result;
+  }
+
+  private static async evaluateRolloverInternal(
+    gameActive?: boolean
   ): Promise<{ closed: boolean; pending: boolean }> {
     const season = await this.getActiveSeason();
     if (!season) return { closed: false, pending: false };
@@ -296,11 +387,14 @@ export class SeasonService {
     ) {
       return { closed: false, pending: false };
     }
-    const finishedGames = await prismaClient.game.count({
-      where: { seasonId: season.id, finished: true },
-    });
+    // A scheduled rollover takes precedence over game limits; without a limit
+    // the count cannot change the closure decision or its reason.
     const gameReached = Boolean(
-      season.gameLimit && finishedGames >= season.gameLimit
+      !scheduled &&
+        season.gameLimit &&
+        (await prismaClient.game.count({
+          where: { seasonId: season.id, finished: true },
+        })) >= season.gameLimit
     );
     const monthReached = Boolean(
       season.rolloverDeadline && season.rolloverDeadline.getTime() <= Date.now()
@@ -320,7 +414,22 @@ export class SeasonService {
         : monthReached
           ? SeasonClosureReason.MONTH_LIMIT
           : (season.closureReason ?? SeasonClosureReason.MONTH_LIMIT);
-    if (gameActive) {
+    // Re-read after the count; never apply a decision to a different season
+    // or to configuration changed while the count was in flight.
+    const current = await this.getActiveSeason();
+    if (!current || current.id !== season.id)
+      return { closed: false, pending: false };
+    if (
+      current.gameLimit !== season.gameLimit ||
+      current.firstRolloverAt?.getTime() !==
+        season.firstRolloverAt?.getTime() ||
+      current.rolloverDeadline?.getTime() !==
+        season.rolloverDeadline?.getTime() ||
+      current.rolloverPending !== season.rolloverPending ||
+      current.closureReason !== season.closureReason
+    )
+      return { closed: false, pending: false };
+    if (gameActive ?? CurrentGameManager.getCurrentGame().announced) {
       await prismaClient.season.update({
         where: { id: season.id },
         data: { rolloverPending: true, closureReason: reason },
@@ -328,11 +437,32 @@ export class SeasonService {
       await this.refreshPresence();
       return { closed: false, pending: true };
     }
-    await this.closeActiveSeason(reason);
+    await this.closeSeason(current, reason);
     return { closed: true, pending: false };
   }
 
   static async closeActiveSeason(
+    reason: SeasonClosureReason,
+    nextType?: SeasonType,
+    expectedSeasonId?: string
+  ): Promise<Season> {
+    // Capture the target before waiting for another closure or maintenance run.
+    const targetId = expectedSeasonId ?? (await this.requireActiveSeason()).id;
+    const successor = await this.serializeLifecycle(async () => {
+      const active = await this.requireActiveSeason();
+      if (active.id !== targetId) {
+        throw new Error(
+          "The season changed before closure could start. Check /season status and try again."
+        );
+      }
+      return this.closeSeason(active, reason, nextType);
+    });
+    await this.deliverPendingAnnouncements();
+    return successor;
+  }
+
+  private static async closeSeason(
+    active: Season,
     reason: SeasonClosureReason,
     nextType?: SeasonType
   ): Promise<Season> {
@@ -344,7 +474,14 @@ export class SeasonService {
         "The season cannot be ended while a game is announced or underway. Finish or cancel that game first."
       );
     }
-    const active = await this.requireActiveSeason();
+    return this.withClosure(() => this.claimAndFinishClosure(active, reason, nextType));
+  }
+
+  private static async claimAndFinishClosure(
+    active: Season,
+    reason: SeasonClosureReason,
+    nextType?: SeasonType
+  ): Promise<Season> {
     const token = randomUUID();
     const locked = await prismaClient.season.updateMany({
       where: {
@@ -389,13 +526,24 @@ export class SeasonService {
           { lifecycleState: SeasonLifecycleState.CLOSING },
           {
             lifecycleState: SeasonLifecycleState.CLOSED,
-            OR: [{ recapProcessedAt: null }, { titlesProcessedAt: null }],
+            OR: [
+              { recapProcessedAt: null },
+              { recapProcessedAt: { isSet: false } },
+              { titlesProcessedAt: null },
+              { titlesProcessedAt: { isSet: false } },
+            ],
           },
         ],
       },
       orderBy: { number: "asc" },
     });
-    for (const season of closing) await this.finishClosure(season.id);
+    for (const season of closing) {
+      // A recovered active match must finish before an incomplete rollover
+      // changes its season. Closed-season outbox/checkpoint repair is safe.
+      if (season.lifecycleState === SeasonLifecycleState.CLOSING &&
+          CurrentGameManager.getCurrentGame().announced) continue;
+      await this.withClosure(() => this.finishClosure(season.id));
+    }
   }
 
   private static async finishClosure(closingSeasonId: string): Promise<Season> {
@@ -476,6 +624,12 @@ export class SeasonService {
       });
     }
 
+    // Persist this before the processing checkpoints so a failed queue write
+    // cannot leave a fully processed closure with no successor announcement.
+    await this.queueBlocks(closing.id, SeasonAnnouncementKind.NEW_SEASON, [
+      this.newSeasonMessage(successor),
+    ]);
+
     if (!closing.recapProcessedAt) {
       try {
         const blocks =
@@ -501,15 +655,18 @@ export class SeasonService {
     }
     if (!closing.titlesProcessedAt) {
       try {
-        const titles = await TitleService.reconcile(closing.id);
-        await this.queueBlocks(
-          closing.id,
-          SeasonAnnouncementKind.TITLES,
-          titles.blocks
-        );
-        closing = await prismaClient.season.update({
-          where: { id: closing.id },
-          data: { titlesProcessedAt: new Date() },
+        const closingId = closing.id;
+        await TitleService.reconcile(closingId, async (tx, titles) => {
+          await this.queueBlocks(
+            closingId,
+            SeasonAnnouncementKind.TITLES,
+            titles.blocks,
+            tx
+          );
+          await tx.season.update({
+            where: { id: closingId },
+            data: { titlesProcessedAt: new Date() },
+          });
         });
       } catch (error) {
         console.error(
@@ -518,11 +675,8 @@ export class SeasonService {
         );
       }
     }
-    await this.queueBlocks(closing.id, SeasonAnnouncementKind.NEW_SEASON, [
-      this.newSeasonMessage(successor),
-    ]);
-    await this.deliverPendingAnnouncements();
-    this.scheduleDeadline(successor);
+    const active = await this.getActiveSeason();
+    if (active) this.scheduleDeadline(active);
     await this.refreshPresence();
     return successor;
   }
@@ -575,19 +729,35 @@ export class SeasonService {
   private static async queueBlocks(
     seasonId: string,
     kind: SeasonAnnouncementKind,
-    blocks: string[]
+    blocks: string[],
+    tx?: Prisma.TransactionClient
   ): Promise<void> {
     for (const [blockIndex, raw] of blocks.entries()) {
       const marker = `〔season:${seasonId}:${kind}:${blockIndex}〕`;
-      await prismaClient.seasonAnnouncement.upsert({
+      const args = {
         where: { seasonId_kind_blockIndex: { seasonId, kind, blockIndex } },
         update: {},
         create: { seasonId, kind, blockIndex, marker, content: raw },
-      });
+      };
+      if (tx) await tx.seasonAnnouncement.upsert(args);
+      else await prismaClient.seasonAnnouncement.upsert(args);
     }
   }
 
-  static async deliverPendingAnnouncements(): Promise<void> {
+  static deliverPendingAnnouncements(): Promise<void> {
+    // Keep delivery ordered and non-overlapping independently of lifecycle
+    // changes. Retain one pending pass so newly queued blocks are not missed.
+    if (this.queuedDelivery) return this.queuedDelivery;
+    const work = this.deliveryTail.then(async () => {
+      this.queuedDelivery = undefined;
+      await this.deliverPendingAnnouncementsPass();
+    });
+    this.queuedDelivery = work;
+    this.deliveryTail = work.catch(() => undefined);
+    return work;
+  }
+
+  private static async deliverPendingAnnouncementsPass(): Promise<void> {
     const pending = await prismaClient.seasonAnnouncement.findMany({
       where: { state: AnnouncementDeliveryState.PENDING },
       orderBy: { createdAt: "asc" },
@@ -710,15 +880,17 @@ export class SeasonService {
       });
       return;
     }
-    const games = await prismaClient.game.count({
-      where: { seasonId: season.id, finished: true },
-    });
     const automated = Boolean(season.gameLimit || season.monthLimit);
     let progress = "";
     if (season.rolloverPending) progress = " • rollover pending";
     else if (season.firstRolloverAt) {
       progress = ` • rollover ${season.firstRolloverAt.toISOString().slice(0, 10)} UTC`;
     } else if (automated) {
+      const games = season.gameLimit
+        ? await prismaClient.game.count({
+            where: { seasonId: season.id, finished: true },
+          })
+        : 0;
       const bits = [
         season.gameLimit ? `${games}/${season.gameLimit} games` : null,
         season.rolloverDeadline

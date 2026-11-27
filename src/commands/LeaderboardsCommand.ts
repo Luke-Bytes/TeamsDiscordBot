@@ -14,9 +14,26 @@ import { EloUtil } from "../util/EloUtil";
 import { prismaClient } from "../database/prismaClient";
 import { Channels } from "../Channels";
 import { SeasonService } from "../database/SeasonService";
-import { DiscordUtil } from "../util/DiscordUtil";
 import { escapeIgn } from "../util/Utils";
-import { SeasonType } from "@prisma/client";
+import { discordErrorCode, isUnknownMessage } from "../util/DiscordFailures";
+import { Prisma, SeasonType } from "@prisma/client";
+
+type LeaderboardSession = {
+  currentPage: number;
+  messageId?: string;
+  seasonNumber?: number;
+  expiresAt: number;
+  busy: boolean;
+};
+
+type NavigationState = {
+  startedAt: number;
+  busy: boolean;
+};
+
+const SESSION_TTL_MS = 30 * 60_000;
+const MAX_SESSIONS = 1_000;
+const NAVIGATION_INTERVAL_MS = 500;
 
 export default class LeaderboardsCommand implements Command {
   public data: SlashCommandOptionsOnlyBuilder;
@@ -24,10 +41,9 @@ export default class LeaderboardsCommand implements Command {
   public description = "Get leaderboards for the top-rated players";
   public buttonIds: string[] = ["leaderboard_prev", "leaderboard_next"];
   private readonly pageSize = 10;
-  private readonly userStates = new Map<
-    string,
-    { currentPage: number; messageId?: string; seasonNumber?: number }
-  >();
+  private readonly userStates = new Map<string, LeaderboardSession>();
+  private readonly navigationByUser = new Map<string, NavigationState>();
+  private nextNavigationCleanupAt = 0;
 
   constructor() {
     this.data = new SlashCommandBuilder()
@@ -41,12 +57,104 @@ export default class LeaderboardsCommand implements Command {
       );
   }
 
-  private getUserState(userId: string, channelId: string) {
-    const key = `${userId}-${channelId}`;
-    if (!this.userStates.has(key)) {
-      this.userStates.set(key, { currentPage: 0, messageId: undefined });
+  private startSession(
+    key: string,
+    seasonNumber?: number
+  ): LeaderboardSession | undefined {
+    const now = Date.now();
+    this.pruneNavigation(now);
+    for (const [id, session] of this.userStates) {
+      if (session.expiresAt <= now) this.userStates.delete(id);
     }
-    return this.userStates.get(key)!;
+    this.userStates.delete(key);
+    if (this.userStates.size >= MAX_SESSIONS) {
+      for (const [id, session] of this.userStates) {
+        if (!session.busy) {
+          this.userStates.delete(id);
+          break;
+        }
+      }
+      if (this.userStates.size >= MAX_SESSIONS) return undefined;
+    }
+    const session: LeaderboardSession = {
+      currentPage: 0,
+      seasonNumber,
+      expiresAt: now + SESSION_TTL_MS,
+      busy: true,
+    };
+    this.userStates.set(key, session);
+    return session;
+  }
+
+  private isCurrentSession(
+    key: string,
+    session: LeaderboardSession,
+    now = Date.now()
+  ): boolean {
+    if (this.userStates.get(key) !== session) return false;
+    if (session.expiresAt <= now) {
+      this.userStates.delete(key);
+      return false;
+    }
+    return true;
+  }
+
+  private refreshSession(key: string, session: LeaderboardSession): boolean {
+    const now = Date.now();
+    if (!this.isCurrentSession(key, session, now)) return false;
+    session.expiresAt = now + SESSION_TTL_MS;
+    this.userStates.delete(key);
+    this.userStates.set(key, session);
+    return true;
+  }
+
+  private pruneNavigation(now: number): void {
+    if (now < this.nextNavigationCleanupAt) return;
+    this.nextNavigationCleanupAt = now + NAVIGATION_INTERVAL_MS;
+    for (const [userId, state] of this.navigationByUser) {
+      if (!state.busy && now - state.startedAt >= NAVIGATION_INTERVAL_MS) {
+        this.navigationByUser.delete(userId);
+      }
+    }
+  }
+
+  private async replyNavigation(
+    interaction: ButtonInteraction,
+    content: string
+  ): Promise<void> {
+    try {
+      const response = { content, flags: MessageFlags.Ephemeral as const };
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp(response);
+      } else {
+        await interaction.reply(response);
+      }
+    } catch (error) {
+      // The generic handler would edit the public source message after deferUpdate.
+      console.warn(
+        `Failed to respond to leaderboard navigation code=${discordErrorCode(error) ?? "other"}`
+      );
+    }
+  }
+
+  private async clearObsoleteControls(
+    interaction: ChatInputCommandInteraction | ButtonInteraction
+  ): Promise<void> {
+    try {
+      await interaction.editReply({ components: [] });
+    } catch (error) {
+      if (!isUnknownMessage(error)) {
+        console.warn(
+          `Failed to clear obsolete leaderboard controls code=${discordErrorCode(error) ?? "other"}`
+        );
+      }
+    }
+  }
+
+  removeMessageSession(messageId: string): void {
+    for (const [key, session] of this.userStates) {
+      if (session.messageId === messageId) this.userStates.delete(key);
+    }
   }
 
   private getLeaderboardEntryString(
@@ -89,7 +197,7 @@ export default class LeaderboardsCommand implements Command {
     userId: string,
     seasonNumberArg?: number
   ) {
-    const season = seasonNumberArg
+    const season = seasonNumberArg !== undefined
       ? await prismaClient.season.findUnique({
           where: { number: seasonNumberArg },
         })
@@ -100,25 +208,65 @@ export default class LeaderboardsCommand implements Command {
       );
     const seasonNumber = seasonNumberArg ?? season.number;
 
-    const allStats = await prismaClient.playerStats.findMany({
-      where: { seasonId: season.id },
-      orderBy:
-        season.type !== SeasonType.RELAXED
-          ? { elo: "desc" }
-          : [{ wins: "desc" }, { biggestWinStreak: "desc" }],
-      include: {
-        player: { select: { latestIGN: true, discordSnowflake: true } },
-      },
-    });
-
-    const totalPlayers = allStats.length;
-    const totalPages = Math.ceil(totalPlayers / this.pageSize);
-    page = Math.max(0, Math.min(page, totalPages - 1));
-
-    const paginatedStats = allStats.slice(
-      page * this.pageSize,
-      (page + 1) * this.pageSize
-    );
+    const ranked = season.type !== SeasonType.RELAXED;
+    const where = { seasonId: season.id };
+    const orderBy: Prisma.PlayerStatsOrderByWithRelationInput[] = ranked
+      ? [{ elo: "desc" }, { id: "asc" }]
+      : [{ wins: "desc" }, { biggestWinStreak: "desc" }, { id: "asc" }];
+    // Read count, page and personal rank together rather than mixing snapshots
+    // during an Elo correction. Only ten player identities are loaded per page.
+    const { paginatedStats, totalPages, currentPlace } =
+      await prismaClient.$transaction(async (tx) => {
+        const totalPlayers = await tx.playerStats.count({ where });
+        const totalPages = Math.max(1, Math.ceil(totalPlayers / this.pageSize));
+        page = Math.max(0, Math.min(page, totalPages - 1));
+        const paginatedStats = await tx.playerStats.findMany({
+          where,
+          orderBy,
+          skip: page * this.pageSize,
+          take: this.pageSize,
+          select: {
+            elo: true,
+            wins: true,
+            losses: true,
+            winStreak: true,
+            loseStreak: true,
+            player: { select: { latestIGN: true, discordSnowflake: true } },
+          },
+        });
+        let currentPlace = -1;
+        if (ranked && totalPlayers > 0) {
+          const visible = paginatedStats.findIndex(
+            (stats) => stats.player?.discordSnowflake === userId
+          );
+          if (visible >= 0) {
+            currentPlace = page * this.pageSize + visible;
+          } else {
+            const player = await tx.player.findUnique({
+              where: { discordSnowflake: userId },
+              select: { id: true },
+            });
+            const own = player && (await tx.playerStats.findUnique({
+              where: {
+                playerId_seasonId: { playerId: player.id, seasonId: season.id },
+              },
+              select: { id: true, elo: true },
+            }));
+            if (own) {
+              currentPlace = await tx.playerStats.count({
+                where: {
+                  ...where,
+                  OR: [
+                    { elo: { gt: own.elo } },
+                    { elo: own.elo, id: { lt: own.id } },
+                  ],
+                },
+              });
+            }
+          }
+        }
+        return { paginatedStats, totalPages, currentPlace };
+      });
 
     const topTen = paginatedStats.map((stats, index) => ({
       rank: page * this.pageSize + index + 1,
@@ -127,14 +275,9 @@ export default class LeaderboardsCommand implements Command {
       wins: stats.wins,
       losses: stats.losses,
       winLossRatio: stats.losses > 0 ? stats.wins / stats.losses : stats.wins,
-      discordSnowflake: stats.player?.discordSnowflake ?? "N/A",
       winStreak: stats.winStreak,
       loseStreak: stats.loseStreak,
     }));
-
-    const currentPlace = allStats.findIndex(
-      (s) => s.player?.discordSnowflake === userId
-    );
 
     const embed = new EmbedBuilder()
       .setColor(season.type !== SeasonType.RELAXED ? "#FFD700" : "#57F287")
@@ -200,108 +343,187 @@ export default class LeaderboardsCommand implements Command {
   }
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    try {
-      const botCommandsChannelId = Channels.botCommands.id;
-      const userId = interaction.user.id;
-      const channelId = interaction.channelId;
-
-      const userState = this.getUserState(userId, channelId);
-      userState.currentPage = 0;
-
-      const seasonNumber =
-        interaction.options.getInteger("season") ?? undefined;
-      userState.currentPage = 0;
-      userState.seasonNumber = seasonNumber;
-
-      const { embed, totalPages } = await this.generateLeaderboardEmbed(
-        userState.currentPage,
-        userId,
-        seasonNumber
-      );
-      const buttons = this.generateButtons(userState.currentPage, totalPages);
-
-      const leaderboardMessage = await DiscordUtil.replyWithMessage(
-        interaction,
-        {
-          embeds: [embed],
-          components: [buttons],
-        }
-      );
-      userState.messageId = leaderboardMessage?.id;
-
-      if (interaction.channelId !== botCommandsChannelId && leaderboardMessage?.id) {
-        const messageId = leaderboardMessage.id;
-        setTimeout(
-          async () => {
-            try {
-              const channel = interaction.channel;
-              if (!channel || !("messages" in channel)) return;
-
-              const message = await channel.messages
-                .fetch(messageId)
-                .catch(() => null);
-              if (message) {
-                await message.delete();
-              }
-            } catch (error) {
-              console.error("Failed to delete leaderboards message:", error);
-            }
-          },
-          2 * 60 * 1000
-        );
-      }
-    } catch (error) {
-      console.error("Error fetching leaderboards:", error);
-      if (!interaction.replied && !interaction.deferred) {
-        const msg =
-          error instanceof Error && error.message
-            ? `❌ ${error.message}`
-            : "❌ An error occurred while fetching the leaderboards. Please try again later.";
-        await interaction.reply({ content: msg });
-      }
-    }
-  }
-
-  async handleButtonPress(interaction: ButtonInteraction): Promise<void> {
     const userId = interaction.user.id;
-    const channelId = interaction.channelId;
-    const userState = this.getUserState(userId, channelId);
-
-    if (
-      !userState.messageId ||
-      interaction.message.id !== userState.messageId
-    ) {
+    const key = `${userId}-${interaction.channelId}`;
+    const seasonNumber = interaction.options.getInteger("season") ?? undefined;
+    const session = this.startSession(key, seasonNumber);
+    if (!session) {
       await interaction.reply({
-        content: "❌ You didn't summon this leaderboard embed!",
+        content: "Leaderboards are busy. Please try again shortly.",
         flags: MessageFlags.Ephemeral,
       });
       return;
     }
+    try {
+      const response = await interaction.deferReply({ withResponse: true });
+      // Bind the deferred message before publishing controls, so a delete
+      // event arriving during the edit can invalidate this exact session.
+      session.messageId =
+        response.interaction.responseMessageId ??
+        response.resource?.message?.id ??
+        (await interaction.fetchReply()).id;
+      const { embed, page, totalPages } = await this.generateLeaderboardEmbed(
+        0,
+        userId,
+        seasonNumber
+      );
+      const publishControls = this.isCurrentSession(key, session);
+      const leaderboardMessage = await interaction.editReply({
+        embeds: [embed],
+        components: publishControls
+          ? [this.generateButtons(page, totalPages)]
+          : [],
+      });
+      if (this.refreshSession(key, session)) {
+        session.currentPage = page;
+        session.busy = false;
+      } else if (publishControls) {
+        await this.clearObsoleteControls(interaction);
+      }
 
-    if (interaction.customId === "leaderboard_next") {
-      userState.currentPage++;
-    } else if (interaction.customId === "leaderboard_prev") {
-      userState.currentPage = Math.max(0, userState.currentPage - 1);
+      if (interaction.channelId !== Channels.botCommands.id && leaderboardMessage.id) {
+        const messageId = leaderboardMessage.id;
+        const channel = interaction.channel;
+        const timer = setTimeout(async () => {
+          try {
+            if (!channel || !("messages" in channel)) return;
+            const message = await channel.messages.fetch(messageId);
+            if (message) await message.delete();
+            this.removeMessageSession(messageId);
+          } catch (error) {
+            if (isUnknownMessage(error)) this.removeMessageSession(messageId);
+            else console.error(
+              `Failed to delete leaderboard message code=${discordErrorCode(error) ?? "other"}`
+            );
+          }
+        }, 2 * 60_000);
+        timer.unref?.();
+      }
+    } catch (error) {
+      if (this.userStates.get(key) === session) this.userStates.delete(key);
+      console.error(`Error fetching leaderboards code=${discordErrorCode(error) ?? "other"}`);
+      if (isUnknownMessage(error)) return;
+      const content =
+        error instanceof Error &&
+        (error.message === "No active season found. Use /season start first." ||
+          error.message === `Season #${seasonNumber} not found. Is this an alternate timeline?`)
+          ? `❌ ${error.message}`
+          : "❌ An error occurred while fetching the leaderboards. Please try again later.";
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({ content, embeds: [], components: [] });
+      } else {
+        await interaction.reply({ content });
+      }
+    }
+  }
+
+  isOwnedNavigation(interaction: ButtonInteraction): boolean {
+    const session = this.userStates.get(
+      `${interaction.user.id}-${interaction.channelId}`
+    );
+    return (
+      this.buttonIds.includes(interaction.customId) &&
+      !!session &&
+      session.expiresAt > Date.now() &&
+      session.messageId === interaction.message.id
+    );
+  }
+
+  async handleButtonPress(interaction: ButtonInteraction): Promise<void> {
+    const userId = interaction.user.id;
+    const key = `${userId}-${interaction.channelId}`;
+    const session = this.userStates.get(key);
+    if (
+      !session ||
+      !this.isCurrentSession(key, session) ||
+      session.messageId !== interaction.message.id
+    ) {
+      await this.replyNavigation(
+        interaction,
+        "❌ This leaderboard is expired or belongs to someone else. Use /leaderboards to open yours."
+      );
+      return;
     }
 
-    try {
-      const { embed, totalPages } = await this.generateLeaderboardEmbed(
-        userState.currentPage,
-        userId,
-        userState.seasonNumber
+    const now = Date.now();
+    this.pruneNavigation(now);
+    const previous = this.navigationByUser.get(userId);
+    if (session.busy || previous?.busy) {
+      await this.replyNavigation(
+        interaction,
+        "Please wait for the current leaderboard update."
       );
+      return;
+    }
+    if (
+      !this.buttonIds.includes(interaction.customId) ||
+      (previous && now - previous.startedAt < NAVIGATION_INTERVAL_MS)
+    ) {
+      // Ignore rapid duplicate clicks without starting a query or showing a cooldown.
+      try {
+        await interaction.deferUpdate();
+      } catch (error) {
+        console.warn(
+          `Failed to acknowledge leaderboard navigation code=${discordErrorCode(error) ?? "other"}`
+        );
+      }
+      return;
+    }
 
-      await interaction.update({
+    // Keep the lock independent of session replacement or channel changes.
+    const navigation = { startedAt: now, busy: true };
+    this.navigationByUser.set(userId, navigation);
+    session.busy = true;
+    try {
+      await interaction.deferUpdate();
+      if (!this.isCurrentSession(key, session)) {
+        await this.replyNavigation(
+          interaction,
+          "This leaderboard is no longer active. Use /leaderboards to open yours."
+        );
+        return;
+      }
+      const requestedPage =
+        session.currentPage +
+        (interaction.customId === "leaderboard_next" ? 1 : -1);
+      const { embed, page, totalPages } = await this.generateLeaderboardEmbed(
+        requestedPage,
+        userId,
+        session.seasonNumber
+      );
+      if (!this.isCurrentSession(key, session)) {
+        await this.replyNavigation(
+          interaction,
+          "This leaderboard is no longer active. Use /leaderboards to open yours."
+        );
+        return;
+      }
+      await interaction.editReply({
         embeds: [embed],
-        components: [this.generateButtons(userState.currentPage, totalPages)],
+        components: [this.generateButtons(page, totalPages)],
       });
+      if (!this.refreshSession(key, session)) {
+        await this.clearObsoleteControls(interaction);
+        return;
+      }
+      session.currentPage = page;
     } catch (error) {
-      console.error("❌ Error updating leaderboard:", error);
-      const msg =
-        error instanceof Error && error.message
-          ? `❌ ${error.message}`
-          : "❌ Failed to update leaderboard.";
-      await interaction.reply({ content: msg });
+      console.error(
+        `Error updating leaderboard code=${discordErrorCode(error) ?? "other"}`
+      );
+      if (isUnknownMessage(error)) {
+        this.removeMessageSession(interaction.message.id);
+      }
+      await this.replyNavigation(
+        interaction,
+        "❌ Failed to update leaderboard. Please try again."
+      );
+    } finally {
+      session.busy = false;
+      navigation.busy = false;
+      if (Date.now() - navigation.startedAt >= NAVIGATION_INTERVAL_MS) {
+        this.navigationByUser.delete(userId);
+      }
     }
   }
 }

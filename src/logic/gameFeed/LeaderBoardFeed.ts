@@ -54,13 +54,16 @@ export class LeaderBoardFeed {
         where: { seasonId: season.id },
         orderBy:
           season.type !== SeasonType.RELAXED
-            ? { elo: "desc" }
-            : [{ wins: "desc" }, { biggestWinStreak: "desc" }],
+            ? [{ elo: "desc" }, { id: "asc" }]
+            : [{ wins: "desc" }, { biggestWinStreak: "desc" }, { id: "asc" }],
         take: 10,
-        include: {
-          player: {
-            select: { latestIGN: true },
-          },
+        select: {
+          elo: true,
+          wins: true,
+          losses: true,
+          winStreak: true,
+          loseStreak: true,
+          player: { select: { latestIGN: true } },
         },
       });
 

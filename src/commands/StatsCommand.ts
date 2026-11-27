@@ -172,7 +172,7 @@ export default class StatsCommand implements Command {
           prismaClient.gameParticipation.findFirst({
             where: { playerId: player.id, seasonId: season.id },
             orderBy: { game: { endTime: "desc" } },
-            include: { game: true },
+            select: { game: { select: { endTime: true } } },
           }),
         ]);
 

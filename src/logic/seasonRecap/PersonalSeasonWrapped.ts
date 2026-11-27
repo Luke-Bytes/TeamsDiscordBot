@@ -74,7 +74,10 @@ export async function generatePersonalSeasonWrapped(options: {
   seasonNumber: number;
   playerId: string;
 }): Promise<PersonalSeasonWrappedResult | null> {
-  const data = await loadSeasonRecapData(options.seasonNumber);
+  // Personal insights never use organiser or host names.
+  const data = await loadSeasonRecapData(options.seasonNumber, {
+    includeGameSupport: false,
+  });
   return generatePersonalSeasonWrappedFromData(data, options.playerId);
 }
 
@@ -92,7 +95,8 @@ export function generatePersonalSeasonWrappedFromData(
   const model = buildSeasonRecapModel(
     games,
     data.histories,
-    DEFAULT_SEASON_RECAP_THRESHOLDS
+    DEFAULT_SEASON_RECAP_THRESHOLDS,
+    playerId
   );
   const outcomes = model.outcomesByPlayer.get(playerId) ?? [];
   if (!outcomes.length) return null;
@@ -201,7 +205,7 @@ function buildRelationshipCards(context: WrappedContext): InsightCard[] {
     { players: [string, string, string]; games: number; wins: number }
   >();
 
-  for (const game of context.games) {
+  for (const game of context.personalGames) {
     const playerGp = game.gameParticipations.find(
       (gp) => gp.playerId === context.playerId
     );

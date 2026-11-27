@@ -952,8 +952,8 @@ export async function executeAiTool(
         where: { seasonId: season.id },
         take: (args.limit as number | undefined) ?? 10,
         orderBy: ranked
-          ? [{ elo: "desc" }]
-          : [{ wins: "desc" }, { biggestWinStreak: "desc" }],
+          ? [{ elo: "desc" }, { id: "asc" }]
+          : [{ wins: "desc" }, { biggestWinStreak: "desc" }, { id: "asc" }],
         select: {
           wins: true,
           losses: true,

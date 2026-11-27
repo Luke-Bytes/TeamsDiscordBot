@@ -9,7 +9,6 @@ import GameCommand from "../../src/commands/GameCommand";
 import AnnouncementCommand from "../../src/commands/AnnouncementCommand";
 import { GameInstance } from "../../src/database/GameInstance";
 import { Channels } from "../../src/Channels";
-import { DiscordUtil } from "../../src/util/DiscordUtil";
 import { PermissionsUtil } from "../../src/util/PermissionsUtil";
 import { prismaClient } from "../../src/database/prismaClient";
 import { TempVoiceChannelManager } from "../../src/logic/TempVoiceChannelManager";
@@ -210,15 +209,13 @@ test("stopping a game feed while an embed is pending prevents stale publication"
 
 test("old leaderboard cleanup deletes only its captured message ID", async () => {
   const command = new LeaderboardsCommand() as any;
-  command.generateLeaderboardEmbed = async () => ({ embed: new EmbedBuilder(), totalPages: 1 });
-  const oldReply = DiscordUtil.replyWithMessage;
+  command.generateLeaderboardEmbed = async () => ({ embed: new EmbedBuilder(), page: 0, totalPages: 1 });
   const oldBotChannel = Channels.botCommands;
   const oldTimeout = global.setTimeout;
   const callbacks: Array<() => Promise<void>> = [];
   const fetched: string[] = [];
   const deleted: string[] = [];
   let replyNumber = 0;
-  (DiscordUtil as any).replyWithMessage = async () => ({ id: `leader-${++replyNumber}` });
   (Channels as any).botCommands = { id: "bot-commands" };
   (global as any).setTimeout = (callback: () => Promise<void>) => {
     callbacks.push(callback);
@@ -232,17 +229,31 @@ test("old leaderboard cleanup deletes only its captured message ID", async () =>
   };
   try {
     const options = { channelId: "general", channel };
-    await command.execute(createChatInputInteraction("reader", options));
-    await command.execute(createChatInputInteraction("reader", options));
+    for (let i = 0; i < 2; i++) {
+      const interaction = createChatInputInteraction("reader", options);
+      const id = `leader-${++replyNumber}`;
+      (interaction as any).deferReply = async () => {
+        interaction.deferred = true;
+        return { interaction: { responseMessageId: id } };
+      };
+      (interaction as any).editReply = async () => ({ id });
+      await command.execute(interaction);
+    }
     await callbacks[0]();
+    assertEqual(command.userStates.size, 1, "Old timer cannot remove the replacement session");
     assertEqual(fetched.join(","), "leader-1", "Old timer fetches old message");
     assertEqual(deleted.join(","), "leader-1", "New leaderboard is untouched");
+    const originalFetch = channel.messages.fetch;
+    channel.messages.fetch = async () => { throw new Error("Temporary Discord failure"); };
     await callbacks[1]();
+    assertEqual(command.userStates.size, 1, "Uncertain deletion must not invalidate live controls");
+    channel.messages.fetch = originalFetch;
+    await callbacks[1]();
+    assertEqual(command.userStates.size, 0, "Deleted message releases its session");
     assertEqual(deleted.join(","), "leader-1,leader-2", "New timer targets only new leaderboard");
     channel.messages.fetch = async () => null;
     await callbacks[0](); // Already deleted must be harmless.
   } finally {
-    (DiscordUtil as any).replyWithMessage = oldReply;
     (Channels as any).botCommands = oldBotChannel;
     (global as any).setTimeout = oldTimeout;
   }

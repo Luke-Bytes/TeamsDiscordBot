@@ -238,8 +238,14 @@ export class CommandHandler {
           interaction.isStringSelectMenu() ||
           interaction.isModalSubmit()) &&
         interaction.customId.startsWith("sign_");
+      // Valid leaderboard navigation has its own short, session-bound
+      // throttle. Keep the generic limiter for slash commands and stale/foreign buttons.
+      const leaderboardNavigation =
+        interaction.isButton() &&
+        this.leaderboardsCommand.isOwnedNavigation(interaction);
       if (
         !signComponent &&
+        !leaderboardNavigation &&
         !(await this.interactionGuard.checkRateLimit(interaction))
       ) {
         return;

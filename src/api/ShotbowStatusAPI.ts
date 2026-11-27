@@ -54,26 +54,17 @@ function parsePopulation(payload: unknown): ShotbowPopulation | undefined {
   return { total: root.all, modes };
 }
 
-function parseStatus(payload: unknown, httpStatus: number): PingStatus {
+function parseStatus(payload: unknown): PingStatus {
   const root = record(payload);
-  if (httpStatus === 200 && root?.success === true) {
-    const players = record(record(root.data)?.players);
+  if (root?.online === true) {
+    const players = record(root.players);
     if (count(players?.online) && count(players?.max)) {
       return { kind: "online", online: players.online, max: players.max };
     }
   }
-
-  // The documented error envelope is generic. Only an explicit statement
-  // about the Minecraft server itself is evidence of an unsuccessful ping.
-  // Never interpret authentication, gateway or other provider errors as offline.
-  if (
-    [200, 400, 404, 422].includes(httpStatus) &&
-    root?.success === false &&
-    typeof root.message === "string" &&
-    /^(?:the )?(?:minecraft )?server is (?:offline|unreachable)[.!]?$/i.test(
-      root.message.trim()
-    )
-  ) {
+  // Only a successful provider response explicitly reporting a failed ping
+  // is evidence of address unreachability, not an HTTP error from the API.
+  if (root?.online === false && root.eula_blocked === false) {
     return { kind: "offline" };
   }
   return UNAVAILABLE;
@@ -92,8 +83,6 @@ export class ShotbowStatusAPI {
   constructor(
     private readonly fetcher: typeof fetch = (...args) => fetch(...args),
     private readonly now: () => number = Date.now,
-    private readonly token: () => string | undefined = () =>
-      process.env.CRAFTY_API_TOKEN,
     private readonly timeoutMs = 5_000,
     private readonly warn: (message: string) => void = (message) =>
       console.warn(message)
@@ -159,10 +148,14 @@ export class ShotbowStatusAPI {
   }
 
   private logFailure(
-    source: "shotbow-population" | "crafty-ping",
+    source: "shotbow-population" | "mcstatus-ping",
     reason: string
   ): void {
-    this.warn(`event=shotbow.check source=${source} ${reason}`);
+    try {
+      this.warn(`event=shotbow.check source=${source} ${reason}`);
+    } catch {
+      // Diagnostics must not invalidate an independent provider result.
+    }
   }
 
   private async requestPopulation(): Promise<ShotbowPopulation | undefined> {
@@ -214,51 +207,47 @@ export class ShotbowStatusAPI {
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     let response: Response | undefined;
     try {
-      const url = new URL("https://api.crafty.gg/api/v2/servers/ping");
-      url.searchParams.set("ip", SHOTBOW_ADDRESS);
-      url.searchParams.set("edition", "java");
-      const token = this.token()?.trim();
+      const url = new URL(
+        `https://api.mcstatus.io/v2/status/java/${SHOTBOW_ADDRESS}`
+      );
       response = await this.fetcher(url, {
         method: "GET",
         redirect: "error",
         signal: controller.signal,
-        headers: {
-          Accept: "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { Accept: "application/json" },
       });
       if (response.status === 429 || response.status === 503) {
         this.blockedUntil =
           this.now() +
           retryDelay(response.headers.get("retry-after"), this.now(), CACHE_MS);
         this.logFailure(
-          "crafty-ping",
+          "mcstatus-ping",
           `reason=http-error status=${response.status}`
         );
         return UNAVAILABLE;
       }
-      if (![200, 400, 404, 422].includes(response.status)) {
+      if (response.status !== 200) {
         this.logFailure(
-          "crafty-ping",
+          "mcstatus-ping",
           `reason=http-error status=${response.status}`
         );
         return UNAVAILABLE;
       }
-      const ping = parseStatus(await readJSON(response), response.status);
+      const ping = parseStatus(await readJSON(response));
       if (ping.kind !== "online") {
         const reason =
           ping.kind === "offline"
             ? "address-unreachable"
             : "unconfirmed-response";
         this.logFailure(
-          "crafty-ping",
+          "mcstatus-ping",
           `reason=${reason} status=${response.status}`
         );
       }
       return ping;
     } catch (error) {
       this.logFailure(
-        "crafty-ping",
+        "mcstatus-ping",
         requestFailure(error, controller.signal.aborted, !!response)
       );
       return UNAVAILABLE;

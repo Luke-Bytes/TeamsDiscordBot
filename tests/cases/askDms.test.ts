@@ -84,15 +84,16 @@ function mockDm(
   };
 }
 
-test("DM /ask uses its configured guild and logs only the sanitised delivered answer", async () => {
+test("DM /ask uses its configured guild even in dev mode and logs only the sanitised delivered answer", async () => {
   const mock = mockDm();
   const oldFetch = globalThis.fetch;
   const oldInfo = console.info;
   const previousKey = process.env.MC_AI_GROQ_KEY;
   const previousDirectory = process.env.CREDENTIALS_DIRECTORY;
   const dev = ConfigManager.getConfig().dev;
-  const previousDevEnabled = dev.enabled;
-  dev.enabled = false;
+  const previousDev = { ...dev };
+  dev.enabled = true;
+  dev.guildId = "another-guild";
   const logs: string[] = [];
   const requests: any[] = [];
   try {
@@ -171,7 +172,7 @@ test("DM /ask uses its configured guild and logs only the sanitised delivered an
       "No raw question, secret or multiline log injection"
     );
   } finally {
-    dev.enabled = previousDevEnabled;
+    Object.assign(dev, previousDev);
     globalThis.fetch = oldFetch;
     console.info = oldInfo;
     if (previousKey === undefined) delete process.env.MC_AI_GROQ_KEY;
@@ -276,22 +277,7 @@ test("DM /ask denies non-members and missing configured channels without provide
   }
 });
 
-test("DM /ask respects the dev-guild restriction and remains disabled when AI is off", async () => {
-  const conf = ConfigManager.getConfig();
-  const original = { ...conf.dev };
-  try {
-    conf.dev.enabled = true;
-    conf.dev.guildId = "another-guild";
-    const denied = mockDm();
-    await new AskCommand(settings).execute(denied.interaction as any);
-    assert(
-      denied.replies[0]?.content?.includes("verified server members") &&
-        denied.membershipChecks() === 0,
-      "Dev-only guild isolation also applies to DMs"
-    );
-  } finally {
-    Object.assign(conf.dev, original);
-  }
+test("DM /ask remains disabled when AI is off", async () => {
   const disabled = mockDm();
   await new AskCommand({ ...settings, enabled: false }).execute(
     disabled.interaction as any

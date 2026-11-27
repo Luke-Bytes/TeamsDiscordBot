@@ -95,6 +95,7 @@ function stubPrismaAndMojang() {
   (prismaClient as any).playerPunishment = {
     findFirst: async () => null,
     findMany: async () => [],
+    updateMany: async () => ({ count: 0 }),
     update: async () => {},
   };
   (prismaClient as any).season = {
@@ -205,37 +206,7 @@ async function runOneGame(params: {
   assert(game.announced === true, "announcement should be confirmed");
   assert(!!game.mapVoteManager, "map vote manager should be created");
 
-  const origAdd = (game as any).addPlayerByDiscordId;
-  (game as any).addPlayerByDiscordId = async (
-    discordSnowflake: string,
-    ign: string
-  ) => {
-    let rec = await (prismaClient as any).player.byDiscordSnowflake(
-      discordSnowflake
-    );
-    if (!rec) {
-      rec = await (prismaClient as any).player.create({
-        data: { discordSnowflake, latestIGN: ign },
-      });
-    }
-    rec.latestIGN = ign;
-    const player = {
-      discordSnowflake,
-      ignUsed: ign,
-      elo: 1000,
-      captain: false,
-      playerId: rec.id,
-      wins: 0,
-      losses: 0,
-      winStreak: 0,
-      loseStreak: 0,
-      biggestWinStreak: 0,
-      biggestLosingStreak: 0,
-    };
-    game.teams.UNDECIDED.push(player as any);
-    return { error: false, playerInstance: player } as const;
-  };
-
+  // Exercise real registration for both games, including returning players.
   const register = new RegisterCommand(new TeamCommand());
   for (let i = 0; i < players.length; i++) {
     const user = players[i];
@@ -405,8 +376,6 @@ async function runOneGame(params: {
     })
   );
 
-  // Restore overridden method
-  (game as any).addPlayerByDiscordId = origAdd;
 }
 
 fastTest(
@@ -431,6 +400,8 @@ fastTest(
     const origBatchMove = (DiscordUtil as any).batchMoveMembersToChannel;
     const origDisplayName = PrismaUtils.getDisplayNameWithTitle;
     const origAfterGameSaved = SeasonService.afterGameSaved;
+    const origProfileLookup = prismaClient.profile.findUnique;
+    (prismaClient.profile as any).findUnique = async () => null;
 
     (DiscordUtil as any).sendMessage = async (_ch: any, content: any) => {
       sent.push(content);
@@ -460,6 +431,7 @@ fastTest(
       }),
       messages: {
         fetch: async () => null,
+        edit: async () => {},
       },
     });
 
@@ -480,6 +452,7 @@ fastTest(
       }),
       messages: {
         fetch: async () => null,
+        edit: async () => {},
       },
     } as any;
 
@@ -638,5 +611,6 @@ fastTest(
     (DiscordUtil as any).batchMoveMembersToChannel = origBatchMove;
     PrismaUtils.getDisplayNameWithTitle = origDisplayName;
     SeasonService.afterGameSaved = origAfterGameSaved;
+    prismaClient.profile.findUnique = origProfileLookup;
   }
 );

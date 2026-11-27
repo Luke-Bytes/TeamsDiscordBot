@@ -1,4 +1,7 @@
+import "./framework/offlineEnvironment";
 import "./cases/eventRegression.test";
+import "./cases/eventReconciliation.test";
+import "./cases/eventPolicyValidation.test";
 import "./cases/eventPresentation.test";
 import "./cases/eventQuestionReopen.test";
 import "./cases/signVisibility.test";
@@ -64,6 +67,7 @@ import "./critical/mvpCritical.test";
 import "./critical/classbanCritical.test";
 import "./critical/captainNominateCritical.test";
 import "./critical/registerCritical.test";
+import "./critical/registrationOptimisations.test";
 import "./critical/resetFlowCritical.test";
 import "./critical/gameLifecycleTransitions.test";
 import "./critical/gameStartGuard.test";
@@ -100,16 +104,14 @@ import "./critical/activeGameRecovery.test";
 import "./critical/discordGameRecovery.test";
 import "./critical/activeGameRecoveryProcesses.test";
 import "./critical/targetedReliability.test";
+import "./critical/leaderboardMemory.test";
+import "./leaderboard-interaction-review-temporary-20261127";
 import "./critical/operationsImprovements.test";
+import "./critical/quickWinOptimisations.test";
+import "./critical/testRunnerIntegrity.test";
+import "./lifecycle-feed-review-temporary-20261127";
+import "./cross-system-release-review-20261127-local";
 import "./critical/singleUseOperations.test";
 import { runAll } from "./framework/test";
 
-// Offline reliability suite: any test needing an HTTP response must explicitly
-// supply its own deterministic fetch fake. Never fall through to a live API.
-const previousFetch = globalThis.fetch;
-globalThis.fetch = (async () => {
-  throw new Error("Unmocked network fetch in offline test suite");
-}) as typeof fetch;
-void runAll().finally(() => {
-  globalThis.fetch = previousFetch;
-});
+void runAll();

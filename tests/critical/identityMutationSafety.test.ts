@@ -20,10 +20,13 @@ function identityFixture() {
     updateMany: player.updateMany,
   };
   (PermissionsUtil as any).isUserAuthorised = async () => true;
-  (MojangAPI as any).lookupUsername = async (name: string) => ({
-    status: "found",
-    uuid: name === "OldName" ? "old-uuid" : "new-uuid",
-  });
+  (MojangAPI as any).lookupUsername = async (name: string, fresh: boolean) => {
+    assert(fresh === true, "Persistent account changes must bypass cached and pending name lookups");
+    return {
+      status: "found",
+      uuid: name === "OldName" ? "old-uuid" : "new-uuid",
+    };
+  };
   let primary = "old-uuid";
   let username = "OldName";
   let updates = 0;
@@ -35,7 +38,7 @@ function identityFixture() {
     return { count: 0 };
   };
   player.findFirst = async ({ where }: any) =>
-    where.primaryMinecraftAccount === primary && primary === "old-uuid"
+    where.primaryMinecraftAccount?.equals === primary && primary === "old-uuid"
       ? {
           id: "owner-1",
           discordSnowflake: "owner-discord",

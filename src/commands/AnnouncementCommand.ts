@@ -556,14 +556,24 @@ export default class AnnouncementCommand implements Command {
     }
     const blocked = MatchRecoveryGate.getBlockReason();
     if (blocked) throw new Error(`Cannot announce a new match: ${blocked}`);
-    const embed = this.createGameAnnouncementEmbed(false).embeds?.[0];
     if (!Channels.announcements?.isSendable()) {
       throw new Error(
         "Announcement channel is not available for sending messages."
       );
     }
 
-    GameInstance.getInstance().beginConfirmedAnnouncement();
+    const game = GameInstance.getInstance();
+    const token = game.getLifecycleToken();
+    const embed = await SeasonService.withGameAdmission((season) => {
+      if (game.getLifecycleToken() !== token || game.announced)
+        throw new Error("The announcement changed while waiting for the season.");
+      const relaxed = season.type === SeasonType.RELAXED;
+      if (game.isRelaxedSeason !== relaxed)
+        throw new Error("The season rating rules changed. Cancel and recreate the announcement preview before confirming.");
+      const currentEmbed = this.createGameAnnouncementEmbed(false).embeds?.[0];
+      game.beginConfirmedAnnouncement();
+      return currentEmbed;
+    });
     const announcedAt = Date.now();
     const lifecycle = GameInstance.getInstance().getLifecycleToken();
     console.info(`event=game.announcement game=${lifecycle} outcome=started`);
@@ -662,7 +672,9 @@ export default class AnnouncementCommand implements Command {
       await interaction.editReply(
         GameInstance.getInstance().announced
           ? "Announcement may be partially published. Inspect the current game and bot logs before attempting any further action; do not retry the same confirmation."
-          : "Could not send the announcement. No permission changes were made; check the bot logs."
+          : error instanceof Error && error.message === "The season rating rules changed. Cancel and recreate the announcement preview before confirming."
+            ? error.message
+            : "Could not send the announcement. No permission changes were made; check the bot logs."
       );
     }
   }

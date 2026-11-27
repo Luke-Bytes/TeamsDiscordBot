@@ -27,6 +27,7 @@ export class AiAdmission {
   private used = 0;
   private readonly lastByUser = new Map<string, number>();
   private readonly recentByUser = new Map<string, number[]>();
+  private nextCleanupAt = -Infinity;
 
   constructor(
     private readonly dailyLimit: number,
@@ -35,6 +36,18 @@ export class AiAdmission {
 
   tryAcquire(userId: string, guildId: string): AiAdmissionResult {
     const now = this.now();
+    // Sweep at most once per rolling window, including on denied requests.
+    // The last accepted request is sufficient to prove the entire history
+    // has expired. Active users and daily counters are deliberately untouched.
+    if (now >= this.nextCleanupAt) {
+      this.nextCleanupAt = now + AI_USER_MINUTE_WINDOW_MS;
+      for (const [id, last] of this.lastByUser) {
+        if (now - last >= AI_USER_MINUTE_WINDOW_MS) {
+          this.lastByUser.delete(id);
+          this.recentByUser.delete(id);
+        }
+      }
+    }
     const day = new Date(now).toISOString().slice(0, 10);
     if (this.day !== day) {
       this.day = day;

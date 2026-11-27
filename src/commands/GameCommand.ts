@@ -99,7 +99,7 @@ export default class GameCommand implements Command {
     .addSubcommand((sub) =>
       sub
         .setName("request")
-        .setDescription("Create a special game request template")
+        .setDescription("Generate a formatted game request to send to Shotbow hosts")
         .addStringOption((option) =>
           option
             .setName("time")

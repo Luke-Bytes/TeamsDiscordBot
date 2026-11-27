@@ -16,7 +16,59 @@ import { PrismaUtils } from "../../src/util/PrismaUtils";
 const mockUUID = (name: string) =>
   Buffer.from(name).toString("hex").padEnd(32, "0").slice(0, 32);
 
-test("Register blocks non-organiser from registering others and blocks duplicates", async () => {
+// Keep these legacy registration fixtures self-contained; the new identity and
+// nickname reads must not depend on a previous test leaving mocks installed.
+function registrationTest(name: string, run: () => Promise<void>) {
+  test(name, async () => {
+    const db = prismaClient as any;
+    const game = CurrentGameManager.getCurrentGame();
+    const original = {
+      byDiscord: db.player.byDiscordSnowflake,
+      create: db.player.create,
+      update: db.player.update,
+      profile: db.profile.findUnique,
+      season: db.season,
+      stats: db.playerStats,
+      punishments: db.playerPunishment,
+      name: MojangAPI.usernameToUUID,
+      uuid: MojangAPI.uuidToUsername,
+      team: TeamCommand.instance,
+    };
+    try {
+      db.profile.findUnique = async () => null;
+      db.season = {
+        findFirst: async () => ({ id: "S1", number: 1, isActive: true }),
+        findUnique: async () => ({ id: "S1", number: 1, isActive: true }),
+      };
+      db.playerStats = {
+        findUnique: async () => ({ seasonId: "S1", elo: 1000 }),
+        create: async ({ data }: any) => ({ ...data }),
+      };
+      db.playerPunishment = {
+        findMany: async () => [],
+        updateMany: async () => ({ count: 0 }),
+        findFirst: async () => null,
+        update: async () => {},
+      };
+      MojangAPI.uuidToUsername = async () => null;
+      await run();
+    } finally {
+      game.reset();
+      TeamCommand.instance = original.team;
+      db.player.byDiscordSnowflake = original.byDiscord;
+      db.player.create = original.create;
+      db.player.update = original.update;
+      db.profile.findUnique = original.profile;
+      db.season = original.season;
+      db.playerStats = original.stats;
+      db.playerPunishment = original.punishments;
+      MojangAPI.usernameToUUID = original.name;
+      MojangAPI.uuidToUsername = original.uuid;
+    }
+  });
+}
+
+registrationTest("Register blocks non-organiser from registering others and blocks duplicates", async () => {
   const teamCmd = new TeamCommand();
   const cmd = new RegisterCommand(teamCmd);
   const game = CurrentGameManager.getCurrentGame();
@@ -30,6 +82,11 @@ test("Register blocks non-organiser from registering others and blocks duplicate
   const idToPlayer = new Map<string, any>();
   (prismaClient as any).player.byDiscordSnowflake = async (id: string) =>
     idToPlayer.get(id) || null;
+  (prismaClient as any).player.update = async ({ where, data }: any) => {
+    const rec = [...idToPlayer.values()].find((record) => record.id === where.id);
+    if (!rec) throw new Error("Missing player");
+    return Object.assign(rec, data);
+  };
   (prismaClient as any).player.create = async ({ data }: any) => {
     const rec = {
       id: `db-${data.discordSnowflake}`,
@@ -51,6 +108,7 @@ test("Register blocks non-organiser from registering others and blocks duplicate
   };
   (prismaClient as any).playerPunishment = {
     findMany: async () => [],
+    updateMany: async () => ({ count: 0 }),
     findFirst: async () => null,
     update: async () => {},
   };
@@ -82,12 +140,7 @@ test("Register blocks non-organiser from registering others and blocks duplicate
     strings: { ingamename: "PlayerY" },
   });
   await cmd.execute(i);
-  // Add in-memory to game
-  (game as any).teams.UNDECIDED.push({
-    discordSnowflake: "U3",
-    ignUsed: "PlayerY",
-    primaryMinecraftAccount: mockUUID("PlayerY"),
-  });
+  assert(game.getPlayers().some((player) => player.discordSnowflake === "U3"), "Initial registration actually succeeds");
   i = createChatInputInteraction("U3", {
     guild,
     channelId: cfg.channels.registration,
@@ -101,7 +154,7 @@ test("Register blocks non-organiser from registering others and blocks duplicate
   );
 });
 
-test("Register late signups message when teams decided", async () => {
+registrationTest("Register late signups message when teams decided", async () => {
   const teamCmd = new TeamCommand();
   const cmd = new RegisterCommand(teamCmd);
   const game = CurrentGameManager.getCurrentGame();
@@ -115,13 +168,18 @@ test("Register late signups message when teams decided", async () => {
   await org.roles.add(cfg.roles.organiserRole);
   (MojangAPI as any).usernameToUUID = async (name: string) => mockUUID(name);
   (prismaClient as any).player.byDiscordSnowflake = async () => null;
-  (prismaClient as any).player.create = async ({ data }: any) => ({
+  let created: any;
+  (prismaClient as any).player.create = async ({ data }: any) => (created = {
     id: `db-${data.discordSnowflake}`,
     discordSnowflake: data.discordSnowflake,
     minecraftAccounts: [],
     latestIGN: data.latestIGN ?? null,
     primaryMinecraftAccount: null,
   });
+  (prismaClient as any).player.update = async ({ where, data }: any) => {
+    if (!created || created.id !== where.id) throw new Error("Missing player");
+    return Object.assign(created, data);
+  };
   (prismaClient as any).season = {
     findFirst: async () => ({ id: "S1", number: 1, isActive: true }),
     findUnique: async () => ({ id: "S1", number: 1, isActive: true }),
@@ -132,6 +190,7 @@ test("Register late signups message when teams decided", async () => {
   };
   (prismaClient as any).playerPunishment = {
     findMany: async () => [],
+    updateMany: async () => ({ count: 0 }),
     findFirst: async () => null,
     update: async () => {},
   };
@@ -143,10 +202,10 @@ test("Register late signups message when teams decided", async () => {
   });
   await cmd.execute(i);
   const edit = i.replies.find((r) => r.type === "editReply");
-  assert(!!edit, "Shows a late signup message when teams decided");
+  assert(!!edit && /successfully registered/i.test(String(edit.payload?.content)), "Shows a successful late signup when teams decided");
 });
 
-test("Register stays open during game start, play and after finish without joining a team", async () => {
+registrationTest("Register stays open during game start, play and after finish without joining a team", async () => {
   const game = CurrentGameManager.getCurrentGame();
   const cmd = new RegisterCommand(new TeamCommand());
   const cfg = ConfigManager.getConfig();
@@ -210,7 +269,7 @@ test("Register stays open during game start, play and after finish without joini
   }
 });
 
-test("Register nudges when IGN provided but already known", async () => {
+registrationTest("Register nudges when IGN provided but already known", async () => {
   const teamCmd = new TeamCommand();
   const cmd = new RegisterCommand(teamCmd);
   const game = CurrentGameManager.getCurrentGame();
@@ -231,6 +290,7 @@ test("Register nudges when IGN provided but already known", async () => {
   });
   (prismaClient as any).playerPunishment = {
     findMany: async () => [],
+    updateMany: async () => ({ count: 0 }),
     findFirst: async () => null,
     update: async () => {},
   };
@@ -249,7 +309,7 @@ test("Register nudges when IGN provided but already known", async () => {
   );
 });
 
-test("Register syncs the verified IGN unless the player opts out or Discord blocks it", async () => {
+registrationTest("Register syncs the verified IGN unless the player opts out or Discord blocks it", async () => {
   const game = CurrentGameManager.getCurrentGame();
   const originalAdd = game.addPlayerByDiscordId;
   const originalLookup = (prismaClient as any).player.byDiscordSnowflake;
@@ -332,6 +392,12 @@ test("Register syncs the verified IGN unless the player opts out or Discord bloc
       const target = guild.addMember(new FakeGuildMember(userId));
       target.nickname = "OldNick";
       target.manageable = !scenario.blocked;
+      if (scenario.blocked) {
+        await target.roles.add(cfg.roles.organiserRole);
+        target.setNickname = async () => {
+          throw new Error("Unmanageable member must not receive a nickname update");
+        };
+      }
       if (scenario.name === "api-failure") {
         target.setNickname = async () => {
           throw new Error("Missing Permissions");
@@ -403,14 +469,11 @@ test("Register syncs the verified IGN unless the player opts out or Discord bloc
             : "VerifiedIGN"),
         `${scenario.name}: automatic nickname obeys preference and permissions`
       );
-      if (scenario.blocked || scenario.name === "api-failure") {
-        assert(
-          /nickname could not be updated/i.test(
-            String(reply?.payload?.content)
-          ),
-          "Nickname permission failure is reported without undoing registration"
-        );
-      }
+      assert(
+        /nickname could not be updated/i.test(String(reply?.payload?.content)) ===
+          (scenario.name === "api-failure"),
+        `${scenario.name}: only unexpected nickname failures produce a warning`
+      );
     }
   } finally {
     (game as any).addPlayerByDiscordId = originalAdd;

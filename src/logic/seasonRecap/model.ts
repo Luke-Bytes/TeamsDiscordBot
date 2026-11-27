@@ -10,7 +10,9 @@ import {
 export function buildSeasonRecapModel(
   games: SeasonRecapGame[],
   histories: SeasonRecapEloHistory[],
-  thresholds: SeasonRecapThresholds
+  thresholds: SeasonRecapThresholds,
+  // Wrapped needs every player's Elo transitions, but only its own outcomes.
+  outcomePlayerId?: string
 ): SeasonRecapModel {
   const historyByGamePlayer = new Map<string, SeasonRecapEloHistory>();
   for (const h of histories) {
@@ -58,6 +60,9 @@ export function buildSeasonRecapModel(
     for (const gp of game.gameParticipations) {
       const post = historyByGamePlayer.get(`${game.id}:${gp.playerId}`);
       if (post) lastEloByPlayer.set(gp.playerId, post.elo);
+      if (outcomePlayerId !== undefined && gp.playerId !== outcomePlayerId) {
+        continue;
+      }
 
       const outcomes = outcomesByPlayer.get(gp.playerId) ?? [];
       outcomes.push({

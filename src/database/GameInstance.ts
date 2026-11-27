@@ -13,6 +13,8 @@ import {
 } from "discord.js";
 import { PlayerInstance } from "./PlayerInstance";
 import { MapVoteManager } from "../logic/MapVoteManager";
+import { RegistrationIdentity } from "./RegistrationIdentity";
+import { SeasonService } from "./SeasonService";
 import { MojangAPI } from "../api/MojangAPI";
 import { fetchGuildMember } from "../util/DiscordFailures";
 import { MinerushVoteManager } from "../logic/MinerushVoteManager";
@@ -267,6 +269,7 @@ export class GameInstance {
   }
 
   public beginConfirmedAnnouncement(): void {
+    SeasonService.assertGameAdmission();
     const blocked = MatchRecoveryGate.getBlockReason() ?? GameRecoveryCoordinator.getBlockReason();
     if (blocked) {
       throw new Error(`Cannot begin announcement while recovery is unresolved: ${blocked}`);
@@ -454,103 +457,150 @@ export class GameInstance {
   public async addPlayerByDiscordId(
     discordSnowflake: Snowflake,
     ignUsed: string,
-    uuid?: string
+    prepared?: RegistrationIdentity
   ) {
     const token = this.getLifecycleToken();
     if (this.getPlayers().some((p) => p.discordSnowflake === discordSnowflake)) {
       return { error: "This player is already registered." } as const;
     }
-    // Read any existing profile without creating one. Unavailable identity
-    // providers must not create empty player/stats records.
-    const existing = await prismaClient.player.byDiscordSnowflake(discordSnowflake);
-    if (!uuid) {
-      if (
-        existing?.primaryMinecraftAccount &&
-        (ignUsed === "" ||
-          ignUsed.toLowerCase() === existing.latestIGN?.toLowerCase() ||
-          existing.minecraftAccounts.some((name) => name.toLowerCase() === ignUsed.toLowerCase()))
-      ) {
-        uuid = existing.primaryMinecraftAccount;
-      } else if (MojangAPI.validateUsername(ignUsed)) {
-        uuid = (await MojangAPI.usernameToUUID(ignUsed)) ?? undefined;
-      }
+    if (prepared === undefined) {
+      // Internal callers without prepared evidence must resolve identity before
+      // creating any profile or statistics.
+      const existing = await prismaClient.player.byDiscordSnowflake(discordSnowflake);
+      const result = await RegistrationIdentity.prepare(discordSnowflake, token, existing, ignUsed, true);
+      if ("error" in result) return { error: result.error } as const;
+      prepared = result.identity;
     }
-
-    if (!MojangAPI.validUUID(uuid)) {
-      return {
-        error: "Unable to verify this Minecraft account. Please retry when the identity service is available.",
-      } as const;
+    if (!(prepared instanceof RegistrationIdentity) ||
+        prepared.discordSnowflake !== discordSnowflake || prepared.gameToken !== token) {
+      return { error: "The registration identity or announced game changed. Please register again." } as const;
     }
-
-    const resolvedIgn = await MojangAPI.uuidToUsername(uuid);
-    const ign = resolvedIgn ?? (MojangAPI.validateUsername(ignUsed) ? ignUsed : existing?.latestIGN);
-    if (!ign || !MojangAPI.validateUsername(ign)) {
-      return { error: "Unable to verify a Minecraft username for this account." } as const;
-    }
-
+    const { uuid, expectedPrimary, expectedIGN, expectedAccounts, playerId } = prepared;
     if (this.getLifecycleToken() !== token || this.isRestarting)
       return { error: "The announced game changed. Please register again." } as const;
 
     // An overlapping registration may have completed during the awaits above.
     if (this.getPlayers().some((p) => p.discordSnowflake === discordSnowflake ||
-        p.primaryMinecraftAccount === uuid)) {
+        p.primaryMinecraftAccount?.toLowerCase() === uuid.toLowerCase())) {
       return { error: "This player or Minecraft account is already registered." } as const;
     }
 
-    const player = await PlayerInstance.byDiscordSnowflake(discordSnowflake);
-    if (uuid && !player.primaryMinecraftAccount) {
-      await prismaClient.player.update({
-        where: { id: player.playerId },
-        data: { primaryMinecraftAccount: uuid },
-      });
-      player.primaryMinecraftAccount = uuid;
-    }
-
-    if (ign && !player.minecraftAccounts.includes(ign)) {
-      const result = await prismaClient.player.update({
-        where: { id: player.playerId },
-        data: {
-          minecraftAccounts: {
-            push: ign,
-          },
-        },
-      });
-
-      if (!result) {
-        console.error(
-          `Failed to register IGN for discord user ${discordSnowflake} with IGN ${ign}.`
-        );
-        return {
-          error: "Something went wrong while adding the IGN! Is it valid?",
-        } as const;
-      }
-
-      player.minecraftAccounts.push(ign);
-    }
-
-    if (ign) {
-      await prismaClient.player.update({
-        where: { id: player.playerId },
-        data: { latestIGN: ign },
-      });
-      player.ignUsed = ign;
-    }
-
-    // Never commit a pending registration into a replacement game.
+    // Refresh the profile after acquiring the roster lock. A database snapshot
+    // cannot detect a Minecraft rename while preparation was awaiting Discord.
+    const resolved = await MojangAPI.uuidToUsername(uuid, true);
+    const ign = resolved ?? prepared.ign;
     if (this.getLifecycleToken() !== token || this.isRestarting)
       return { error: "The announced game changed. Please register again." } as const;
-    // Check again after database writes in case an overlapping call succeeded.
-    if (this.getPlayers().some((p) => p.discordSnowflake === discordSnowflake ||
-        p.primaryMinecraftAccount === uuid)) {
-      return { error: "This player is already registered." } as const;
+    // A new account must not be linked to a UUID whose current name now
+    // contradicts the forward lookup. Existing UUID associations remain stable.
+    if (!expectedPrimary && resolved && resolved.toLowerCase() !== prepared.ign.toLowerCase())
+      return { error: "The Minecraft username changed during verification. Please register again." } as const;
+    if (!MojangAPI.validateUsername(ign))
+      return { error: "Unable to retrieve a verified Minecraft username. Please retry later." } as const;
+    const committed = await RegistrationIdentity.serializeMutation(async () => {
+      if (playerId) {
+        const punishment = await PrismaUtils.registrationPunishmentError(playerId);
+        if (punishment) return { error: punishment } as const;
+      }
+      if (this.getLifecycleToken() !== token || this.isRestarting)
+        return { error: "The announced game changed. Please register again." } as const;
+      // Check ownership inside the shared identity-write queue, before linking.
+      if (!expectedPrimary) {
+        const owner = await prismaClient.player.findFirst({
+          where: {
+            NOT: { discordSnowflake },
+            OR: RegistrationIdentity.ownershipConditions(uuid),
+          },
+          select: { id: true },
+        });
+        if (owner) return { error: "That Minecraft account is already linked to another member." } as const;
+      }
+      if (this.getLifecycleToken() !== token || this.isRestarting)
+        return { error: "The announced game changed. Please register again." } as const;
+      const player = await PlayerInstance.byDiscordSnowflake(discordSnowflake, playerId);
+      if (this.getLifecycleToken() !== token || this.isRestarting)
+        return { error: "The announced game changed. Please register again." } as const;
+      if (player.primaryMinecraftAccount !== expectedPrimary || player.latestIGN !== expectedIGN ||
+          (playerId && player.playerId !== playerId) ||
+          player.minecraftAccounts.length !== expectedAccounts.length ||
+          player.minecraftAccounts.some((name, index) => name !== expectedAccounts[index])) {
+        return { error: "The stored Minecraft identity changed. Please register again." } as const;
+      }
+      // A blank profile may have appeared concurrently after preparation.
+      if (!playerId) {
+        const punishment = await PrismaUtils.registrationPunishmentError(player.playerId);
+        if (punishment) return { error: punishment } as const;
+        if (this.getLifecycleToken() !== token || this.isRestarting)
+          return { error: "The announced game changed. Please register again." } as const;
+      }
+      const addName = !player.minecraftAccounts.includes(ign);
+      const accounts = addName ? [...player.minecraftAccounts, ign] : player.minecraftAccounts;
+      if (!player.primaryMinecraftAccount || addName || player.latestIGN !== ign) {
+        // Compare-and-swap all identity fields: never overwrite a concurrent
+        // organiser account change or another registration's name history.
+        // MongoDB distinguishes explicitly null fields from missing legacy fields.
+        const result = await prismaClient.player.update({
+          where: {
+            id: player.playerId,
+            AND: [
+              expectedPrimary === undefined
+                ? { OR: [{ primaryMinecraftAccount: null }, { primaryMinecraftAccount: { isSet: false } }] }
+                : { primaryMinecraftAccount: expectedPrimary },
+              expectedIGN === undefined
+                ? { OR: [{ latestIGN: null }, { latestIGN: { isSet: false } }] }
+                : { latestIGN: expectedIGN },
+              { minecraftAccounts: { equals: player.minecraftAccounts } },
+            ],
+          },
+          data: {
+            ...(!player.primaryMinecraftAccount ? { primaryMinecraftAccount: uuid } : {}),
+            ...(addName ? { minecraftAccounts: accounts } : {}),
+            ...(player.latestIGN !== ign ? { latestIGN: ign } : {}),
+          },
+        }).catch((error: unknown) => {
+          if ((error as { code?: string })?.code === "P2025") return null;
+          throw error;
+        });
+        if (!result) return { error: "The stored Minecraft identity changed. Please register again." } as const;
+        player.primaryMinecraftAccount = uuid;
+        player.minecraftAccounts = accounts;
+        player.latestIGN = ign;
+      }
+      player.ignUsed = ign;
+
+      // Check again after all identity/statistics I/O. The same per-player
+      // queue orders organiser ban additions against this synchronous admission.
+      return PrismaUtils.withPunishmentAdmission(player.playerId, async () => {
+        const punishment = await PrismaUtils.registrationPunishmentError(player.playerId);
+        if (punishment) return { error: punishment } as const;
+        if (this.getLifecycleToken() !== token || this.isRestarting)
+          return { error: "The announced game changed. Please register again." } as const;
+        if (this.getPlayers().some((p) => p.discordSnowflake === discordSnowflake ||
+            p.primaryMinecraftAccount?.toLowerCase() === uuid.toLowerCase())) {
+          return { error: "This player is already registered." } as const;
+        }
+        this.teams["UNDECIDED"].push(player);
+        this.lastRegisteredSnowflake = discordSnowflake;
+        return { error: false, playerInstance: player } as const;
+      });
+    });
+    if (committed.error !== false) return committed;
+    if (this.getLifecycleToken() !== token || this.isRestarting)
+      return { error: "The announced game changed. Please register again." } as const;
+    let scenarioWarning = false;
+    try {
+      await this.scenarios.onRegistrationChanged(discordSnowflake, true);
+    } catch (error) {
+      scenarioWarning = true;
+      console.error(`Scenario registration sync failed member=${discordSnowflake}`, error);
+      if (this.getLifecycleToken() === token)
+        this.scenarios.needsReview("Scenario registration update failed; organiser review required.");
     }
-    this.teams["UNDECIDED"].push(player);
-    this.lastRegisteredSnowflake = discordSnowflake;
-    await this.scenarios.onRegistrationChanged(discordSnowflake, true);
 
     return {
       error: false,
-      playerInstance: player,
+      playerInstance: committed.playerInstance,
+      scenarioWarning,
     } as const;
   }
 

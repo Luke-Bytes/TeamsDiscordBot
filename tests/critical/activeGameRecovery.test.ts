@@ -736,20 +736,29 @@ test("Old map vote callbacks cannot mutate a subsequent game", () => {
   game.reset();
 });
 
-test("Recovery Discord reference re-fetch is read-only, missing and timed-out messages remain unverified", async () => {
+test("Recovery Discord reference re-fetch distinguishes missing resources from uncertain failures", async () => {
   const bot = Object.create(TeamsBot.prototype) as any;
   let fetchCount = 0;
-  bot.client = { channels: { fetch: async (_id: string) => ({
-    messages: { fetch: async (id: string) => { fetchCount++; return { id, channelId: "channel" }; } },
-  }) } };
+  bot.client = { channels: { fetch: async (_id: string, options: any) => {
+    assert(options.force, "channel lookup bypasses stale cache");
+    return { messages: { fetch: async ({ message, force }: any) => {
+      assert(force, "message lookup bypasses stale cache");
+      fetchCount++;
+      return { id: message, channelId: "channel" };
+    } } };
+  } } };
   const ref = { id: "existing", channelId: "channel" };
   const found = await bot.fetchRecoveryMessage(ref, 15);
-  assertEqual(found?.id, "existing", "original message returned");
+  assertEqual(found.status, "found", "original message verified");
+  assertEqual(found.message?.id, "existing", "original message returned");
   assertEqual(fetchCount, 1, "only a fetch; no message creation");
-  bot.client = { channels: { fetch: async () => { throw new Error("Unknown Message"); } } };
-  assertEqual(await bot.fetchRecoveryMessage(ref, 15), null, "missing fetch is not re-created");
+  for (const [code, status] of [[10008, "missing"], [10003, "missing"], [50013, "unverified"], [429, "unverified"], ["ECONNRESET", "unverified"]] as const) {
+    bot.client = { channels: { fetch: async () => { throw { code }; } } };
+    assertEqual((await bot.fetchRecoveryMessage(ref, 15)).status, status, "classify Discord failure");
+  }
   bot.client = { channels: { fetch: () => new Promise(() => {}) } };
-  assertEqual(await bot.fetchRecoveryMessage(ref, 15), null, "timeout is inconclusive");
+  assertEqual((await bot.fetchRecoveryMessage(ref, 15)).status, "unverified", "timeout is inconclusive");
+  assertEqual((await bot.fetchRecoveryMessage(null, 15)).status, "not-recorded", "absent reference needs no lookup");
 });
 
 test("Full preserve-restart command snapshots then startup restores the same 20-player game", async () => {

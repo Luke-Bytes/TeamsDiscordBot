@@ -323,6 +323,29 @@ test("Guild /ask uses the same blacklist and eligible thread types as @Navi", as
   });
 });
 
+test("Guild /ask uses the trusted home guild rather than the dev guild", async () => {
+  await withProvider(async (requests) => {
+    const dev = ConfigManager.getConfig().dev;
+    dev.enabled = true;
+    dev.guildId = "another-dev-guild";
+    const home = scenario();
+    await new AskCommand(settings).execute(home.interaction as any);
+    assert(
+      requests.length === 1 && home.edits.length === 1,
+      "The trusted home guild is accepted in dev mode"
+    );
+
+    const foreign = scenario({ guildId: dev.guildId });
+    await new AskCommand(settings).execute(foreign.interaction as any);
+    assert(
+      requests.length === 1 &&
+        foreign.defers.length === 0 &&
+        foreign.slashReplies[0]?.flags === MessageFlags.Ephemeral,
+      "The dev guild cannot bypass the trusted home guild policy"
+    );
+  });
+});
+
 test("Slash /ask remains available when mention replies are disabled", async () => {
   await withProvider(async (requests) => {
     const mock = scenario();

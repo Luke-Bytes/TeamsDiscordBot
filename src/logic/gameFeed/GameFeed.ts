@@ -1,4 +1,5 @@
-import { TextChannel, EmbedBuilder } from "discord.js";
+import { TextChannel, EmbedBuilder, APIEmbed } from "discord.js";
+import { isUnknownMessage } from "../../util/DiscordFailures";
 
 type FeedMessage = {
   id?: string;
@@ -8,17 +9,46 @@ type FeedMessage = {
   published?: string;
 };
 
+type FeedRun = { interval: NodeJS.Timeout; update: () => Promise<void> };
+
+// Compare author-controlled content, not Discord-generated type, proxy URLs,
+// image dimensions or the optional inline flag's representation.
+function comparableEmbed(embed: APIEmbed): string {
+  return JSON.stringify({
+    title: embed.title,
+    description: embed.description,
+    url: embed.url,
+    color: embed.color,
+    timestamp: embed.timestamp ? Date.parse(embed.timestamp) : undefined,
+    author: embed.author && {
+      name: embed.author.name,
+      url: embed.author.url,
+      icon_url: embed.author.icon_url,
+    },
+    footer: embed.footer && {
+      text: embed.footer.text,
+      icon_url: embed.footer.icon_url,
+    },
+    image: embed.image?.url,
+    thumbnail: embed.thumbnail?.url,
+    fields: (embed.fields ?? []).map(({ name, value, inline }) => ({
+      name, value, inline: inline ?? false,
+    })),
+  });
+}
+
 class GameFeed {
   private readonly feedMessages: Map<string, FeedMessage[]> = new Map();
-  private readonly updateIntervals: Map<string, NodeJS.Timeout> = new Map();
+  private readonly updateIntervals = new Map<string, FeedRun>();
   private readonly managedChannels: Set<string> = new Set();
   private readonly updatesInFlight = new Set<string>();
+  private readonly pendingStarts = new Map<string, FeedRun>();
 
   async startFeed(channel: TextChannel): Promise<void> {
     if (this.updateIntervals.has(channel.id)) return;
     this.managedChannels.add(channel.id);
 
-    const isCurrent = () => this.updateIntervals.get(channel.id) === intervalId;
+    const isCurrent = () => this.updateIntervals.get(channel.id) === run;
     const update = async () => {
       if (!isCurrent() || this.updatesInFlight.has(channel.id)) return;
       this.updatesInFlight.add(channel.id);
@@ -28,62 +58,87 @@ class GameFeed {
 
         // Sequential processing keeps newly published feed messages in order.
         for (const feed of feedData) {
-          if (!isCurrent() || !this.feedMessages.get(channel.id)?.includes(feed)) break;
-          const embed = await feed.updateFn();
+          const isActive = () =>
+            isCurrent() && this.feedMessages.get(channel.id)?.includes(feed);
           if (!isCurrent()) break;
-          const message = feed.id
-            ? await channel.messages.fetch(feed.id).catch(() => null)
-            : null;
-          if (!isCurrent()) break;
-          // Compare the serialized Discord payload, not EmbedBuilder identity.
-          const content = JSON.stringify(embed.toJSON());
-          if (!this.feedMessages.get(channel.id)?.includes(feed)) break;
-          if (message) {
-            if (feed.published === content) continue;
-            await message.edit({ embeds: [embed] });
-            if (isCurrent() && this.feedMessages.get(channel.id)?.includes(feed)) {
-              feed.published = content;
+          if (!isActive()) continue;
+          try {
+            const embed = await feed.updateFn();
+            if (!isActive()) continue;
+            const payload = embed.toJSON();
+            const content = JSON.stringify(payload);
+            if (feed.id) {
+              try {
+                if (feed.published === content) {
+                  // Verify existence and content even when the local cache is stale.
+                  const message = await channel.messages.fetch({ message: feed.id, force: true });
+                  if (!isActive()) continue;
+                  if (message.embeds.length === 1 &&
+                      comparableEmbed(message.embeds[0].toJSON()) === comparableEmbed(payload)) continue;
+                }
+                // Editing by ID verifies existence without a preceding GET
+                // when our generated content changed.
+                await channel.messages.edit(feed.id, { embeds: [embed] });
+                if (isActive()) feed.published = content;
+                continue;
+              } catch (error) {
+                // Only Discord's explicit Unknown Message proves deletion.
+                if (!isUnknownMessage(error)) throw error;
+              }
             }
-          } else {
-            // A missing/deleted message invalidates the last published content.
+            if (!isActive()) continue;
             feed.id = undefined;
             feed.published = undefined;
             const newMessage = await channel.send({ embeds: [embed] });
-            if (isCurrent()) {
-              if (!this.feedMessages.get(channel.id)?.includes(feed)) {
-                await newMessage.delete().catch(() => {});
-                break;
-              }
+            if (isActive()) {
               feed.id = newMessage.id;
               feed.published = content;
             } else {
-              // Stop occurred while Discord was sending. Remove the orphan if possible.
+              // Stop or removal occurred while Discord was sending.
               await newMessage.delete().catch((error) =>
                 console.error("Failed to remove stopped game-feed message:", error)
               );
-              break;
             }
+          } catch (error) {
+            // One unavailable message must not starve the other feed entries.
+            console.error(`Game-feed update failed channel=${channel.id} type=${feed.type}:`, error);
           }
         }
-      } catch (error) {
-        console.error(`Game-feed update failed for channel ${channel.id}:`, error);
       } finally {
         this.updatesInFlight.delete(channel.id);
+        const pending = this.pendingStarts.get(channel.id);
+        this.pendingStarts.delete(channel.id);
+        if (pending && this.updateIntervals.get(channel.id) === pending) {
+          // A replacement run was waiting for this run (including orphan cleanup).
+          await pending.update();
+        }
       }
     };
-    const intervalId = setInterval(() => { void update(); }, 20000);
-    this.updateIntervals.set(channel.id, intervalId);
+    const run: FeedRun = {
+      interval: setInterval(() => { void update(); }, 20000),
+      update,
+    };
+    this.updateIntervals.set(channel.id, run);
 
-    await update();
+    if (this.updatesInFlight.has(channel.id)) {
+      // Do not block lifecycle operations on a stopped generation's Discord I/O.
+      this.pendingStarts.set(channel.id, run);
+    } else {
+      await update();
+    }
   }
 
   stopFeed(channel: TextChannel): void {
-    const intervalId = this.updateIntervals.get(channel.id);
-    if (intervalId) {
-      clearInterval(intervalId);
-      this.updateIntervals.delete(channel.id);
-    }
-    this.feedMessages.delete(channel.id);
+    this.stopChannel(channel.id);
+  }
+
+  private stopChannel(channelId: string): void {
+    const run = this.updateIntervals.get(channelId);
+    if (run) clearInterval(run.interval);
+    this.updateIntervals.delete(channelId);
+    this.pendingStarts.delete(channelId);
+    this.feedMessages.delete(channelId);
+    this.managedChannels.delete(channelId);
   }
 
   addFeedMessage(
@@ -107,15 +162,9 @@ class GameFeed {
   removeAllFeedMessages(): void {
     for (const channelId of this.managedChannels) {
       console.log(`Removing managed channel: ${channelId}`);
-
-      const intervalId = this.updateIntervals.get(channelId);
-      if (intervalId) clearInterval(intervalId);
-
-      this.feedMessages.delete(channelId);
-      this.updateIntervals.delete(channelId);
+      this.stopChannel(channelId);
     }
     console.log("Removed all feed message updaters.");
-    this.managedChannels.clear();
   }
 }
 

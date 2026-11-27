@@ -24,6 +24,7 @@ import {
   RecoveryProposal,
 } from "../logic/DiscordGameRecovery";
 import { GameInstance } from "../database/GameInstance";
+import { SeasonService } from "../database/SeasonService";
 import { escapeText } from "../util/Utils";
 import type { TeamPlanRecord } from "../util/PlanUtil";
 import { GameRecoveryCoordinator } from "../logic/ActiveGameRecovery";
@@ -501,7 +502,13 @@ export default class RecoverGameCommand implements Command {
           `Red plan ${changes.updateRedPlan ? "extended" : "unchanged"}, Blue plan ${changes.updateBluePlan ? "extended" : "unchanged"}. ` +
           "Teams, settings and existing ELO values were not replaced. Verify the result before /game shutdown.";
       } else {
-        installDiscordRecovery(current);
+        await SeasonService.withGameAdmission((season) => {
+          if (season.id !== current.seasonId ||
+              (season.type === "RELAXED") !== current.relaxed ||
+              GameInstance.getInstance().getLifecycleToken() !== pending.lifecycleToken)
+            throw new Error("Season or game changed during recovery. Run /recover-game again.");
+          installDiscordRecovery(current);
+        });
         installed = true;
         if (current.announcementMessage) {
           this.announcementCommand.attachRecoveredAnnouncementMessage(

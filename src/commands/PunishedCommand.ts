@@ -77,7 +77,7 @@ export default class PunishedCommand implements Command {
       } else {
         const punishedUsers = await prismaClient.playerPunishment.findMany({
           where: {
-            punishmentExpiry: { not: null },
+            punishmentExpiry: { isSet: true, not: null, gt: new Date() },
           },
           include: { player: true },
         });

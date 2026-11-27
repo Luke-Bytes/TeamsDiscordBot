@@ -31,6 +31,7 @@ test("/scripts titles-update awards earned titles", async () => {
     player: (prismaClient as any).player,
     game: (prismaClient as any).game,
     profile: (prismaClient as any).profile,
+    transaction: prismaClient.$transaction,
     announcements: Channels.announcements,
   };
 
@@ -141,6 +142,8 @@ test("/scripts titles-update awards earned titles", async () => {
     (prismaClient as any).game = {
       findRaw: async () => [],
     };
+    (prismaClient as any).$transaction = async (work: any) =>
+      work(prismaClient);
     (prismaClient as any).profile = {
       findUnique: async () => ({ unlockedTitles: [] }),
       upsert: async (args: any) => {
@@ -207,6 +210,7 @@ test("/scripts titles-update awards earned titles", async () => {
     (prismaClient as any).player = orig.player;
     (prismaClient as any).game = orig.game;
     (prismaClient as any).profile = orig.profile;
+    prismaClient.$transaction = orig.transaction;
     Channels.announcements = orig.announcements;
     TitleStore.clearOverride();
   }

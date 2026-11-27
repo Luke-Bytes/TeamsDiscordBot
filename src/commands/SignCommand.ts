@@ -36,6 +36,7 @@ type Session = {
   questions: EventQuestion[];
   answers: EventAnswers;
   username?: string;
+  minecraftUUID: string;
   index: number;
   reviewPage: number;
   expires: number;
@@ -160,6 +161,7 @@ export default class SignCommand implements Command {
             ? { ...(row.answers as EventAnswers) }
             : {},
         username: identity.username,
+        minecraftUUID: identity.uuid,
         index: 0,
         reviewPage: 0,
         expires: Date.now() + 30 * 60_000,
@@ -385,6 +387,7 @@ export default class SignCommand implements Command {
             expectedSignupUpdatedAt: s.expectedSignupUpdatedAt,
             acceptedTerms: true,
             minecraftUsername: s.username,
+            expectedMinecraftUUID: s.minecraftUUID,
           }
         );
         this.sessions.delete(s.id);

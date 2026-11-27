@@ -12,39 +12,15 @@ import {
 import {
   MinecraftServicesAPI,
   MinecraftServicesStatus,
-  MonitorStatus,
   ProbeStatus,
 } from "../api/MinecraftServicesAPI";
 import { Command } from "./CommandInterface";
 
-function serviceLine(
-  name: string,
-  monitor: MonitorStatus,
-  probe?: ProbeStatus
-): string {
+function serviceLine(name: string, probe: ProbeStatus): string {
   const label = `**${name}:**`;
-  if (monitor === "definite" || monitor === "possible") {
-    const indicator = monitor === "definite" ? "🔴" : "🟠";
-    const report =
-      monitor === "definite" ? "Issues reported" : "Possible issues";
-    const direct =
-      probe === "responding"
-        ? " · endpoint responding"
-        : probe === "error"
-          ? " · endpoint error"
-          : probe === "unknown"
-            ? " · direct check unavailable"
-            : "";
-    return `${indicator} ${label} ${report}${direct}`;
-  }
+  if (probe === "responding") return `🟢 ${label} Endpoint responding`;
   if (probe === "error") return `🟠 ${label} Endpoint error`;
-  if (monitor === "unknown") {
-    return `🟠 ${label} ${probe === "responding" ? "Endpoint responding; monitor unavailable" : "Status unavailable"}`;
-  }
-  if (probe === "unknown") {
-    return `🟠 ${label} No reported issues; direct check unavailable`;
-  }
-  return `🟢 ${label} No reported issues`;
+  return `🟠 ${label} Check unavailable`;
 }
 
 export function addMinecraftServices(
@@ -52,18 +28,14 @@ export function addMinecraftServices(
   status: MinecraftServicesStatus
 ): EmbedBuilder {
   const lines = [
-    serviceLine("Session authentication", status.session, status.sessionProbe),
-    serviceLine("Xbox services", status.xbox),
-    serviceLine("Minecraft API", status.minecraft, status.keysProbe),
+    serviceLine("Session verification", status.sessionProbe),
+    serviceLine("Microsoft sign-in discovery", status.microsoftProbe),
+    serviceLine("Minecraft public keys", status.keysProbe),
   ];
-  return embed
-    .addFields({
-      name: "Minecraft services",
-      value: lines.join("\n"),
-    })
-    .setFooter({
-      text: "MCPing reports and public endpoint checks; actual sign-in is not tested.",
-    });
+  return embed.addFields({
+    name: "Minecraft services",
+    value: lines.join("\n"),
+  }).setFooter({ text: "Public endpoint checks only; actual sign-in and Xbox network health are not tested." });
 }
 
 export function buildShotbowEmbed(status: ShotbowStatus): EmbedBuilder {
@@ -90,31 +62,31 @@ export function buildShotbowEmbed(status: ShotbowStatus): EmbedBuilder {
     return embed
       .setColor(0x57f287)
       .setDescription(
-        `🟢 Online\n\n**Players:** ${players}${breakdown}\n\n\`${SHOTBOW_ADDRESS}\``
+        `🟢 Online · \`${SHOTBOW_ADDRESS}\`\n\n**Players:** ${players}${breakdown}`
       );
   }
   if (status.kind === "reported-online") {
     const warning =
       status.reachability === "offline"
-        ? "⚠️ Login address unreachable in the server ping. There may be a connection or DNS issue."
-        : "⚠️ Login address could not be verified. The status check may have failed.";
+        ? "⚠️ Login address unreachable from the status provider."
+        : "⚠️ Login address could not be verified.";
     return embed
       .setColor(0xfaa61a)
       .setDescription(
-        `🟢 Online (reported by Shotbow)\n\n**Players:** ${status.population.total.toLocaleString("en-GB")}${breakdown}\n\n${warning}\n\n\`${SHOTBOW_ADDRESS}\``
+        `🟢 Online (reported by Shotbow)\n\`${SHOTBOW_ADDRESS}\`\n\n**Players:** ${status.population.total.toLocaleString("en-GB")}${breakdown}\n\n${warning}`
       );
   }
   if (status.kind === "offline") {
     return embed
       .setColor(0xed4245)
-      .setDescription("🔴 Offline\n\nThe server is currently unreachable.");
+      .setDescription(`🔴 Address unreachable from status provider · \`${SHOTBOW_ADDRESS}\``);
   }
   return embed
     .setColor(0xfaa61a)
     .setDescription(
       population
-        ? `🟠 Status unavailable\n\n**Reported players:** ${population.total.toLocaleString("en-GB")}${breakdown}\n\nCouldn't verify server reachability.\n\n\`${SHOTBOW_ADDRESS}\``
-        : "🟠 Status unavailable\n\nCouldn't check the server right now. Try again shortly."
+        ? `🟠 Status unavailable · \`${SHOTBOW_ADDRESS}\`\n\n**Reported players:** ${population.total.toLocaleString("en-GB")}${breakdown}`
+        : `🟠 Status unavailable · \`${SHOTBOW_ADDRESS}\``
     );
 }
 
@@ -135,10 +107,16 @@ export default class ShotbowCommand implements Command {
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     await interaction.deferReply({});
-    const [status, services] = await Promise.all([
-      this.api.getStatus(),
-      this.services.getStatus(),
+    const [shotbowResult, servicesResult] = await Promise.allSettled([
+      Promise.resolve().then(() => this.api.getStatus()),
+      Promise.resolve().then(() => this.services.getStatus()),
     ]);
+    const status: ShotbowStatus = shotbowResult.status === "fulfilled"
+      ? shotbowResult.value : { kind: "unavailable" };
+    const services: MinecraftServicesStatus = servicesResult.status === "fulfilled"
+      ? servicesResult.value : { sessionProbe: "unknown", keysProbe: "unknown", microsoftProbe: "unknown" };
+    if (shotbowResult.status === "rejected") console.warn("event=shotbow.check source=shotbow reason=unexpected-failure");
+    if (servicesResult.status === "rejected") console.warn("event=shotbow.check source=minecraft-services reason=unexpected-failure");
     await interaction.editReply({
       embeds: [addMinecraftServices(buildShotbowEmbed(status), services)],
       allowedMentions: { parse: [] },

@@ -2301,6 +2301,11 @@ test("Tier-list final completion posts full and confidence-filtered images", asy
     placement("steady-final", "SteadyFinal", "C", 60, "medium")
   );
   const sent: any[] = [];
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    assert(new URL(String(input)).hostname === "mc-heads.net", "Only avatar requests are expected");
+    return new Response(null, { status: 404 });
+  };
 
   try {
     await command.postTierListImageSnapshot(
@@ -2321,6 +2326,7 @@ test("Tier-list final completion posts full and confidence-filtered images", asy
       "Final tier list complete. Full list:"
     );
   } finally {
+    globalThis.fetch = previousFetch;
     config.tierList = originalTierList;
   }
 
@@ -2370,6 +2376,11 @@ test("Tier-list final completion skips filtered image when no limited-sample pla
     placement("steady-only", "SteadyOnly", "C", 60, "medium")
   );
   const sent: any[] = [];
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    assert(new URL(String(input)).hostname === "mc-heads.net", "Only avatar requests are expected");
+    return new Response(null, { status: 404 });
+  };
 
   try {
     await command.postTierListImageSnapshot(
@@ -2390,6 +2401,7 @@ test("Tier-list final completion skips filtered image when no limited-sample pla
       "Final tier list complete. Full list:"
     );
   } finally {
+    globalThis.fetch = previousFetch;
     config.tierList = originalTierList;
   }
 

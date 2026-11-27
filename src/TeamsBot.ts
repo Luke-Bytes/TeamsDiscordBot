@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { startEventDiscordSync, syncEventDiscord } from "./logic/EventDiscordSync";
+import { startEventDiscordSync, syncReturningEventMember } from "./logic/EventDiscordSync";
 import { Client, GatewayIntentBits, Partials } from "discord.js";
 import { CommandHandler } from "./commands/CommandHandler";
 import { MessageHandler } from "./interactions/MessageHandler";
@@ -20,6 +20,11 @@ import { GameInstance } from "./database/GameInstance";
 import { GameRecoveryCoordinator, GameSnapshotStore, recoverPendingGame, GameSnapshot } from "./logic/ActiveGameRecovery";
 import { DiscordUtil } from "./util/DiscordUtil";
 import { Message, TextChannel } from "discord.js";
+import { discordErrorCode } from "./util/DiscordFailures";
+
+type RecoveryMessageResult =
+  | { status: "found"; message: Message<boolean> }
+  | { status: "not-recorded" | "missing" | "unverified" };
 
 export class TeamsBot {
   client: Client;
@@ -44,7 +49,7 @@ export class TeamsBot {
         GatewayIntentBits.GuildVoiceStates,
         GatewayIntentBits.DirectMessages,
       ],
-      partials: [Partials.Channel],
+      partials: [Partials.Channel, Partials.Message],
     });
 
     this.client.on("rateLimit", (warn) => {
@@ -105,24 +110,31 @@ export class TeamsBot {
   private async fetchRecoveryMessage(
     ref: { id: string; channelId: string } | null,
     timeoutMs = 3000
-  ): Promise<Message<boolean> | null> {
-    if (!ref) return null;
+  ): Promise<RecoveryMessageResult> {
+    if (!ref) return { status: "not-recorded" };
     let timeout: NodeJS.Timeout | undefined;
     try {
       const operation = async () => {
-        const channel = await this.client.channels.fetch(ref.channelId);
+        const channel = await this.client.channels.fetch(ref.channelId, { force: true });
         if (!channel || !("messages" in channel)) throw new Error("Original message channel unavailable");
-        return (channel as TextChannel).messages.fetch(ref.id) as Promise<Message<boolean>>;
+        return (channel as TextChannel).messages.fetch({ message: ref.id, force: true }) as Promise<Message<boolean>>;
       };
-      return await Promise.race([
+      const message = await Promise.race([
         operation(),
         new Promise<never>((_, reject) => {
           timeout = setTimeout(() => reject(new Error("Discord message fetch timed out")), timeoutMs);
         }),
       ]);
+      if (!message) throw new Error("Original message lookup returned no result");
+      return { status: "found", message };
     } catch (error) {
+      const code = discordErrorCode(error);
+      if (code === 10008 || code === 10003) {
+        console.info(`[game-recovery] Original Discord resource missing channel=${ref.channelId} id=${ref.id} code=${code}`);
+        return { status: "missing" };
+      }
       console.warn(`[game-recovery] Original Discord message not verified channel=${ref.channelId} id=${ref.id}`, error);
-      return null;
+      return { status: "unverified" };
     } finally {
       if (timeout) clearTimeout(timeout);
     }
@@ -141,14 +153,21 @@ export class TeamsBot {
       }
       // Re-fetch only; these requests must not recreate announcements, pings or roles.
       const refs = snapshot.workflows;
-      const announcement = await this.fetchRecoveryMessage(refs.announcementMessage);
+      const game = GameInstance.getInstance();
+      const restoreReference = async (label: string, ref: { id: string; channelId: string } | null) => {
+        const result = await this.fetchRecoveryMessage(ref);
+        if (result.status === "found") return result.message;
+        if (result.status === "unverified" && ref) {
+          game.recoveryPausedWorkflows.push(`${label} could not be verified; organiser review required (message ${ref.id} in channel ${ref.channelId})`);
+        }
+        return undefined;
+      };
+      const announcement = await restoreReference("Announcement", refs.announcementMessage);
       if (announcement) this.commandHandler.announcementCommand.attachRecoveredAnnouncementMessage(announcement);
-      GameInstance.getInstance().announcementPingMessage =
-        (await this.fetchRecoveryMessage(refs.announcementPingMessage)) ?? undefined;
-      GameInstance.getInstance().announcementPreviewMessage =
-        (await this.fetchRecoveryMessage(refs.announcementPreviewMessage)) ?? undefined;
-      const total = GameInstance.getInstance().getRegisteredPlayerCount();
-      console.info(`[game-recovery] Restored game=${snapshot.gameId} players=${total}; paused=${refs.paused.join("; ")}`);
+      game.announcementPingMessage = await restoreReference("Announcement ping", refs.announcementPingMessage);
+      game.announcementPreviewMessage = await restoreReference("Announcement preview", refs.announcementPreviewMessage);
+      const total = game.getRegisteredPlayerCount();
+      console.info(`[game-recovery] Restored game=${snapshot.gameId} players=${total}; paused=${game.recoveryPausedWorkflows.join("; ")}`);
       GameRecoveryCoordinator.finishStartup(null);
       await DiscordUtil.sendMessage("gameFeed",
         `Active game recovered after restart: ${total} registered players, original time and teams retained. Automatic timers, votes and unfinished sessions are paused for organiser review. Use /team list to inspect.`
@@ -208,14 +227,19 @@ export class TeamsBot {
       }
     });
 
+    this.client.on("messageDelete", (message) => {
+      this.commandHandler.leaderboardsCommand.removeMessageSession(message.id);
+    });
+    this.client.on("messageDeleteBulk", (messages) => {
+      for (const id of messages.keys()) {
+        this.commandHandler.leaderboardsCommand.removeMessageSession(id);
+      }
+    });
+
     this.client.on("guildMemberAdd", async (member) => {
       if (!ConfigManager.getConfig().roles.eventParticipantRole) return;
       try {
-        await prismaClient.eventSignup.updateMany({
-          where: { discordUserId: member.id, event: { guildId: member.guild.id } },
-          data: { roleSyncPending: true },
-        });
-        await syncEventDiscord(this.client, member.guild.id);
+        await syncReturningEventMember(this.client, member.guild.id, member.id);
       } catch {
         console.warn(`[events] Returning-member role sync pending guild=${member.guild.id}`);
       }
@@ -223,7 +247,7 @@ export class TeamsBot {
 
     this.client.on("guildMemberRemove", async (member) => {
       try {
-        await this.commandHandler.teamCommand.handleGuildDeparture(member.id);
+        await this.commandHandler.teamCommand.handleGuildDeparture(member.id, member.guild.id);
       } catch (error) {
         console.error(`Guild departure handling failed guild=${member.guild.id} member=${member.id}`, error);
       }

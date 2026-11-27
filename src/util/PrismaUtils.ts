@@ -5,6 +5,24 @@ import { escapeText } from "./Utils";
 import { PrismaSafeExtractor } from "./PrismaSafeExtractor";
 
 export class PrismaUtils {
+  private static readonly punishmentOperations = new Map<string, Promise<void>>();
+
+  /** Order local ban additions and the final roster admission for one player. */
+  static async withPunishmentAdmission<T>(playerId: string, work: () => Promise<T>): Promise<T> {
+    const previous = this.punishmentOperations.get(playerId);
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    this.punishmentOperations.set(playerId, pending);
+    try {
+      await previous;
+      return await work();
+    } finally {
+      release();
+      if (this.punishmentOperations.get(playerId) === pending)
+        this.punishmentOperations.delete(playerId);
+    }
+  }
+
   static async findPlayer(identifier: string) {
     identifier = identifier.replace(/<@([^>]+)>/g, "$1");
     return await prismaClient.player.findFirst({
@@ -39,28 +57,45 @@ export class PrismaUtils {
     });
   }
 
-  static async updatePunishmentsForExpiry() {
-    const now = new Date();
-    const punishments = await prismaClient.playerPunishment.findMany({
+  static async registrationPunishmentError(playerId: string): Promise<string | undefined> {
+    const punishment = await prismaClient.playerPunishment.findFirst({
       where: {
-        punishmentExpiry: { not: null },
+        playerId,
+        AND: [
+          { punishmentExpiry: { not: null } },
+          { punishmentExpiry: { gt: new Date() } },
+        ],
       },
     });
+    if (!punishment) return;
+    const expiryDate = punishment.punishmentExpiry
+      ? new Intl.DateTimeFormat("en-US", {
+          weekday: "long", day: "numeric", month: "long", year: "numeric",
+        }).format(punishment.punishmentExpiry)
+      : "unknown";
+    return `You cannot register because you are currently banned from friendly wars. Your punishment will expire on **${expiryDate}**.`;
+  }
 
-    const punishmentsToUpdate = punishments.filter((punishment) => {
-      const expiryDate = punishment.punishmentExpiry;
-      if (!expiryDate) return false;
-      return expiryDate.getTime() <= now.getTime();
-    });
-
-    for (const punishment of punishmentsToUpdate) {
-      await prismaClient.playerPunishment.update({
-        where: { id: punishment.id },
-        data: { punishmentExpiry: null },
-      });
+  static async updatePunishmentsForExpiry() {
+    const now = new Date();
+    // Match expiry at write time so a concurrently extended punishment is safe.
+    // MongoDB distinguishes missing fields from explicit nulls.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const { count } = await prismaClient.playerPunishment.updateMany({
+          where: {
+            punishmentExpiry: { isSet: true, not: null, lte: now },
+          },
+          data: { punishmentExpiry: null },
+        });
+        return count;
+      } catch (error) {
+        // A rolled-back write conflict can be retried against the current state.
+        if (attempt >= 2 || (error as { code?: string })?.code !== "P2034") {
+          throw error;
+        }
+      }
     }
-
-    return punishmentsToUpdate.length;
   }
 
   static async getPlayerTitle(identifier: string) {

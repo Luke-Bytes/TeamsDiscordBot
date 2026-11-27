@@ -10,6 +10,7 @@ import {
 import { Command } from "./CommandInterface.js";
 import { PrismaUtils } from "../util/PrismaUtils";
 import { PermissionsUtil } from "../util/PermissionsUtil";
+import { Prisma } from "@prisma/client";
 import { prismaClient } from "../database/prismaClient";
 
 type ExpungeSession = {
@@ -17,6 +18,9 @@ type ExpungeSession = {
   userId: string;
   createdAt: number;
   messageId: string;
+  recordId: string;
+  reasons: string[];
+  punishmentDates: Date[];
 };
 
 export default class PunishCommand implements Command {
@@ -74,6 +78,39 @@ export default class PunishCommand implements Command {
   buttonIds = [];
   selectMenuIds = ["punish-expunge-select"];
   private readonly expungeSessions = new Map<string, ExpungeSession>();
+  private async addPunishment(
+    playerId: string, reason: string, currentDate: Date, expiryDate: Date
+  ) {
+    // Use the same per-player queue as final roster admission, without
+    // holding a roster lock or delaying unrelated players.
+    return PrismaUtils.withPunishmentAdmission(playerId, async () => {
+      const existing = await prismaClient.playerPunishment.findFirst({
+        where: { playerId },
+      });
+      if (existing) {
+        const updated = await prismaClient.playerPunishment.update({
+          where: { id: existing.id },
+          data: {
+            reasons: { push: reason },
+            strikeCount: { increment: 1 },
+            punishmentDates: { push: currentDate },
+            punishmentExpiry: expiryDate,
+          },
+        });
+        return { added: true, strikeCount: updated.strikeCount };
+      }
+      await prismaClient.playerPunishment.create({
+        data: {
+          playerId,
+          reasons: [reason],
+          strikeCount: 1,
+          punishmentDates: [currentDate],
+          punishmentExpiry: expiryDate,
+        },
+      });
+      return { added: false, strikeCount: 1 };
+    });
+  }
 
   async execute(interaction: ChatInputCommandInteraction) {
     const member = interaction.guild?.members.cache.get(interaction.user.id);
@@ -111,37 +148,14 @@ export default class PunishCommand implements Command {
         return;
       }
 
-      const existing = await prismaClient.playerPunishment.findFirst({
-        where: { playerId: player.id },
-      });
-
-      if (existing) {
-        await prismaClient.playerPunishment.update({
-          where: { id: existing.id },
-          data: {
-            reasons: [...existing.reasons, reason],
-            strikeCount: existing.strikeCount + 1,
-            punishmentDates: [...existing.punishmentDates, currentDate],
-            punishmentExpiry: expiryDate || existing.punishmentExpiry,
-          },
-        });
-
+      const result = await this.addPunishment(player.id, reason, currentDate, expiryDate);
+      if (result.added) {
         await interaction.editReply(
           `New punishment added for **${playerInput}**. Reason: "${reason}".` +
-            ` Total strikes: ${existing.strikeCount + 1}.` +
+            ` Total strikes: ${result.strikeCount}.` +
             (expiryDate ? ` Expiry: ${expiryDate.toUTCString()}.` : "")
         );
       } else {
-        await prismaClient.playerPunishment.create({
-          data: {
-            playerId: player.id,
-            reasons: [reason],
-            strikeCount: 1,
-            punishmentDates: [currentDate],
-            punishmentExpiry: expiryDate,
-          },
-        });
-
         await interaction.editReply(
           `Punished **${playerInput}** for reason: "${reason}".` +
             (expiryDate ? ` Expires on ${expiryDate.toUTCString()}.` : "")
@@ -221,6 +235,9 @@ export default class PunishCommand implements Command {
           userId: interaction.user.id,
           createdAt: Date.now(),
           messageId: message.id,
+          recordId: existing.id,
+          reasons: [...existing.reasons],
+          punishmentDates: [...existing.punishmentDates],
         });
       }
     }
@@ -266,7 +283,7 @@ export default class PunishCommand implements Command {
     }
 
     const idx = Number(choice.replace("idx:", ""));
-    if (!Number.isFinite(idx)) {
+    if (!/^idx:\d+$/.test(choice) || !Number.isSafeInteger(idx)) {
       await interaction.reply({
         content: "Invalid selection.",
         flags: MessageFlags.Ephemeral,
@@ -289,6 +306,32 @@ export default class PunishCommand implements Command {
         });
         return;
       }
+      // The displayed index is only valid for the history shown in the menu.
+      if (
+        existing.id !== session.recordId ||
+        existing.reasons.length !== session.reasons.length ||
+        existing.reasons.some((reason, i) => reason !== session.reasons[i]) ||
+        existing.punishmentDates.length !== session.punishmentDates.length ||
+        existing.punishmentDates.some((date, i) =>
+          date.getTime() !== session.punishmentDates[i].getTime())
+      ) {
+        await interaction.reply({
+          content: "Punishment history changed. Open a new expunge menu.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      // Compare the complete relevant state at write time. An expiry cleanup
+      // or concurrent add must not be overwritten by a stale expunge.
+      const where: Prisma.PlayerPunishmentWhereUniqueInput = {
+        id: existing.id,
+        reasons: { equals: existing.reasons },
+        punishmentDates: { equals: existing.punishmentDates },
+        strikeCount: existing.strikeCount,
+        ...(existing.punishmentExpiry == null
+          ? { OR: [{ punishmentExpiry: null }, { punishmentExpiry: { isSet: false } }] }
+          : { punishmentExpiry: existing.punishmentExpiry }),
+      };
 
       const newReasons = existing.reasons.filter((_, i) => i !== idx);
       const newDates = existing.punishmentDates.filter((_, i) => i !== idx);
@@ -296,12 +339,10 @@ export default class PunishCommand implements Command {
       const removedLatest = idx === existing.reasons.length - 1;
 
       if (newReasons.length === 0) {
-        await prismaClient.playerPunishment.delete({
-          where: { id: existing.id },
-        });
+        await prismaClient.playerPunishment.delete({ where });
       } else {
         await prismaClient.playerPunishment.update({
-          where: { id: existing.id },
+          where,
           data: {
             reasons: newReasons,
             punishmentDates: newDates,
@@ -317,6 +358,13 @@ export default class PunishCommand implements Command {
         components: [],
       });
     } catch (error) {
+      if ((error as { code?: string })?.code === "P2025") {
+        await interaction.reply({
+          content: "Punishment history or expiry changed. Open a new expunge menu.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
       console.error(`event=punish.expunge outcome=failed error_type=${error instanceof Error ? error.name : "unknown"}`);
       await interaction.reply({
         content: "Expunge status is uncertain. Inspect the punishment record before submitting another request.",

@@ -223,7 +223,7 @@ test("expunge write failure is single-use and requires inspection", async () => 
     (PermissionsUtil as any).hasRole = () => true;
     (prismaClient.playerPunishment as any).findFirst = async () => ({
       id: "record", reasons: ["Late", "AFK"],
-      punishmentDates: [new Date(), new Date()], punishmentExpiry: null,
+      punishmentDates: [new Date(100), new Date(200)], punishmentExpiry: null, strikeCount: 2,
     });
     (prismaClient.playerPunishment as any).update = async () => {
       writes++;
@@ -231,6 +231,7 @@ test("expunge write failure is single-use and requires inspection", async () => 
     };
     command.expungeSessions.set("ORG", {
       userId: "ORG", playerId: "P1", createdAt: Date.now(), messageId: "expunge-failure",
+      recordId: "record", reasons: ["Late", "AFK"], punishmentDates: [new Date(100), new Date(200)],
     });
     const first = button("punish-expunge-select", "expunge-failure");
     first.values = ["idx:0"];
@@ -258,10 +259,10 @@ test("expunge validates message and claims session before DB access", async () =
     (PermissionsUtil as any).hasRole = () => true;
     (prismaClient.playerPunishment as any).findFirst = async () => {
       await gate.promise;
-      return { id: "rec", reasons: ["Late", "AFK"], punishmentDates: [new Date(), new Date()], punishmentExpiry: null };
+      return { id: "rec", reasons: ["Late", "AFK"], punishmentDates: [new Date(100), new Date(200)], punishmentExpiry: null, strikeCount: 2 };
     };
     (prismaClient.playerPunishment as any).update = async () => { writes++; return {}; };
-    command.expungeSessions.set("ORG", { userId: "ORG", playerId: "P1", createdAt: Date.now(), messageId: "expunge-one" });
+    command.expungeSessions.set("ORG", { userId: "ORG", playerId: "P1", createdAt: Date.now(), messageId: "expunge-one", recordId: "rec", reasons: ["Late", "AFK"], punishmentDates: [new Date(100), new Date(200)] });
     const wrongUser = button("punish-expunge-select", "expunge-one", "OTHER");
     wrongUser.values = ["idx:0"];
     await command.handleSelectMenu(wrongUser);
@@ -280,7 +281,7 @@ test("expunge validates message and claims session before DB access", async () =
     await run;
     assertEqual(writes, 1, "Concurrent selections make one write");
 
-    command.expungeSessions.set("ORG", { userId: "ORG", playerId: "P1", createdAt: Date.now(), messageId: "expunge-two" });
+    command.expungeSessions.set("ORG", { userId: "ORG", playerId: "P1", createdAt: Date.now(), messageId: "expunge-two", recordId: "rec", reasons: ["Late", "AFK"], punishmentDates: [new Date(100), new Date(200)] });
     const cancel = button("punish-expunge-select", "expunge-two");
     cancel.values = ["cancel"];
     await command.handleSelectMenu(cancel);

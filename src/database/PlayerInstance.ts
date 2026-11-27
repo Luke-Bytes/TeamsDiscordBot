@@ -46,32 +46,44 @@ export class PlayerInstance {
     this.latestIGN = player.latestIGN ?? undefined;
   }
 
-  public static async byDiscordSnowflake(discordSnowflake: Snowflake) {
-    let player = await prismaClient.player.byDiscordSnowflake(discordSnowflake);
-
-    if (!player) {
-      player = await prismaClient.player.create({
-        data: {
-          discordSnowflake,
-        },
-      });
+  public static async byDiscordSnowflake(
+    discordSnowflake: Snowflake,
+    expectedPlayerId?: string
+  ) {
+    let player: Player | null = null;
+    if (!expectedPlayerId) {
+      player = await prismaClient.player.byDiscordSnowflake(discordSnowflake);
+      if (!player) {
+        player = await prismaClient.player.create({
+          data: { discordSnowflake, minecraftAccounts: [] },
+        });
+      }
     }
 
+    const playerId = expectedPlayerId ?? player?.id;
+    if (!playerId) throw new Error("Missing registration player ID.");
     const season = await SeasonService.requireActiveSeason();
 
     let stats = await prismaClient.playerStats.findUnique({
       where: {
         playerId_seasonId: {
-          playerId: player.id,
+          playerId,
           seasonId: season.id,
         },
       },
     });
 
+    // Resolve existing season statistics first, so the authoritative
+    // returning-player identity read is closer to the roster commit.
+    if (expectedPlayerId)
+      player = await prismaClient.player.byDiscordSnowflake(discordSnowflake);
+    if (!player || player.id !== playerId)
+      throw new Error("The registration player profile changed.");
+
     if (!stats) {
       stats = await prismaClient.playerStats.create({
         data: {
-          playerId: player.id,
+          playerId,
           seasonId: season.id,
           elo: 1000,
           wins: 0,
@@ -82,6 +94,11 @@ export class PlayerInstance {
           biggestLosingStreak: 0,
         },
       });
+      if (expectedPlayerId) {
+        player = await prismaClient.player.byDiscordSnowflake(discordSnowflake);
+        if (!player || player.id !== playerId)
+          throw new Error("The registration player profile changed.");
+      }
     }
 
     return new PlayerInstance(player, stats);

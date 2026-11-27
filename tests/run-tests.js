@@ -7,6 +7,7 @@ async function buildAndRun() {
     __dirname,
     process.env.NAVI_TEST_ONLY === "1" ? "navi-only.ts" : "run.ts"
   );
+  console.log(`Test scope: ${path.basename(entry) === "navi-only.ts" ? "Navi only" : "full suite"}`);
   const outfile = path.resolve(__dirname, "../dist/tests/run.js");
   await esbuild.build({
     entryPoints: [entry],

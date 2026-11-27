@@ -49,7 +49,13 @@ function makeGuild(members: FakeMember[]) {
   const map = new Map(members.map((m) => [m.id, m]));
   return {
     members: {
-      fetch: async (id: string) => map.get(id) ?? null,
+      fetch: async (input: string | { user: string }) => {
+        const id = typeof input === "string" ? input : input.user;
+        const member = map.get(id);
+        if (!member)
+          throw Object.assign(new Error("Unknown Member"), { code: 10007 });
+        return member;
+      },
       cache: { get: (id: string) => map.get(id) ?? null },
     },
   } as any;

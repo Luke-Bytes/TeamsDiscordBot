@@ -107,6 +107,83 @@ test("/punish add accepts a strict day duration", async () => {
   }
 });
 
+test("concurrent first punishment additions preserve both history entries", async () => {
+  const originalRole = PermissionsUtil.hasRole;
+  const originalFind = PrismaUtils.findPlayer;
+  const db = prismaClient.playerPunishment as any;
+  const original = { findFirst: db.findFirst, create: db.create, update: db.update };
+  let row: any = null;
+  let creates = 0;
+  try {
+    (PermissionsUtil as any).hasRole = () => true;
+    (PrismaUtils as any).findPlayer = async () => ({ id: "P1" });
+    db.findFirst = async () => row;
+    db.create = async ({data}: any) => {
+      creates++;
+      await new Promise<void>(resolve => setImmediate(resolve));
+      row = {id: "pp1", ...data};
+      return row;
+    };
+    db.update = async ({data}: any) => {
+      assert(data.strikeCount.increment === 1, "atomic strike increment");
+      row.reasons.push(data.reasons.push);
+      row.punishmentDates.push(data.punishmentDates.push);
+      row.strikeCount += data.strikeCount.increment;
+      row.punishmentExpiry = data.punishmentExpiry;
+      return row;
+    };
+    await Promise.all([
+      new PunishCommand().execute(makePunishAddInteraction("1d")),
+      new PunishCommand().execute(makePunishAddInteraction("2d")),
+    ]);
+    assert(creates === 1 && row.strikeCount === 2, "one record with two strikes");
+    assert(row.reasons.length === 2 && row.punishmentDates.length === 2, "both history entries preserved");
+  } finally {
+    PermissionsUtil.hasRole = originalRole;
+    PrismaUtils.findPlayer = originalFind;
+    Object.assign(db, original);
+  }
+});
+
+test("expunge rejects stale menu and conditional write conflict", async () => {
+  const cmd = new PunishCommand();
+  const originalRole = PermissionsUtil.hasRole;
+  const db = prismaClient.playerPunishment as any;
+  const original = { findFirst: db.findFirst, update: db.update };
+  const dates = [new Date(100), new Date(200)];
+  const row = { id: "pp1", reasons: ["Late", "AFK"], punishmentDates: dates, strikeCount: 2, punishmentExpiry: null };
+  let writes = 0;
+  let response = "";
+  const interaction: any = {
+    customId: "punish-expunge-select", user: { id: "ORG" }, member: {},
+    guildId: "guild", message: { id: "expunge-msg" }, values: ["idx:0"],
+    reply: async (payload: any) => { response = payload.content; },
+  };
+  const open = (reasons: string[]) => (cmd as any).expungeSessions.set("ORG", {
+    playerId: "P1", userId: "ORG", createdAt: Date.now(), messageId: "expunge-msg",
+    recordId: "pp1", reasons, punishmentDates: dates,
+  });
+  try {
+    (PermissionsUtil as any).hasRole = () => true;
+    db.findFirst = async () => row;
+    db.update = async ({where}: any) => {
+      writes++;
+      assert(where.reasons.equals.length === 2 && where.strikeCount === 2, "history CAS");
+      assert(where.OR.some((part: any) => part.punishmentExpiry?.isSet === false), "legacy missing expiry supported");
+      throw Object.assign(new Error("concurrent extension"), {code: "P2025"});
+    };
+    open(["Different", "AFK"]);
+    await cmd.handleSelectMenu(interaction);
+    assert(writes === 0 && response.includes("history changed"), "stale selection rejected");
+    open(["Late", "AFK"]);
+    await cmd.handleSelectMenu(interaction);
+    assert(writes === 1 && response.includes("expiry changed"), "concurrent write conflict rejected");
+  } finally {
+    PermissionsUtil.hasRole = originalRole;
+    Object.assign(db, original);
+  }
+});
+
 test("/punish expunge shows select menu for existing punishments", async () => {
   const cmd = new PunishCommand();
   const origFind = (PrismaUtils as any).findPlayer;
@@ -333,6 +410,9 @@ test("/punish expunge removes latest clears expiry", async () => {
     userId: "ORG",
     createdAt: Date.now(),
     messageId: "expunge-msg",
+    recordId: "pp1",
+    reasons: ["Late", "AFK"],
+    punishmentDates: [new Date("2024-01-01"), new Date("2024-01-02")],
   });
 
   await cmd.handleSelectMenu!(interaction);
@@ -379,6 +459,9 @@ test("/punish expunge removes last entry deletes record", async () => {
     userId: "ORG",
     createdAt: Date.now(),
     messageId: "expunge-msg",
+    recordId: "pp1",
+    reasons: ["Late"],
+    punishmentDates: [new Date("2024-01-01")],
   });
 
   await cmd.handleSelectMenu!(interaction);

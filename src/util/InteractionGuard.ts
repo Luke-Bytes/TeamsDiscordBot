@@ -17,6 +17,7 @@ type RateState = {
 
 export class InteractionGuard {
   private readonly rateState = new Map<string, RateState>();
+  private nextCleanupAt = 0;
 
   private static readonly repeatedCommandWindowMs = 10_000;
   private static readonly repeatedCommandLimit = 3;
@@ -36,6 +37,21 @@ export class InteractionGuard {
     }
 
     const now = Date.now();
+    // Only discard users whose history, cooldown and escalation window
+    // are all inactive. Keep long escalated cooldowns even after 120s.
+    if (now >= this.nextCleanupAt) {
+      this.nextCleanupAt = now + InteractionGuard.cooldownEscalationWindowMs;
+      for (const [id, entry] of this.rateState) {
+        if (entry.cooldownUntil <= now &&
+            now - entry.lastViolationAt > InteractionGuard.cooldownEscalationWindowMs &&
+            now - entry.lastAction > InteractionGuard.uniqueCommandWindowMs &&
+            entry.recentHistory.every((action) =>
+              now - action.time > InteractionGuard.uniqueCommandWindowMs
+            )) {
+          this.rateState.delete(id);
+        }
+      }
+    }
     const state: RateState = this.rateState.get(userId) ?? {
       lastAction: 0,
       recentHistory: [],

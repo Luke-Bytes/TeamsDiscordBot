@@ -7,6 +7,7 @@ import {
 import { Command } from "./CommandInterface.js";
 import { PermissionsUtil } from "../util/PermissionsUtil.js";
 import { GameInstance } from "../database/GameInstance";
+import { RegistrationIdentity } from "../database/RegistrationIdentity";
 import { prismaClient } from "../database/prismaClient";
 import { escapeText } from "../util/Utils";
 import { MojangAPI } from "../api/MojangAPI";
@@ -73,14 +74,13 @@ export default class MassRegisterCommand implements Command {
       });
       return;
     }
-    await interaction.deferReply();
-
     const game = GameInstance.getInstance();
-    if (!game.announced) {
+    const gameToken = game.getLifecycleToken();
+    await interaction.deferReply();
+    if (!game.announced || game.getLifecycleToken() !== gameToken) {
       await interaction.editReply("No game has been announced yet.");
       return;
     }
-    const gameToken = game.getLifecycleToken();
     if (!interaction.guild) {
       await interaction.editReply("This command must be used in a server.");
       return;
@@ -96,6 +96,10 @@ export default class MassRegisterCommand implements Command {
       ...duplicates.map((name) => `${name} (duplicate input)`),
     ];
     for (const ign of names) {
+      if (!game.announced || game.getLifecycleToken() !== gameToken) {
+        skipped.push(`${ign} (the announced game changed)`);
+        continue;
+      }
       try {
         const player = await prismaClient.player.findFirst({
           where: { latestIGN: ign },
@@ -120,18 +124,33 @@ export default class MassRegisterCommand implements Command {
           skipped.push(`${ign} (left server)`);
           continue;
         }
+        // Bind the selected profile before acquiring the roster lock; the
+        // commit re-reads it and resolves the current name.
+        const prepared = await RegistrationIdentity.prepare(player.discordSnowflake, gameToken, player, ign, true);
+        if ("error" in prepared) {
+          skipped.push(`${ign} (${prepared.error})`);
+          continue;
+        }
         let registeredWithDraftWarning = false;
         const add = async () => {
           if (!game.announced || game.getLifecycleToken() !== gameToken) {
             return { error: "The announced game changed. Please check the roster." } as const;
           }
+          if (!(await fetchGuildMember(interaction.guild!, player.discordSnowflake))) {
+            return { error: "left server" } as const;
+          }
+          if (!game.announced || game.getLifecycleToken() !== gameToken) {
+            return { error: "The announced game changed. Please check the roster." } as const;
+          }
           const added = await game.addPlayerByDiscordId(
             player.discordSnowflake,
-            ign
+            ign,
+            prepared.identity
           );
           const session = TeamCommand.instance?.teamPickingSession;
           if (
-            !added.error &&
+            added.error === false &&
+            game.getLifecycleToken() === gameToken &&
             session instanceof DraftTeamPickingSession &&
             !session.latePickingStarted
           ) {
@@ -150,10 +169,12 @@ export default class MassRegisterCommand implements Command {
         const result = TeamCommand.instance
           ? await TeamCommand.instance.runRosterOperation(add)
           : await add();
-        if (result.error) skipped.push(`${ign} (${result.error})`);
+        if (result.error !== false) skipped.push(`${ign} (${result.error})`);
         else {
           registered.push(ign);
-          await deliverScenarioRegistrationPrompt(interaction, game, player.discordSnowflake);
+          if (result.scenarioWarning)
+            warnings.push(`${ign} (scenario synchronisation needs organiser review)`);
+          await deliverScenarioRegistrationPrompt(interaction, game, player.discordSnowflake, gameToken);
           if (registeredWithDraftWarning)
             warnings.push(`${ign} (draft display needs organiser review)`);
         }

@@ -16,6 +16,7 @@ import { prismaClient } from "../../src/database/prismaClient";
 import { withImmediateTimers } from "../framework/timers";
 import { GuildMemberRoleManager } from "discord.js";
 import { DraftTeamPickingSession } from "../../src/logic/teams/DraftTeamPickingSession";
+import { MojangAPI } from "../../src/api/MojangAPI";
 
 function snowflake(n: number) {
   return `30000000000000000${String(n).padStart(2, "0")}`;
@@ -317,7 +318,14 @@ test("Massregister during active session does not duplicate players", () =>
 
     const origClean = (DiscordUtil as any).cleanUpAllChannelMessages;
     const origGetMember = DiscordUtil.getGuildMember;
-    const origFindFirst = (prismaClient as any).player.findFirst;
+    const db = prismaClient as any;
+    const origFindFirst = db.player.findFirst;
+    const origByDiscord = db.player.byDiscordSnowflake;
+    const origUpdate = db.player.update;
+    const origSeason = db.season;
+    const origStats = db.playerStats;
+    const origPunishment = db.playerPunishment;
+    const origReverse = MojangAPI.uuidToUsername;
     try {
       (DiscordUtil as any).cleanUpAllChannelMessages = async () => {};
       (DiscordUtil as any).getGuildMember = () => organiser as any;
@@ -332,16 +340,26 @@ test("Massregister during active session does not duplicate players", () =>
       const teamCmd = new TeamCommand();
       await runGenerate(teamCmd, guild, organiser.id, "random");
 
-      // Stub prisma to return new players for massregister
-      (prismaClient as any).player.findFirst = async ({ where }: any) => {
-        const ign = where?.latestIGN;
-        const map: Record<string, string> = {
-          NEW1: newIds[0],
-          NEW2: newIds[1],
+      // Return complete, consistent persisted profiles for both the initial
+      // name lookup and the authoritative commit-time Discord lookup.
+      const records = newIds.map((id, index) => {
+        const ign = `NEW${index + 1}`;
+        return {
+          id: `db-${id}`, discordSnowflake: id, latestIGN: ign,
+          primaryMinecraftAccount: String(index + 1).padStart(32, "0"),
+          minecraftAccounts: [ign],
         };
-        if (!map[ign]) return null;
-        return { discordSnowflake: map[ign], latestIGN: ign };
-      };
+      });
+      db.player.findFirst = async ({ where }: any) =>
+        records.find((row) => row.latestIGN === where.latestIGN) ?? null;
+      db.player.byDiscordSnowflake = async (id: string) =>
+        records.find((row) => row.discordSnowflake === id) ?? null;
+      db.player.update = async () => { throw new Error("Unchanged identity must not be written"); };
+      db.season = { findFirst: async () => ({ id: "mass-season" }) };
+      db.playerStats = { findUnique: async () => ({ elo: 1000 }) };
+      db.playerPunishment = { findFirst: async () => null };
+      MojangAPI.uuidToUsername = async (uuid) =>
+        records.find((row) => row.primaryMinecraftAccount === uuid)?.latestIGN ?? null;
 
       const mass = new MassRegisterCommand();
       const massInteraction = createChatInputInteraction(organiser.id, {
@@ -354,6 +372,9 @@ test("Massregister during active session does not duplicate players", () =>
       massInteraction.guild = guild;
       massInteraction.member = guild.members.cache.get(organiser.id);
       await mass.execute(massInteraction);
+      assert(massInteraction.replies.some((reply: any) =>
+        reply.type === "editReply" && String(reply.payload).includes("Registered (2)")),
+        "Both known players actually register");
 
       await runConfirm(teamCmd, "random-team-accept", guild);
 
@@ -361,7 +382,13 @@ test("Massregister during active session does not duplicate players", () =>
     } finally {
       (DiscordUtil as any).cleanUpAllChannelMessages = origClean;
       (DiscordUtil as any).getGuildMember = origGetMember;
-      (prismaClient as any).player.findFirst = origFindFirst;
+      db.player.findFirst = origFindFirst;
+      db.player.byDiscordSnowflake = origByDiscord;
+      db.player.update = origUpdate;
+      db.season = origSeason;
+      db.playerStats = origStats;
+      db.playerPunishment = origPunishment;
+      MojangAPI.uuidToUsername = origReverse;
     }
   }));
 

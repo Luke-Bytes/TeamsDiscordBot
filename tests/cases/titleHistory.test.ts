@@ -13,20 +13,28 @@ async function withHistory(run: (fixture: any) => Promise<void>) {
     "player",
     "season",
     "profile",
+    "$transaction",
   ];
   const originals = keys.map((key) => [key, client[key]]);
   const fixture: any = {
     games: [],
     participations: [],
     stats: [],
+    seasons: [{ id: "S6", type: "RANKED" }],
     players: [],
     profiles: new Map<string, string[]>(),
     writes: 0,
   };
   TitleStore.setOverride(
-    ["COMMODORE", "OVERSEER", "UNYIELDING", "PARAGON", "CHAMPION"].map(
-      (id) => ({ id, label: id })
-    )
+    [
+      "COMMODORE",
+      "OVERSEER",
+      "UNYIELDING",
+      "PARAGON",
+      "CHAMPION",
+      "ACE",
+      "ELITE",
+    ].map((id) => ({ id, label: id }))
   );
   try {
     client.game = {
@@ -61,17 +69,51 @@ async function withHistory(run: (fixture: any) => Promise<void>) {
     client.playerStats = { findMany: async () => fixture.stats };
     client.player = { findMany: async () => fixture.players };
     client.season = {
-      findUnique: async () => ({ id: "S6", type: "RANKED" }),
-      findMany: async () => [{ id: "S6", type: "RANKED" }],
+      findUnique: async () => ({
+        id: "S6",
+        type: "RANKED",
+        titlesProcessedAt: fixture.checkpoint,
+      }),
+      findMany: async () => fixture.seasons,
     };
     client.profile = {
-      findUnique: async ({ where }: any) => ({
-        unlockedTitles: fixture.profiles.get(where.playerId) ?? [],
-      }),
+      findUnique: async ({ where }: any) =>
+        fixture.profiles.has(where.playerId)
+          ? { unlockedTitles: [...fixture.profiles.get(where.playerId)] }
+          : null,
       upsert: async ({ where, update }: any) => {
         fixture.writes++;
+        if (fixture.failPlayer === where.playerId)
+          throw new Error("profile failure");
         fixture.profiles.set(where.playerId, update.unlockedTitles);
       },
+    };
+    client.$transaction = async (work: any) => {
+      const snapshot = new Map(fixture.profiles);
+      const writes = fixture.writes;
+      const checkpoint = fixture.checkpoint;
+      const queued = fixture.queued;
+      try {
+        const result = await work(client);
+        if (fixture.conflictOnce) {
+          fixture.conflictOnce = false;
+          throw Object.assign(new Error("write conflict"), { code: "P2034" });
+        }
+        return result;
+      } catch (error) {
+        fixture.profiles = snapshot;
+        fixture.writes = writes;
+        fixture.checkpoint = checkpoint;
+        fixture.queued = queued;
+        if ((error as { code?: string }).code === "P2034") {
+          fixture.profiles.set("A", [
+            ...(fixture.profiles.get("A") ?? []),
+            "CONCURRENT",
+            "UNYIELDING",
+          ]);
+        }
+        throw error;
+      }
     };
     await run(fixture);
   } finally {
@@ -158,13 +200,130 @@ test("titles tolerate legacy nulls in season closure and manual reconciliation",
         "Invalid or unknown teams/winners and losing captains earn no title"
       );
       assert(first.blocks.length > 0, "New titles are announced");
+      const writes = f.writes;
       const second = await TitleService.reconcile(closingSeasonId);
+      assert(f.writes === writes, "Unchanged awards do not rewrite profiles");
       assert(
         second.newlyUnlocked.length === 0 && second.blocks.length === 0,
         "Repeating reconciliation produces no duplicate unlocks or announcements"
       );
     });
   }
+});
+
+test("title placement preserves competition ties and relaxed exclusions", async () => {
+  await withHistory(async (f) => {
+    f.seasons = [
+      { id: "S6", type: "RANKED" },
+      { id: "S7", type: "RELAXED" },
+      { id: "S8", type: null },
+    ];
+    f.stats = [
+      { playerId: "A", seasonId: "S6", elo: 1300, wins: 1, losses: 0 },
+      { playerId: "B", seasonId: "S6", elo: 1300, wins: 1, losses: 0 },
+      { playerId: "C", seasonId: "S6", elo: 1200, wins: 1, losses: 0 },
+      { playerId: "D", seasonId: "S7", elo: 1500, wins: 1, losses: 0 },
+      { playerId: "E", seasonId: "S8", elo: 1200, wins: 1, losses: 0 },
+    ];
+    f.profiles.set("A", ["EXISTING", "EXISTING"]);
+    const first = await TitleService.reconcile();
+    assert(
+      f.profiles.get("A").join() === "EXISTING,CHAMPION,ACE,ELITE",
+      "Old titles survive and duplicates are removed"
+    );
+    assert(
+      f.profiles.get("B").join() === "CHAMPION,ACE,ELITE",
+      "Tied first place awards match"
+    );
+    assert(
+      f.profiles.get("C").join() === "ELITE",
+      "Next player is third, not second"
+    );
+    assert(!f.profiles.has("D"), "Relaxed seasons grant no placement titles");
+    assert(
+      f.profiles.get("E").includes("CHAMPION"),
+      "Legacy season type remains ranked"
+    );
+    assert(
+      first.newlyUnlocked.length === 4,
+      "Only actual new awards are announced"
+    );
+    const writes = f.writes;
+    await TitleService.reconcile();
+    assert(f.writes === writes, "Repeat reconciliation performs no writes");
+  });
+});
+
+test("closure title writes and announcements roll back and retry together", async () => {
+  await withHistory(async (f) => {
+    f.stats = [
+      { playerId: "A", seasonId: "S6", elo: 1400, wins: 25, losses: 0 },
+      { playerId: "B", seasonId: "S6", elo: 1300, wins: 25, losses: 0 },
+    ];
+    f.profiles.set("A", ["LEGACY"]);
+    const persist = async (_tx: any, result: any) => {
+      f.queued = result.blocks;
+      f.checkpoint = new Date();
+      if (f.failQueue) throw new Error("outbox failure");
+    };
+    f.failPlayer = "B";
+    let rejected = false;
+    try {
+      await TitleService.reconcile("S6", persist);
+    } catch {
+      rejected = true;
+    }
+    assert(
+      rejected &&
+        f.profiles.get("A").join() === "LEGACY" &&
+        !f.profiles.has("B"),
+      "Partial profile writes roll back"
+    );
+    f.failPlayer = undefined;
+    f.failQueue = true;
+    rejected = false;
+    try {
+      await TitleService.reconcile("S6", persist);
+    } catch {
+      rejected = true;
+    }
+    assert(
+      rejected && !f.checkpoint && !f.queued && !f.profiles.has("B"),
+      "Outbox and profile writes roll back together"
+    );
+    f.failQueue = false;
+    const result = await TitleService.reconcile("S6", persist);
+    assert(
+      result.newlyUnlocked.length === 2 && f.checkpoint && f.queued.length,
+      "Retry announces all newly persisted awards"
+    );
+    assert(f.profiles.get("A").includes("LEGACY"), "Existing titles retained");
+    const repeat = await TitleService.reconcile("S6", persist);
+    assert(
+      !repeat.newlyUnlocked.length && !repeat.blocks.length,
+      "Committed closure is not repeated"
+    );
+  });
+});
+
+test("title transaction retry preserves concurrent awards and reports only committed unlocks", async () => {
+  await withHistory(async (f) => {
+    f.stats = [
+      { playerId: "A", seasonId: "S6", elo: 1400, wins: 25, losses: 0 },
+    ];
+    f.profiles.set("A", ["LEGACY"]);
+    f.conflictOnce = true;
+    const result = await TitleService.reconcile("S6");
+    assert(
+      f.profiles.get("A").join() ===
+        "LEGACY,CONCURRENT,UNYIELDING,CHAMPION,ACE,ELITE",
+      "Concurrent writes survive retry"
+    );
+    assert(
+      result.newlyUnlocked[0].titleIds.join() === "CHAMPION,ACE,ELITE",
+      "Already granted titles are not announced twice"
+    );
+  });
 });
 
 test("titles include valid history beyond the old 10000-document batch cap", async () => {

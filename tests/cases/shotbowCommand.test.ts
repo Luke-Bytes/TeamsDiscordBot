@@ -1,5 +1,6 @@
 import { test } from "../framework/test";
 import { assert } from "../framework/assert";
+import { generateKeyPairSync } from "node:crypto";
 import { ShotbowStatusAPI } from "../../src/api/ShotbowStatusAPI";
 import { MinecraftServicesAPI } from "../../src/api/MinecraftServicesAPI";
 import ShotbowCommand, {
@@ -15,26 +16,20 @@ function json(body: unknown, status = 200, headers = {}) {
   return new Response(JSON.stringify(body), { status, headers });
 }
 
-// Existing ping tests isolate Crafty; the official endpoint has its own tests below.
-function pingOnly(
-  fetcher: typeof fetch,
-  now = Date.now,
-  token = () => undefined as string | undefined,
-  timeoutMs = 5_000
-) {
+// Ping tests isolate MCStatus.io; the official endpoint has its own tests below.
+function pingOnly(fetcher: typeof fetch, now = Date.now, timeoutMs = 5_000) {
   return new ShotbowStatusAPI(
     (url, init) =>
       String(url).startsWith("https://shotbow.net/")
         ? Promise.resolve(new Response(null, { status: 404 }))
         : fetcher(url, init),
     now,
-    token,
     timeoutMs
   );
 }
 
 function online(online = 142, max = 1000) {
-  return { success: true, data: { players: { online, max } } };
+  return { online: true, players: { online, max }, eula_blocked: false };
 }
 
 test("Shotbow validates online and zero-player responses", async () => {
@@ -51,16 +46,16 @@ test("Shotbow validates online and zero-player responses", async () => {
   }
   const proxy = buildShotbowEmbed({ kind: "online", online: 42, max: 1 });
   assert(
-    proxy.toJSON().description?.includes("**Players:** 42\n"),
+    proxy.toJSON().description?.endsWith("**Players:** 42"),
     "Proxy capacity omitted"
   );
 });
 
 test("Shotbow only treats explicit Minecraft server errors as offline", async () => {
-  const body = { success: false, message: "Server is offline" };
-  const api = pingOnly(async () => json(body, 404));
+  const body = { online: false, eula_blocked: false };
+  const api = pingOnly(async () => json(body));
   assert((await api.getStatus()).kind === "offline", "Explicit offline");
-  for (const status of [401, 403, 429, 500, 502, 503]) {
+  for (const status of [401, 403, 404, 429, 500, 502, 503]) {
     const failure = pingOnly(async () => json(body, status));
     assert(
       (await failure.getStatus()).kind === "unavailable",
@@ -72,8 +67,10 @@ test("Shotbow only treats explicit Minecraft server errors as offline", async ()
     { success: false, message: "Not found" },
     { success: false, message: "Request timed out" },
     { success: false, message: "Internal server error" },
-    { success: true, data: {} },
-    { success: true, data: { players: { online: "1", max: 100 } } },
+    { online: true },
+    { online: true, players: { online: "1", max: 100 } },
+    { online: false },
+    { online: false, eula_blocked: true },
     online(-1),
     online(1.5),
     online(1, -1),
@@ -102,7 +99,6 @@ test("Shotbow handles invalid JSON, network failure and request timeout", async 
         );
       }),
     Date.now,
-    () => undefined,
     5
   );
   assert((await timeout.getStatus()).kind === "unavailable", "Timeout");
@@ -166,37 +162,25 @@ test("Shotbow respects Retry-After seconds and HTTP dates", async () => {
   assert(calls === 1, "Default backoff");
 });
 
-test("Shotbow uses fixed Java address and optional Bearer authentication", async () => {
-  for (const token of [undefined, "  test-token  ", " "]) {
-    const api = pingOnly(
-      async (input, init) => {
-        const url = new URL(String(input));
-        assert(url.origin === "https://api.crafty.gg", "Fixed provider");
-        assert(url.pathname === "/api/v2/servers/ping", "Ping endpoint");
-        assert(
-          url.searchParams.get("ip") === "play.shotbow.net",
-          "Verified address"
-        );
-        assert(url.searchParams.get("edition") === "java", "Java edition");
-        assert(init?.redirect === "error", "Do not forward credentials");
-        assert(
-          new Headers(init?.headers).get("authorization") ===
-            (token?.trim() ? "Bearer test-token" : null),
-          "Optional authentication"
-        );
-        return json(online());
-      },
-      Date.now,
-      () => token
+test("Shotbow uses fixed Java address without credentials", async () => {
+  const api = pingOnly(async (input, init) => {
+    const url = new URL(String(input));
+    assert(url.origin === "https://api.mcstatus.io", "Fixed provider");
+    assert(
+      url.pathname === "/v2/status/java/play.shotbow.net",
+      "Verified Java address"
     );
-    assert((await api.getStatus()).kind === "online", "Request validated");
-  }
+    assert(init?.redirect === "error", "No redirects");
+    assert(!new Headers(init?.headers).has("authorization"), "No credentials");
+    return json(online());
+  });
+  assert((await api.getStatus()).kind === "online", "Request validated");
 });
 
 test("Shotbow command defers publicly and edits with a clean embed for every outcome", async () => {
   for (const [body, expected] of [
     [online(), "🟢 Online"],
-    [{ success: false, message: "Server is offline" }, "🔴 Offline"],
+    [{ online: false, eula_blocked: false }, "🔴 Address unreachable from status provider"],
     [{ success: false }, "🟠 Status unavailable"],
   ] as const) {
     let deferred = false;
@@ -231,9 +215,14 @@ test("Shotbow command defers publicly and edits with a clean embed for every out
     );
     assert(
       embed.fields?.[0]?.name === "Minecraft services" &&
-        embed.fields[0].value.includes("Status unavailable"),
+        embed.fields[0].value.includes("Endpoint error"),
       "Auth check failure does not hide Shotbow status"
     );
+    assert(
+      embed.description.includes("`play.shotbow.net`"),
+      "Server address visible in every outcome"
+    );
+    assert(embed.footer?.text.includes("actual sign-in") && embed.footer.text.includes("not tested"), "Endpoint-only disclaimer");
     assert(
       reply.flags == null && reply.allowedMentions.parse.length === 0,
       "Public, no mentions"
@@ -282,14 +271,13 @@ test("Shotbow displays official totals and only populated allowlisted modes", as
         assert(url.searchParams.get("t") === "12345", "Cache buster");
         assert(
           !new Headers(init?.headers).has("authorization"),
-          "No Crafty credentials"
+          "No credentials"
         );
         return json(officialPopulation);
       }
       return json(online(42));
     },
-    () => 12345,
-    () => "test-token"
+    () => 12345
   );
   const status = await api.getStatus();
   assert(status.kind === "online", "Ping succeeds");
@@ -377,13 +365,10 @@ test("Shotbow keeps normal ping when official endpoint fails or is malformed", a
   }
 });
 
-test("Shotbow preserves official counts when Crafty is unavailable or contradictory", async () => {
+test("Shotbow preserves official counts when MCStatus.io is unavailable or contradictory", async () => {
   for (const [ping, reachability] of [
     [() => json({}, 503), "unavailable"],
-    [
-      () => json({ success: false, message: "Server is offline" }, 404),
-      "offline",
-    ],
+    [() => json({ online: false, eula_blocked: false }), "offline"],
   ] as const) {
     const api = new ShotbowStatusAPI(async (input) =>
       String(input).startsWith("https://shotbow.net/")
@@ -414,7 +399,7 @@ test("Shotbow preserves official counts when Crafty is unavailable or contradict
   const empty = new ShotbowStatusAPI(async (input) =>
     String(input).startsWith("https://shotbow.net/")
       ? json({ all: 0 })
-      : json({ success: false, message: "Server is offline" }, 404)
+      : json({ online: false, eula_blocked: false })
   );
   assert(
     (await empty.getStatus()).kind === "offline",
@@ -435,7 +420,6 @@ test("Shotbow logs safe provider diagnostics only for actual requests", async ()
       return json({ message: secret }, 401);
     },
     () => 0,
-    () => secret,
     5_000,
     (message) => messages.push(message)
   );
@@ -444,7 +428,7 @@ test("Shotbow logs safe provider diagnostics only for actual requests", async ()
   assert(messages.length === 2, "Cached failures do not log again");
   assert(
     messages.some((message) =>
-      message.includes("source=crafty-ping reason=http-error status=401")
+      message.includes("source=mcstatus-ping reason=http-error status=401")
     ),
     "Authentication failure identified"
   );
@@ -464,7 +448,8 @@ test("Shotbow logs safe provider diagnostics only for actual requests", async ()
 
 test("Minecraft services uses credential-free public probes and caches independently", async () => {
   let now = 0;
-  let monitorCalls = 0;
+  const key = generateKeyPairSync("rsa", { modulusLength: 1024 }).publicKey.export({ format: "der", type: "spki" }).toString("base64");
+  let microsoftCalls = 0;
   let sessionCalls = 0;
   let keysCalls = 0;
   const messages: string[] = [];
@@ -477,15 +462,19 @@ test("Minecraft services uses credential-free public probes and caches independe
         !new Headers(init?.headers).has("authorization"),
         "No credentials"
       );
-      if (url.hostname === "mcping.me") {
-        assert(url.pathname === "/api/services", "Monitor endpoint");
-        monitorCalls++;
-        return monitorCalls === 1
+      if (url.hostname === "login.live.com") {
+        assert(
+          url.pathname === "/.well-known/openid-configuration",
+          "Discovery endpoint"
+        );
+        microsoftCalls++;
+        return microsoftCalls === 1
           ? json({}, 429, { "Retry-After": "120" })
           : json({
-              SessionServer: "DefiniteProblems",
-              "Xbox services": "PossibleProblems",
-              "Minecraft API": "Operational",
+              issuer: "https://login.live.com",
+              authorization_endpoint:
+                "https://login.live.com/oauth20_authorize.srf",
+              token_endpoint: "https://login.live.com/oauth20_token.srf",
             });
       }
       if (url.hostname === "sessionserver.mojang.com") {
@@ -505,8 +494,8 @@ test("Minecraft services uses credential-free public probes and caches independe
       );
       keysCalls++;
       return json({
-        profilePropertyKeys: [{ publicKey: "test-key" }],
-        playerCertificateKeys: [{ publicKey: "test-key" }],
+        profilePropertyKeys: [{ publicKey: key }],
+        playerCertificateKeys: [{ publicKey: key }],
       });
     },
     () => now,
@@ -516,24 +505,24 @@ test("Minecraft services uses credential-free public probes and caches independe
   const [first, second] = await Promise.all([api.getStatus(), api.getStatus()]);
   assert(first === second, "Concurrent calls coalesced");
   assert(
-    first.session === "unknown" &&
+    first.microsoftProbe === "unknown" &&
       first.sessionProbe === "responding" &&
       first.keysProbe === "responding",
-    "Monitor failure does not erase direct evidence"
+    "Microsoft failure does not erase direct evidence"
   );
   now = 60_000;
   await api.getStatus();
   assert(
-    monitorCalls === 1 && sessionCalls === 2 && keysCalls === 2,
-    "Monitor backoff independent of direct probes"
+    microsoftCalls === 1 && sessionCalls === 2 && keysCalls === 2,
+    "Microsoft backoff independent of other probes"
   );
   now = 120_000;
   const status = await api.getStatus();
   assert(
-    status.session === "definite" &&
-      status.xbox === "possible" &&
-      status.minecraft === "operational",
-    "Documented monitor states parsed"
+    status.microsoftProbe === "responding" &&
+      status.sessionProbe === "responding" &&
+      status.keysProbe === "responding",
+    "All direct checks succeed"
   );
   const field =
     addMinecraftServices(
@@ -541,16 +530,17 @@ test("Minecraft services uses credential-free public probes and caches independe
       status
     ).toJSON().fields?.[0]?.value ?? "";
   assert(
-    field.includes("Issues reported · endpoint responding") &&
-      field.includes("Possible issues") &&
-      field.includes("No reported issues"),
-    "Monitor warnings survive successful direct checks"
+    field.split("\n").length === 3 &&
+      field
+        .split("\n")
+        .every((line) => line.startsWith("🟢") && line.endsWith("Endpoint responding")),
+    "Green indicates endpoint response only"
   );
   assert(
     messages.some((message) =>
-      message.includes("source=mcping-services reason=http-error status=429")
+      message.includes("source=microsoft-login reason=http-error status=429")
     ),
-    "Monitor rate limit logged"
+    "Rate limit logged"
   );
 });
 
@@ -559,12 +549,8 @@ test("Minecraft services handles invalid responses, endpoint errors and unknown 
   const api = new MinecraftServicesAPI(
     async (input) => {
       const url = new URL(String(input));
-      if (url.hostname === "mcping.me") {
-        return json({
-          SessionServer: "Operational",
-          "Xbox services": "not-a-status",
-          "Minecraft API": "Operational",
-        });
+      if (url.hostname === "login.live.com") {
+        return json({ issuer: "https://invalid.example" });
       }
       if (url.hostname === "sessionserver.mojang.com") {
         return json({}, 503);
@@ -577,11 +563,10 @@ test("Minecraft services handles invalid responses, endpoint errors and unknown 
   );
   const status = await api.getStatus();
   assert(
-    status.session === "operational" &&
-      status.sessionProbe === "error" &&
-      status.xbox === "unknown" &&
+    status.sessionProbe === "error" &&
+      status.microsoftProbe === "unknown" &&
       status.keysProbe === "unknown",
-    "Partial and contradictory results preserved"
+    "Partial results preserved"
   );
   const field =
     addMinecraftServices(
@@ -590,11 +575,60 @@ test("Minecraft services handles invalid responses, endpoint errors and unknown 
     ).toJSON().fields?.[0]?.value ?? "";
   assert(
     field.includes("Endpoint error") &&
-      field.includes("Status unavailable") &&
-      field.includes("direct check unavailable"),
+      field.includes("Check unavailable") &&
+      !field.includes("🟢"),
     "Failed checks not shown green"
   );
   assert(messages.length === 3, "Every failed source logged");
+});
+
+test("Minecraft public keys reject malformed key material independently of other probes", async () => {
+  const api = new MinecraftServicesAPI(async (input) => {
+    const url = String(input);
+    if (url.includes("hasJoined")) return new Response(null, { status: 204 });
+    if (url.includes("publickeys")) return json({
+      profilePropertyKeys: [{ publicKey: "not a key" }],
+      playerCertificateKeys: [{ publicKey: "bm90LWEtb2tleQ==" }],
+    });
+    return json({}, 403);
+  });
+  const result = await api.getStatus();
+  assert(result.keysProbe === "unknown" && result.sessionProbe === "responding", "Malformed keys cannot erase independent evidence or appear healthy");
+});
+
+test("Throwing diagnostic logger does not erase independent provider results", async () => {
+  const warn = () => { throw new Error("logger unavailable"); };
+  const api = new ShotbowStatusAPI(async (input) =>
+    String(input).includes("shotbow.net/serverList")
+      ? json({}, 503) : json(online(12, 100)),
+    Date.now, 5000, warn);
+  assert((await api.getStatus()).kind === "online", "Ping survives failure of population logging");
+  const services = new MinecraftServicesAPI(async (input) =>
+    String(input).includes("hasJoined") ? new Response(null, { status: 204 }) : json({}, 503),
+    Date.now, 5000, warn);
+  const result = await services.getStatus();
+  assert(result.sessionProbe === "responding" && result.keysProbe === "error" && result.microsoftProbe === "error", "Each endpoint retains independent evidence");
+});
+
+test("Shotbow command preserves successful results on unexpected diagnostic rejection", async () => {
+  for (const failShotbow of [true, false]) {
+    const shotbow = { getStatus: async () => {
+      if (failShotbow) throw new Error("unexpected");
+      return { kind: "online", online: 12, max: 100 };
+    } } as unknown as ShotbowStatusAPI;
+    const services = { getStatus: async () => {
+      if (!failShotbow) throw new Error("unexpected");
+      return { sessionProbe: "responding", keysProbe: "unknown", microsoftProbe: "unknown" };
+    } } as unknown as MinecraftServicesAPI;
+    let reply: any;
+    await new ShotbowCommand(shotbow, services).execute({
+      deferReply: async () => {},
+      editReply: async (payload: any) => { reply = payload; },
+    } as any);
+    const embed = reply.embeds[0].toJSON();
+    assert(embed.description.includes(failShotbow ? "Status unavailable" : "12/100"), "Shotbow evidence preserved");
+    assert(embed.fields[0].value.includes(failShotbow ? "Endpoint responding" : "Check unavailable"), "Service evidence preserved");
+  }
 });
 
 test("Shotbow zero official players alone do not establish reachability", async () => {
@@ -612,7 +646,7 @@ test("Shotbow zero official players alone do not establish reachability", async 
 
 test("Shotbow coalesces both requests and respects independent provider limits", async () => {
   let now = 0;
-  let crafty = 0;
+  let ping = 0;
   let official = 0;
   const api = new ShotbowStatusAPI(
     async (input) => {
@@ -622,27 +656,27 @@ test("Shotbow coalesces both requests and respects independent provider limits",
           ? json({}, 429, { "Retry-After": "60" })
           : json(officialPopulation);
       }
-      crafty++;
-      return crafty === 1
+      ping++;
+      return ping === 1
         ? json({}, 429, { "Retry-After": "90" })
         : json(online());
     },
     () => now
   );
   await Promise.all([api.getStatus(), api.getStatus()]);
-  assert(crafty === 1 && official === 1, "One request per source");
+  assert(ping === 1 && official === 1, "One request per source");
   now = 30_000;
   await api.getStatus();
-  assert(crafty === 1 && official === 1, "Both limits respected");
+  assert(ping === 1 && official === 1, "Both limits respected");
   now = 60_000;
   const status = await api.getStatus();
   assert(
-    status.population?.total === 39 && crafty === 1 && Number(official) === 2,
+    status.population?.total === 39 && ping === 1 && Number(official) === 2,
     "Official recovers independently"
   );
   now = 90_000;
   assert(
-    (await api.getStatus()).kind === "online" && Number(crafty) === 2,
-    "Crafty recovers"
+    (await api.getStatus()).kind === "online" && Number(ping) === 2,
+    "MCStatus.io recovers"
   );
 });

@@ -80,9 +80,7 @@ export default class AskCommand implements Command {
       !guildId ||
       !homeGuild ||
       guildId !== homeGuild.id ||
-      !channelAllowed ||
-      (ConfigManager.getConfig().dev.enabled &&
-        guildId !== ConfigManager.getConfig().dev.guildId)
+      !channelAllowed
     ) {
       await interaction.reply({
         content:
