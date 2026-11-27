@@ -248,6 +248,40 @@ test("/name history registers, defers publicly and renders an unregistered accou
   assertEqual(invalid.replies[0].payload.flags, MessageFlags.Ephemeral);
 }));
 
+test("/name history allows another lookup after five seconds but blocks immediate repeats", async () => {
+  const originalNow = Date.now;
+  const originalLookup = MinecraftNameHistoryAPI.lookup;
+  let now = originalNow();
+  let lookups = 0;
+  const command = new NameHistoryCommand();
+  const guild = new FakeGuild() as any;
+  const request = (user = "cooldown-tester") => createChatInputInteraction(user, {
+    guild, subcommand: "history", strings: { username: "Current" },
+  });
+  try {
+    Date.now = () => now;
+    MinecraftNameHistoryAPI.lookup = async () => {
+      lookups++;
+      return { status: "notFound", names: [], providers: [], suppressed: false, partial: true };
+    };
+    await command.execute(request());
+    now += 4_999;
+    const blocked = request();
+    await command.execute(blocked);
+    assertEqual(blocked.replies[0].payload.flags, MessageFlags.Ephemeral);
+    assertEqual(blocked.replies[0].payload.content, "Please wait before requesting another history.");
+    assertEqual(lookups, 1);
+    await command.execute(request("another-user"));
+    assertEqual(lookups, 2);
+    now++;
+    await command.execute(request());
+    assertEqual(lookups, 3);
+  } finally {
+    Date.now = originalNow;
+    MinecraftNameHistoryAPI.lookup = originalLookup;
+  }
+});
+
 test("database name history merges UUID-linked rows, isolates player-only aliases and preserves match dates", async () => {
   const findPlayers = prismaClient.player.findMany;
   const findSignups = prismaClient.eventSignup.findMany;

@@ -44,6 +44,28 @@ export function observedMinecraftUUIDs(
   ];
 }
 
+export function recordedMinecraftNames(
+  player: PlayerIdentity,
+  games: GameIdentity[],
+  signups: SignupIdentity[]
+): string[] {
+  return [
+    ...new Map(
+      [
+        player.latestIGN,
+        ...player.minecraftAccounts,
+        ...games.map((g) => g.ignUsed),
+        ...signups.map((s) => s.minecraftUsername),
+      ]
+        .filter(
+          (name): name is string =>
+            typeof name === "string" && MojangAPI.validateUsername(name)
+        )
+        .map((name) => [name.toLowerCase(), name] as const)
+    ).values(),
+  ];
+}
+
 function limitedField(text: string): string {
   return text.length > 1024 ? `${text.slice(0, 1018)}…` : text || "None";
 }
@@ -67,21 +89,7 @@ export function buildModerationReview(
   now: Date = new Date()
 ): EmbedBuilder {
   const uuids = observedMinecraftUUIDs(player, signups);
-  const recordedNames = [
-    ...new Map(
-      [
-        player.latestIGN,
-        ...player.minecraftAccounts,
-        ...games.map((g) => g.ignUsed),
-        ...signups.map((s) => s.minecraftUsername),
-      ]
-        .filter(
-          (name): name is string =>
-            typeof name === "string" && MojangAPI.validateUsername(name)
-        )
-        .map((name) => [name.toLowerCase(), name] as const)
-    ).values(),
-  ];
+  const recordedNames = recordedMinecraftNames(player, games, signups);
   const namePreview = recordedNames
     .slice(0, 15)
     .map((name) => escapeText(name))
@@ -131,19 +139,15 @@ export function buildModerationReview(
 
   return new EmbedBuilder()
     .setTitle(
-      `Moderation review: ${(player.latestIGN ?? player.discordSnowflake).slice(0, 80)}`
+      `Moderation review: ${escapeText((player.latestIGN ?? player.discordSnowflake).slice(0, 80))}`
     )
-    .setDescription(
-      "Organiser-only, read-only review. Account overlap is a lead for manual review, not proof of an alt."
-    )
+    .setColor(0x5865f2)
     .addFields(
       {
         name: "Identity",
         value: limitedField(
           `Discord ID: \`${escapeText(player.discordSnowflake)}\`\n` +
-            `Current IGN: ${player.latestIGN ? escapeText(player.latestIGN) : "Unknown"}\n` +
-            `Primary Minecraft UUID: ${MojangAPI.validUUID(player.primaryMinecraftAccount) ? `\`${player.primaryMinecraftAccount}\`` : "Not verified/recorded"}\n` +
-            `Player record created: ${stamp(player.createdAt)}`
+            `Registered: ${stamp(player.createdAt)}`
         ),
       },
       {
@@ -153,7 +157,7 @@ export function buildModerationReview(
       {
         name: "Punishments",
         value: limitedField(
-          `${totalEntries} recorded entr${totalEntries === 1 ? "y" : "ies"}; ${punishments.reduce((n, p) => n + p.strikeCount, 0)} stored strikes.\n` +
+          `**${totalEntries} recorded entr${totalEntries === 1 ? "y" : "ies"} · ${punishments.reduce((n, p) => n + p.strikeCount, 0)} strikes**\n` +
             `Active expiry: ${active.length ? stamp(active[0]) : "None recorded"}` +
             (recent.length
               ? `\n${recent.join("\n")}`
@@ -175,13 +179,10 @@ export function buildModerationReview(
         ),
       },
       {
-        name: "Minecraft account changes",
+        name: "Minecraft accounts observed",
         value: limitedField(
-          `${uuids.length} distinct valid UUID${uuids.length === 1 ? "" : "s"} observed (current link and this server's event signups).\n` +
-            (uuids.length > 1
-              ? `${uuids.length - 1} other account identit${uuids.length === 2 ? "y" : "ies"} observed in the record. `
-              : "") +
-            "Exact switch count unknown; no complete UUID-change audit exists."
+          `**${uuids.length} distinct Minecraft account${uuids.length === 1 ? "" : "s"}** (stored link and server event signups).\n` +
+            "Exact switch count unknown."
         ),
       },
       {
@@ -189,11 +190,11 @@ export function buildModerationReview(
         value: limitedField(
           overlapLines.length
             ? `Same Minecraft UUID appears under ${overlaps.size} other Discord ID${overlaps.size === 1 ? "" : "s"}:\n${overlapLines.join("\n")}${overlaps.size > 8 ? "\n…more omitted." : ""}\nReview manually; shared use or a moved account can also explain this.`
-            : "No shared UUID found under another Discord ID in the checked player links or this server's event signups. Alt status remains unknown."
+            : "No shared Minecraft accounts found in player links or server event signups."
         ),
       }
     )
     .setFooter({
-      text: "Recorded names are not verified Mojang name history. Absence of overlap does not rule out alts.",
+      text: "Names and account overlap are review leads, not proof of an alt. No overlap does not rule out alts.",
     });
 }

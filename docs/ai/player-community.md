@@ -66,7 +66,7 @@ Use `/name history username:<current IGN>` in the server for a public, read-only
 
 ## Is Shotbow online? Server status and player count `/shotbow`
 
-Use `/shotbow` to check whether the Shotbow Minecraft server is online, offline or its status is unavailable, and how many players are connected, including populated MineZ, SMASH, Annihilation, GG, Slaughter and Ghostcraft modes. Empty modes are hidden. Anyone in the Discord server can use it without parameters or registration. The result is public and cached briefly. The Java address is `play.shotbow.net`. If status is unavailable, try again shortly; it does not mean Shotbow is offline. Navi can explain the command but cannot check live Shotbow status itself.
+Use `/shotbow` to check whether the Shotbow Minecraft server is online, offline or its status is unavailable, and how many players are connected, including populated MineZ, SMASH, Annihilation, GG, Slaughter and Ghostcraft modes. Empty modes are hidden. Anyone in the Discord server can use it without parameters or registration. The result is public and cached briefly. The Java address is `play.shotbow.net`. If status is unavailable, try again shortly; it does not mean Shotbow is offline. If Shotbow reports connected players but the address ping fails, the command shows the reported online status with a separate login-address warning, not a confirmed DNS outage. The Minecraft services section also shows reported session authentication, Xbox and Minecraft API issues, cross-checked where possible against public Mojang/Minecraft endpoints. It does not test an actual account sign-in. Navi can explain the command but cannot check live Shotbow status itself.
 
 ## How do I make a Discord timestamp? `/timestamp`
 

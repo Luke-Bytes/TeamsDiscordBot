@@ -40,7 +40,7 @@ export default class NameHistoryCommand implements Command {
       await interaction.reply({ ...privateReply, content: "Please wait before requesting another history." });
       return;
     }
-    this.cooldowns.set(interaction.user.id, now + 30_000);
+    this.cooldowns.set(interaction.user.id, now + 5_000);
     await interaction.deferReply({});
     try {
       const result = await MinecraftNameHistoryAPI.lookup(username, {

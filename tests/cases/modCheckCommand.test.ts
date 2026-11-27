@@ -69,7 +69,7 @@ test("/modcheck refuses non-organisers before reading the player", async () => {
   }
 });
 
-test("/modcheck shows punishment history and UUID evidence privately", async () => {
+test("/modcheck shows punishment history, UUID evidence and IGN verification publicly", async () => {
   const command = new ModCheckCommand();
   const originalFind = PrismaUtils.findPlayer;
   const originalPunishments = prismaClient.playerPunishment.findMany;
@@ -77,16 +77,24 @@ test("/modcheck shows punishment history and UUID evidence privately", async () 
   const originalEvents = prismaClient.standaloneEvent.findMany;
   const originalSignups = prismaClient.eventSignup.findMany;
   const originalPlayers = prismaClient.player.findMany;
+  const originalFirst = prismaClient.player.findFirst;
+  const originalReverse = MojangAPI.uuidToUsername;
+  const lookedUp: string[] = [];
   const originalPermission = PermissionsUtil.hasRole;
   const originalLookup = MojangAPI.lookupUsername;
   const originalHistory = MinecraftNameHistoryAPI.lookupByUUID;
   let signupQueries = 0;
   try {
     (PermissionsUtil as any).hasRole = () => true;
-    (MojangAPI as any).lookupUsername = async () => ({
-      status: "found",
-      uuid: firstUUID,
-    });
+    (MojangAPI as any).lookupUsername = async (name: string) => {
+      lookedUp.push(name);
+      if (name === "Old_Name") return { status: "notFound" };
+      if (name === "Older_Name") return { status: "unavailable" };
+      return { status: "found", uuid: name === "Other_Name" ? secondUUID : firstUUID };
+    };
+    MojangAPI.uuidToUsername = async () => player.latestIGN;
+    (prismaClient.player as any).findFirst = async (args: any) =>
+      args.where.primaryMinecraftAccount === firstUUID ? player : null;
     MinecraftNameHistoryAPI.lookupByUUID = async (uuid, scope) => {
       assert(scope?.guildId === "guild-1", "Name history must use invoking guild");
       assert(uuid === firstUUID, "External lookup must use primary UUID");
@@ -135,6 +143,7 @@ test("/modcheck shows punishment history and UUID evidence privately", async () 
       ];
     };
     (prismaClient.player as any).findMany = async (args: any) => {
+      if (args.where.minecraftAccounts?.has) return [player];
       if (args.where.id?.not) return [];
       assert(args.where.NOT.id === player.id, "Exclude current player");
       return [
@@ -147,8 +156,15 @@ test("/modcheck shows punishment history and UUID evidence privately", async () 
     };
 
     const request = interaction(true);
+    let deferOptions: any;
+    const defer = request.deferReply.bind(request);
+    (request as any).deferReply = async (options: any) => {
+      deferOptions = options;
+      return defer(options);
+    };
     await command.execute(request);
-    assert(request.deferred, "Should defer a private result");
+    assert(request.deferred, "Should defer a result");
+    assert(!deferOptions?.flags && !deferOptions?.ephemeral, "Successful result must be public");
     const result = request.replies.find((r: any) => r.type === "editReply");
     const embed = result?.payload?.embeds?.[0];
     assert(!!embed, "Result must be an embed");
@@ -158,10 +174,10 @@ test("/modcheck shows punishment history and UUID evidence privately", async () 
       "Should show actual punishments and dates"
     );
     assert(
-      field(embed, "Minecraft account changes").includes(
-        "2 distinct valid UUIDs"
+      field(embed, "Minecraft accounts observed").includes(
+        "2 distinct Minecraft accounts"
       ) &&
-        field(embed, "Minecraft account changes").includes(
+        field(embed, "Minecraft accounts observed").includes(
           "Exact switch count unknown"
         ),
       "Should distinguish observed IDs from an unrecorded change count"
@@ -187,7 +203,13 @@ test("/modcheck shows punishment history and UUID evidence privately", async () 
         ),
       "Should show both confirmed UUID-overlap sources"
     );
-    assert(field(embed, "Minecraft name history (primary UUID)").includes("Verified current IGN"), "External history must appear separately");
+    const verification = field(embed, "IGN verification (recorded names)");
+    for (const phrase of ["Same Minecraft account", "Different Minecraft account", "not registered", "historical match", "service unavailable"]) {
+      assert(verification.includes(phrase), `Verification should include: ${phrase}`);
+    }
+    assert(lookedUp.length === 4, "Should check each distinct local name once, including reuse of current lookup");
+    assert(field(embed, "Name history (linked account)").includes("0 previous names found"), "External history must appear separately");
+    assert(embed.length <= 6000, "Embed must stay within the total Discord limit");
     assert(
       signupQueries === 2,
       "Should inspect signups and related Discord IDs"
@@ -204,7 +226,7 @@ test("/modcheck shows punishment history and UUID evidence privately", async () 
     assert(!!failedEmbed, "External outage must not prevent the moderation embed");
     assert(field(failedEmbed, "Punishments") === field(embed, "Punishments"), "Punishment evidence must be preserved");
     assert(field(failedEmbed, "Possible alt-account overlap") === field(embed, "Possible alt-account overlap"), "External outage must not affect alt assessment");
-    assert(field(failedEmbed, "Minecraft name history (primary UUID)").includes("unavailable"), "External outage must be reported separately");
+    assert(field(failedEmbed, "Name history (linked account)").includes("unavailable"), "External outage must be reported separately");
   } finally {
     (PrismaUtils as any).findPlayer = originalFind;
     (prismaClient.playerPunishment as any).findMany = originalPunishments;
@@ -212,6 +234,8 @@ test("/modcheck shows punishment history and UUID evidence privately", async () 
     (prismaClient.standaloneEvent as any).findMany = originalEvents;
     (prismaClient.eventSignup as any).findMany = originalSignups;
     (prismaClient.player as any).findMany = originalPlayers;
+    (prismaClient.player as any).findFirst = originalFirst;
+    MojangAPI.uuidToUsername = originalReverse;
     (PermissionsUtil as any).hasRole = originalPermission;
     (MojangAPI as any).lookupUsername = originalLookup;
     MinecraftNameHistoryAPI.lookupByUUID = originalHistory;
@@ -348,17 +372,17 @@ test("/modcheck does not turn IGN changes or lack of overlap into an alt verdict
     []
   );
   assert(
-    field(embed, "Minecraft account changes").includes(
-      "1 distinct valid UUID"
+    field(embed, "Minecraft accounts observed").includes(
+      "1 distinct Minecraft account"
     ) &&
-      field(embed, "Minecraft account changes").includes(
+      field(embed, "Minecraft accounts observed").includes(
         "Exact switch count unknown"
       ),
     "A list of names should not be counted as changes of account"
   );
   assert(
     field(embed, "Possible alt-account overlap").includes(
-      "Alt status remains unknown"
+      "No shared Minecraft accounts found"
     ),
     "No identified link is not proof that someone is not an alt"
   );

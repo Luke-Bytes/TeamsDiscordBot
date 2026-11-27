@@ -1,3 +1,5 @@
+import { readJSON, record, requestFailure, retryDelay } from "./StatusHttp";
+
 export const SHOTBOW_ADDRESS = "play.shotbow.net";
 
 const GAME_MODES = {
@@ -22,17 +24,16 @@ type PingStatus =
   | { kind: "offline" }
   | { kind: "unavailable" };
 
-export type ShotbowStatus = PingStatus & { population?: ShotbowPopulation };
+export type ShotbowStatus =
+  | (PingStatus & { population?: ShotbowPopulation })
+  | {
+      kind: "reported-online";
+      population: ShotbowPopulation;
+      reachability: "offline" | "unavailable";
+    };
 
-const UNAVAILABLE: ShotbowStatus = { kind: "unavailable" };
+const UNAVAILABLE: PingStatus = { kind: "unavailable" };
 const CACHE_MS = 30_000;
-const MAX_BYTES = 256 * 1024;
-
-function record(value: unknown): Record<string, unknown> | undefined {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
 
 function count(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
@@ -78,39 +79,6 @@ function parseStatus(payload: unknown, httpStatus: number): PingStatus {
   return UNAVAILABLE;
 }
 
-async function readJSON(response: Response): Promise<unknown> {
-  if (Number(response.headers.get("content-length")) > MAX_BYTES) {
-    throw new Error("Response too large");
-  }
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error("Missing response body");
-  const decoder = new TextDecoder("utf-8", { fatal: true });
-  let bytes = 0;
-  let content = "";
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      bytes += value.byteLength;
-      if (bytes > MAX_BYTES) throw new Error("Response too large");
-      content += decoder.decode(value, { stream: true });
-    }
-    return JSON.parse(content + decoder.decode()) as unknown;
-  } finally {
-    await reader.cancel().catch(() => undefined);
-    reader.releaseLock();
-  }
-}
-
-function retryDelay(header: string | null, now: number): number {
-  if (!header?.trim()) return CACHE_MS;
-  const seconds = Number(header);
-  const delay = Number.isFinite(seconds)
-    ? seconds * 1000
-    : Date.parse(header) - now;
-  return Number.isFinite(delay) ? Math.max(CACHE_MS, delay) : CACHE_MS;
-}
-
 export class ShotbowStatusAPI {
   private pingCached?: { result: PingStatus; expires: number };
   private populationCached?: {
@@ -126,7 +94,9 @@ export class ShotbowStatusAPI {
     private readonly now: () => number = Date.now,
     private readonly token: () => string | undefined = () =>
       process.env.CRAFTY_API_TOKEN,
-    private readonly timeoutMs = 5_000
+    private readonly timeoutMs = 5_000,
+    private readonly warn: (message: string) => void = (message) =>
+      console.warn(message)
   ) {}
 
   getStatus(): Promise<ShotbowStatus> {
@@ -143,11 +113,16 @@ export class ShotbowStatusAPI {
       this.getPopulation(),
     ]);
     if (!population) return ping;
-    // A populated network and a failed address ping are conflicting signals.
-    // Do not claim the entire network is offline in that case.
-    if (ping.kind === "offline") {
-      return population.total > 0 ? { ...UNAVAILABLE, population } : ping;
+    // Positive official counts are evidence of network activity, not proof
+    // that new connections to the public login address will succeed.
+    if (ping.kind !== "online" && population.total > 0) {
+      return {
+        kind: "reported-online",
+        population,
+        reachability: ping.kind,
+      };
     }
+    if (ping.kind === "offline") return ping;
     return { ...ping, population };
   }
 
@@ -183,6 +158,13 @@ export class ShotbowStatusAPI {
     return result;
   }
 
+  private logFailure(
+    source: "shotbow-population" | "crafty-ping",
+    reason: string
+  ): void {
+    this.warn(`event=shotbow.check source=${source} ${reason}`);
+  }
+
   private async requestPopulation(): Promise<ShotbowPopulation | undefined> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -199,12 +181,25 @@ export class ShotbowStatusAPI {
       if (response.status === 429 || response.status === 503) {
         const now = this.now();
         this.populationBlockedUntil =
-          now + retryDelay(response.headers.get("retry-after"), now);
+          now + retryDelay(response.headers.get("retry-after"), now, CACHE_MS);
       }
-      if (!response.ok) return undefined;
-      return parsePopulation(await readJSON(response));
-    } catch {
-      // The optional breakdown must not prevent the normal ping result.
+      if (!response.ok) {
+        this.logFailure(
+          "shotbow-population",
+          `reason=http-error status=${response.status}`
+        );
+        return undefined;
+      }
+      const population = parsePopulation(await readJSON(response));
+      if (!population) {
+        this.logFailure("shotbow-population", "reason=invalid-response");
+      }
+      return population;
+    } catch (error) {
+      this.logFailure(
+        "shotbow-population",
+        requestFailure(error, controller.signal.aborted, !!response)
+      );
       return undefined;
     } finally {
       clearTimeout(timeout);
@@ -235,14 +230,37 @@ export class ShotbowStatusAPI {
       if (response.status === 429 || response.status === 503) {
         this.blockedUntil =
           this.now() +
-          retryDelay(response.headers.get("retry-after"), this.now());
+          retryDelay(response.headers.get("retry-after"), this.now(), CACHE_MS);
+        this.logFailure(
+          "crafty-ping",
+          `reason=http-error status=${response.status}`
+        );
         return UNAVAILABLE;
       }
-      if (![200, 400, 404, 422].includes(response.status)) return UNAVAILABLE;
-      return parseStatus(await readJSON(response), response.status);
-    } catch {
-      // Provider failures (including aborts and invalid JSON) are not outages
-      // of the Minecraft server. Do not log provider content or credentials.
+      if (![200, 400, 404, 422].includes(response.status)) {
+        this.logFailure(
+          "crafty-ping",
+          `reason=http-error status=${response.status}`
+        );
+        return UNAVAILABLE;
+      }
+      const ping = parseStatus(await readJSON(response), response.status);
+      if (ping.kind !== "online") {
+        const reason =
+          ping.kind === "offline"
+            ? "address-unreachable"
+            : "unconfirmed-response";
+        this.logFailure(
+          "crafty-ping",
+          `reason=${reason} status=${response.status}`
+        );
+      }
+      return ping;
+    } catch (error) {
+      this.logFailure(
+        "crafty-ping",
+        requestFailure(error, controller.signal.aborted, !!response)
+      );
       return UNAVAILABLE;
     } finally {
       clearTimeout(timeout);

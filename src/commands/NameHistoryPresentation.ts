@@ -71,19 +71,29 @@ export function historyProviderSummary(result: NameHistoryResult): string {
     ).join(" · ") : "");
 }
 
-export function combinedHistorySummary(result: NameHistoryResult | undefined): string {
+export function combinedHistorySummary(
+  result: NameHistoryResult | undefined,
+  storedIGN?: string | null
+): string {
   if (!result || result.status !== "found" || !result.currentUsername) {
-    return "UUID-linked history unavailable or no valid primary UUID. Local moderation records are unaffected.";
+    return "UUID-linked name history unavailable.";
   }
   const current = result.currentUsername;
-  const old = result.names.filter((n) => !n.current);
+  const old = result.suppressed ? [] : result.names.filter((n) => !n.current);
+  const sources = [...new Set(old.flatMap((n) => n.providers))];
   const lines = [
-    `Verified current IGN: ${escapeText(current)}`,
-    result.suppressed ? "Historical records withheld." : `${old.length} distinct visible previous names (not a rename count).`,
-    historyProviderSummary(result),
-    ...old.slice(0, 3).map((n) => `**${escapeText(n.name)}** — ${formatHistoryDate(n.bestDate)} (${n.providers.map((p) => p === "database" ? "Friendly Wars database" : p).join(", ")})`),
-    ...(old.length > 3 ? [`…${old.length - 3} more; use /name history for details.`] : []),
-    result.partial ? "Partial/unavailable coverage; not evidence of an alt." : "History may be incomplete; not evidence of an alt.",
+    ...(current.toLowerCase() !== storedIGN?.toLowerCase()
+      ? [`Verified current IGN: **${escapeText(current)}**`]
+      : []),
+    result.suppressed
+      ? "Historical records withheld."
+      : `**${old.length} previous name${old.length === 1 ? "" : "s"} found**`,
+    ...old.slice(0, 5).map(historyLine),
+    ...(old.length > 5 ? [`…${old.length - 5} more · /name history`] : []),
+    ...(sources.length
+      ? [`Sources: ${sources.map((p) => p === "winstreak" ? providerLabel(p, current) : publicSourceLabels[p]).join(", ")}`]
+      : []),
+    result.partial ? "History coverage is incomplete." : "History may be incomplete.",
   ];
   return lines.join("\n");
 }
